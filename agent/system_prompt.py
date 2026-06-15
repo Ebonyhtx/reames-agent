@@ -355,6 +355,15 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     except Exception:
         pass
 
+    # Mermaid offload notification (volatile)
+    try:
+        from agent.mermaid_offload import offload_notification as _offload_note
+        _note = _offload_note()
+        if _note:
+            volatile_parts.append(_note)
+    except Exception:
+        pass
+
     return {
         "stable":   "\n\n".join(p.strip() for p in stable_parts   if p and p.strip()),
         "context":  "\n\n".join(p.strip() for p in context_parts  if p and p.strip()),
