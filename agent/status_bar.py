@@ -32,7 +32,7 @@ class StatusBar:
             from agent.deepseek_cache import CacheStats
             self._cache_stats = CacheStats()
         except Exception:
-            pass
+            logger.debug("CacheStats init failed, continuing without cache tracking")
         
         # Cumulative tracking
         self.session_prompt_tokens = 0
@@ -85,7 +85,7 @@ class StatusBar:
             try:
                 self._cache_stats.record_turn(messages)
             except Exception:
-                pass
+                logger.debug("CacheStats record_turn failed")
     
     def set_balance(self, balance_str: str):
         self.balance = balance_str

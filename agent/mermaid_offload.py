@@ -20,7 +20,7 @@ def _cleanup_old_refs(ref_dir):
             if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
                 os.remove(fp)
     except Exception:
-        pass
+        logger.debug("Failed to cleanup old refs")
 
 
 def _get_ref_dir():

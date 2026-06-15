@@ -47,7 +47,7 @@ def assess_skills():
         from agent.skill_commands import scan_skill_commands
         skills = scan_skill_commands()
     except Exception as e:
-        logger.debug("skill_commands scan failed: %s, falling back to dir scan", e)
+        logger.warning("skill_commands scan failed: %s, falling back to dir scan", e)
         skills = _scan_skills_fallback()
     
     results = []
@@ -95,7 +95,7 @@ def _scan_skills_fallback():
                     with open(md, "r", encoding="utf-8") as f:
                         content = f.read()
                 except Exception:
-                    pass
+                    logger.debug("Failed to read skill file, skipping")
             skills["/" + name] = {"name": name, "content": content, "frontmatter": {"description": desc}}
     return skills
 
@@ -123,7 +123,7 @@ def prune_memory(dry_run=True):
                         os.remove(fp)
                         result["pruned_refs"] += 1
                     except Exception:
-                        pass
+                        logger.debug("Failed to remove stale ref file, skipping")
                 else:
                     result["pruned_refs"] += 1
     
@@ -220,21 +220,25 @@ def generate_report(dry_run=True):
         report["skills"] = assess_skills()
     except Exception as e:
         report["skills_error"] = str(e)
+        logger.warning("Entropy: assess_skills failed: %s", e)
     
     try:
         report["memory"] = prune_memory(dry_run=dry_run)
     except Exception as e:
         report["memory_error"] = str(e)
+        logger.warning("Entropy: prune_memory failed: %s", e)
     
     try:
         report["plugins"] = check_plugin_health()
     except Exception as e:
         report["plugins_error"] = str(e)
+        logger.warning("Entropy: check_plugin_health failed: %s", e)
     
     try:
         report["config_drift"] = detect_config_drift()
     except Exception as e:
         report["config_error"] = str(e)
+        logger.warning("Entropy: detect_config_drift failed: %s", e)
     
     low_quality = [s for s in report["skills"] if s[1] < 40]
     plugin_issues = [p for p in report["plugins"] if p[1] != "healthy"]
@@ -267,6 +271,7 @@ def health_status_line():
             return f"[Entropy] {report['summary']}"
         return ""
     except Exception:
+        logger.debug("Entropy health_status_line failed")
         return ""
 
 
@@ -291,6 +296,7 @@ def on_pre_compress():
             _HAS_RUN_THIS_SESSION = False
             return r
         except Exception:
+            logger.warning("Entropy on_pre_compress failed")
             return {}
     return {}
 
@@ -354,7 +360,7 @@ def _register_tools():
         logger.info("Entropy tools registered: entropy_report, entropy_prune, entropy_health")
         return True
     except Exception as e:
-        logger.debug("Entropy tool registration deferred: %s", e)
+        logger.warning("Entropy tool registration deferred: %s", e)
         return False
 
 
