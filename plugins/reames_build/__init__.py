@@ -1,4 +1,4 @@
-"""Hermes Build plugin — build system tools."""
+"""Reames Build plugin — build system tools."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,6 @@ try:
             emoji="🏗️",
             description=tool_def.get("description", ""),
         )
-    logger.info("hermes-build plugin loaded: %d tools registered", len(BUILD_TOOLS))
+    logger.info("reames-build plugin loaded: %d tools registered", len(BUILD_TOOLS))
 except ImportError as e:
-    logger.debug("hermes-build plugin not loaded: %s", e)
+    logger.debug("reames-build plugin not loaded: %s", e)

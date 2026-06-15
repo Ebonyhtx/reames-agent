@@ -1,7 +1,7 @@
 """PostToolUse: Auto-run tests after file edits."""
 import sys, os, json, subprocess
 
-BYPASS_FILE = os.path.expanduser("~/.hermes/.bypass-hooks")
+BYPASS_FILE = os.path.expanduser("~/.reames/.bypass-hooks")
 if os.path.exists(BYPASS_FILE):
     sys.exit(0)
 

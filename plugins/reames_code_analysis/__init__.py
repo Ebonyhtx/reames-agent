@@ -1,4 +1,4 @@
-"""Hermes Code Analysis plugin."""
+"""Reames Code Analysis plugin."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,6 @@ try:
             emoji="🔍",
             description=tool_def.get("description", ""),
         )
-    logger.info("hermes-code-analysis plugin loaded: %d tools registered", len(CODE_TOOLS))
+    logger.info("reames-code-analysis plugin loaded: %d tools registered", len(CODE_TOOLS))
 except ImportError as e:
-    logger.debug("hermes-code-analysis plugin not loaded: %s", e)
+    logger.debug("reames-code-analysis plugin not loaded: %s", e)

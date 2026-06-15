@@ -1,5 +1,5 @@
 __all__ = ["maybe_offload", "should_offload", "offload_notification", "MERMAID_OFFLOAD_THRESHOLD"]
-"""Mermaid short-term memory offload (TencentDB deep customization)."""
+"""Mermaid short-term memory offload (Reames Agent)."""
 import os
 import time
 import tempfile

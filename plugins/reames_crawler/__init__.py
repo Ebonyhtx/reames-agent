@@ -1,4 +1,4 @@
-"""Hermes Crawler plugin — web scraping tools."""
+"""Reames Crawler plugin — web scraping tools."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,6 @@ try:
             emoji="🕷️",
             description=tool_def.get("description", ""),
         )
-    logger.info("hermes-crawler plugin loaded: %d tools registered", len(CRAWLER_TOOLS))
+    logger.info("reames-crawler plugin loaded: %d tools registered", len(CRAWLER_TOOLS))
 except ImportError as e:
-    logger.debug("hermes-crawler plugin not loaded: %s", e)
+    logger.debug("reames-crawler plugin not loaded: %s", e)

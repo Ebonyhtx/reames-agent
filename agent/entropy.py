@@ -2,11 +2,11 @@
 
 设计原则：
   - 继承 MemoryProvider 生命周期钩子
-  - 使用 Hermes 原生的 skill_commands.scan_skill_commands() 而非 os.listdir
-  - 通过 MemoryManager.on_session_end 钩子触发记忆修剪
-  - 通过 ToolRegistry 注册 3 个熵管理工具
-  - 健康度注入到 system_prompt volatile 层
-  - 配置漂移使用 hermes_cli/config.py 的 DEFAULT_CONFIG
+  - 使用 Reames 集成的 skill_commands 扫描系统
+  - 通过 on_session_end 钩子触发记忆修剪
+  - 通过 ToolRegistry 注册熵管理工具
+  - 健康度注入 volatile 层
+  - 配置漂移使用 DEFAULT_CONFIG
 """
 
 import os
@@ -25,7 +25,7 @@ _LAST_REPORT = None
 # ─── 熵管理配置 ───────────────────────────────────
 
 def _get_hermes_home():
-    """Get Hermes home directory."""
+    """Get Reames home directory."""
     try:
         from hermes_constants import get_hermes_home as gh
         return str(gh())
@@ -33,10 +33,10 @@ def _get_hermes_home():
         return os.path.expanduser("~/.hermes")
 
 
-# ─── 技能质量评估（复用 Hermes 原生扫描） ────────
+# ─── 技能质量评估（复用集成扫描）────────
 
 def assess_skills():
-    """Assess installed skills using Hermes native scanner.
+    """Assess installed skills using built-in scanner.
     
     This calls skill_commands.scan_skill_commands() to get the canonical
     skill list, then evaluates each for quality.
@@ -112,7 +112,7 @@ def prune_memory(dry_run=True):
     result = {"pruned_refs": 0, "pruned_sessions": 0, "archived": 0}
     now = time.time()
     
-    # Clean Hermes memory refs older than 24h
+    # Clean memory refs older than 24h
     refs_dir = os.path.join(_get_hermes_home(), "memory", "refs")
     if os.path.isdir(refs_dir):
         for f in os.listdir(refs_dir):
@@ -130,10 +130,10 @@ def prune_memory(dry_run=True):
     return result
 
 
-# ─── 插件健康检查（使用 Hermes 原生工具注册） ────
+# ─── 插件健康检查（使用 ToolRegistry）────
 
 def check_plugin_health():
-    """Check plugin health using Hermes ToolRegistry.
+    """Check plugin health using ToolRegistry.
     
     Returns list of (plugin_name, status, [issues]).
     """
@@ -163,7 +163,7 @@ def check_plugin_health():
     return results
 
 
-# ─── 配置漂移检测（使用 Hermes 原生 config 系统） ──
+# ─── 配置漂移检测（使用 config 系统）────
 
 def detect_config_drift():
     """Detect config drift using hermes_cli.config DEFAULT_CONFIG comparison.
@@ -298,7 +298,7 @@ def on_pre_compress():
 # ─── 熵管理工具注册 ─────────────────────────────
 
 def _register_tools():
-    """Register entropy management tools with Hermes ToolRegistry.
+    """Register entropy management tools with ToolRegistry.
     
     Called once at module load time.
     """

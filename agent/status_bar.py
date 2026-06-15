@@ -1,4 +1,4 @@
-"""Reasonix-style status bar for CLI/desktop display.
+"""Reames-style status bar for CLI/desktop display.
 
 Tracks and formats per-turn statistics:
   - Cache hit rates (current + average)
@@ -114,7 +114,7 @@ class StatusBar:
         return self.last_cache_hit_pct
     
     def format_status_line(self) -> str:
-        """Format the status bar line (Reasonix-style)."""
+        """Format the status bar line (Reames-style)."""
         model = self.last_model.split("/")[-1] if self.last_model else "unknown"
         hit_rate = self._cache_hit_rate()
         avg_hit = (self._cache_stats.hit_rate * 100 if self._cache_stats else hit_rate)

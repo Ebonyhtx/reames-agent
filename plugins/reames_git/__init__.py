@@ -1,4 +1,4 @@
-"""Hermes Git plugin — development workflow tools."""
+"""Reames Git plugin — development workflow tools."""
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,6 @@ try:
             emoji="🔀",
             description=tool_def.get("description", ""),
         )
-    logger.info("hermes-git plugin loaded: %d tools registered", len(GIT_TOOLS))
+    logger.info("reames-git plugin loaded: %d tools registered", len(GIT_TOOLS))
 except ImportError as e:
-    logger.debug("hermes-git plugin not loaded: %s", e)
+    logger.debug("reames-git plugin not loaded: %s", e)
