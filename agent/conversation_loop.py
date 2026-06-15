@@ -1678,6 +1678,11 @@ def run_conversation(
                             )
                         except Exception:
                             pass
+                    # Print status bar after recording API usage
+                    try:
+                        agent._status_bar.print_status_line()
+                    except Exception:
+                        pass
                     agent.session_cost_source = cost_result.source
 
                     # Persist token counts to session DB for /insights.
