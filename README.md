@@ -17,39 +17,25 @@
 
 ### 前置条件
 
-- [Hermes Agent](https://hermes.ai) v0.16+ 已安装
 - Python 3.12+
-- Node.js 18+（用于部分 MCP 服务器）
+- Node.js 18+（可选，用于 GitHub MCP 等）
 
 ### 快速安装
 
 ```bash
-# 1. 克隆仓库到 Hermes 安装目录
-git clone <你的仓库链接> /path/to/hermes-agent
-cd /path/to/hermes-agent
+git clone <你的仓库链接>
+cd reames-agent
 
-# 2. 运行安装脚本
-chmod +x reames-setup.sh
-./reames-setup.sh
+# 创建虚拟环境
+python -m venv .venv
+.venv\Scriptsctivate  # Windows
+# source .venv/bin/activate  # macOS/Linux
 
-# 3. 重启 Hermes
-```
+# 安装依赖
+pip install -e .
 
-### 手动安装
-
-```bash
-# 1. 备份原有的配置文件
-cp ~/.hermes/config.yaml ~/.hermes/config.yaml.bak
-
-# 2. 安装 Python 依赖
-pip install markitdown[all] searxng-mcp
-
-# 3. 复制自定义文件
-cp agent/*.py /path/to/hermes-agent/agent/
-cp -r plugins/reames_* /path/to/hermes-agent/plugins/
-cp -r hooks/* /path/to/hermes-agent/hooks/
-
-# 4. 配置 MCP 服务器（见 .hermes/config.yaml）
+# 启动
+hermes
 ```
 
 ## 使用
@@ -89,12 +75,12 @@ deepseek-v4-flash | 77.27% | avg 77.27% | 5.5K | ¥0.0250 | 3 turns
 ## 在新电脑上无缝开发
 
 ```bash
-# 1. 安装 Hermes Agent
-# 2. 克隆仓库到 Hermes 安装目录
-git clone <仓库链接> /path/to/hermes-agent
-# 3. 运行安装脚本
-./reames-setup.sh
-# 4. 开始开发
+git clone <仓库链接>
+cd reames-agent
+python -m venv .venv
+.venv\Scriptsctivate
+pip install -e .
+hermes
 ```
 
 ## 技术栈
