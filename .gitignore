@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Virtual environment (Hermes uses .venv)
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Hermes runtime
+*.log
+*.pid
+
+# Secrets and local config
+.env
+*.key
+
+# Temp files
+/tmp/
+*.bak
+*.orig
+__pycache__/

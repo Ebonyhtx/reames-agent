@@ -1,0 +1,5 @@
+name: hermes-git
+display_name: hermes-git
+version: 1.0.0
+description: "Git development workflow tools — clone, commit, branch, PR, review, log, status"
+hooks: []
