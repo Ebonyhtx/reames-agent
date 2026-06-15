@@ -432,6 +432,13 @@ def compress_context(
         except Exception:
             pass
 
+    # Entropy: pre-compress hook
+    try:
+        from agent.entropy import on_pre_compress as _entropy_precompress
+        _entropy_precompress()
+    except Exception:
+        pass
+
     try:
         compressed = agent.context_compressor.compress(messages, current_tokens=approx_tokens, focus_topic=focus_topic, force=force)
     except TypeError:
