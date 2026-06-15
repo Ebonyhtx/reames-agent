@@ -67,8 +67,8 @@ All fields are optional. Missing values inherit from the ``default`` skin.
     branding:
       agent_name: "Hermes Agent"          # Banner title, status display
       welcome: "Welcome message"          # Shown at CLI startup
-      goodbye: "Goodbye! ⚕"              # Shown on exit
-      response_label: " ⚕ Hermes "       # Response box header label
+      goodbye: "Goodbye! ◆"              # Shown on exit
+      response_label: " ◆ Reames "       # Response box header label
       prompt_symbol: "❯"                 # Input prompt symbol (bare token; renderers add trailing space)
       help_header: "(^_^)? Commands"      # /help header text
 
@@ -164,33 +164,33 @@ class SkinConfig:
 _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
     "default": {
         "name": "default",
-        "description": "Classic Hermes — gold and kawaii",
+        "description": "Classic Reames — cyan and sleek",
         "colors": {
-            "banner_border": "#CD7F32",
-            "banner_title": "#FFD700",
-            "banner_accent": "#FFBF00",
-            "banner_dim": "#B8860B",
-            "banner_text": "#FFF8DC",
-            "ui_accent": "#FFBF00",
-            "ui_label": "#DAA520",
+            "banner_border": "#0066CC",
+            "banner_title": "#00D4FF",
+            "banner_accent": "#00AAFF",
+            "banner_dim": "#005599",
+            "banner_text": "#E0F0FF",
+            "ui_accent": "#00AAFF",
+            "ui_label": "#0088CC",
             "ui_ok": "#4caf50",
             "ui_error": "#ef5350",
             "ui_warn": "#ffa726",
-            "prompt": "#FFF8DC",
-            "input_rule": "#CD7F32",
-            "response_border": "#FFD700",
+            "prompt": "#E0F0FF",
+            "input_rule": "#0066CC",
+            "response_border": "#00D4FF",
             "status_bar_bg": "#1a1a2e",
-            "session_label": "#DAA520",
+            "session_label": "#0088CC",
             "session_border": "#8B8682",
         },
         "spinner": {
             # Empty = use hardcoded defaults in display.py
         },
         "branding": {
-            "agent_name": "Hermes Agent",
-            "welcome": "Welcome to Hermes Agent! Type your message or /help for commands.",
-            "goodbye": "Goodbye! ⚕",
-            "response_label": " ⚕ Hermes ",
+            "agent_name": "Reames Agent",
+            "welcome": "Welcome to Reames Agent! Type your message or /help for commands.",
+            "goodbye": "Goodbye! ◆",
+            "response_label": " ◆ Reames ",
             "prompt_symbol": "❯",
             "help_header": "(^_^)? Available Commands",
         },
@@ -240,7 +240,7 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "branding": {
             "agent_name": "Ares Agent",
-            "welcome": "Welcome to Ares Agent! Type your message or /help for commands.",
+            "welcome": "Welcome to Reames Agent! Type your message or /help for commands.",
             "goodbye": "Farewell, warrior! ⚔",
             "response_label": " ⚔ Ares ",
             "prompt_symbol": "⚔",
@@ -298,10 +298,10 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "spinner": {},
         "branding": {
-            "agent_name": "Hermes Agent",
-            "welcome": "Welcome to Hermes Agent! Type your message or /help for commands.",
-            "goodbye": "Goodbye! ⚕",
-            "response_label": " ⚕ Hermes ",
+            "agent_name": "Reames Agent",
+            "welcome": "Welcome to Reames Agent! Type your message or /help for commands.",
+            "goodbye": "Goodbye! ◆",
+            "response_label": " ◆ Reames ",
             "prompt_symbol": "❯",
             "help_header": "[?] Available Commands",
         },
@@ -337,10 +337,10 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "spinner": {},
         "branding": {
-            "agent_name": "Hermes Agent",
-            "welcome": "Welcome to Hermes Agent! Type your message or /help for commands.",
-            "goodbye": "Goodbye! ⚕",
-            "response_label": " ⚕ Hermes ",
+            "agent_name": "Reames Agent",
+            "welcome": "Welcome to Reames Agent! Type your message or /help for commands.",
+            "goodbye": "Goodbye! ◆",
+            "response_label": " ◆ Reames ",
             "prompt_symbol": "❯",
             "help_header": "(^_^)? Available Commands",
         },
@@ -374,10 +374,10 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "spinner": {},
         "branding": {
-            "agent_name": "Hermes Agent",
-            "welcome": "Welcome to Hermes Agent! Type your message or /help for commands.",
-            "goodbye": "Goodbye! ⚕",
-            "response_label": " ⚕ Hermes ",
+            "agent_name": "Reames Agent",
+            "welcome": "Welcome to Reames Agent! Type your message or /help for commands.",
+            "goodbye": "Goodbye! ◆",
+            "response_label": " ◆ Reames ",
             "prompt_symbol": "❯",
             "help_header": "[?] Available Commands",
         },
@@ -411,10 +411,10 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "spinner": {},
         "branding": {
-            "agent_name": "Hermes Agent",
-            "welcome": "Welcome to Hermes Agent! Type your message or /help for commands.",
+            "agent_name": "Reames Agent",
+            "welcome": "Welcome to Reames Agent! Type your message or /help for commands.",
             "goodbye": "Goodbye! \u2695",
-            "response_label": " \u2695 Hermes ",
+            "response_label": " \u2695 Reames ",
             "prompt_symbol": "\u276f",
             "help_header": "(^_^)? Available Commands",
         },
@@ -465,7 +465,7 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "branding": {
             "agent_name": "Poseidon Agent",
-            "welcome": "Welcome to Poseidon Agent! Type your message or /help for commands.",
+            "welcome": "Welcome to Reames Agent! Type your message or /help for commands.",
             "goodbye": "Fair winds! Ψ",
             "response_label": " Ψ Poseidon ",
             "prompt_symbol": "Ψ",
@@ -537,7 +537,7 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "branding": {
             "agent_name": "Sisyphus Agent",
-            "welcome": "Welcome to Sisyphus Agent! Type your message or /help for commands.",
+            "welcome": "Welcome to Reames Agent! Type your message or /help for commands.",
             "goodbye": "The boulder waits. ◉",
             "response_label": " ◉ Sisyphus ",
             "prompt_symbol": "◉",
@@ -615,7 +615,7 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "branding": {
             "agent_name": "Charizard Agent",
-            "welcome": "Welcome to Charizard Agent! Type your message or /help for commands.",
+            "welcome": "Welcome to Reames Agent! Type your message or /help for commands.",
             "goodbye": "Flame out! ✦",
             "response_label": " ✦ Charizard ",
             "prompt_symbol": "✦",
@@ -834,7 +834,7 @@ def get_active_help_header(fallback: str = "(^_^)? Available Commands") -> str:
 
 
 
-def get_active_goodbye(fallback: str = "Goodbye! ⚕") -> str:
+def get_active_goodbye(fallback: str = "Goodbye! ◆") -> str:
     """Get the goodbye line from the active skin."""
     try:
         return get_active_skin().get_branding("goodbye", fallback)
