@@ -1,4 +1,9 @@
-"""Advanced web crawler tools."""
+"""Advanced web crawler tools.
+
+Note: This crawler does NOT parse robots.txt. It applies basic rate limiting
+(0.5s delay between requests) and caps at 50 results. Use responsibly and
+respect target website terms of service.
+"""
 import requests
 import re
 import time

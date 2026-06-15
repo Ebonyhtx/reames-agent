@@ -1,5 +1,5 @@
 """
-Hermes CLI - Unified command-line interface for Hermes Agent.
+Reames CLI - Unified command-line interface for Reames Agent.
 
 Provides subcommands for:
 - hermes chat          - Interactive chat (same as ./hermes)

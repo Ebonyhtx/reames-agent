@@ -1,4 +1,4 @@
-"""Migrate Hermes' MCP server config and Codex's installed curated plugins
+"""Migrate Reames' MCP server config and Codex's installed curated plugins
 to the format Codex expects in ~/.codex/config.toml.
 
 When the user enables the codex_app_server runtime, the codex subprocess

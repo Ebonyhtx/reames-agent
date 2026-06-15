@@ -1,4 +1,4 @@
-"""Hermes-managed Camofox state helpers.
+"""Reames-managed Camofox state helpers.
 
 Provides profile-scoped identity and state directory paths for Camofox
 persistent browser profiles.  When managed persistence is enabled, Hermes

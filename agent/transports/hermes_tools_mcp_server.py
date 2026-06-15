@@ -1,4 +1,4 @@
-"""Hermes-tools-as-MCP server for the codex_app_server runtime.
+"""Reames-tools-as-MCP server for the codex_app_server runtime.
 
 When the user runs `openai/*` turns through the codex app-server, codex
 owns the loop and builds its own tool list. By default, that means

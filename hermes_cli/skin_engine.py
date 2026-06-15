@@ -1,4 +1,4 @@
-"""Hermes CLI skin/theme engine.
+"""Reames CLI skin/theme engine.
 
 A data-driven skin system that lets users customize the CLI's visual appearance.
 Skins are defined as YAML files in ~/.hermes/skins/ or as built-in presets.
@@ -180,11 +180,35 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
             "input_rule": "#0066CC",
             "response_border": "#00D4FF",
             "status_bar_bg": "#1a1a2e",
-            "session_label": "#0088CC",
+            "status_bar_text": "#C0C0C0",
+            "status_bar_strong": "#00D4FF",
+            "status_bar_dim": "#005599",
+            "status_bar_good": "#4caf50",
+            "status_bar_warn": "#ffa726",
+            "status_bar_bad": "#FF8C00",
+            "status_bar_critical": "#FF6B6B",
+            "session_label": "#00D4FF",
             "session_border": "#8B8682",
+            "voice_status_bg": "#1a1a2e",
+            "selection_bg": "#1a1a2e",
+            "completion_menu_bg": "#1a1a2e",
+            "completion_menu_current_bg": "#333355",
+            "completion_menu_meta_bg": "#1a1a2e",
+            "completion_menu_meta_current_bg": "#333355",
         },
         "spinner": {
-            # Empty = use hardcoded defaults in display.py
+            "waiting_faces": ["(⟡)", "(◈)", "(◇)", "(<>)", "(→)"],
+            "thinking_faces": ["(⟡)", "(◈)", "(◇)", "(⌁)", "(✦)"],
+            "thinking_verbs": [
+                "indexing", "grepping", "reading", "editing",
+                "compiling", "bundling", "optimizing", "linking",
+            ],
+            "wings": [
+                ["⟪⟡", "⟡⟫"],
+                ["⟪◇", "◇⟫"],
+                ["⟪⌘", "⌘⟫"],
+                ["⟪◈", "◈⟫"],
+            ],
         },
         "branding": {
             "agent_name": "Reames Agent",
@@ -195,6 +219,19 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
             "help_header": "(^_^)? Available Commands",
         },
         "tool_prefix": "┊",
+        "tool_emojis": {
+            "git_clone": "○",
+            "git_commit": "○",
+            "git_branch": "○",
+            "edit_file": "◇",
+            "write_file": "◇",
+            "read_file": "◇",
+            "terminal": "⌘",
+            "web_search": "⟡",
+            "web_fetch": "⟡",
+            "delegate_task": "◎",
+            "execute_code": "▷",
+        },
     },
     "ares": {
         "name": "ares",

@@ -2,7 +2,7 @@
 name: hermes-agent
 description: "Configure, extend, or contribute to Hermes Agent."
 version: 2.1.0
-author: Hermes Agent + Teknium
+author: Reames Agent + Teknium
 license: MIT
 platforms: [linux, macos, windows]
 metadata:

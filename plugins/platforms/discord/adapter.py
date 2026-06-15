@@ -4397,7 +4397,7 @@ class DiscordAdapter(BasePlatformAdapter):
                 body = body[: max_desc - 3] + "..."
 
             embed = discord.Embed(
-                title="❓ Hermes needs your input",
+                title="❓ Reames needs your input",
                 description=body,
                 color=discord.Color.orange(),
             )

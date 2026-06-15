@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermes Agent Release Script
+"""Reames Agent Release Script
 
 Generates changelogs and creates GitHub releases with CalVer tags.
 

@@ -1,4 +1,4 @@
-"""Hermes middleware contract helpers.
+"""Reames middleware contract helpers.
 
 Observer hooks report what happened. Middleware can change what happens by
 rewriting a request or wrapping the actual execution callback. Keep the small

@@ -556,8 +556,8 @@ def render_edit_diff_with_delta(
 # KawaiiSpinner
 # =========================================================================
 
-class KawaiiSpinner:
-    """Animated spinner with kawaii faces for CLI feedback during tool execution."""
+class ReamesSpinner:
+    """Animated spinner with themed faces for CLI feedback during tool execution."""
 
     SPINNERS = {
         'dots': ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],

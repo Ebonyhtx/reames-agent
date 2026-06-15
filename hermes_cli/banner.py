@@ -540,7 +540,7 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     layout_table.add_column("right", justify="left")
 
     # Resolve skin colors once for the entire banner
-    accent = _skin_color("banner_accent", "#00D4FF")
+    accent = _skin_color("banner_accent", "#00AAFF")
     dim = _skin_color("banner_dim", "#0066CC")
     text = _skin_color("banner_text", "#E0F0FF")
     session_color = _skin_color("session_border", "#8B8682")
@@ -745,8 +745,8 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     right_content = "\n".join(right_lines)
     layout_table.add_row(left_content, right_content)
 
-    title_color = _skin_color("banner_title", "#FFD700")
-    border_color = _skin_color("banner_border", "#CD7F32")
+    title_color = _skin_color("banner_title", "#00D4FF")
+    border_color = _skin_color("banner_border", "#0066CC")
     version_label = format_banner_version_label()
     release_info = get_latest_release_tag()
     if release_info:

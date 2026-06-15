@@ -7,9 +7,9 @@ def _count_lines(files):
     total = 0
     for f in files:
         try:
-            with open(f, 'r') as fh:
+            with open(f, 'r', encoding='utf-8') as fh:
                 total += len(fh.readlines())
-        except:
+        except Exception:
             pass
     return total
 
@@ -20,7 +20,7 @@ def handle_complexity(args):
         r = subprocess.run(["lizard", path, "-l", "python,go,javascript,typescript,rust", "-w"], 
                          capture_output=True, text=True, timeout=30)
         return r.stdout[:2000] if r.stdout else "lizard not installed. Try: pip install lizard"
-    except:
+    except Exception:
         return "lizard not available for complexity analysis."
 
 def handle_dependencies(args):
@@ -32,11 +32,11 @@ def handle_dependencies(args):
         for f in files:
             fp = os.path.join(root, f)
             try:
-                with open(fp, 'r') as fh:
+                with open(fp, 'r', encoding='utf-8') as fh:
                     for line in fh:
                         if re.match(r'^(import |from |require\()', line.strip()):
                             results.append(f"{fp}: {line.strip()[:80]}")
-            except:
+            except Exception:
                 pass
     return "Dependencies:\n" + "\n".join(results[:50]) if results else "No dependencies found."
 

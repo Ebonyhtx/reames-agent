@@ -376,7 +376,7 @@ plugins/<name>/
 
 ## 5. 钩子系统
 
-**目标：** 将 Reasonix 的三层钩子机制移植到 Hermes 核心
+**目标：** 将 Reames 的三层钩子机制移植到 Hermes 核心
 
 ### 5.1 设计思路
 
@@ -416,7 +416,7 @@ hooks:
       timeout: 5000
 ```
 
-### 5.4 移植的脚本（来自 Reasonix）
+### 5.4 移植的脚本（来自 Reames）
 
 | 脚本 | 对应钩子 | 功能 |
 |:---|:---|:---|
@@ -449,9 +449,9 @@ rm -f ~/.hermes/.bypass-hooks   # 恢复
 | `agent/shell_hooks.py` | 扩展现有钩子系统支持三层 + bypass |
 | `tools/registry.py` | 工具注册时可选关联钩子 |
 
-### 5.7 与 Reasonix 现有钩子的关系
+### 5.7 与 Reames 现有钩子的关系
 
-你在 Reasonix 上配的钩子（`pre-tool-check.js`、`check-empty-shell.js`、`run-tests.js`）可以直接移植为 Python 版本，逻辑不变。
+你在 Reames 上配的钩子（`pre-tool-check.js`、`check-empty-shell.js`、`run-tests.js`）可以直接移植为 Python 版本，逻辑不变。
 
 ### 5.8 验证标准
 
@@ -464,7 +464,7 @@ rm -f ~/.hermes/.bypass-hooks   # 恢复
 
 ## 6. 缓存优化
 
-**目标：** 将 Reasonix 的字节稳定前缀缓存策略融入 Hermes
+**目标：** 将 Reames 的字节稳定前缀缓存策略融入 Hermes
 
 ### 6.1 现状分析
 
@@ -475,7 +475,7 @@ Hermes AGENTS.md 明确指出「prompt caching is sacred」，现有策略：
 
 ### 6.2 需要加强的地方
 
-| 问题 | Reasonix 做法 | Hermes 现状 | 改进措施 |
+| 问题 | Reames 做法 | Hermes 现状 | 改进措施 |
 |:---|:---|:---|:---|
 | 消息序列化稳定性 | 确定性序列化，逐字节一致 | Python dict 序列化可能因键顺序变化 | 使用有序 dict + 规范 JSON 序列化 |
 | 系统提示词注入 | 一次构建，永不修改 | 记忆/技能可能在运行时追加 | 将动态部分（Persona）固定在提示词末尾固定位置 |
@@ -611,7 +611,7 @@ cron:
 阶段3 📅 记忆系统 — TencentDB 4 层集成 + 符号化短期记忆
 阶段4 📅 MCP 集群 — SearXNG → GitHub → 代码分析 → 爬虫 → 文档
 阶段5 📅 原生插件 — Git → 编译 → 代码分析 → 爬虫
-阶段6 📅 钩子系统 — Reasonix PreToolUse/PostToolUse/Stop 移植
+阶段6 📅 钩子系统 — Reames PreToolUse/PostToolUse/Stop 移植
 阶段7 📅 缓存优化 — 字节稳定前缀策略
 阶段8 📅 熵管理系统 — 设计已完成，等待实施
 阶段9 📅 桌面端 — 品牌定制 + 仪表盘

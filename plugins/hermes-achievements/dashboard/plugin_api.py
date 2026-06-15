@@ -1,4 +1,4 @@
-"""Hermes Achievements dashboard plugin backend.
+"""Reames Achievements dashboard plugin backend.
 
 Mounted at /api/plugins/hermes-achievements/ by Hermes dashboard.
 """

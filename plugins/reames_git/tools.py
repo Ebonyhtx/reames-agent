@@ -19,6 +19,8 @@ def handle_git_clone(args):
     branch = args.get("branch", "")
     if not url:
         return "Error: url is required"
+    if directory:
+        directory = _os.path.basename(directory)  # prevent path traversal
     cmd = ["clone"]
     if branch:
         cmd += ["--branch", branch]

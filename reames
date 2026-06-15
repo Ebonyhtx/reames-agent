@@ -2,7 +2,7 @@
 """
 Reames Agent CLI launcher.
 
-This wrapper should behave like the installed `hermes` command, including
+This wrapper should behave like the installed `reames` command, including
 subcommands such as `gateway`, `cron`, and `doctor`.
 """
 

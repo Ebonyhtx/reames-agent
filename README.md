@@ -1,12 +1,12 @@
 # Reames Agent
 
-> 基于 Hermes Agent 深度定制的 AI 编码助手 — 由 Reasonix + Hermes 融合而成。
+> 基于 Hermes Agent 深度定制的 AI 编码助手 — 由 Reames 深度定制。
 
 ## 功能概览
 
 | 模块 | 说明 | 状态 |
 |:---|:---|:---:|
-| **记忆系统** | L0-L4 渐进式披露 + Mermaid Offload + TencentDB | ✅ |
+| **记忆系统** | L0-L4 渐进式披露 + Mermaid Offload + 记忆后端 | ✅ |
 | **MCP 集群** | SearXNG 搜索 + GitHub + MarkItDown 文档解析 | ✅ |
 | **原生插件** | Git(7) + Build(4) + CodeAnalysis(2) + Crawler(1) | ✅ |
 | **钩子系统** | PreToolUse / PostToolUse / Stop 三层校验 | ✅ |
@@ -87,6 +87,6 @@ hermes
 
 - **基础框架**: Hermes Agent v0.16
 - **模型**: DeepSeek V4 Flash（默认）
-- **向量数据库**: TencentDB Agent Memory
+- **记忆后端**: 多后端记忆系统
 - **搜索**: SearXNG
 - **文档解析**: Microsoft MarkItDown

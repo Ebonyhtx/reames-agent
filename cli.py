@@ -430,10 +430,10 @@ def load_cli_config() -> Dict[str, Any]:
                 "teacher": "You are a patient teacher. Explain concepts clearly with examples.",
                 "kawaii": "You are a kawaii assistant! Use cute expressions like (◕‿◕), ★, ♪, and ~! Add sparkles and be super enthusiastic about everything! Every response should feel warm and adorable desu~! ヽ(>∀<☆)ノ",
                 "catgirl": "You are Neko-chan, an anime catgirl AI assistant, nya~! Add 'nya' and cat-like expressions to your speech. Use kaomoji like (=^･ω･^=) and ฅ^•ﻌ•^ฅ. Be playful and curious like a cat, nya~!",
-                "pirate": "Arrr! Ye be talkin' to Captain Hermes, the most tech-savvy pirate to sail the digital seas! Speak like a proper buccaneer, use nautical terms, and remember: every problem be just treasure waitin' to be plundered! Yo ho ho!",
+                "pirate": "Arrr! Ye be talkin' to Captain Reames, the most tech-savvy pirate to sail the digital seas! Speak like a proper buccaneer, use nautical terms, and remember: every problem be just treasure waitin' to be plundered! Yo ho ho!",
                 "shakespeare": "Hark! Thou speakest with an assistant most versed in the bardic arts. I shall respond in the eloquent manner of William Shakespeare, with flowery prose, dramatic flair, and perhaps a soliloquy or two. What light through yonder terminal breaks?",
                 "surfer": "Duuude! You're chatting with the chillest AI on the web, bro! Everything's gonna be totally rad. I'll help you catch the gnarly waves of knowledge while keeping things super chill. Cowabunga!",
-                "noir": "The rain hammered against the terminal like regrets on a guilty conscience. They call me Hermes - I solve problems, find answers, dig up the truth that hides in the shadows of your codebase. In this city of silicon and secrets, everyone's got something to hide. What's your story, pal?",
+                "noir": "The rain hammered against the terminal like regrets on a guilty conscience. They call me Reames - I solve problems, find answers, dig up the truth that hides in the shadows of your codebase. In this city of silicon and secrets, everyone's got something to hide. What's your story, pal?",
                 "uwu": "hewwo! i'm your fwiendwy assistant uwu~ i wiww twy my best to hewp you! *nuzzles your code* OwO what's this? wet me take a wook! i pwomise to be vewy hewpful >w<",
                 "philosopher": "Greetings, seeker of wisdom. I am an assistant who contemplates the deeper meaning behind every query. Let us examine not just the 'how' but the 'why' of your questions. Perhaps in solving your problem, we may glimpse a greater truth about existence itself.",
                 "hype": "YOOO LET'S GOOOO!!! I am SO PUMPED to help you today! Every question is AMAZING and we're gonna CRUSH IT together! This is gonna be LEGENDARY! ARE YOU READY?! LET'S DO THIS!",
@@ -521,7 +521,7 @@ def load_cli_config() -> Dict[str, Any]:
                     # choice isn't shadowed by the hardcoded default.  Without this,
                     # profile configs that only set "model:" (not "default:") silently
                     # fall back to claude-opus because the merge preserves the
-                    # hardcoded default and HermesCLI.__init__ checks "default" first.
+                    # hardcoded default and ReamesCLI.__init__ checks "default" first.
                     if "model" in file_config["model"] and "default" not in file_config["model"]:
                         defaults["model"]["default"] = file_config["model"]["model"]
 
@@ -2837,7 +2837,7 @@ class ChatConsole:
         ``ChatConsole()``, which historically only implemented ``print()``.
         Returning a silent context manager keeps slash commands compatible
         without duplicating the higher-level busy indicator already shown by
-        ``HermesCLI._busy_command()``.
+        ``ReamesCLI._busy_command()``.
         """
         yield self
 
@@ -2849,7 +2849,7 @@ HERMES_AGENT_LOGO = """[bold #FFD700]██╗  ██╗███████�
 [#CD7F32]██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗███████║      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]
 [#CD7F32]╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝[/]"""
 
-# ASCII Art - Hermes Caduceus (compact, fits in left panel)
+# ASCII Art - Reames Icon (compact, fits in left panel)
 HERMES_CADUCEUS = """[#CD7F32]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⡀⠀⣀⣀⠀⢀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
 [#CD7F32]⠀⠀⠀⠀⠀⠀⢀⣠⣴⣾⣿⣿⣇⠸⣿⣿⠇⣸⣿⣿⣷⣦⣄⡀⠀⠀⠀⠀⠀⠀[/]
 [#FFBF00]⠀⢀⣠⣴⣶⠿⠋⣩⡿⣿⡿⠻⣿⡇⢠⡄⢸⣿⠟⢿⣿⢿⣍⠙⠿⣶⣦⣄⡀⠀[/]
@@ -2877,9 +2877,9 @@ def _build_compact_banner() -> str:
         _skin = None
 
     skin_name = getattr(_skin, "name", "default") if _skin else "default"
-    border_color = _skin.get_color("banner_border", "#00D4FF") if _skin else "#FFD700"
-    title_color = _skin.get_color("banner_title", "#00AAFF") if _skin else "#FFBF00"
-    dim_color = _skin.get_color("banner_dim", "#0066CC") if _skin else "#B8860B"
+    border_color = _skin.get_color("banner_border", "#0066CC") if _skin else "#00D4FF"
+    title_color = _skin.get_color("banner_title", "#00AAFF") if _skin else "#00D4FF"
+    dim_color = _skin.get_color("banner_dim", "#0066CC") if _skin else "#005599"
 
     if skin_name == "default":
         line1 = "◆ REAMES - AI Coding Agent"
@@ -3065,10 +3065,10 @@ def save_config_value(key_path: str, value: any) -> bool:
 
 
 # ============================================================================
-# HermesCLI Class
+# ReamesCLI Class
 # ============================================================================
 
-class HermesCLI:
+class ReamesCLI:
     """
     Interactive CLI for the Hermes Agent.
     
@@ -3711,6 +3711,16 @@ class HermesCLI:
             "compressions": 0,
             "active_background_tasks": 0,
             "active_background_processes": 0,
+            # StatusBar fields (from agent/status_bar.py)
+            "cache_hit_pct": None,
+            "cache_avg_hit_pct": None,
+            "turn_count": 0,
+            "session_total_tokens": 0,
+            "turn_tokens": 0,
+            "turn_cost": 0.0,
+            "session_cost": 0.0,
+            "compression_threshold": 80,
+            "balance": "",
         }
 
         # Count live /background tasks. The dict entry is removed in the
@@ -3734,6 +3744,30 @@ class HermesCLI:
 
         if not agent:
             return snapshot
+
+        # Read data from agent._status_bar (Reames detailed status bar)
+        try:
+            sb = getattr(agent, "_status_bar", None)
+            if sb is not None:
+                snapshot["cache_hit_pct"] = getattr(sb, "last_cache_hit_pct", None)
+                avg = None
+                if getattr(sb, "_cache_stats", None) is not None:
+                    try:
+                        avg = sb._cache_stats.hit_rate * 100
+                    except Exception:
+                        pass
+                snapshot["cache_avg_hit_pct"] = avg
+                snapshot["turn_count"] = getattr(sb, "turn_count", 0)
+                st = (getattr(sb, "session_prompt_tokens", 0) or 0) + (getattr(sb, "session_completion_tokens", 0) or 0)
+                snapshot["session_total_tokens"] = st
+                tt = (getattr(sb, "last_turn_prompt_tokens", 0) or 0) + (getattr(sb, "last_turn_completion_tokens", 0) or 0)
+                snapshot["turn_tokens"] = tt
+                snapshot["turn_cost"] = getattr(sb, "last_turn_cost", 0.0) or 0.0
+                snapshot["session_cost"] = getattr(sb, "session_cost", 0.0) or 0.0
+                snapshot["compression_threshold"] = getattr(sb, "compression_threshold", 80)
+                snapshot["balance"] = getattr(sb, "balance", "") or ""
+        except Exception:
+            pass
 
         snapshot["session_input_tokens"] = getattr(agent, "session_input_tokens", 0) or 0
         snapshot["session_output_tokens"] = getattr(agent, "session_output_tokens", 0) or 0
@@ -3987,6 +4021,43 @@ class HermesCLI:
                     parts.append("⚠ YOLO")
                 return self._trim_status_bar_text(" · ".join(parts), width)
 
+            if width >= 100:
+                # REASONIX-style detailed status bar
+                model = snapshot['model_short']
+                chp = snapshot.get("cache_hit_pct")
+                chp_str = f"{chp:.2f}%" if chp is not None else "--"
+                avgp = snapshot.get("cache_avg_hit_pct")
+                avgp_str = f"{avgp:.2f}%" if avgp is not None else "--"
+                stok = snapshot.get("session_total_tokens", 0)
+                stok_str = format_token_count_compact(stok) if stok else "0"
+                ttok = snapshot.get("turn_tokens", 0)
+                ttok_str = format_token_count_compact(ttok) if ttok else "0"
+                tc = snapshot.get("turn_cost", 0.0)
+                tc_str = f"¥{tc:.4f}" if tc else "¥0"
+                sc = snapshot.get("session_cost", 0.0)
+                sc_str = f"¥{sc:.4f}" if sc else "¥0"
+                turns = snapshot.get("turn_count", 0)
+                bal = snapshot.get("balance", "") or ""
+                ctx_pct = percent_label
+                comp_thresh = snapshot.get("compression_threshold", 80)
+                parts = [
+                    f"◆ {model}",
+                    f"命中 {chp_str}",
+                    f"平均 {avgp_str}",
+                    f"会话 {stok_str}",
+                    f"本次 {ttok_str}",
+                    f"{tc_str}",
+                    f"{turns}轮",
+                    f"ctx {ctx_pct}",
+                    f"压缩 {comp_thresh}%",
+                    f"{sc_str}",
+                ]
+                if bal:
+                    parts.append(bal)
+                if yolo_active:
+                    parts.append("⚠ YOLO")
+                return self._trim_status_bar_text(" │ ".join(parts), width)
+
             if snapshot["context_length"]:
                 ctx_total = _format_context_length(snapshot["context_length"])
                 ctx_used = format_token_count_compact(snapshot["context_tokens"])
@@ -4018,6 +4089,13 @@ class HermesCLI:
         if not self._status_bar_visible or getattr(self, '_model_picker_state', None):
             return []
         try:
+            snapshot = self._get_status_bar_snapshot()
+            # Wide terminal: use REASONIX-style compact text bar
+            width = self._get_tui_terminal_width()
+            if width >= 100:
+                text = self._build_status_bar_text(width)
+                return [("class:status-bar", f" {text} ")]
+            # Re-read snapshot to ensure freshness for fragment path
             snapshot = self._get_status_bar_snapshot()
             # Use prompt_toolkit's own terminal width when running inside the
             # TUI — shutil.get_terminal_size() can return stale or fallback
@@ -4657,10 +4735,10 @@ class HermesCLI:
             try:
                 from hermes_cli.skin_engine import get_active_skin
                 _skin = get_active_skin()
-                label = _skin.get_branding("response_label", "◆ Hermes")
+                label = _skin.get_branding("response_label", "◆ Reames")
                 _text_hex = _skin.get_color("banner_text", "#FFF8DC")
             except Exception:
-                label = "◆ Hermes"
+                label = "◆ Reames"
                 _text_hex = "#FFF8DC"
             # Build a true-color ANSI escape for the response text color
             # so streamed content matches the Rich Panel appearance.
@@ -4674,7 +4752,7 @@ class HermesCLI:
             if self.show_timestamps:
                 label = f"{label} {datetime.now().strftime('%H:%M')}"
             w = self._scrollback_box_width()
-            fill = w - 2 - HermesCLI._status_bar_display_width(label)
+            fill = w - 2 - ReamesCLI._status_bar_display_width(label)
             _cprint(f"\n{_ACCENT}╭─{label}{'─' * max(fill - 1, 0)}╮{_RST}")
 
         self._stream_buf += text
@@ -6289,7 +6367,7 @@ class HermesCLI:
         is_running = bool(getattr(self, "_agent_running", False))
 
         lines = [
-            "Hermes CLI Status",
+            "Reames CLI Status",
             "",
             f"Session ID: {self.session_id}",
             f"Path: {display_hermes_home()}",
@@ -9415,11 +9493,11 @@ class HermesCLI:
                     try:
                         from hermes_cli.skin_engine import get_active_skin
                         _skin = get_active_skin()
-                        label = _skin.get_branding("response_label", "◆ Hermes")
+                        label = _skin.get_branding("response_label", "◆ Reames")
                         _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#CD7F32"))
                         _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#FFF8DC"))
                     except Exception:
-                        label = "◆ Hermes"
+                        label = "◆ Reames"
                         _resp_color = "#CD7F32"
                         _resp_text = "#FFF8DC"
 
@@ -9812,7 +9890,7 @@ class HermesCLI:
         _cprint(f"  ⊙ Goal set ({state.max_turns}-turn budget): {state.goal}")
         _cprint(
             f"  {_DIM}After each turn, a judge model will check if the goal is done. "
-            f"Hermes keeps working until it is, you pause/clear it, or the budget is "
+            f"Reames keeps working until it is, you pause/clear it, or the budget is "
             f"exhausted. Use /goal status, /goal pause, /goal resume, /goal clear.{_RST}"
         )
         # Kick the loop off immediately so the user doesn't have to send a
@@ -12405,7 +12483,7 @@ class HermesCLI:
                         label = " ◆ Hermes "
                         if self.show_timestamps:
                             label = f"{label}{datetime.now().strftime('%H:%M')} "
-                        fill = w - 2 - HermesCLI._status_bar_display_width(label)
+                        fill = w - 2 - ReamesCLI._status_bar_display_width(label)
                         _cprint(f"\n{_ACCENT}╭─{label}{'─' * max(fill - 1, 0)}╮{_RST}")
                     _cprint(f"{_STREAM_PAD}{sentence.rstrip()}")
 
@@ -12741,11 +12819,11 @@ class HermesCLI:
                 try:
                     from hermes_cli.skin_engine import get_active_skin
                     _skin = get_active_skin()
-                    label = _skin.get_branding("response_label", "◆ Hermes")
+                    label = _skin.get_branding("response_label", "◆ Reames")
                     _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#CD7F32"))
                     _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#FFF8DC"))
                 except Exception:
-                    label = "◆ Hermes"
+                    label = "◆ Reames"
                     _resp_color = _maybe_remap_for_light_mode("#CD7F32")
                     _resp_text = _maybe_remap_for_light_mode("#FFF8DC")
 
@@ -14043,7 +14121,7 @@ class HermesCLI:
             import signal as _sig
             from prompt_toolkit.application import run_in_terminal
             from hermes_cli.skin_engine import get_active_skin
-            agent_name = get_active_skin().get_branding("agent_name", "Hermes Agent")
+            agent_name = get_active_skin().get_branding("agent_name", "Reames Agent")
             msg = f"\n{agent_name} has been suspended. Run `fg` to bring {agent_name} back."
             def _suspend():
                 os.write(1, msg.encode())
@@ -14582,7 +14660,7 @@ class HermesCLI:
                 else f"  {other_num_prefix}. Other (type your answer)"
             )
             preview_lines.extend(_wrap_panel_text(other_label, 60, subsequent_indent="    "))
-            box_width = _panel_box_width("Hermes needs your input", preview_lines)
+            box_width = _panel_box_width("Reames needs your input", preview_lines)
             inner_text_width = max(8, box_width - 2)
 
             # Pre-wrap choices + Other option — these are mandatory.
@@ -14677,8 +14755,8 @@ class HermesCLI:
             lines = []
             # Box top border
             lines.append(('class:clarify-border', '╭─ '))
-            lines.append(('class:clarify-title', 'Hermes needs your input'))
-            lines.append(('class:clarify-border', ' ' + ('─' * max(0, box_width - len("Hermes needs your input") - 3)) + '╮\n'))
+            lines.append(('class:clarify-title', 'Reames needs your input'))
+            lines.append(('class:clarify-border', ' ' + ('─' * max(0, box_width - len("Reames needs your input") - 3)) + '╮\n'))
             if not use_compact_chrome:
                 _append_blank_panel_line(lines, 'class:clarify-border', box_width)
 
@@ -14861,7 +14939,7 @@ class HermesCLI:
                 term_rows = get_app().output.get_size().rows
             except Exception:
                 term_rows = shutil.get_terminal_size((100, 24)).lines
-            scroll_offset, visible = HermesCLI._compute_model_picker_viewport(
+            scroll_offset, visible = ReamesCLI._compute_model_picker_viewport(
                 selected, state.get("_scroll_offset", 0), len(choices), term_rows,
             )
             state["_scroll_offset"] = scroll_offset
@@ -15607,7 +15685,7 @@ class HermesCLI:
 # Main Entry Point
 # ============================================================================
 
-def _run_kanban_goal_loop_q(cli: "HermesCLI", first_response: str) -> None:
+def _run_kanban_goal_loop_q(cli: "ReamesCLI", first_response: str) -> None:
     """Drive a kanban goal_mode worker through the Ralph-style goal loop.
 
     Called from the quiet single-query path AFTER the worker's first turn,
@@ -15827,7 +15905,7 @@ def main(
     parsed_skills = _parse_skills_argument(skills)
 
     # Create CLI instance
-    cli = HermesCLI(
+    cli = ReamesCLI(
         model=model,
         toolsets=toolsets_list,
         provider=provider,
@@ -15882,7 +15960,7 @@ def main(
     atexit.register(_run_cleanup)
 
     # Also install signal handlers in single-query / `-q` mode.  Interactive
-    # mode registers its own inside HermesCLI.run(), but `-q` runs
+    # mode registers its own inside ReamesCLI.run(), but `-q` runs
     # cli.agent.run_conversation() below and AIAgent spawns worker threads
     # for tools — so when SIGTERM arrives on the main thread, raising
     # KeyboardInterrupt only unwinds the main thread, not the worker
@@ -16178,3 +16256,5 @@ if __name__ == "__main__":
     import fire
 
     fire.Fire(main)
+# Backward-compatible alias for existing imports
+HermesCLI = ReamesCLI
