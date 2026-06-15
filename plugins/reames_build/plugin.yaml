@@ -1,5 +1,5 @@
-name: hermes-build
-display_name: hermes-build
+name: reames-build
+display_name: reames-build
 version: 1.0.0
 description: "Build system tools — auto-detect project type, build, test, lint, clean"
 hooks: []

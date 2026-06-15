@@ -4,7 +4,7 @@ import logging
 logger = logging.getLogger(__name__)
 try:
     from tools.registry import registry
-    from hermes_git.tools import GIT_TOOLS
+    from reames_git.tools import GIT_TOOLS
     
     for tool_name, tool_def in GIT_TOOLS.items():
         registry.register(

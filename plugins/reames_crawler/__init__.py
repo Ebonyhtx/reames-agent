@@ -4,7 +4,7 @@ import logging
 logger = logging.getLogger(__name__)
 try:
     from tools.registry import registry
-    from hermes_crawler.tools import CRAWLER_TOOLS
+    from reames_crawler.tools import CRAWLER_TOOLS
     
     for tool_name, tool_def in CRAWLER_TOOLS.items():
         registry.register(

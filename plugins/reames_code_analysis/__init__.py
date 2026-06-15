@@ -4,7 +4,7 @@ import logging
 logger = logging.getLogger(__name__)
 try:
     from tools.registry import registry
-    from hermes_code_analysis.tools import CODE_TOOLS
+    from reames_code_analysis.tools import CODE_TOOLS
     
     for tool_name, tool_def in CODE_TOOLS.items():
         registry.register(

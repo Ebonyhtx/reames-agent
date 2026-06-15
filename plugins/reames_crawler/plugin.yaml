@@ -1,5 +1,5 @@
-name: hermes-crawler
-display_name: hermes-crawler
+name: reames-crawler
+display_name: reames-crawler
 version: 1.0.0
 description: "Advanced web crawling — recursive crawl, structured extraction, sitemap"
 hooks: []

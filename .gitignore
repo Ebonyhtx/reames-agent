@@ -1,40 +1,53 @@
+# Ignore everything by default
+/*
+
+# But allow root-level files and dirs we need
+!/.gitignore
+
+# Agent core - our custom files
+!/agent/entropy.py
+!/agent/status_bar.py
+!/agent/mermaid_offload.py
+!/agent/deepseek_cache.py
+!/agent/__init__.py
+
+# Plugins - our custom plugins
+!/plugins/
+/plugins/*
+!/plugins/reames_git/
+!/plugins/reames_build/
+!/plugins/reames_code_analysis/
+!/plugins/reames_crawler/
+
+# Hooks
+!/hooks/
+/hooks/*
+!/hooks/*.py
+
 # Python
 __pycache__/
 *.py[cod]
-*.so
 *.egg-info/
 dist/
 build/
-.eggs/
-*.egg
 .venv/
 venv/
 env/
-
-# Virtual environment (Hermes uses .venv)
-.venv/
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Hermes runtime
-*.log
-*.pid
-
-# Secrets and local config
+# Secrets
 .env
 *.key
 
-# Temp files
-/tmp/
+# Temp
 *.bak
 *.orig
-__pycache__/
+/tmp/

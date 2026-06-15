@@ -4,7 +4,7 @@ import logging
 logger = logging.getLogger(__name__)
 try:
     from tools.registry import registry
-    from hermes_build.tools import BUILD_TOOLS
+    from reames_build.tools import BUILD_TOOLS
     
     for tool_name, tool_def in BUILD_TOOLS.items():
         registry.register(
