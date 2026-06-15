@@ -60,14 +60,13 @@ def _skin_color(key: str, fallback: str) -> str:
 
 from hermes_cli import __version__ as VERSION, __release_date__ as RELEASE_DATE
 
-HERMES_AGENT_LOGO = """[bold #FFD700]██╗  ██╗███████╗██████╗ ███╗   ███╗███████╗███████╗       █████╗  ██████╗ ███████╗███╗   ██╗████████╗[/]
-[bold #FFD700]██║  ██║██╔════╝██╔══██╗████╗ ████║██╔════╝██╔════╝      ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝[/]
-[#FFBF00]███████║█████╗  ██████╔╝██╔████╔██║█████╗  ███████╗█████╗███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║[/]
-[#FFBF00]██╔══██║██╔══╝  ██╔══██╗██║╚██╔╝██║██╔══╝  ╚════██║╚════╝██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║[/]
-[#CD7F32]██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗███████║      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]
-[#CD7F32]╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝[/]"""
-
-HERMES_CADUCEUS = """[#CD7F32]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⡀⠀⣀⣀⠀⢀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+REAMES_AGENT_LOGO = """[bold #00D4FF]██████╗ ███████╗██████╗ ███╗   ███╗███████╗██████╗       ██████╗ ██████╗ ███████╗███╗   ██╗████████╗[/]
+[bold #00D4FF]██╔══██╗██╔════╝██╔══██╗████╗ ████║██╔════╝╚════██╗      ██╔══██╗██╔════╝██╔════╝████╗  ██║╚══██╔══╝[/]
+[#00AAFF]██████╔╝███████╗██████╔╝██╔████╔██║███████╗ █████╔╝      ██████╔╝██║  ███╗███████╗██╔██╗ ██║   ██║   [/]
+[#00AAFF]██╔══██╗╚════██║██╔══██╗██║╚██╔╝██║╚════██║ ╚═══██╗      ██╔══██╗██║   ██║╚════██║██║╚██╗██║   ██║   [/]
+[#0088FF]██║  ██║███████║██║  ██║██║ ╚═╝ ██║███████║██████╔╝      ██║  ██║╚██████╔╝███████║██║ ╚████║   ██║   [/]
+[#0088FF]╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚═════╝       ╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   [/]"""
+REAMES_ICON = """[#CD7F32]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⡀⠀⣀⣀⠀⢀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
 [#CD7F32]⠀⠀⠀⠀⠀⠀⢀⣠⣴⣾⣿⣿⣇⠸⣿⣿⠇⣸⣿⣿⣷⣦⣄⡀⠀⠀⠀⠀⠀⠀[/]
 [#FFBF00]⠀⢀⣠⣴⣶⠿⠋⣩⡿⣿⡿⠻⣿⡇⢠⡄⢸⣿⠟⢿⣿⢿⣍⠙⠿⣶⣦⣄⡀⠀[/]
 [#FFBF00]⠀⠀⠉⠉⠁⠶⠟⠋⠀⠉⠀⢀⣈⣁⡈⢁⣈⣁⡀⠀⠉⠀⠙⠻⠶⠈⠉⠉⠀⠀[/]
@@ -541,19 +540,19 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     layout_table.add_column("right", justify="left")
 
     # Resolve skin colors once for the entire banner
-    accent = _skin_color("banner_accent", "#FFBF00")
-    dim = _skin_color("banner_dim", "#B8860B")
-    text = _skin_color("banner_text", "#FFF8DC")
+    accent = _skin_color("banner_accent", "#00D4FF")
+    dim = _skin_color("banner_dim", "#0066CC")
+    text = _skin_color("banner_text", "#E0F0FF")
     session_color = _skin_color("session_border", "#8B8682")
 
     # Use skin's custom caduceus art if provided
     try:
         from hermes_cli.skin_engine import get_active_skin
         _bskin = get_active_skin()
-        _hero = _bskin.banner_hero if hasattr(_bskin, 'banner_hero') and _bskin.banner_hero else HERMES_CADUCEUS
+        _hero = _bskin.banner_hero if hasattr(_bskin, 'banner_hero') and _bskin.banner_hero else REAMES_ICON
     except Exception:
         _bskin = None
-        _hero = HERMES_CADUCEUS
+        _hero = REAMES_ICON
     left_lines = ["", _hero, ""]
     model_short = model.split("/")[-1] if "/" in model else model
     if model_short.endswith(".gguf"):
@@ -765,7 +764,7 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     console.print()
     term_width = shutil.get_terminal_size().columns
     if term_width >= 95:
-        _logo = _bskin.banner_logo if _bskin and hasattr(_bskin, 'banner_logo') and _bskin.banner_logo else HERMES_AGENT_LOGO
+        _logo = _bskin.banner_logo if _bskin and hasattr(_bskin, 'banner_logo') and _bskin.banner_logo else REAMES_AGENT_LOGO
         console.print(_logo)
         console.print()
     console.print(outer_panel)
