@@ -810,17 +810,17 @@ def run_conversation(
             agent._vprint(f"{agent.log_prefix}   🔧 Available tools: {len(agent.tools) if agent.tools else 0}")
         else:
             # Animated thinking spinner in quiet mode
-            face = random.choice(KawaiiSpinner.get_thinking_faces())
-            verb = random.choice(KawaiiSpinner.get_thinking_verbs())
+            face = random.choice(ReamesSpinner.get_thinking_faces())
+            verb = random.choice(ReamesSpinner.get_thinking_verbs())
             if agent.thinking_callback:
                 # CLI TUI mode: use prompt_toolkit widget instead of raw spinner
                 # (works in both streaming and non-streaming modes)
                 agent.thinking_callback(f"{face} {verb}...")
             elif not agent._has_stream_consumers() and agent._should_start_quiet_spinner():
-                # Raw KawaiiSpinner only when no streaming consumers and the
+                # Raw ReamesSpinner only when no streaming consumers and the
                 # spinner output has a safe sink.
                 spinner_type = random.choice(['brain', 'sparkle', 'pulse', 'moon', 'star'])
-                thinking_spinner = KawaiiSpinner(f"{face} {verb}...", spinner_type=spinner_type, print_fn=agent._print_fn)
+                thinking_spinner = ReamesSpinner(f"{face} {verb}...", spinner_type=spinner_type, print_fn=agent._print_fn)
                 thinking_spinner.start()
         
         # Log request details if verbose
