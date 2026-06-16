@@ -1100,32 +1100,38 @@ def init_agent(
     # broad pseudo-public config object on the agent instance.
     agent._aux_compression_context_length_config = None
 
-    # Reames: TencentDB 4-layer memory — the one and only memory system.
-    # No Hermes native MemoryStore. No MemoryManager plugin abstraction.
+    # Reames: Native Python memory engine (L0-L3, SQLite-backed)
     agent._memory_core = None
     agent._iters_since_skill = 0
     if not skip_memory:
         try:
-            from agent.memory_tencentdb_core import MemoryTencentdbCore
-            agent._memory_core = MemoryTencentdbCore()
+            from agent.reames_memory import ReamesMemory
+            mem_cfg = _agent_cfg.get("memory", {}) if _agent_cfg else {}
+            data_dir = mem_cfg.get("data_dir", "") or os.path.join(str(get_hermes_home()), "reames_memory")
+            agent._memory_core = ReamesMemory(data_dir=data_dir)
+            agent._memory_core.initialize(
+                session_id=agent.session_id,
+                user_id=getattr(agent, '_user_id', '') or '',
+                platform=platform or "cli",
+                agent=agent,
+            )
+            # Configure embedding if provided
+            _emb_key = mem_cfg.get("embedding_api_key", "") or os.environ.get("MEMORY_EMBEDDING_API_KEY", "")
+            if _emb_key:
+                agent._memory_core.configure_embedding(
+                    api_key=_emb_key,
+                    api_base=mem_cfg.get("embedding_api_base", "https://api.openai.com/v1"),
+                    model=mem_cfg.get("embedding_model", "text-embedding-3-small"),
+                )
+            # Configure extraction intervals
+            agent._memory_core.configure_extraction(
+                l1=int(mem_cfg.get("l1_every_n", 10)),
+                l2=int(mem_cfg.get("l2_every_n", 50)),
+                l3=int(mem_cfg.get("l3_every_n", 200)),
+            )
+            _ra().logger.info("ReamesMemory engine activated")
             
-            _init_kwargs = {
-                "session_id": agent.session_id,
-                "user_id": getattr(agent, '_user_id', '') or '',
-                "platform": platform or "cli",
-                "hermes_home": str(get_hermes_home()),
-            }
-            if agent._session_db:
-                try:
-                    _st = agent._session_db.get_session_title(agent.session_id)
-                    if _st:
-                        _init_kwargs["session_title"] = _st
-                except Exception:
-                    pass
-            agent._memory_core.initialize(**_init_kwargs)
-            _ra().logger.info("TencentDB memory core activated")
-            
-            # Register TencentDB tools
+            # Register memory tool
             if agent.tools is not None:
                 _existing_names = {
                     t.get("function", {}).get("name")
@@ -1133,8 +1139,7 @@ def init_agent(
                     if isinstance(t, dict)
                 }
                 try:
-                    from agent.memory_tencentdb_core import get_tool_schemas
-                    for _schema in get_tool_schemas():
+                    for _schema in agent._memory_core.get_tool_schemas():
                         _tname = _schema.get("name", "")
                         if _tname and _tname in _existing_names:
                             continue
@@ -1146,7 +1151,7 @@ def init_agent(
                 except Exception:
                     pass
         except Exception as _mpe:
-            _ra().logger.warning("TencentDB memory core init failed: %s", _mpe)
+            _ra().logger.warning("ReamesMemory init failed: %s", _mpe)
             agent._memory_core = None
 
     # Skills config: nudge interval for skill creation reminders
