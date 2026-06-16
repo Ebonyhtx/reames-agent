@@ -230,6 +230,10 @@ class ReamesMemory:
 
     def on_session_end(self, messages: list = None):
         logger.info("ReamesMemory: session end, turns=%d", self._turn_count)
+        # Flush pending L1 extraction
+        if self._agent and self._l1_pending > 0:
+            try: self._extract_l1()
+            except Exception: pass
         try:
             with sqlite3.connect(str(self._db_path)) as conn:
                 cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
@@ -245,6 +249,23 @@ class ReamesMemory:
                 t.start(); self._bg_threads.append(t)
         except Exception as e:
             logger.debug("L2/L3 check failed: %s", e)
+
+    def register_signal_handler(self):
+        """Register SIGINT handler to flush memory on Ctrl+C."""
+        import signal
+        def _flush_and_exit(signum, frame):
+            try:
+                self.on_session_end()
+                for t in getattr(self, "_bg_threads", []):
+                    t.join(timeout=3)
+            except Exception:
+                pass
+            import sys as _sys
+            _sys.exit(0)
+        try:
+            signal.signal(signal.SIGINT, _flush_and_exit)
+        except Exception:
+            pass
 
     def shutdown(self):
         logger.info("ReamesMemory: shutdown")

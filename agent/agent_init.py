@@ -1137,6 +1137,7 @@ def init_agent(
                 l3=int(mem_cfg.get("l3_every_n", 200)),
             )
             _ra().logger.info("ReamesMemory engine activated")
+            agent._memory_core.register_signal_handler()
             
             # Register memory tool
             if agent.tools is not None:
