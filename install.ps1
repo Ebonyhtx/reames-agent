@@ -1,5 +1,5 @@
 # Reames Agent — Windows One-Command Installer
-# Usage in PowerShell: irm https://rebrand.ly/reames-install | iex
+# Usage in PowerShell: irm https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/install.ps1 | iex
 #
 # 一键完成: Python/Git检查 → 克隆 → venv → pip安装 → PATH → 隔离旧Hermes → 配置向导
 
@@ -44,7 +44,7 @@ foreach ($loc in @("$env:LOCALAPPDATA\hermes\config.yaml", "$env:USERPROFILE\.he
 $oldHomeEnv = [Environment]::GetEnvironmentVariable("HERMES_HOME", "User")
 if ($oldHomeEnv -and $oldHomeEnv -like "*.hermes*") {
     Write-Color "[WARN] Old HERMES_HOME detected. Reames will ignore it." "Yellow"
-    [Environment]::SetEnvironmentVariable("HERMES_HOME", $null, "User")
+    [Environment]::SetEnvironmentVariable("HERMES_HOME", "", "User")
 }
 if ($oldWarns.Count -gt 0) {
     Write-Color "[OK] Old Hermes config found — Reames uses separate paths, no conflict." "DarkGray"
@@ -72,7 +72,7 @@ if (-not (Test-Path ".venv")) {
     & $pythonCmd -m venv .venv
 }
 $pip = Join-Path ".venv" "Scripts" "pip.exe"
-& $pip install --quiet --upgrade pip 2>&1 | Out-Null
+try { & $pip install --quiet --upgrade pip 2>&1 | Out-Null } catch {}
 Write-Color "[OK] Installing dependencies (1-3 minutes)..." "Cyan"
 & $pip install --quiet -e . 2>&1 | Out-Null
 Write-Color "[OK] Reames Agent installed!" "Green"
