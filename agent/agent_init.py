@@ -1113,7 +1113,17 @@ def init_agent(
     if not skip_memory:
         try:
             from agent.reames_memory import ReamesMemory
-            mem_cfg = _agent_cfg.get("memory", {}) if _agent_cfg else {}
+            mem_cfg = {}
+            try:
+                import yaml
+                reames_cfg = os.path.expanduser("~/.reames/config.yaml")
+                if os.path.exists(reames_cfg):
+                    with open(reames_cfg, encoding="utf-8") as f:
+                        mem_cfg = yaml.safe_load(f).get("memory", {}) or {}
+            except Exception:
+                pass
+            if not mem_cfg:
+                mem_cfg = _agent_cfg.get("memory", {}) if _agent_cfg else {}
             data_dir = mem_cfg.get("data_dir", "") or os.path.join(str(get_hermes_home()), "reames_memory")
             agent._memory_core = ReamesMemory(data_dir=data_dir)
             agent._memory_core.initialize(
