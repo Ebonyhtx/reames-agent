@@ -1634,3 +1634,32 @@ def register(ctx) -> None:
 
 # Export for convenience
 __all__ = ["MemoryTencentdbCore", "GatewaySupervisor", "MemoryTencentdbSdkClient"]
+
+
+def get_tool_schemas():
+    """Return TencentDB memory tool schemas."""
+    return [
+        {
+            "name": "memory_tencentdb_memory_search",
+            "description": "Search structured L1-L3 memories from past conversations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"}
+                },
+                "required": ["query"]
+            }
+        },
+        {
+            "name": "memory_tencentdb_conversation_search",
+            "description": "Search raw L0 conversation history.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"}
+                },
+                "required": ["query"]
+            }
+        }
+    ]
+

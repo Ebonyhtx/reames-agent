@@ -306,30 +306,12 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # ── Volatile tier (changes per session/turn — never cached) ───
     volatile_parts: List[str] = []
 
-    if agent._memory_store:
-        if agent._memory_enabled:
-            mem_block = agent._memory_store.format_for_system_prompt("memory")
-            if mem_block:
-                volatile_parts.append(mem_block)
-        # USER.md is always included when enabled.
-        if agent._user_profile_enabled:
-            user_block = agent._memory_store.format_for_system_prompt("user")
-            if user_block:
-                volatile_parts.append(user_block)
-
-    # External memory provider system prompt block (additive to built-in)
-    # Priority: TencentDB L3 Persona > SOUL.md
-    # SOUL.md goes to stable (cached), TencentDB L3 goes to volatile (per-session).
-    # When both exist, the volatile L3 takes precedence in the model's view.
-    # TencentDB L3 Persona (优先从 memory_core，兜底从 memory_manager)
-    _mem = getattr(agent, '_memory_core', None) or getattr(agent, '_memory_manager', None)
-    if _mem:
+    # Reames: TencentDB L3 Persona (direct integration, no abstraction)
+    if agent._memory_core:
         try:
-            _ext_mem_block = (_mem.build_system_prompt_block() 
-                              if hasattr(_mem, 'build_system_prompt_block')
-                              else _mem.build_system_prompt())
-            if _ext_mem_block:
-                volatile_parts.append(_ext_mem_block)
+            _l3_block = agent._memory_core.system_prompt_block()
+            if _l3_block:
+                volatile_parts.append(_l3_block)
         except Exception:
             pass
 

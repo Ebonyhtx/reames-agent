@@ -1100,132 +1100,54 @@ def init_agent(
     # broad pseudo-public config object on the agent instance.
     agent._aux_compression_context_length_config = None
 
-    # Persistent memory (MEMORY.md + USER.md) -- loaded from disk
-    agent._memory_store = None
-    agent._memory_enabled = False
-    agent._user_profile_enabled = False
-    agent._memory_nudge_interval = 10
-    agent._turns_since_memory = 0
+    # Reames: TencentDB 4-layer memory — the one and only memory system.
+    # No Hermes native MemoryStore. No MemoryManager plugin abstraction.
+    agent._memory_core = None
     agent._iters_since_skill = 0
     if not skip_memory:
         try:
-            mem_config = _agent_cfg.get("memory", {})
-            agent._memory_enabled = mem_config.get("memory_enabled", False)
-            agent._user_profile_enabled = mem_config.get("user_profile_enabled", False)
-            agent._memory_nudge_interval = int(mem_config.get("nudge_interval", 10))
-            if agent._memory_enabled or agent._user_profile_enabled:
-                from tools.memory_tool import MemoryStore
-                agent._memory_store = MemoryStore(
-                    memory_char_limit=mem_config.get("memory_char_limit", 2200),
-                    user_char_limit=mem_config.get("user_char_limit", 1375),
-                )
-                agent._memory_store.load_from_disk()
-        except Exception:
-            pass  # Memory is optional -- don't break agent init
-    
-
-
-    # Memory provider plugin (external — one at a time, alongside built-in)
-    # Reads memory.provider from config to select which plugin to activate.
-    # Reames: defaults to memory_tencentdb (deep integration — 4-layer memory)
-    agent._memory_manager = None
-    if not skip_memory:
-        try:
-            _mem_provider_name = mem_config.get("provider", "memory_tencentdb") if mem_config else "memory_tencentdb"
-            # Default to TencentDB when no provider configured
-            if not _mem_provider_name or not _mem_provider_name.strip():
-                _mem_provider_name = "memory_tencentdb"
-
-            if _mem_provider_name and _mem_provider_name.strip():
-                from agent.memory_manager import MemoryManager as _MemoryManager
-                from plugins.memory import load_memory_provider as _load_mem
-                agent._memory_manager = _MemoryManager()
-                _mp = _load_mem(_mem_provider_name)
-                if _mp and _mp.is_available():
-                    agent._memory_manager.add_provider(_mp)
-                if agent._memory_manager.providers:
-                    _init_kwargs = {
-                        "session_id": agent.session_id,
-                        "platform": platform or "cli",
-                        "hermes_home": str(get_hermes_home()),
-                        "agent_context": "primary",
-                    }
-                    # Thread session title for memory provider scoping
-                    # (e.g. honcho uses this to derive chat-scoped session keys)
-                    if agent._session_db:
-                        try:
-                            _st = agent._session_db.get_session_title(agent.session_id)
-                            if _st:
-                                _init_kwargs["session_title"] = _st
-                        except Exception:
-                            pass
-                    # Thread gateway user identity for per-user memory scoping
-                    if agent._user_id:
-                        _init_kwargs["user_id"] = agent._user_id
-                    if agent._user_id_alt:
-                        _init_kwargs["user_id_alt"] = agent._user_id_alt
-                    if agent._user_name:
-                        _init_kwargs["user_name"] = agent._user_name
-                    if agent._chat_id:
-                        _init_kwargs["chat_id"] = agent._chat_id
-                    if agent._chat_name:
-                        _init_kwargs["chat_name"] = agent._chat_name
-                    if agent._chat_type:
-                        _init_kwargs["chat_type"] = agent._chat_type
-                    if agent._thread_id:
-                        _init_kwargs["thread_id"] = agent._thread_id
-                    # Thread gateway session key for stable per-chat Honcho session isolation
-                    if agent._gateway_session_key:
-                        _init_kwargs["gateway_session_key"] = agent._gateway_session_key
-                    # Profile identity for per-profile provider scoping
-                    try:
-                        from reames_cli.profiles import get_active_profile_name
-                        _profile = get_active_profile_name()
-                        _init_kwargs["agent_identity"] = _profile
-                        _init_kwargs["agent_workspace"] = "hermes"
-                    except Exception:
-                        pass
-                    agent._memory_manager.initialize_all(**_init_kwargs)
-                    _ra().logger.info("Memory provider '%s' activated", _mem_provider_name)
-                else:
-                    _ra().logger.debug("Memory provider '%s' not found or not available", _mem_provider_name)
-                    agent._memory_manager = None
+            from agent.memory_tencentdb_core import MemoryTencentdbCore
+            agent._memory_core = MemoryTencentdbCore()
+            
+            _init_kwargs = {
+                "session_id": agent.session_id,
+                "user_id": getattr(agent, '_user_id', '') or '',
+                "platform": platform or "cli",
+                "hermes_home": str(get_hermes_home()),
+            }
+            if agent._session_db:
+                try:
+                    _st = agent._session_db.get_session_title(agent.session_id)
+                    if _st:
+                        _init_kwargs["session_title"] = _st
+                except Exception:
+                    pass
+            agent._memory_core.initialize(**_init_kwargs)
+            _ra().logger.info("TencentDB memory core activated")
+            
+            # Register TencentDB tools
+            if agent.tools is not None:
+                _existing_names = {
+                    t.get("function", {}).get("name")
+                    for t in agent.tools
+                    if isinstance(t, dict)
+                }
+                try:
+                    from agent.memory_tencentdb_core import get_tool_schemas
+                    for _schema in get_tool_schemas():
+                        _tname = _schema.get("name", "")
+                        if _tname and _tname in _existing_names:
+                            continue
+                        _wrapped = {"type": "function", "function": _schema}
+                        agent.tools.append(_wrapped)
+                        if _tname:
+                            agent.valid_tool_names.add(_tname)
+                            _existing_names.add(_tname)
+                except Exception:
+                    pass
         except Exception as _mpe:
-            _ra().logger.warning("Memory provider plugin init failed: %s", _mpe)
-            agent._memory_manager = None
-
-    # Inject memory provider tool schemas into the tool surface.
-    # Skip tools whose names already exist (plugins may register the
-    # same tools via ctx.register_tool(), which lands in agent.tools
-    # through _ra().get_tool_definitions()).  Duplicate function names cause
-    # 400 errors on providers that enforce unique names (e.g. Xiaomi
-    # MiMo via Nous Portal).
-    #
-    # Respect the platform's enabled_toolsets configuration (#5544):
-    #   enabled_toolsets is None        → no filter, inject (backward compat)
-    #   "memory" in enabled_toolsets    → user opted in, inject
-    #   otherwise (incl. [])            → user excluded memory, skip injection
-    #
-    # Without this gate, `platform_toolsets: telegram: []` still leaks memory
-    # provider tools (fact_store, etc.) into the tool surface — a 10x latency
-    # penalty on local models and a frequent trigger of tool-call loops.
-    if agent._memory_manager and agent.tools is not None and (
-        agent.enabled_toolsets is None or "memory" in agent.enabled_toolsets
-    ):
-        _existing_tool_names = {
-            t.get("function", {}).get("name")
-            for t in agent.tools
-            if isinstance(t, dict)
-        }
-        for _schema in agent._memory_manager.get_all_tool_schemas():
-            _tname = _schema.get("name", "")
-            if _tname and _tname in _existing_tool_names:
-                continue  # already registered via plugin path
-            _wrapped = {"type": "function", "function": _schema}
-            agent.tools.append(_wrapped)
-            if _tname:
-                agent.valid_tool_names.add(_tname)
-                _existing_tool_names.add(_tname)
+            _ra().logger.warning("TencentDB memory core init failed: %s", _mpe)
+            agent._memory_core = None
 
     # Skills config: nudge interval for skill creation reminders
     agent._skill_nudge_interval = 10
