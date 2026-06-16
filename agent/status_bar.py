@@ -42,7 +42,7 @@ class StatusBar:
         self.last_cache_hit_pct = 0.0
         self.last_model = ""
         self.context_used_pct = 0
-        self.compression_threshold = 80
+        self.compression_threshold = 50
         self.balance = ""
         self._hit_pct_total = 0.0
         self.user_turn_count = 0
