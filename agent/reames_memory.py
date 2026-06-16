@@ -112,7 +112,7 @@ class ReamesMemory:
         # Retroactively embed existing facts
         try:
             with sqlite3.connect(str(self._db_path)) as conn:
-                rows = conn.execute("SELECT id, content FROM memories WHERE embedding IS NULL LIMIT 20").fetchall()
+                rows = conn.execute("SELECT id, content FROM memories WHERE embedding IS NULL").fetchall()
                 done = 0
                 for mid, text in rows:
                     emb = self._get_embedding(text)
