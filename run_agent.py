@@ -2888,11 +2888,11 @@ class AIAgent:
         """
         if self._memory_manager:
             try:
-                self._memory_manager.on_session_end(messages or [])
+                (self._memory_core or self._memory_manager).on_session_end(messages or [])
             except Exception:
                 pass
             try:
-                self._memory_manager.shutdown_all()
+                (self._memory_core or self._memory_manager).shutdown_all()
             except Exception:
                 pass
         # Notify context engine of session end (flush DAG, close DBs, etc.)
@@ -2912,7 +2912,7 @@ class AIAgent:
         session_id — they just flush pending extraction now."""
         if self._memory_manager:
             try:
-                self._memory_manager.on_session_end(messages or [])
+                (self._memory_core or self._memory_manager).on_session_end(messages or [])
             except Exception:
                 pass
         # Notify context engine of session end too — same lifecycle moment as
@@ -2930,7 +2930,7 @@ class AIAgent:
             except Exception:
                 pass
 
-    def _sync_external_memory_for_turn(
+    def _sync_tencentdb_memory_for_turn(
         self,
         *,
         original_user_message: Any,
@@ -2972,12 +2972,12 @@ class AIAgent:
             sync_kwargs = {"session_id": self.session_id or ""}
             if messages is not None:
                 sync_kwargs["messages"] = messages
-            self._memory_manager.sync_all(
+            (self._memory_core or self._memory_manager).sync_all(
                 original_user_message,
                 final_response,
                 **sync_kwargs,
             )
-            self._memory_manager.queue_prefetch_all(
+            (self._memory_core or self._memory_manager).queue_prefetch_all(
                 original_user_message,
                 session_id=self.session_id or "",
             )

@@ -321,9 +321,13 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # Priority: TencentDB L3 Persona > SOUL.md
     # SOUL.md goes to stable (cached), TencentDB L3 goes to volatile (per-session).
     # When both exist, the volatile L3 takes precedence in the model's view.
-    if agent._memory_manager:
+    # TencentDB L3 Persona (优先从 memory_core，兜底从 memory_manager)
+    _mem = getattr(agent, '_memory_core', None) or getattr(agent, '_memory_manager', None)
+    if _mem:
         try:
-            _ext_mem_block = agent._memory_manager.build_system_prompt()
+            _ext_mem_block = (_mem.build_system_prompt_block() 
+                              if hasattr(_mem, 'build_system_prompt_block')
+                              else _mem.build_system_prompt())
             if _ext_mem_block:
                 volatile_parts.append(_ext_mem_block)
         except Exception:

@@ -4595,7 +4595,7 @@ def run_conversation(
     # External memory provider: sync the completed turn + queue next prefetch.
     # === TencentDB deep customization: trigger L3 persona update ===
     _maybe_trigger_l3_persona_update(agent)
-    agent._sync_external_memory_for_turn(
+    agent._sync_tencentdb_memory_for_turn(
         original_user_message=original_user_message,
         final_response=final_response,
         interrupted=interrupted,
@@ -4659,7 +4659,7 @@ _tdb_logger = _tdb_logging.getLogger(__name__)
 
 def _maybe_trigger_l3_persona_update(agent):
     """Check if it's time to trigger L3 persona update based on memory count."""
-    if not hasattr(agent, '_memory_manager') or not agent._memory_manager:
+    if not (getattr(agent, '_memory_core', None) or getattr(agent, '_memory_manager', None)):
         return
     for prov in getattr(agent._memory_manager, '_providers', []):
         if getattr(prov, 'name', '') == 'memory_tencentdb':
