@@ -1116,7 +1116,7 @@ def init_agent(
             mem_cfg = {}
             try:
                 import yaml
-                reames_cfg = os.path.expanduser("~/.reames/config.yaml")
+                reames_cfg = str(get_hermes_home() / "config.yaml")
                 if os.path.exists(reames_cfg):
                     with open(reames_cfg, encoding="utf-8") as f:
                         mem_cfg = yaml.safe_load(f).get("memory", {}) or {}
