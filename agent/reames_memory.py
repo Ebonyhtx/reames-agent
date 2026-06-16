@@ -72,7 +72,7 @@ class ReamesMemory:
             conn.execute("""CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL, role TEXT NOT NULL,
-                content TEXT NOT NULL,
+                content TEXT NOT NULL, embedding BLOB,
                 created_at TEXT DEFAULT (datetime('now'))
             )""")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_sess ON messages(session_id)")
@@ -129,11 +129,14 @@ class ReamesMemory:
         with self._lock:
             self._turn_count += 1
             with sqlite3.connect(str(self._db_path)) as conn:
-                conn.execute("INSERT INTO messages (session_id, role, content) VALUES (?,?,?)",
-                            (self._session_id, "user", user_content))
+                # Embed messages if embedding API configured
+                user_emb = self._get_embedding(user_content) if self._embedding_api_key else None
+                conn.execute("INSERT INTO messages (session_id, role, content, embedding) VALUES (?,?,?,?)",
+                            (self._session_id, "user", user_content, self._blob_from_vec(user_emb)))
                 if assistant_content:
-                    conn.execute("INSERT INTO messages (session_id, role, content) VALUES (?,?,?)",
-                                (self._session_id, "assistant", assistant_content))
+                    asst_emb = self._get_embedding(assistant_content) if self._embedding_api_key else None
+                    conn.execute("INSERT INTO messages (session_id, role, content, embedding) VALUES (?,?,?,?)",
+                                (self._session_id, "assistant", assistant_content, self._blob_from_vec(asst_emb)))
                 conn.commit()
             self._l1_pending += 1
 
@@ -202,14 +205,22 @@ class ReamesMemory:
         vec = self._get_embedding(query)
         if vec is None:
             return []
-        with sqlite3.connect(str(self._db_path)) as conn:
-            rows = conn.execute("SELECT content, embedding FROM memories WHERE embedding IS NOT NULL").fetchall()
         results = []
-        for content, emb in rows:
-            v = self._blob_to_vector(emb)
-            if v and len(v) == len(vec):
-                sim = self._cosine_sim(vec, v)
-                results.append((content, sim))
+        with sqlite3.connect(str(self._db_path)) as conn:
+            # Search L1 (memories — always vectorized)
+            rows = conn.execute("SELECT content, embedding FROM memories WHERE embedding IS NOT NULL").fetchall()
+            for content, emb in rows:
+                v = self._blob_to_vector(emb)
+                if v and len(v) == len(vec):
+                    sim = self._cosine_sim(vec, v)
+                    results.append((content, sim))
+            # Search L0 (messages — if embedded)
+            rows2 = conn.execute("SELECT content, embedding FROM messages WHERE embedding IS NOT NULL LIMIT 200").fetchall()
+            for content, emb in rows2:
+                v = self._blob_to_vector(emb)
+                if v and len(v) == len(vec):
+                    sim = self._cosine_sim(vec, v)
+                    results.append((content, sim * 0.8))  # slight weight penalty vs memories
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:limit]
 
