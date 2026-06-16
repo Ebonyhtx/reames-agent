@@ -364,7 +364,7 @@ class ReamesMemory:
             body = json.dumps({
                 "model": getattr(agent, 'model', 'deepseek-v4-flash'),
                 "messages": [
-                    {"role": "system", "content": "You are a memory extraction assistant. Return facts only."},
+                    {"role": "system", "content": "你是一个记忆提取助手。只返回提取的事实，不评论。"},
                     {"role": "user", "content": prompt}
                 ],
                 "max_tokens": 1000, "temperature": 0.0,
@@ -413,7 +413,7 @@ class ReamesMemory:
             facts = "\n".join(f"- {r[0]}" for r in rows)
             if not facts:
                 return
-            prompt = "Synthesize a concise user persona (preferences, habits, goals) from these facts. Under 200 chars.\n\n" + facts
+            prompt = "根据以下事实合成一份简洁的用户画像（偏好、习惯、技术栈、目标）。200字以内。\n\n" + facts
             persona = self._call_llm(prompt)
             if persona:
                 self._persona_path.write_text(persona.strip(), encoding="utf-8")
@@ -454,6 +454,14 @@ class ReamesMemory:
 
     def get_tool_schemas(self) -> List[dict]:
         return [{
+            "name": "reames_memory_status",
+            "description": "Show Reames memory system status (L0-L3).",
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        }, {
+            "name": "reames_memory_prune",
+            "description": "Manually prune old memories.",
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        }, {
             "name": "reames_memory_search",
             "description": "Search Reames memory (L0-L3): conversations, facts, scenes, persona.",
             "parameters": {
@@ -462,6 +470,31 @@ class ReamesMemory:
                 "required": ["query"]
             }
         }]
+
+    # -- Management -------------------------------------------------
+
+    def get_status(self) -> str:
+        """Return memory system status summary."""
+        with sqlite3.connect(str(self._db_path)) as conn:
+            msg_cnt = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+            mem_cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+            emb_cnt = conn.execute("SELECT COUNT(*) FROM memories WHERE embedding IS NOT NULL").fetchone()[0]
+        persona = "yes" if self._persona_path.exists() else "no"
+        scenes = "yes" if self._scenes_path.exists() else "no"
+        db_kb = self._db_path.stat().st_size / 1024 if self._db_path.exists() else 0
+        return (
+            "ReamesMemory L0=%d L1=%d(e=%d) L2=%s L3=%s DB=%.0fKB turns=%d"
+            % (msg_cnt, mem_cnt, emb_cnt, scenes, persona, db_kb, self._turn_count)
+        )
+    def manual_prune(self) -> str:
+        """Manually trigger prune and return result."""
+        with sqlite3.connect(str(self._db_path)) as conn:
+            before = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        self.archive()
+        self.prune()
+        with sqlite3.connect(str(self._db_path)) as conn:
+            after = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        return f"Pruned: {before} -> {after} memories"
 
     # -- Entropy management ------------------------------------------
 
@@ -537,10 +570,14 @@ class ReamesMemory:
     def handle_tool_call(self, tool_name: str, args: dict) -> str:
         if tool_name == "reames_memory_search":
             return self.recall(args.get("query", ""))
+        if tool_name == "reames_memory_status":
+            return self.get_status()
+        if tool_name == "reames_memory_prune":
+            return self.manual_prune()
         return f"Unknown tool: {tool_name}"
 
     def has_tool(self, tool_name: str) -> bool:
-        return tool_name == "reames_memory_search"
+        return tool_name in ("reames_memory_search", "reames_memory_status", "reames_memory_prune")
 
 
 def get_tool_schemas() -> List[dict]:
