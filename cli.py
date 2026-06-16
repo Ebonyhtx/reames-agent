@@ -8976,6 +8976,7 @@ class ReamesCLI:
                         _tip_color = get_active_skin().get_color("banner_dim", "#B8860B")
                     except Exception:
                         _tip_color = "#B8860B"
+                    if _tip:
                     cc.print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
                 except Exception:
                     pass
@@ -8991,6 +8992,7 @@ class ReamesCLI:
                         _tip_color = get_active_skin().get_color("banner_dim", "#B8860B")
                     except Exception:
                         _tip_color = "#B8860B"
+                    if _tip:
                     self._console_print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
                 except Exception:
                     pass
@@ -13346,7 +13348,8 @@ class ReamesCLI:
                 _tip_color = _welcome_skin.get_color("banner_dim", "#B8860B")
             except Exception:
                 _tip_color = "#B8860B"
-            self._console_print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
+            if _tip:
+                    self._console_print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
         except Exception:
             pass  # Tips are non-critical — never break startup
 
