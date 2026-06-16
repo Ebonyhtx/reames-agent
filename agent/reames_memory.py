@@ -158,6 +158,20 @@ class ReamesMemory:
             t = threading.Thread(target=self._extract_l1, daemon=True, name="reames-l1")
             t.start()
 
+        # Check L2/L3 accumulation after each turn
+        if self._l1_pending > 0 and self._l1_pending % 5 == 0:
+            try:
+                with sqlite3.connect(str(self._db_path)) as conn:
+                    cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+                if cnt >= self._l2_interval:
+                    t = threading.Thread(target=self._aggregate_l2, daemon=True, name="reames-l2")
+                    t.start()
+                if cnt >= self._l3_interval:
+                    t = threading.Thread(target=self._synthesize_l3, daemon=True, name="reames-l3")
+                    t.start()
+            except Exception:
+                pass
+
     def recall(self, query: str, *, session_id: str = "") -> str:
         """Search all layers (L0+L1+L2+L3) and return ranked results."""
         if not query:
@@ -278,6 +292,17 @@ class ReamesMemory:
                     rows = conn.execute(
                         f'SELECT content FROM {table} WHERE content LIKE ? LIMIT ?',
                         ('%' + query + '%', limit)
+                    ).fetchall()
+                    results += [(r[0], weight/(i+1)) for i, r in enumerate(rows)]
+                except Exception:
+                    pass
+        # Fallback: LIKE for Chinese/CJK text
+        if not results:
+            for table, weight in [("memories", 0.3), ("messages", 0.15)]:
+                try:
+                    rows = conn.execute(
+                        f"SELECT content FROM {table} WHERE content LIKE ? LIMIT ?",
+                        ("%" + query + "%", limit)
                     ).fetchall()
                     results += [(r[0], weight/(i+1)) for i, r in enumerate(rows)]
                 except Exception:
