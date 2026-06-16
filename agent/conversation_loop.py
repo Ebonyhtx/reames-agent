@@ -442,6 +442,13 @@ def run_conversation(
             agent._status_bar = StatusBar()
         except Exception:
             agent._status_bar = None
+    # Increment user turn counter (once per conversation_loop call, not per API call)
+    if agent._status_bar is not None:
+        try:
+            agent._status_bar.user_turn_count += 1
+        except Exception:
+            pass
+
     # Fetch account balance
     if agent._status_bar is not None:
         try:

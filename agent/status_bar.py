@@ -45,6 +45,7 @@ class StatusBar:
         self.compression_threshold = 80
         self.balance = ""
         self._hit_pct_total = 0.0
+        self.user_turn_count = 0
     
     def record_api_usage(self, prompt_tokens: int, completion_tokens: int, 
                           cache_hit_tokens: int = 0, cost: float = 0.0,
@@ -149,7 +150,7 @@ class StatusBar:
             f"{_GREEN}{hit_rate:.2f}%{_RESET}",
             f"{_DIM}avg {avg_hit:.2f}%{_RESET}",
             f"{self._fmt_cost(self.last_turn_cost)}",
-            f"{self.turn_count} turns",
+            f"{self.user_turn_count}轮",
             f"ctx {self._ctx_bar(self.context_used_pct)}",
             f"{self.compression_threshold}%",
             f"{_BOLD}{self._fmt_cost(self.session_cost)}{_RESET}",
