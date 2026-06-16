@@ -1131,7 +1131,7 @@ def init_agent(
     agent._memory_manager = None
     if not skip_memory:
         try:
-            _mem_provider_name = mem_config.get("provider", "") if mem_config else ""
+            _mem_provider_name = mem_config.get("provider", "memory_tencentdb") if mem_config else "memory_tencentdb"
             # Default to TencentDB when no provider configured
             if not _mem_provider_name or not _mem_provider_name.strip():
                 _mem_provider_name = "memory_tencentdb"
