@@ -209,6 +209,10 @@ class ReamesMemory:
             if cnt >= self._l3_interval:
                 t = threading.Thread(target=self._synthesize_l3, daemon=True, name="reames-l3")
                 t.start()
+            # Auto-prune every 50 sessions to prevent unbounded growth
+            if cnt >= 500:
+                t = threading.Thread(target=self.prune, daemon=True, name="reames-prune")
+                t.start()
         except Exception as e:
             logger.debug("L2/L3 check failed: %s", e)
 
@@ -447,6 +451,66 @@ class ReamesMemory:
                 "required": ["query"]
             }
         }]
+
+    # -- Entropy management ------------------------------------------
+
+    def prune(self, max_memories: int = 1000, max_age_days: int = 90):
+        """Prune old memories. Keeps most recent N, deletes oldest beyond that.
+        
+        Args:
+            max_memories: Keep at most this many memories (default 1000)
+            max_age_days: Also delete memories older than this (default 90 days)
+        """
+        with sqlite3.connect(str(self._db_path)) as conn:
+            try:
+                # Delete by age
+                conn.execute(
+                    "DELETE FROM memories WHERE created_at < datetime('now', ?)",
+                    (f'-{max_age_days} days',)
+                )
+                aged = conn.total_changes
+
+                # Delete by count: keep only the most recent max_memories
+                conn.execute("""
+                    DELETE FROM memories WHERE id NOT IN (
+                        SELECT id FROM memories ORDER BY id DESC LIMIT ?
+                    )
+                """, (max_memories,))
+                counted = conn.total_changes - aged
+
+                # Also prune old messages
+                conn.execute(
+                    "DELETE FROM messages WHERE created_at < datetime('now', ?)",
+                    (f'-{max_age_days} days',)
+                )
+                conn.execute("""
+                    DELETE FROM messages WHERE id NOT IN (
+                        SELECT id FROM messages ORDER BY id DESC LIMIT ?
+                    )
+                """, (max_memories * 10,))
+
+                # Rebuild FTS index after deletes
+                conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
+                conn.execute("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")
+                conn.commit()
+
+                total = aged + counted
+                if total > 0:
+                    logger.info("Pruned %d old records (age=%d, count=%d)", total, aged, counted)
+            except Exception as e:
+                logger.warning("Prune failed: %s", e)
+
+    def archive(self, archive_dir: str = ""):
+        """Archive old memories to a backup file before pruning."""
+        target = Path(archive_dir or str(self._data_dir)) / f"archive_{datetime.now().strftime('%Y%m%d')}.db"
+        if target.exists():
+            return
+        try:
+            import shutil
+            shutil.copy2(str(self._db_path), str(target))
+            logger.info("Archived to %s", target)
+        except Exception as e:
+            logger.warning("Archive failed: %s", e)
 
     # -- API compatibility ------------------------------------------
 
