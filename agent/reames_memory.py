@@ -51,6 +51,8 @@ class ReamesMemory:
         self._l1_pending = 0
         self._lock = threading.Lock()
         self._agent: Any = None
+        self._last_l2_count = 0
+        self._last_l3_count = 0
 
         self._embedding_api_key = ""
         self._embedding_api_base = ""
