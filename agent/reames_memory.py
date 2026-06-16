@@ -163,7 +163,7 @@ class ReamesMemory:
             try:
                 with sqlite3.connect(str(self._db_path)) as conn:
                     cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-                if cnt >= self._l2_interval and not self._scenes_path.exists():
+                if cnt >= self._l2_interval:
                     t = threading.Thread(target=self._aggregate_l2, name="reames-l2")
                     t.start()
                 # L3 synthesis only at session_end (persona is session-level)
