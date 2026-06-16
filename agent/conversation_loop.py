@@ -442,6 +442,14 @@ def run_conversation(
             agent._status_bar = StatusBar()
         except Exception:
             agent._status_bar = None
+    # Fetch account balance
+    if agent._status_bar is not None:
+        try:
+            api_key = getattr(agent, 'api_key', '') or os.environ.get('DEEPSEEK_API_KEY', '')
+            if api_key:
+                agent._status_bar.fetch_balance(api_key)
+        except Exception:
+            pass
     final_response = None
     # Initialize cache stability tracker (persistent across turns)
     if not hasattr(agent, '_cache_stats') or agent._cache_stats is None:

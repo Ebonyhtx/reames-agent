@@ -87,6 +87,24 @@ class StatusBar:
     def set_cache_stats(self, cache_stats):
         self._cache_stats = cache_stats
     
+    def fetch_balance(self, api_key: str):
+        """Fetch DeepSeek account balance from API."""
+        if not api_key:
+            return
+        try:
+            import urllib.request, json
+            req = urllib.request.Request(
+                "https://api.deepseek.com/user/balance",
+                headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+            )
+            resp = urllib.request.urlopen(req, timeout=5)
+            data = json.loads(resp.read())
+            bal = data.get("balance", data.get("total_balance", ""))
+            if bal is not None:
+                self.balance = f"¥{float(bal):.2f}"
+        except Exception:
+            pass
+    
     def set_balance(self, balance_str: str):
         self.balance = balance_str
     
