@@ -109,6 +109,21 @@ class ReamesMemory:
         self._embedding_api_key = api_key
         self._embedding_api_base = api_base.rstrip("/")
         self._embedding_model = model
+        # Retroactively embed existing facts
+        try:
+            with sqlite3.connect(str(self._db_path)) as conn:
+                rows = conn.execute("SELECT id, content FROM memories WHERE embedding IS NULL LIMIT 20").fetchall()
+                done = 0
+                for mid, text in rows:
+                    emb = self._get_embedding(text)
+                    if emb:
+                        conn.execute("UPDATE memories SET embedding=? WHERE id=?", (self._blob_from_vec(emb), mid))
+                        done += 1
+                conn.commit()
+            if done:
+                logger.info("Retroactive embedding: %d facts", done)
+        except Exception:
+            pass
 
     def configure_extraction(self, l1: int = 10, l2: int = 50, l3: int = 200):
         self._l1_interval = l1
@@ -196,7 +211,7 @@ class ReamesMemory:
             except Exception:
                 pass
 
-        kw = self._search_keyword(query, self._recall_count)
+        kw = self._search_fresh(query, self._recall_count)
         results = kw
         if self._embedding_api_key:
             try:
