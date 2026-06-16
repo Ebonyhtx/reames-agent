@@ -246,7 +246,7 @@ class ReamesMemory:
             if cnt >= self._l3_interval:
                 t = threading.Thread(target=self._synthesize_l3, name="reames-l3")
                 t.start(); self._bg_threads.append(t)
-            if cnt >= 200:
+            if cnt >= 500:
                 t = threading.Thread(target=self.prune, name="reames-prune")
                 t.start(); self._bg_threads.append(t)
         except Exception as e:
@@ -604,12 +604,12 @@ class ReamesMemory:
 
     # -- Entropy management ------------------------------------------
 
-    def prune(self, max_memories: int = 1000, max_age_days: int = 90):
+    def prune(self, max_memories: int = 500, max_age_days: int = 30):
         """Prune old memories. Keeps most recent N, deletes oldest beyond that.
         
         Args:
-            max_memories: Keep at most this many memories (default 1000)
-            max_age_days: Also delete memories older than this (default 90 days)
+            max_memories: Keep at most this many (default 500)
+            max_age_days: Also delete older than this (default 30 days)
         """
         with sqlite3.connect(str(self._db_path)) as conn:
             try:
