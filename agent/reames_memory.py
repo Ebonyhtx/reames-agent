@@ -367,8 +367,11 @@ class ReamesMemory:
                 if row and row[0]:
                     try:
                         ts = datetime.strptime(row[0][:19], "%Y-%m-%d %H:%M:%S")
-                        age_days = (now - ts).total_seconds() / 86400 / 7.0
-                        score = score * 0.7 + (1.0/(age_days+1)) * 0.3
+                        age_weeks = (now - ts).total_seconds() / 86400 / 7.0
+                        age_hours = (now - ts).total_seconds() / 3600
+                        week_f = 1.0/(age_weeks+1)
+                        hour_f = 1.0/(age_hours+1)
+                        score = score * 0.7 + (week_f * 0.7 + hour_f * 0.3) * 0.3
                     except Exception: pass
                 ilist.append((content, score))
         ilist.sort(key=lambda x: x[1], reverse=True)
@@ -390,8 +393,11 @@ class ReamesMemory:
                 if row and row[0]:
                     try:
                         ts = datetime.strptime(row[0][:19], "%Y-%m-%d %H:%M:%S")
-                        age_days = (now - ts).total_seconds() / 86400 / 7.0
-                        score = score * 0.7 + (1.0 / (age_days + 1)) * 0.3
+                        age_weeks = (now - ts).total_seconds() / 86400 / 7.0
+                        age_hours = (now - ts).total_seconds() / 3600
+                        week_f = 1.0/(age_weeks+1)
+                        hour_f = 1.0/(age_hours+1)
+                        score = score * 0.7 + (week_f * 0.7 + hour_f * 0.3) * 0.3
                     except Exception:
                         pass
                 weighted.append((content, score))
