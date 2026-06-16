@@ -164,19 +164,9 @@ class ReamesMemory:
                 with sqlite3.connect(str(self._db_path)) as conn:
                     cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
                 if cnt >= self._l2_interval and not self._scenes_path.exists():
-                    try:
-                        logger.info("L2 aggregation triggered (%d facts)", cnt)
-                        self._aggregate_l2()
-                        logger.info("L2 aggregation complete")
-                    except Exception as e:
-                        logger.warning("L2 aggregation failed: %s", e)
-                if cnt >= self._l3_interval and not self._persona_path.exists():
-                    try:
-                        logger.info("L3 synthesis triggered (%d facts)", cnt)
-                        self._synthesize_l3()
-                        logger.info("L3 synthesis complete")
-                    except Exception as e:
-                        logger.warning("L3 synthesis failed: %s", e)
+                    t = threading.Thread(target=self._aggregate_l2, name="reames-l2")
+                    t.start()
+                # L3 synthesis only at session_end (persona is session-level)
             except Exception:
                 pass
 
@@ -237,21 +227,26 @@ class ReamesMemory:
         try:
             with sqlite3.connect(str(self._db_path)) as conn:
                 cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+            self._bg_threads = []
             if cnt >= self._l2_interval:
-                t = threading.Thread(target=self._aggregate_l2, daemon=True, name="reames-l2")
-                t.start()
+                t = threading.Thread(target=self._aggregate_l2, name="reames-l2")
+                t.start(); self._bg_threads.append(t)
             if cnt >= self._l3_interval:
-                t = threading.Thread(target=self._synthesize_l3, daemon=True, name="reames-l3")
-                t.start()
-            # Auto-prune every 50 sessions to prevent unbounded growth
+                t = threading.Thread(target=self._synthesize_l3, name="reames-l3")
+                t.start(); self._bg_threads.append(t)
             if cnt >= 200:
-                t = threading.Thread(target=self.prune, daemon=True, name="reames-prune")
-                t.start()
+                t = threading.Thread(target=self.prune, name="reames-prune")
+                t.start(); self._bg_threads.append(t)
         except Exception as e:
             logger.debug("L2/L3 check failed: %s", e)
 
     def shutdown(self):
         logger.info("ReamesMemory: shutdown")
+        for t in getattr(self, "_bg_threads", []):
+            try:
+                t.join(timeout=5)
+            except Exception:
+                pass
 
     def on_turn_start(self, turn_count: int, message: str = ""):
         """Compatibility: called at turn start."""
