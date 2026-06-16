@@ -8977,7 +8977,7 @@ class ReamesCLI:
                     except Exception:
                         _tip_color = "#B8860B"
                     if _tip:
-                    cc.print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
+                        cc.print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
                 except Exception:
                     pass
             else:
@@ -8993,7 +8993,7 @@ class ReamesCLI:
                     except Exception:
                         _tip_color = "#B8860B"
                     if _tip:
-                    self._console_print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
+                        self._console_print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
                 except Exception:
                     pass
         elif canonical == "history":
