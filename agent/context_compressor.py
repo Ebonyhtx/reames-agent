@@ -616,6 +616,7 @@ class ContextCompressor(ContextEngine):
         provider: str = "",
         api_mode: str = "",
         abort_on_summary_failure: bool = False,
+        cache_first: bool = False,
     ):
         self.model = model
         self.base_url = base_url
@@ -632,6 +633,7 @@ class ContextCompressor(ContextEngine):
         # When False (default = historical behavior), insert a
         # deterministic "summary unavailable" handoff and drop the middle window.
         self.abort_on_summary_failure = abort_on_summary_failure
+        self.cache_first = cache_first
 
         self.context_length = get_model_context_length(
             model, base_url=base_url, api_key=api_key,
@@ -2040,7 +2042,32 @@ The user has requested that this compaction PRIORITISE preserving all informatio
                 tail_msgs,
             )
 
-        # Phase 3: Generate structured summary
+        # Phase 3: Generate structured summary (skipped in cache_first mode)
+        if self.cache_first:
+            if not self.quiet_mode:
+                _savings_ct = current_tokens - estimate_messages_tokens_rough(messages) if current_tokens else 0
+                logger.info(
+                    "cache_first=True: tool-only compression, skipping LLM summary "
+                    "(freed ~%d tokens)", _savings_ct,
+                )
+            compressed = messages
+            compressed = self._sanitize_tool_pairs(compressed)
+            compressed = _strip_historical_media(compressed)
+            _new_est = estimate_messages_tokens_rough(compressed)
+            _savings_pct = max(0.0, (1 - _new_est / max(display_tokens, 1)) * 100) if display_tokens > 0 else 0.0
+            self._last_compression_savings_pct = _savings_pct
+            if _savings_pct < 10:
+                self._ineffective_compression_count += 1
+            else:
+                self._ineffective_compression_count = 0
+            self.compression_count += 1
+            if not self.quiet_mode:
+                logger.info(
+                    "cache_first compression #%d: %d->%d messages (%.0f%% savings)",
+                    self.compression_count, n_messages, len(compressed), _savings_pct,
+                )
+            return compressed
+
         summary = self._generate_summary(turns_to_summarize, focus_topic=focus_topic)
 
         # If summary generation failed, behavior splits on

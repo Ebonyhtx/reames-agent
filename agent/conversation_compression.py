@@ -635,7 +635,44 @@ def compress_context(
     # release will see the NEW session_id in state.db / SessionEntry and
     # acquire on that — no race against our just-finished work.
     _release_lock()
+    # Background cache warm-up — daemon thread, best-effort.
+    if getattr(agent, "_cache_stats", None):
+        import threading as _th
+        _th.Thread(target=_fire_cache_warmup, args=(agent, compressed), daemon=True).start()
     return compressed, new_system_prompt
+
+
+def _fire_cache_warmup(agent: Any, messages: list) -> None:
+    """Background cache warm-up: send a minimal request so DeepSeek computes
+    KV cache for the new prefix after compression.  Daemon thread, best-effort.
+    """
+    if not getattr(agent, "_cache_stats", None):
+        return  # only warm when cache tracking is active
+    try:
+        import json, urllib.request, threading
+        _warm = messages + [{"role": "user", "content": "."}]
+        _body = {
+            "model": agent.model,
+            "messages": _warm,
+            "max_tokens": 1,
+            "temperature": 0.0,
+        }
+        _base = (getattr(agent, "base_url", "https://api.deepseek.com/v1") or "https://api.deepseek.com/v1").rstrip("/")
+        if not _base.endswith("/v1"):
+            _base += "/v1"
+        _req = urllib.request.Request(
+            f"{_base}/chat/completions",
+            data=json.dumps(_body).encode(),
+            headers={
+                "Authorization": f"Bearer {getattr(agent, 'api_key', '')}",
+                "Content-Type": "application/json",
+            },
+        )
+        _resp = urllib.request.urlopen(_req, timeout=10)
+        _resp.read()
+        logger.debug("Cache warm-up complete (HTTP %d)", _resp.status)
+    except Exception as _we:
+        logger.debug("Cache warm-up skipped: %s", _we)
 
 
 def try_shrink_image_parts_in_messages(api_messages: list) -> bool:
