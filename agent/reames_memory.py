@@ -342,8 +342,22 @@ class ReamesMemory:
                     if v and len(v) == len(vec):
                         sim = self._cosine_sim(vec, v) * weight
                         results.append((content, sim))
-        results.sort(key=lambda x: x[1], reverse=True)
-        return results[:limit]
+
+        # Freshness weighting
+        now = datetime.now()
+        ilist = []
+        with __import__("sqlite3").connect(str(self._db_path)) as conn:
+            for content, score in results:
+                row = conn.execute("SELECT created_at FROM memories WHERE content=? LIMIT 1", (content,)).fetchone()
+                if row and row[0]:
+                    try:
+                        ts = datetime.strptime(row[0][:19], "%Y-%m-%d %H:%M:%S")
+                        age_days = (now - ts).total_seconds() / 86400
+                        score = score * 0.7 + (1.0/(age_days+1)) * 0.3
+                    except Exception: pass
+                ilist.append((content, score))
+        ilist.sort(key=lambda x: x[1], reverse=True)
+        return ilist[:limit]
 
     def _search_fresh(self, query: str, limit: int = 5):
         """Search with freshness weighting: newer results score higher."""
