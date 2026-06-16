@@ -4659,9 +4659,9 @@ _tdb_logger = _tdb_logging.getLogger(__name__)
 
 def _maybe_trigger_l3_persona_update(agent):
     """Check if it's time to trigger L3 persona update based on memory count."""
-    if not (getattr(agent, '_memory_core', None) or getattr(agent, '_memory_manager', None)):
+    if not (getattr(agent, '_memory_core', None)):
         return
-    for prov in getattr(agent._memory_manager, '_providers', []):
+    for prov in getattr(agent._memory_core, '_providers', []):
         if getattr(prov, 'name', '') == 'memory_tencentdb':
             try:
                 block = prov.system_prompt_block()

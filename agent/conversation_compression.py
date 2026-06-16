@@ -426,9 +426,9 @@ def compress_context(
                 logger.debug("compression lock release failed: %s", _rel_err)
 
     # Notify external memory provider before compression discards context
-    if agent._memory_manager:
+    if agent._memory_core:
         try:
-            agent._memory_manager.on_pre_compress(messages)
+            agent._memory_core.on_pre_compress(messages)
         except Exception:
             pass
 
@@ -583,8 +583,8 @@ def compress_context(
     # over. See #6672.
     try:
         _old_sid = locals().get("old_session_id")
-        if _old_sid and agent._memory_manager:
-            agent._memory_manager.on_session_switch(
+        if _old_sid and agent._memory_core:
+            agent._memory_core.on_session_switch(
                 agent.session_id or "",
                 parent_session_id=_old_sid,
                 reset=False,

@@ -2886,13 +2886,13 @@ class AIAgent:
         NOT called per-turn — only at CLI exit, /reset, gateway
         session expiry, etc.
         """
-        if self._memory_manager:
+        if self._memory_core:
             try:
-                (self._memory_core or self._memory_manager).on_session_end(messages or [])
+                (self._memory_core or self._memory_core).on_session_end(messages or [])
             except Exception:
                 pass
             try:
-                (self._memory_core or self._memory_manager).shutdown_all()
+                (self._memory_core or self._memory_core).shutdown_all()
             except Exception:
                 pass
         # Notify context engine of session end (flush DAG, close DBs, etc.)
@@ -2910,9 +2910,9 @@ class AIAgent:
         Called when session_id rotates (e.g. /new, context compression);
         providers keep their state and continue running under the old
         session_id — they just flush pending extraction now."""
-        if self._memory_manager:
+        if self._memory_core:
             try:
-                (self._memory_core or self._memory_manager).on_session_end(messages or [])
+                (self._memory_core or self._memory_core).on_session_end(messages or [])
             except Exception:
                 pass
         # Notify context engine of session end too — same lifecycle moment as
@@ -2966,18 +2966,18 @@ class AIAgent:
         """
         if interrupted:
             return
-        if not (self._memory_manager and final_response and original_user_message):
+        if not (self._memory_core and final_response and original_user_message):
             return
         try:
             sync_kwargs = {"session_id": self.session_id or ""}
             if messages is not None:
                 sync_kwargs["messages"] = messages
-            (self._memory_core or self._memory_manager).sync_all(
+            (self._memory_core or self._memory_core).sync_all(
                 original_user_message,
                 final_response,
                 **sync_kwargs,
             )
-            (self._memory_core or self._memory_manager).queue_prefetch_all(
+            (self._memory_core or self._memory_core).queue_prefetch_all(
                 original_user_message,
                 session_id=self.session_id or "",
             )

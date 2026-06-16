@@ -59,8 +59,8 @@ def agent_runtime_owns_post_tool_hook(agent: Any, function_name: str) -> bool:
         return True
     if getattr(agent, "_context_engine_tool_names", None) and function_name in agent._context_engine_tool_names:
         return True
-    memory_manager = getattr(agent, "_memory_manager", None)
-    return bool(memory_manager and memory_manager.has_tool(function_name))
+    memory_manager = getattr(agent, "_memory_core", None)
+    return bool(memory_core and memory_core.has_tool(function_name))
 
 
 def convert_to_trajectory_format(agent, messages: List[Dict[str, Any]], user_query: str, completed: bool) -> List[Dict[str, Any]]:
@@ -1753,12 +1753,12 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
                 target=target,
                 content=next_args.get("content"),
                 old_text=next_args.get("old_text"),
-                store=agent._memory_store,
+                store=agent._memory_core,
             )
             # Bridge: notify external memory provider of built-in memory writes
-            if agent._memory_manager and next_args.get("action") in {"add", "replace"}:
+            if agent._memory_core and next_args.get("action") in {"add", "replace"}:
                 try:
-                    agent._memory_manager.on_memory_write(
+                    agent._memory_core.on_memory_write(
                         next_args.get("action", ""),
                         target,
                         next_args.get("content", ""),
@@ -1770,9 +1770,9 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
                 except Exception:
                     pass
             return _finish_agent_tool(result, next_args)
-    elif agent._memory_manager and agent._memory_manager.has_tool(function_name):
+    elif agent._memory_core and agent._memory_core.has_tool(function_name):
         def _execute(next_args: dict) -> Any:
-            return _finish_agent_tool(agent._memory_manager.handle_tool_call(function_name, next_args), next_args)
+            return _finish_agent_tool(agent._memory_core.handle_tool_call(function_name, next_args), next_args)
     elif function_name == "clarify":
         def _execute(next_args: dict) -> Any:
             from tools.clarify_tool import clarify_tool as _clarify_tool

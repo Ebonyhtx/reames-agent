@@ -383,8 +383,6 @@ def invalidate_system_prompt(agent: Any) -> None:
     so the rebuilt prompt captures any writes from this session.
     """
     agent._cached_system_prompt = None
-    if agent._memory_store:
-        agent._memory_store.load_from_disk()
 
 
 def format_tools_for_system_message(agent: Any) -> str:

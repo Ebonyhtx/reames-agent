@@ -1018,12 +1018,12 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     target=target,
                     content=next_args.get("content"),
                     old_text=next_args.get("old_text"),
-                    store=agent._memory_store,
+                    store=agent._memory_core,
                 )
                 # Bridge: notify external memory provider of built-in memory writes
-                if agent._memory_manager and next_args.get("action") in {"add", "replace"}:
+                if agent._memory_core and next_args.get("action") in {"add", "replace"}:
                     try:
-                        agent._memory_manager.on_memory_write(
+                        agent._memory_core.on_memory_write(
                             next_args.get("action", ""),
                             target,
                             next_args.get("content", ""),
@@ -1135,9 +1135,9 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     spinner.stop(cute_msg)
                 elif agent._should_emit_quiet_tool_messages():
                     agent._vprint(f"  {cute_msg}")
-        elif agent._memory_manager and agent._memory_manager.has_tool(function_name):
+        elif agent._memory_core and agent._memory_core.has_tool(function_name):
             # Memory provider tools (hindsight_retain, honcho_search, etc.)
-            # These are not in the tool registry — route through MemoryManager.
+            # These are not in the tool registry — route through MemoryTencentdbCore.
             spinner = None
             if agent._should_emit_quiet_tool_messages() and agent._should_start_quiet_spinner():
                 face = random.choice(ReamesSpinner.get_waiting_faces())
@@ -1148,7 +1148,7 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             _mem_result = None
             try:
                 def _execute(next_args: dict) -> Any:
-                    return agent._memory_manager.handle_tool_call(function_name, next_args)
+                    return agent._memory_core.handle_tool_call(function_name, next_args)
                 function_result, function_args = _run_agent_tool_execution_middleware(
                     agent,
                     function_name=function_name,
@@ -1160,7 +1160,7 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                 _mem_result = function_result
             except Exception as tool_error:
                 function_result = json.dumps({"error": f"Memory tool '{function_name}' failed: {tool_error}"})
-                logger.error("memory_manager.handle_tool_call raised for %s: %s", function_name, tool_error, exc_info=True)
+                logger.error("memory_core.handle_tool_call raised for %s: %s", function_name, tool_error, exc_info=True)
             finally:
                 tool_duration = time.time() - tool_start_time
                 cute_msg = _get_cute_tool_message_impl(function_name, function_args, tool_duration, result=_mem_result)
