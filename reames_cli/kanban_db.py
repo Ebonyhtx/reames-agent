@@ -6628,7 +6628,7 @@ def _kanban_worker_skill_available(hermes_home: Optional[str]) -> bool:
 
     # An unset HERMES_HOME means the worker falls back to the default root
     # home (``~/.hermes``), which ships the bundled skill.
-    base = _Path(hermes_home) if hermes_home else (_Path.home() / ".hermes")
+    base = _Path(hermes_home) if hermes_home else (get_hermes_home())
     skills_root = base / "skills"
     if not skills_root.is_dir():
         return False

@@ -92,7 +92,7 @@ def _disk_cache_path(home_path: Optional[Path] = None) -> Path:
     to `$HERMES_HOME` / `~/.hermes` keeps direct callers working too.
     """
     if home_path is None:
-        home_path = Path(os.getenv("HERMES_HOME", Path.home() / ".hermes"))
+        home_path = Path(os.getenv("HERMES_HOME", get_hermes_home()))
     return home_path / "cache" / _DISK_CACHE_BASENAME
 
 

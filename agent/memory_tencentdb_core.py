@@ -443,7 +443,7 @@ class GatewaySupervisor:
             return env_dir
         home = os.environ.get("HOME") or os.environ.get("USERPROFILE")
         if home:
-            return os.path.join(home, ".hermes", "logs", "memory_tencentdb")
+            return os.path.join(str(get_hermes_home()), "logs", "memory_tencentdb")
         return os.path.join(os.getcwd(), ".memory-tencentdb-logs")
 
     def _close_log_handles(self) -> None:

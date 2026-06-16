@@ -56,7 +56,7 @@ def _resolve_log_path() -> Path:
     else ``~/.hermes``. A local copy avoids an import cycle with the
     middleware which lives below ``hermes_cli``.
     """
-    home = os.environ.get("HERMES_HOME") or str(Path.home() / ".hermes")
+    home = str(get_hermes_home())
     return Path(home) / "logs" / "dashboard-auth.log"
 
 

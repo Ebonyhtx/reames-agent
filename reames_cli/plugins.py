@@ -1110,7 +1110,7 @@ class PluginManager:
 
         # 3. Project plugins (./.hermes/plugins/)
         if _env_enabled("HERMES_ENABLE_PROJECT_PLUGINS"):
-            project_dir = Path.cwd() / ".hermes" / "plugins"
+            project_dir = get_hermes_home() / "plugins"
             logger.debug("Scanning project plugins: %s", project_dir)
             project_manifests = self._scan_directory(project_dir, source="project")
             logger.debug("  project: %d manifest(s)", len(project_manifests))

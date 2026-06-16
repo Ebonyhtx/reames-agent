@@ -13,7 +13,7 @@ def _hermes_home_path() -> Path:
         from reames_constants import get_hermes_home  # local import to avoid cycles
         return get_hermes_home()
     except Exception:
-        return Path(os.path.expanduser("~/.hermes"))
+        return get_hermes_home()
 
 
 def _hermes_root_path() -> Path:
@@ -22,7 +22,7 @@ def _hermes_root_path() -> Path:
         from reames_constants import get_default_hermes_root  # local import to avoid cycles
         return get_default_hermes_root()
     except Exception:
-        return Path(os.path.expanduser("~/.hermes"))
+        return get_hermes_home()
 
 
 def build_write_denied_paths(home: str) -> set[str]:
@@ -490,7 +490,7 @@ def _find_sandbox_mirror_segments(parts: tuple) -> Optional[int]:
         # Need at least: sandboxes / <backend> / <task> / home / .hermes / <thing>
         if i + 5 >= len(parts):
             continue
-        if parts[i + 3] == "home" and parts[i + 4] == ".hermes":
+        if parts[i + 3] == "home" and parts[i + 4] in (".hermes", ".reames"):
             return i + 4
     return None
 
