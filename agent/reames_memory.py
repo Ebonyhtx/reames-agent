@@ -442,27 +442,27 @@ class ReamesMemory:
     # -- L2 Scene Aggregation (via DeepSeek) ------------------------
 
     def _aggregate_l2(self):
+        """Full re-aggregation: read ALL L1 facts, synthesize 2-4 scenes."""
         try:
             with sqlite3.connect(str(self._db_path)) as conn:
-                rows = conn.execute(
-                    "SELECT content FROM memories ORDER BY id DESC LIMIT ?",
-                    (self._l2_interval,)
-                ).fetchall()
+                cur = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+            if cur - self._last_l2_count < self._l2_interval:
+                return  # not enough new facts
+            self._last_l2_count = cur
+            with sqlite3.connect(str(self._db_path)) as conn:
+                rows = conn.execute("SELECT content FROM memories").fetchall()
             facts = "\n".join(f"- {r[0]}" for r in rows)
             if not facts:
                 return
             prompt = (
-                "Group these facts into 2-4 thematic scenes (e.g. project setup, deployment, debugging).\n"
-                "Per scene: ## Scene Name\\n- fact 1\\n- fact 2\\n\n" + facts
+                "将以下事实按主题分为2-4个场景。每个场景格式：## 场景名\n- 事实1\n- 事实2\n\n" + facts
             )
             scenes = self._call_llm(prompt)
             if scenes:
                 self._scenes_path.write_text(scenes.strip(), encoding="utf-8")
-                logger.info("L2 scenes aggregated: %d chars", len(scenes))
+                logger.info("L2 scenes aggregated: %d facts -> %d chars", cur, len(scenes))
         except Exception as e:
             logger.warning("L2 aggregation failed: %s", e)
-
-    # -- L3 Persona Synthesis (via DeepSeek) ------------------------
 
     def _synthesize_l3(self):
         try:
