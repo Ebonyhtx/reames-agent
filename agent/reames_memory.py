@@ -11,6 +11,7 @@ import os
 import sqlite3
 import threading
 from pathlib import Path
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -369,9 +370,12 @@ class ReamesMemory:
                 ],
                 "max_tokens": 1000, "temperature": 0.0,
             }).encode()
-            base = getattr(agent, 'base_url', 'https://api.deepseek.com')
+            base = getattr(agent, 'base_url', 'https://api.deepseek.com/v1').rstrip("/")
+            # Ensure single /v1 suffix
+            if not base.endswith("/v1"):
+                base += "/v1"
             req = urllib.request.Request(
-                f"{base}/v1/chat/completions", data=body,
+                f"{base}/chat/completions", data=body,
                 headers={"Authorization": f"Bearer {getattr(agent, 'api_key', '')}",
                          "Content-Type": "application/json"}
             )
@@ -506,17 +510,28 @@ class ReamesMemory:
 
     def list_memories(self, limit: int = 20) -> str:
         """List recent memories for inspection."""
+        out = []
         with sqlite3.connect(str(self._db_path)) as conn:
+            # L1 facts first
             rows = conn.execute(
                 "SELECT content, created_at FROM memories ORDER BY id DESC LIMIT ?",
                 (limit,)
             ).fetchall()
-        if not rows:
-            return "(no memories)"
-        out = []
-        out.append("Recent memories:")
-        for idx, (content, ts) in enumerate(rows, 1):
-            out.append("  %d. [%s] %s" % (idx, ts[:10], content[:120]))
+            if rows:
+                out.append("L1 Facts:")
+                for idx, (content, ts) in enumerate(rows, 1):
+                    out.append("  %d. [%s] %s" % (idx, ts[:10], content[:120]))
+            # L0 messages
+            rows2 = conn.execute(
+                "SELECT role, content, created_at FROM messages ORDER BY id DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+            if rows2:
+                out.append("L0 Messages:")
+                for idx, (role, content, ts) in enumerate(rows2, 1):
+                    out.append("  %d. [%s] %s: %s" % (idx, ts[:10], role, content[:100]))
+        if not out:
+            return "(no data)"
         return chr(10).join(out)
 
     def manual_prune(self, max_count: int = 500) -> str:
