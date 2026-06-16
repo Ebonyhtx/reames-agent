@@ -27,12 +27,7 @@ class StatusBar:
     """Tracks and formats per-turn statistics for display."""
 
     def __init__(self):
-        self._cache_stats = None
-        try:
-            from agent.deepseek_cache import CacheStats
-            self._cache_stats = CacheStats()
-        except Exception:
-            logger.debug("CacheStats init failed, continuing without cache tracking")
+        self._cache_stats = None  # injected externally via set_cache_stats()
         
         # Cumulative tracking
         self.session_prompt_tokens = 0
@@ -86,6 +81,9 @@ class StatusBar:
                 self._cache_stats.record_turn(messages)
             except Exception:
                 logger.debug("CacheStats record_turn failed")
+    
+    def set_cache_stats(self, cache_stats):
+        self._cache_stats = cache_stats
     
     def set_balance(self, balance_str: str):
         self.balance = balance_str

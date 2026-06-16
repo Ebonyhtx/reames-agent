@@ -442,6 +442,12 @@ def run_conversation(
             agent._status_bar = StatusBar()
         except Exception:
             agent._status_bar = None
+    # Share local cache stats with status bar (single source of truth)
+    if agent._status_bar is not None and _cache_stats is not None:
+        try:
+            agent._status_bar.set_cache_stats(_cache_stats)
+        except Exception:
+            pass
     final_response = None
     # Initialize cache stability tracker
     _cache_stats = None
