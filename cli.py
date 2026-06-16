@@ -3750,13 +3750,9 @@ class ReamesCLI:
             sb = getattr(agent, "_status_bar", None)
             if sb is not None:
                 snapshot["cache_hit_pct"] = getattr(sb, "last_cache_hit_pct", None)
-                avg = None
-                if getattr(sb, "_cache_stats", None) is not None:
-                    try:
-                        avg = sb._cache_stats.hit_rate * 100
-                    except Exception:
-                        pass
-                snapshot["cache_avg_hit_pct"] = avg
+                avg = getattr(sb, "_hit_pct_total", 0.0)
+                tc = getattr(sb, "turn_count", 0)
+                snapshot["cache_avg_hit_pct"] = avg / tc if tc > 0 else None
                 snapshot["turn_count"] = getattr(sb, "turn_count", 0)
                 st = (getattr(sb, "session_prompt_tokens", 0) or 0) + (getattr(sb, "session_completion_tokens", 0) or 0)
                 snapshot["session_total_tokens"] = st

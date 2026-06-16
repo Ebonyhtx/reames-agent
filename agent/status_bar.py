@@ -44,6 +44,7 @@ class StatusBar:
         self.context_used_pct = 0
         self.compression_threshold = 80
         self.balance = ""
+        self._hit_pct_total = 0.0
     
     def record_api_usage(self, prompt_tokens: int, completion_tokens: int, 
                           cache_hit_tokens: int = 0, cost: float = 0.0,
@@ -69,6 +70,7 @@ class StatusBar:
         total = prompt_tokens + completion_tokens
         if total > 0 and cache_hit_tokens > 0:
             self.last_cache_hit_pct = (cache_hit_tokens / total) * 100
+        self._hit_pct_total += self.last_cache_hit_pct
         
         # Context usage %
         if context_window > 0 and context_used > 0:
@@ -114,8 +116,8 @@ class StatusBar:
     def format_status_line(self) -> str:
         """Format the status bar line (Reames-style)."""
         model = self.last_model.split("/")[-1] if self.last_model else "unknown"
-        hit_rate = self._cache_hit_rate()
-        avg_hit = (self._cache_stats.hit_rate * 100 if self._cache_stats else hit_rate)
+        hit_rate = self.last_cache_hit_pct
+        avg_hit = self._hit_pct_total / self.turn_count if self.turn_count > 0 else hit_rate
         
         session_tokens = self.session_prompt_tokens + self.session_completion_tokens
         turn_tokens = self.last_turn_prompt_tokens + self.last_turn_completion_tokens
