@@ -10,7 +10,6 @@ import logging
 import os
 import sqlite3
 import threading
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -25,12 +24,12 @@ DEFAULT_RECALL_COUNT = 5
 class ReamesMemory:
     """Reames native memory engine. SQLite-backed, zero external dependencies.
 
-    Usage:
-        mem = ReamesMemory(data_dir="~/.reames/memory")
-        mem.initialize(session_id="xxx", user_id="user1", agent=agent)
-        mem.capture_turn("hello", "hi there")
-        ctx = mem.recall("Python project", session_id="xxx")
-        mem.on_session_end()
+    L0: raw conversation messages
+    L1: atomic facts (LLM-extracted, optionally vectorized)
+    L2: scene blocks (aggregated from L1 facts)
+    L3: user persona (synthesized from L2 scenes)
+
+    All four layers stored in SQLite. FTS5 keyword + vector semantic search.
     """
 
     def __init__(self, data_dir: Optional[str] = None):
@@ -43,6 +42,7 @@ class ReamesMemory:
 
         self._db_path = self._data_dir / "reames_memory.db"
         self._persona_path = self._data_dir / "persona.md"
+        self._scenes_path = self._data_dir / "scenes.md"
 
         self._session_id = ""
         self._user_id = "default"
@@ -51,12 +51,10 @@ class ReamesMemory:
         self._lock = threading.Lock()
         self._agent: Any = None
 
-        # Embedding config
         self._embedding_api_key = ""
         self._embedding_api_base = ""
         self._embedding_model = ""
 
-        # Intervals
         self._l1_interval = DEFAULT_L1_INTERVAL
         self._l2_interval = DEFAULT_L2_INTERVAL
         self._l3_interval = DEFAULT_L3_INTERVAL
@@ -85,7 +83,9 @@ class ReamesMemory:
             )""")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mem_sess ON memories(session_id)")
 
-            # FTS5 indexes
+            # Add unique index to prevent duplicates
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_mem_content ON memories(content)")
+
             for table in ("memories", "messages"):
                 conn.execute(f"""CREATE VIRTUAL TABLE IF NOT EXISTS {table}_fts USING fts5(
                     content, content='{table}', content_rowid='id'
@@ -129,14 +129,15 @@ class ReamesMemory:
         with self._lock:
             self._turn_count += 1
             with sqlite3.connect(str(self._db_path)) as conn:
-                # Embed messages if embedding API configured
                 user_emb = self._get_embedding(user_content) if self._embedding_api_key else None
-                conn.execute("INSERT INTO messages (session_id, role, content, embedding) VALUES (?,?,?,?)",
-                            (self._session_id, "user", user_content, self._blob_from_vec(user_emb)))
+                conn.execute(
+                    "INSERT INTO messages (session_id, role, content, embedding) VALUES (?,?,?,?)",
+                    (self._session_id, "user", user_content, self._blob_from_vec(user_emb)))
                 if assistant_content:
                     asst_emb = self._get_embedding(assistant_content) if self._embedding_api_key else None
-                    conn.execute("INSERT INTO messages (session_id, role, content, embedding) VALUES (?,?,?,?)",
-                                (self._session_id, "assistant", assistant_content, self._blob_from_vec(asst_emb)))
+                    conn.execute(
+                        "INSERT INTO messages (session_id, role, content, embedding) VALUES (?,?,?,?)",
+                        (self._session_id, "assistant", assistant_content, self._blob_from_vec(asst_emb)))
                 conn.commit()
             self._l1_pending += 1
 
@@ -146,8 +147,23 @@ class ReamesMemory:
             t.start()
 
     def recall(self, query: str, *, session_id: str = "") -> str:
+        """Search all layers (L0+L1+L2+L3) and return ranked results."""
         if not query:
             return ""
+
+        # L2+L3: add scene/persona text if available
+        extra = ""
+        if self._scenes_path.exists():
+            try:
+                extra += self._scenes_path.read_text(encoding="utf-8")[:2000] + "\n"
+            except Exception:
+                pass
+        if self._persona_path.exists():
+            try:
+                extra += self._persona_path.read_text(encoding="utf-8")[:500] + "\n"
+            except Exception:
+                pass
+
         kw = self._search_keyword(query, self._recall_count)
         results = kw
         if self._embedding_api_key:
@@ -156,12 +172,21 @@ class ReamesMemory:
                 results = self._rrf_fusion(kw, vec)
             except Exception as e:
                 logger.debug("Vector search failed: %s", e)
-        if not results:
+
+        if not results and not extra:
             return ""
+
         parts = ["## Reames Memory\n"]
+        if extra:
+            parts.append(extra.strip())
         for content, _ in results[:self._recall_count]:
             parts.append(f"- {content.strip()}")
-        return "\n".join(parts)
+
+        # Limit total size
+        result = "\n".join(parts)
+        if len(result) > 3000:
+            result = result[:3000] + "\n... (truncated)"
+        return result
 
     def system_prompt_block(self) -> str:
         if self._persona_path.exists():
@@ -179,27 +204,33 @@ class ReamesMemory:
             with sqlite3.connect(str(self._db_path)) as conn:
                 cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
             if cnt >= self._l2_interval:
+                t = threading.Thread(target=self._aggregate_l2, daemon=True, name="reames-l2")
+                t.start()
+            if cnt >= self._l3_interval:
                 t = threading.Thread(target=self._synthesize_l3, daemon=True, name="reames-l3")
                 t.start()
         except Exception as e:
-            logger.debug("L3 check failed: %s", e)
+            logger.debug("L2/L3 check failed: %s", e)
 
     def shutdown(self):
         logger.info("ReamesMemory: shutdown")
 
-    # -- Search -----------------------------------------------------
+    # -- Search (L0+L1, keyword + vector) --------------------------
 
     def _search_keyword(self, query: str, limit: int = 5) -> List[Tuple[str, float]]:
+        results = []
         with sqlite3.connect(str(self._db_path)) as conn:
-            try:
-                rows = conn.execute(
-                    "SELECT m.content, rank FROM memories_fts f JOIN memories m ON f.rowid=m.id "
-                    "WHERE memories_fts MATCH ? ORDER BY rank LIMIT ?",
-                    (query, limit)
-                ).fetchall()
-                return [(r[0], 1.0/(i+1)) for i, r in enumerate(rows)]
-            except Exception:
-                return []
+            for table, weight in [("memories", 1.0), ("messages", 0.5)]:
+                try:
+                    rows = conn.execute(
+                        f"SELECT m.content, rank FROM {table}_fts f JOIN {table} m ON f.rowid=m.id "
+                        f"WHERE {table}_fts MATCH ? ORDER BY rank LIMIT ?",
+                        (query, limit)
+                    ).fetchall()
+                    results += [(r[0], weight/(i+1)) for i, r in enumerate(rows)]
+                except Exception:
+                    pass
+        return results
 
     def _search_vector(self, query: str, limit: int = 5) -> List[Tuple[str, float]]:
         vec = self._get_embedding(query)
@@ -207,20 +238,13 @@ class ReamesMemory:
             return []
         results = []
         with sqlite3.connect(str(self._db_path)) as conn:
-            # Search L1 (memories — always vectorized)
-            rows = conn.execute("SELECT content, embedding FROM memories WHERE embedding IS NOT NULL").fetchall()
-            for content, emb in rows:
-                v = self._blob_to_vector(emb)
-                if v and len(v) == len(vec):
-                    sim = self._cosine_sim(vec, v)
-                    results.append((content, sim))
-            # Search L0 (messages — if embedded)
-            rows2 = conn.execute("SELECT content, embedding FROM messages WHERE embedding IS NOT NULL LIMIT 200").fetchall()
-            for content, emb in rows2:
-                v = self._blob_to_vector(emb)
-                if v and len(v) == len(vec):
-                    sim = self._cosine_sim(vec, v)
-                    results.append((content, sim * 0.8))  # slight weight penalty vs memories
+            for table, weight in [("memories", 1.0), ("messages", 0.8)]:
+                rows = conn.execute(f"SELECT content, embedding FROM {table} WHERE embedding IS NOT NULL LIMIT 200").fetchall()
+                for content, emb in rows:
+                    v = self._blob_to_vector(emb)
+                    if v and len(v) == len(vec):
+                        sim = self._cosine_sim(vec, v) * weight
+                        results.append((content, sim))
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:limit]
 
@@ -252,7 +276,7 @@ class ReamesMemory:
             logger.debug("Embedding failed: %s", e)
             return None
 
-    # -- L1 Extraction (via DeepSeek) -------------------------------
+    # -- L1 Extraction (via DeepSeek, with dedup) -------------------
 
     def _extract_l1(self):
         if not self._agent:
@@ -270,17 +294,24 @@ class ReamesMemory:
             if not facts:
                 return
             with sqlite3.connect(str(self._db_path)) as conn:
+                existing = set(r[0] for r in conn.execute("SELECT content FROM memories").fetchall())
+                inserted = 0
                 for line in facts.split("\n"):
                     f = line.strip().lstrip("- ").strip()
-                    if not f or len(f) < 5:
+                    if not f or len(f) < 5 or f in existing:
                         continue
+                    existing.add(f)
                     emb = self._get_embedding(f)
-                    conn.execute(
-                        "INSERT INTO memories (session_id, content, embedding) VALUES (?,?,?)",
-                        (self._session_id, f, self._blob_from_vec(emb) if emb else None)
-                    )
+                    try:
+                        conn.execute(
+                            "INSERT INTO memories (session_id, content, embedding) VALUES (?,?,?)",
+                            (self._session_id, f, self._blob_from_vec(emb) if emb else None)
+                        )
+                        inserted += 1
+                    except sqlite3.IntegrityError:
+                        pass  # duplicate (unique index)
                 conn.commit()
-            logger.info("L1: extracted %d facts", len([l for l in facts.split("\n") if l.strip()]))
+            logger.info("L1: extracted %d new facts", inserted)
         except Exception as e:
             logger.warning("L1 extraction failed: %s", e)
 
@@ -310,7 +341,30 @@ class ReamesMemory:
             logger.warning("L1 LLM call failed: %s", e)
             return ""
 
-    # -- L3 Synthesis -----------------------------------------------
+    # -- L2 Scene Aggregation (via DeepSeek) ------------------------
+
+    def _aggregate_l2(self):
+        try:
+            with sqlite3.connect(str(self._db_path)) as conn:
+                rows = conn.execute(
+                    "SELECT content FROM memories ORDER BY id DESC LIMIT ?",
+                    (self._l2_interval,)
+                ).fetchall()
+            facts = "\n".join(f"- {r[0]}" for r in rows)
+            if not facts:
+                return
+            prompt = (
+                "Group these facts into 2-4 thematic scenes (e.g. project setup, deployment, debugging).\n"
+                "Per scene: ## Scene Name\\n- fact 1\\n- fact 2\\n\n" + facts
+            )
+            scenes = self._call_llm(prompt)
+            if scenes:
+                self._scenes_path.write_text(scenes.strip(), encoding="utf-8")
+                logger.info("L2 scenes aggregated: %d chars", len(scenes))
+        except Exception as e:
+            logger.warning("L2 aggregation failed: %s", e)
+
+    # -- L3 Persona Synthesis (via DeepSeek) ------------------------
 
     def _synthesize_l3(self):
         try:
@@ -361,7 +415,7 @@ class ReamesMemory:
     def get_tool_schemas(self) -> List[dict]:
         return [{
             "name": "reames_memory_search",
-            "description": "Search Reames memory (L0-L3): conversations, facts, scenes.",
+            "description": "Search Reames memory (L0-L3): conversations, facts, scenes, persona.",
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string", "description": "Search query"}},
