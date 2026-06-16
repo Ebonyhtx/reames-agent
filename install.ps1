@@ -136,4 +136,18 @@ if (-not $Quiet) {
 
 Write-Color @"
 Done! Restart terminal and type: reames
-"@ "Green"
+"@ "Green"# Find Python
+$pythonCmd = $null
+foreach ($cmd in @("python3", "python")) {
+    try { $null = Get-Command $cmd -ErrorAction Stop; $pythonCmd = $cmd; break } catch {}
+}
+if (-not $pythonCmd) {
+    Write-Host "[INFO] Installing Python 3.12 via winget..." -ForegroundColor Yellow
+    winget install Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements
+    Write-Host "[OK] Please restart terminal and re-run this command." -ForegroundColor Green
+    exit 0
+}
+$ver = & $pythonCmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+Write-Host "[OK] Python $ver" -ForegroundColor Green
+
+
