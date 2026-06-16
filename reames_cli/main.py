@@ -2075,37 +2075,7 @@ def cmd_chat(args):
     except Exception:
         pass
 
-    # First-run guard: check if any provider is configured before launching
-    if not _has_any_provider_configured():
-        print()
-        print(
-            "It looks like Reames isn't configured yet -- no API keys or providers found."
-        )
-        print()
-        print("  Run:  reames setup")
-        print()
 
-        from reames_cli.setup import (
-            is_interactive_stdin,
-            print_noninteractive_setup_guidance,
-        )
-
-        if not is_interactive_stdin():
-            print_noninteractive_setup_guidance(
-                "No interactive TTY detected for the first-run setup prompt."
-            )
-            sys.exit(1)
-
-        try:
-            reply = input("Run setup now? [Y/n] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            reply = "n"
-        if reply in {"", "y", "yes"}:
-            cmd_setup(args)
-            return
-        print()
-        print("You can run 'reames setup' at any time to configure.")
-        sys.exit(1)
 
     # Start update check in background (runs while other init happens).
     # On Termux this imports rich/prompt_toolkit in the foreground and then
