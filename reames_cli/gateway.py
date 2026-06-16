@@ -322,9 +322,9 @@ def _scan_gateway_pids(exclude_pids: set[int], all_profiles: bool = False) -> li
         "reames_cli.main gateway",
         "reames_cli.main --profile",
         "reames_cli.main -p",
-        "hermes_cli/main.py gateway",
-        "hermes_cli/main.py --profile",
-        "hermes_cli/main.py -p",
+        "reames_cli/main.py gateway",
+        "reames_cli/main.py --profile",
+        "reames_cli/main.py -p",
         "hermes gateway",
         # Windows: only match invocations that actually carry the ``gateway``
         # subcommand or the gateway-dedicated console-script shim. Bare
@@ -1736,7 +1736,7 @@ _LEGACY_SERVICE_NAMES: tuple[str, ...] = ("hermes.service",)
 # A legacy unit is only flagged when its file contains one of these.
 _LEGACY_UNIT_EXECSTART_MARKERS: tuple[str, ...] = (
     "reames_cli.main gateway",
-    "hermes_cli/main.py gateway",
+    "reames_cli/main.py gateway",
     "gateway/run.py",
     " hermes gateway ",
     "/hermes gateway ",

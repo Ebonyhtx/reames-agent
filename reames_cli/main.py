@@ -83,7 +83,7 @@ def _set_process_title() -> None:
     try:
         import setproctitle  # type: ignore[import-untyped]
 
-        setproctitle.setproctitle("hermes")
+        setproctitle.setproctitle("reames")
         return
     except ImportError:
         pass
@@ -96,10 +96,10 @@ def _set_process_title() -> None:
         system = platform.system()
         if system == "Linux":
             libc = ctypes.CDLL("libc.so.6", use_errno=True)
-            libc.prctl(15, b"hermes", 0, 0, 0)  # PR_SET_NAME = 15
+            libc.prctl(15, b"reames", 0, 0, 0)  # PR_SET_NAME = 15
         elif system == "Darwin":
             libc = ctypes.CDLL("libc.dylib", use_errno=True)
-            libc.pthread_setname_np(b"hermes")
+            libc.pthread_setname_np(b"reames")
         # Windows: the .exe name is already ``hermes.exe`` — nothing to do.
     except Exception:
         pass
@@ -6795,14 +6795,14 @@ def _clear_bytecode_cache(root: Path) -> int:
 # even run ``hermes update`` again to roll forward. The post-pull syntax
 # guard validates these and auto-rolls-back on failure.
 _UPDATE_CRITICAL_FILES = (
-    "hermes_cli/main.py",
-    "hermes_cli/config.py",
-    "hermes_cli/__init__.py",
+    "reames_cli/main.py",
+    "reames_cli/config.py",
+    "reames_cli/__init__.py",
     "cli.py",
     "run_agent.py",
     "model_tools.py",
     "toolsets.py",
-    "hermes_constants.py",
+    "reames_constants.py",
 )
 
 
@@ -6925,7 +6925,7 @@ def _web_ui_build_needed(web_dir: Path) -> bool:
     has the newest mtime of any build output.
     """
     project_root = web_dir.parent.parent if web_dir.parent.name == "apps" else web_dir.parent
-    dist_dir = project_root / "hermes_cli" / "web_dist"
+    dist_dir = project_root / "reames_cli" / "web_dist"
     sentinel = dist_dir / ".vite" / "manifest.json"
     if not sentinel.exists():
         sentinel = dist_dir / "index.html"
@@ -7193,7 +7193,7 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
         stderr_preview = build_output.strip()
         stderr_tail = "\n  ".join(stderr_preview.splitlines()[-10:]) if stderr_preview else ""
         project_root = web_dir.parent.parent if web_dir.parent.name == "apps" else web_dir.parent
-        dist_dir = project_root / "hermes_cli" / "web_dist"
+        dist_dir = project_root / "reames_cli" / "web_dist"
         dist_index = dist_dir / "index.html"
 
         # If a stale dist exists, serve it as a fallback instead of failing.

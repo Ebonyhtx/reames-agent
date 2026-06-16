@@ -30,7 +30,7 @@ def _get_hermes_home():
         from reames_constants import get_hermes_home as gh
         return str(gh())
     except Exception:
-        return os.path.expanduser("~/.hermes")
+        return os.path.expanduser("~/.reames")
 
 
 # ─── 技能质量评估（复用集成扫描）────────

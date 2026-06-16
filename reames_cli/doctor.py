@@ -251,9 +251,9 @@ def _check_version_consistency(issues: list[str]) -> None:
     else:
         _fail_and_issue(
             "Version mismatch between source files",
-            f"(pyproject.toml {pyproject_version} != hermes_cli/__init__.py {init_version})",
+            f"(pyproject.toml {pyproject_version} != reames_cli/__init__.py {init_version})",
             "Re-sync version files (e.g. run 'hermes update', or set "
-            "hermes_cli/__init__.py __version__ to match pyproject.toml)",
+            "reames_cli/__init__.py __version__ to match pyproject.toml)",
             issues,
         )
 
@@ -564,7 +564,7 @@ def run_doctor(args):
     else:
         check_warn("Not in virtual environment", "(recommended)")
 
-    # Detect drift between pyproject.toml and hermes_cli/__init__.py versions
+    # Detect drift between pyproject.toml and reames_cli/__init__.py versions
     # (a git conflict resolution can silently revert one but not the other).
     _check_version_consistency(issues)
     
