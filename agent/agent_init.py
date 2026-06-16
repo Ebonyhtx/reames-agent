@@ -1100,6 +1100,9 @@ def init_agent(
     # broad pseudo-public config object on the agent instance.
     agent._aux_compression_context_length_config = None
 
+    agent._turns_since_memory = 0
+    agent._memory_nudge_interval = 0  # disabled: TencentDB handles memory
+
     # Reames: Native Python memory engine (L0-L3, SQLite-backed)
     agent._memory_core = None
     agent._iters_since_skill = 0
