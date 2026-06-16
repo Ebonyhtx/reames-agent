@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_L1_INTERVAL = 10  # user-LLM turns
 DEFAULT_L2_INTERVAL = 20
 DEFAULT_L3_INTERVAL = 50
-DEFAULT_RECALL_COUNT = 5
+DEFAULT_RECALL_COUNT = 10
 
 
 class ReamesMemory:
@@ -202,12 +202,12 @@ class ReamesMemory:
         extra = ""
         if self._scenes_path.exists():
             try:
-                extra += self._scenes_path.read_text(encoding="utf-8")[:2000] + "\n"
+                extra += self._scenes_path.read_text(encoding="utf-8")[:300] + "\n"
             except Exception:
                 pass
         if self._persona_path.exists():
             try:
-                extra += self._persona_path.read_text(encoding="utf-8")[:500] + "\n"
+                extra += self._persona_path.read_text(encoding="utf-8")[:200] + "\n"
             except Exception:
                 pass
 
@@ -367,7 +367,7 @@ class ReamesMemory:
                 if row and row[0]:
                     try:
                         ts = datetime.strptime(row[0][:19], "%Y-%m-%d %H:%M:%S")
-                        age_days = (now - ts).total_seconds() / 86400
+                        age_days = (now - ts).total_seconds() / 86400 / 7.0
                         score = score * 0.7 + (1.0/(age_days+1)) * 0.3
                     except Exception: pass
                 ilist.append((content, score))
@@ -390,7 +390,7 @@ class ReamesMemory:
                 if row and row[0]:
                     try:
                         ts = datetime.strptime(row[0][:19], "%Y-%m-%d %H:%M:%S")
-                        age_days = (now - ts).total_seconds() / 86400
+                        age_days = (now - ts).total_seconds() / 86400 / 7.0
                         score = score * 0.7 + (1.0 / (age_days + 1)) * 0.3
                     except Exception:
                         pass
