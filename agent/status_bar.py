@@ -27,6 +27,13 @@ class StatusBar:
     """Tracks and formats per-turn statistics for display."""
 
     def __init__(self):
+        # DEBUG: log initialization
+        try:
+            with open(r"C:\Users\Administrator\AppData\Local\hermes\debug_status.log", "a") as _f:
+                _f.write(f"StatusBar.__init__ called
+")
+        except:
+            pass
         self._cache_stats = None
         try:
             from agent.deepseek_cache import CacheStats
@@ -50,6 +57,13 @@ class StatusBar:
         self.compression_threshold = 80
         self.balance = ""
     
+        # DEBUG: log record_api_usage call
+        try:
+            with open(r"C:\Users\Administrator\AppData\Local\hermes\debug_status.log", "a") as _f:
+                _f.write(f"record_api_usage: turn={self.turn_count} pt={prompt_tokens} ct={completion_tokens}
+")
+        except:
+            pass
     def record_api_usage(self, prompt_tokens: int, completion_tokens: int, 
                           cache_hit_tokens: int = 0, cost: float = 0.0,
                           model: str = "", context_window: int = 0,

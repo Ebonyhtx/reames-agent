@@ -563,8 +563,13 @@ def run_conversation(
                             blocks = list(existing) if existing else []
                             blocks.append({"type": "text", "text": marker})
                             _sm["content"] = blocks
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            try:
+                                with open(r"C:\Users\Administrator\AppData\Local\hermes\debug_status.log", "a") as _f:
+                                    _f.write(f"EXCEPTION: {_e}
+")
+                            except:
+                                pass
                     _injected = True
                     logger.debug(
                         "Pre-API-call steer drain: injected into tool msg at index %d",
@@ -1665,6 +1670,13 @@ def run_conversation(
                         agent.session_estimated_cost_usd += float(cost_result.amount_usd)
                     agent.session_cost_status = cost_result.status
                     # Update status bar
+                    # DEBUG: before record_api_usage
+                    try:
+                        with open(r"C:\Users\Administrator\AppData\Local\hermes\debug_status.log", "a") as _f:
+                            _f.write(f"BEFORE record_api_usage: _cu={type(_cu).__name__ if _cu is not None else 'None'}
+")
+                    except:
+                        pass
                     _cu = locals().get('canonical_usage')
                     if hasattr(agent, '_status_bar') and agent._status_bar is not None:
                         try:
@@ -1677,8 +1689,13 @@ def run_conversation(
                                 context_window=getattr(getattr(agent, 'context_compressor', None), 'context_length', 0) or 0,
                                 context_used=getattr(_cu, 'total_tokens', 0) if _cu is not None else 0,
                             )
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            try:
+                                with open(r"C:\Users\Administrator\AppData\Local\hermes\debug_status.log", "a") as _f:
+                                    _f.write(f"EXCEPTION: {_e}
+")
+                            except:
+                                pass
                     agent.session_cost_source = cost_result.source
 
                     # Persist token counts to session DB for /insights.
@@ -2169,8 +2186,13 @@ def run_conversation(
                         agent._oauth_1m_beta_disabled = True
                         try:
                             agent._anthropic_client.close()
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            try:
+                                with open(r"C:\Users\Administrator\AppData\Local\hermes\debug_status.log", "a") as _f:
+                                    _f.write(f"EXCEPTION: {_e}
+")
+                            except:
+                                pass
                         agent._rebuild_anthropic_client()
                         agent._vprint(
                             f"{agent.log_prefix}🔕 OAuth subscription doesn't support "
