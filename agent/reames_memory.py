@@ -215,6 +215,31 @@ class ReamesMemory:
     def shutdown(self):
         logger.info("ReamesMemory: shutdown")
 
+    def on_turn_start(self, turn_count: int, message: str = ""):
+        """Compatibility: called at turn start."""
+        pass
+
+    def prefetch_all(self, query: str) -> str:
+        """Compatibility: prefetch for all layers."""
+        return self.recall(query) or ""
+
+    def queue_prefetch_all(self, query: str):
+        """Compatibility: queue async prefetch (sync in ReamesMemory)."""
+        pass
+
+    def sync_all(self, user_content: str, assistant_content: str, *, session_id: str = ""):
+        """Compatibility: sync all providers."""
+        self.capture_turn(user_content, assistant_content)
+
+    def shutdown_all(self):
+        """Compatibility: shutdown all providers."""
+        self.shutdown()
+
+    def on_session_switch(self, new_session_id: str, parent_session_id: str, **kwargs):
+        """Compatibility: called on session switch (compression)."""
+        self._session_id = new_session_id
+        self.capture_turn("[Session compressed]", "")
+
     # -- Search (L0+L1, keyword + vector) --------------------------
 
     def _search_keyword(self, query: str, limit: int = 5) -> List[Tuple[str, float]]:
