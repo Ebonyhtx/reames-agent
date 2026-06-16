@@ -1122,6 +1122,30 @@ def init_agent(
                         mem_cfg = yaml.safe_load(f).get("memory", {}) or {}
             except Exception:
                 pass
+            # Auto-generate config template on first launch
+            if not os.path.exists(reames_cfg):
+                try:
+                    os.makedirs(os.path.dirname(reames_cfg), exist_ok=True)
+                    _lines = [
+                        "# Reames Agent configuration",
+                        "# Set these env vars before starting:",
+                        "#   DEEPSEEK_API_KEY - your DeepSeek API key",
+                        "#   MEMORY_EMBEDDING_API_KEY - SiliconFlow key",
+                        "",
+                        "memory:",
+                        "  data_dir: ~/.reames/memory",
+                        "  l1_every_n: 10",
+                        "  l2_every_n: 20",
+                        "  l3_every_n: 50",
+                        "  embedding_api_key: ${MEMORY_EMBEDDING_API_KEY}",
+                        "  embedding_api_base: https://api.siliconflow.cn/v1",
+                        "  embedding_model: BAAI/bge-m3",
+                    ]
+                    _template = chr(10).join(_lines)
+                    with open(reames_cfg, "w", encoding="utf-8") as f:
+                        f.write(_template)
+                except Exception:
+                    pass
             if not mem_cfg:
                 mem_cfg = _agent_cfg.get("memory", {}) if _agent_cfg else {}
             data_dir = mem_cfg.get("data_dir", "") or os.path.join(str(get_hermes_home()), "reames_memory")
