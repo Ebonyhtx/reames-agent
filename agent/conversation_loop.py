@@ -443,13 +443,14 @@ def run_conversation(
         except Exception:
             agent._status_bar = None
     final_response = None
-    # Initialize cache stability tracker
-    _cache_stats = None
-    try:
-        from agent.deepseek_cache import CacheStats
-        _cache_stats = CacheStats()
-    except Exception:
-        pass
+    # Initialize cache stability tracker (persistent across turns)
+    if not hasattr(agent, '_cache_stats') or agent._cache_stats is None:
+        try:
+            from agent.deepseek_cache import CacheStats
+            agent._cache_stats = CacheStats()
+        except Exception:
+            agent._cache_stats = None
+    _cache_stats = agent._cache_stats
 
     # Share local cache stats with status bar (single source of truth)
     if agent._status_bar is not None and _cache_stats is not None:
@@ -742,12 +743,9 @@ def run_conversation(
                 _cache_stats.record_turn(api_messages)
                 if _cache_stats._total % 10 == 0:  # log every 10 turns
                     logger.info("CacheStats: %s", _cache_stats.report())
-                # DEBUG: check if CacheStats is working
-                import sys as _sys
-                _sys.stderr.write("CACHESTATS: total=" + str(_cache_stats._total) + " hits=" + str(_cache_stats._hits) + " rate=" + str(_cache_stats.hit_rate) + chr(10))
-            except Exception as _e:
-                import sys as _sys
-                _sys.stderr.write("CACHESTATS ERROR: " + str(_e) + chr(10))
+                logger.debug("CacheStats: total=%d hits=%d rate=%.2f%%", _cache_stats._total, _cache_stats._hits, _cache_stats.hit_rate * 100)
+            except Exception:
+                pass
 
         # Normalize message whitespace and tool-call JSON for consistent
         # prefix matching.  Ensures bit-perfect prefixes across turns,
