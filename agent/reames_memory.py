@@ -163,12 +163,10 @@ class ReamesMemory:
             try:
                 with sqlite3.connect(str(self._db_path)) as conn:
                     cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-                if cnt >= self._l2_interval:
-                    t = threading.Thread(target=self._aggregate_l2, daemon=True, name="reames-l2")
-                    t.start()
-                if cnt >= self._l3_interval:
-                    t = threading.Thread(target=self._synthesize_l3, daemon=True, name="reames-l3")
-                    t.start()
+                if cnt >= self._l2_interval and not self._scenes_path.exists():
+                    threading.Thread(target=self._aggregate_l2, name="reames-l2").start()
+                if cnt >= self._l3_interval and not self._persona_path.exists():
+                    threading.Thread(target=self._synthesize_l3, name="reames-l3").start()
             except Exception:
                 pass
 
