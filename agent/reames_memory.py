@@ -123,6 +123,16 @@ class ReamesMemory:
         self._agent = agent
         self._turn_count = 0
         logger.info("ReamesMemory: initialized session=%s", session_id)
+        # Startup check: trigger L2/L3 if thresholds already met from previous sessions
+        try:
+            with sqlite3.connect(str(self._db_path)) as conn:
+                cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+            if cnt >= self._l2_interval:
+                threading.Thread(target=self._aggregate_l2, name="reames-l2-init").start()
+            if cnt >= self._l3_interval:
+                threading.Thread(target=self._synthesize_l3, name="reames-l3-init").start()
+        except Exception:
+            pass
 
     def capture_offload(self, tool_name: str, content: str):
         """Store offloaded tool output for future retrieval (L0, tool role)."""
