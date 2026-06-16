@@ -202,8 +202,13 @@ class ReamesMemory:
         extra = ""
         if self._scenes_path.exists():
             try:
-                extra += self._scenes_path.read_text(encoding="utf-8")[:300] + "\n"
+                scene_text = self._scenes_path.read_text(encoding="utf-8")
+                titles = [l for l in scene_text.split(chr(10)) if l.startswith("## ")]
+                if any(t.lower() in query.lower() for t in titles):
+                    extra += scene_text[:300]
             except Exception:
+                pass
+                pass
                 pass
         if self._persona_path.exists():
             try:
