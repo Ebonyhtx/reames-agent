@@ -59,7 +59,7 @@ def agent_runtime_owns_post_tool_hook(agent: Any, function_name: str) -> bool:
         return True
     if getattr(agent, "_context_engine_tool_names", None) and function_name in agent._context_engine_tool_names:
         return True
-    memory_manager = getattr(agent, "_memory_core", None)
+    memory_core = getattr(agent, "_memory_core", None)
     return bool(memory_core and memory_core.has_tool(function_name))
 
 
