@@ -4602,6 +4602,16 @@ def run_conversation(
         messages=messages,
     )
 
+    # ReamesMemory: direct L0 capture (safety net if sync mechanism fails)
+    if agent._memory_core and final_response and original_user_message:
+        try:
+            agent._memory_core.capture_turn(
+                str(original_user_message)[:2000],
+                str(final_response)[:2000]
+            )
+        except Exception:
+            pass
+
     # Background memory/skill review — runs AFTER the response is delivered
     # so it never competes with the user's task for model attention.
     if final_response and not interrupted and (_should_review_memory or _should_review_skills):
@@ -4658,18 +4668,16 @@ import logging as _tdb_logging
 _tdb_logger = _tdb_logging.getLogger(__name__)
 
 def _maybe_trigger_l3_persona_update(agent):
-    """Check if it's time to trigger L3 persona update based on memory count."""
-    if not (getattr(agent, '_memory_core', None)):
+    """Check ReamesMemory L3 persona — refresh if available."""
+    mem = getattr(agent, '_memory_core', None)
+    if not mem:
         return
-    for prov in getattr(agent._memory_core, '_providers', []):
-        if getattr(prov, 'name', '') == 'memory_tencentdb':
-            try:
-                block = prov.system_prompt_block()
-                if block and block.strip():
-                    _tdb_logger.info('TencentDB L3 persona refreshed')
-            except Exception:
-                pass
-            break
+    try:
+        block = mem.system_prompt_block()
+        if block:
+            logger.debug('L3 persona active: %d chars', len(block))
+    except Exception:
+        pass
 
 def _inject_mermaid_offload_hook(agent, tool_name, tool_use_id, result_text):
     """Hook into tool result processing for Mermaid offload."""
