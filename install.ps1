@@ -96,10 +96,26 @@ if (-not $Quiet) {
         Write-Color "[OK] DEEPSEEK_API_KEY already set" "Green"
     } else {
         Write-Color "Enter your DeepSeek API Key (from https://platform.deepseek.com):" "Cyan"
+        Write-Color "(leave blank to skip and set later via 'setx DEEPSEEK_API_KEY sk-xxx')" "DarkGray"
         $key = Read-Host "API Key"
         if ($key) {
             [Environment]::SetEnvironmentVariable("DEEPSEEK_API_KEY", $key, "User")
             $env:DEEPSEEK_API_KEY = $key
+        }
+    }
+    
+    # Embedding key for memory vector search
+    $existingEmbKey = [Environment]::GetEnvironmentVariable("MEMORY_EMBEDDING_API_KEY", "User")
+    if ($existingEmbKey) {
+        Write-Color "[OK] MEMORY_EMBEDDING_API_KEY already set" "Green"
+    } else {
+        Write-Color "Enter your SiliconFlow API Key for memory vector search (optional):" "Cyan"
+        Write-Color "(from https://siliconflow.cn — BGE-M3 model, free tier available)" "DarkGray"
+        Write-Color "(leave blank to disable vector search — keyword search still works)" "DarkGray"
+        $embKey = Read-Host "Embedding Key"
+        if ($embKey) {
+            [Environment]::SetEnvironmentVariable("MEMORY_EMBEDDING_API_KEY", $embKey, "User")
+            $env:MEMORY_EMBEDDING_API_KEY = $embKey
         }
     }
 }
