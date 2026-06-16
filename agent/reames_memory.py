@@ -11,7 +11,7 @@ import os
 import sqlite3
 import threading
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -345,6 +345,30 @@ class ReamesMemory:
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:limit]
 
+    def _search_fresh(self, query: str, limit: int = 5):
+        """Search with freshness weighting: newer results score higher."""
+        raw = self._search_keyword(query, limit * 2)
+        if not raw:
+            return raw
+        now = datetime.now()
+        weighted = []
+        with __import__('sqlite3').connect(str(self._db_path)) as conn:
+            for content, score in raw:
+                row = conn.execute(
+                    "SELECT created_at FROM memories WHERE content = ? LIMIT 1",
+                    (content,)
+                ).fetchone()
+                if row and row[0]:
+                    try:
+                        ts = datetime.strptime(row[0][:19], "%Y-%m-%d %H:%M:%S")
+                        age_days = (now - ts).total_seconds() / 86400
+                        score = score * 0.7 + (1.0 / (age_days + 1)) * 0.3
+                    except Exception:
+                        pass
+                weighted.append((content, score))
+        weighted.sort(key=lambda x: x[1], reverse=True)
+        return weighted[:limit]
+
     def _rrf_fusion(self, kw: list, vec: list, k: int = 60) -> list:
         scores = {}
         for rank, (c, _) in enumerate(kw):
@@ -486,7 +510,7 @@ class ReamesMemory:
     def _get_recent(self, limit: int = 20) -> str:
         with sqlite3.connect(str(self._db_path)) as conn:
             rows = conn.execute(
-                "SELECT role, content FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?",
+                "SELECT role, content FROM messages WHERE session_id=? AND role IN ('user','assistant') ORDER BY id DESC LIMIT ?",
                 (self._session_id, limit)
             ).fetchall()
         rows = list(reversed(rows))
