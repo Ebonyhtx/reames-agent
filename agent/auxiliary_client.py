@@ -5084,7 +5084,7 @@ def call_llm(
         if client is None:
             raise RuntimeError(
                 f"No LLM provider configured for task={task} provider={resolved_provider}. "
-                f"Run: hermes setup"
+                f"Run: reames setup"
             )
         resolved_provider = effective_provider or resolved_provider
     else:
@@ -5119,7 +5119,7 @@ def call_llm(
         if client is None:
             raise RuntimeError(
                 f"No LLM provider configured for task={task} provider={resolved_provider}. "
-                f"Run: hermes setup")
+                f"Run: reames setup")
 
     effective_timeout = timeout if timeout is not None else _get_task_timeout(task)
 
@@ -5568,7 +5568,7 @@ async def async_call_llm(
         if client is None:
             raise RuntimeError(
                 f"No LLM provider configured for task={task} provider={resolved_provider}. "
-                f"Run: hermes setup"
+                f"Run: reames setup"
             )
         resolved_provider = effective_provider or resolved_provider
     else:
@@ -5595,7 +5595,7 @@ async def async_call_llm(
         if client is None:
             raise RuntimeError(
                 f"No LLM provider configured for task={task} provider={resolved_provider}. "
-                f"Run: hermes setup")
+                f"Run: reames setup")
 
     effective_timeout = timeout if timeout is not None else _get_task_timeout(task)
 
