@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from hermes_cli.prompt_size import (
+from reames_cli.prompt_size import (
     _SKILLS_BLOCK_RE,
     compute_prompt_breakdown,
     render_breakdown,

@@ -88,7 +88,7 @@ def _gateway_env_map_keys() -> set[str]:
 
 def _save_config_env_sync_keys() -> set[str]:
     """terminal config keys bridged by ``hermes config set foo bar``."""
-    from hermes_cli import config as hc_config
+    from reames_cli import config as hc_config
     source = inspect.getsource(hc_config.set_config_value)
     keys = _extract_dict_keys(source, "_config_to_env_sync")
     # set_config_value uses fully-qualified ``terminal.foo`` keys; strip the

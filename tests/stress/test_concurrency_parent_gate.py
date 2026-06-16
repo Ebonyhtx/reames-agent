@@ -38,7 +38,7 @@ def run() -> int:
     os.environ["HERMES_HOME"] = home
     os.environ["HOME"] = home
 
-    from hermes_cli import kanban_db as kb
+    from reames_cli import kanban_db as kb
 
     kb.init_db()
 

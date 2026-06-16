@@ -29,7 +29,7 @@ def _isolate_hermes_home(tmp_path, monkeypatch):
     """Redirect HERMES_HOME to a temp directory."""
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     try:
-        import hermes_constants
+        import reames_constants
         monkeypatch.setattr(hermes_constants, "get_hermes_home", lambda: tmp_path)
     except (ImportError, AttributeError):
         pass
@@ -1010,7 +1010,7 @@ class TestCliIntegration:
 
         import argparse
         args = argparse.Namespace(mcp_action="serve", verbose=True)
-        from hermes_cli.mcp_config import mcp_command
+        from reames_cli.mcp_config import mcp_command
         mcp_command(args)
         mock_run.assert_called_once_with(verbose=True)
 

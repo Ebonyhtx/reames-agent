@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-import hermes_time
+import reames_time
 
 
 def _reset_hermes_time_cache():

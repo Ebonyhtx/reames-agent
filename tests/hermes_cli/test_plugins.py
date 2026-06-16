@@ -1,4 +1,4 @@
-"""Tests for the Hermes plugin system (hermes_cli.plugins)."""
+"""Tests for the Hermes plugin system (reames_cli.plugins)."""
 
 import logging
 import sys
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from hermes_cli.plugins import (
+from reames_cli.plugins import (
     ENTRY_POINTS_GROUP,
     VALID_HOOKS,
     PluginContext,
@@ -21,7 +21,7 @@ from hermes_cli.plugins import (
     has_middleware,
     resolve_plugin_command_result,
 )
-from hermes_cli.middleware import (
+from reames_cli.middleware import (
     VALID_MIDDLEWARE,
     apply_llm_request_middleware,
     apply_tool_request_middleware,
@@ -138,7 +138,7 @@ class TestPluginDiscovery:
             return kwargs["next_call"](kwargs["args"])
 
         manager = types.SimpleNamespace(_middleware={"tool_execution": [middleware]})
-        monkeypatch.setattr("hermes_cli.plugins.get_plugin_manager", lambda: manager)
+        monkeypatch.setattr("reames_cli.plugins.get_plugin_manager", lambda: manager)
 
         def terminal(args):
             calls.append(args)
@@ -151,7 +151,7 @@ class TestPluginDiscovery:
 
     def test_middleware_helpers_skip_no_listener_work(self, monkeypatch):
         manager = types.SimpleNamespace(_middleware={})
-        monkeypatch.setattr("hermes_cli.plugins.get_plugin_manager", lambda: manager)
+        monkeypatch.setattr("reames_cli.plugins.get_plugin_manager", lambda: manager)
 
         request = {"messages": []}
         args = {"path": "README.md"}
@@ -178,7 +178,7 @@ class TestPluginDiscovery:
             _middleware={"tool_request": [same_payload_middleware]},
             invoke_middleware=lambda kind, **kwargs: [same_payload_middleware(**kwargs)],
         )
-        monkeypatch.setattr("hermes_cli.plugins.get_plugin_manager", lambda: manager)
+        monkeypatch.setattr("reames_cli.plugins.get_plugin_manager", lambda: manager)
 
         args = {"path": "README.md"}
         result = apply_tool_request_middleware("read_file", args)
@@ -196,7 +196,7 @@ class TestPluginDiscovery:
             raise RuntimeError(f"post-processing failed after {result}")
 
         manager = types.SimpleNamespace(_middleware={"tool_execution": [middleware]})
-        monkeypatch.setattr("hermes_cli.plugins.get_plugin_manager", lambda: manager)
+        monkeypatch.setattr("reames_cli.plugins.get_plugin_manager", lambda: manager)
 
         def terminal(args):
             calls.append(args)
@@ -219,7 +219,7 @@ class TestPluginDiscovery:
             return kwargs["next_call"]({**kwargs["args"], "rewritten": True})
 
         manager = types.SimpleNamespace(_middleware={"tool_execution": [failing_middleware, downstream_middleware]})
-        monkeypatch.setattr("hermes_cli.plugins.get_plugin_manager", lambda: manager)
+        monkeypatch.setattr("reames_cli.plugins.get_plugin_manager", lambda: manager)
 
         def terminal(args):
             calls.append(("terminal", args))
@@ -240,7 +240,7 @@ class TestPluginDiscovery:
                 raise RuntimeError(f"translated downstream failure: {exc}") from exc
 
         manager = types.SimpleNamespace(_middleware={"tool_execution": [middleware]})
-        monkeypatch.setattr("hermes_cli.plugins.get_plugin_manager", lambda: manager)
+        monkeypatch.setattr("reames_cli.plugins.get_plugin_manager", lambda: manager)
 
         def terminal(args):
             calls.append(args)
@@ -261,7 +261,7 @@ class TestPluginDiscovery:
                 raise RuntimeError(f"middleware should not catch base exception: {exc}") from exc
 
         manager = types.SimpleNamespace(_middleware={"tool_execution": [middleware]})
-        monkeypatch.setattr("hermes_cli.plugins.get_plugin_manager", lambda: manager)
+        monkeypatch.setattr("reames_cli.plugins.get_plugin_manager", lambda: manager)
 
         def terminal(args):
             calls.append(args)
@@ -284,7 +284,7 @@ class TestPluginDiscovery:
             return first
 
         manager = types.SimpleNamespace(_middleware={"tool_execution": [middleware]})
-        monkeypatch.setattr("hermes_cli.plugins.get_plugin_manager", lambda: manager)
+        monkeypatch.setattr("reames_cli.plugins.get_plugin_manager", lambda: manager)
 
         def terminal(args):
             calls.append(args)
@@ -308,7 +308,7 @@ class TestPluginDiscovery:
             _middleware={"tool_request": [middleware]},
             invoke_middleware=lambda kind, **kwargs: [middleware(**kwargs)],
         )
-        monkeypatch.setattr("hermes_cli.plugins.get_plugin_manager", lambda: manager)
+        monkeypatch.setattr("reames_cli.plugins.get_plugin_manager", lambda: manager)
 
         # threading.Lock is not deepcopyable; a hard deepcopy would raise.
         args = {"command": "noop", "lock": threading.Lock()}
@@ -730,7 +730,7 @@ class TestPluginHooks:
         )
         monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes_test"))
 
-        with caplog.at_level(logging.WARNING, logger="hermes_cli.plugins"):
+        with caplog.at_level(logging.WARNING, logger="reames_cli.plugins"):
             mgr = PluginManager()
             mgr.discover_and_load()
 
@@ -741,7 +741,7 @@ class TestPreToolCallBlocking:
 
     def test_block_message_returned_for_valid_directive(self, monkeypatch):
         monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
+            "reames_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [{"action": "block", "message": "blocked by plugin"}],
         )
         assert get_pre_tool_call_block_message("todo", {}, task_id="t1") == "blocked by plugin"
@@ -749,7 +749,7 @@ class TestPreToolCallBlocking:
     def test_invalid_returns_are_ignored(self, monkeypatch):
         """Various malformed hook returns should not trigger a block."""
         monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
+            "reames_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [
                 "block",                                 # not a dict
                 123,                                     # not a dict
@@ -763,14 +763,14 @@ class TestPreToolCallBlocking:
 
     def test_none_when_no_hooks(self, monkeypatch):
         monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
+            "reames_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [],
         )
         assert get_pre_tool_call_block_message("web_search", {"q": "test"}) is None
 
     def test_first_valid_block_wins(self, monkeypatch):
         monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
+            "reames_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [
                 {"action": "allow"},
                 {"action": "block", "message": "first blocker"},
@@ -784,13 +784,13 @@ class TestThreadToolWhitelist:
     """Tests for the thread-local tool whitelist used by background review forks."""
 
     def test_allowed_tool_passes_through_to_hooks(self, monkeypatch):
-        from hermes_cli.plugins import (
+        from reames_cli.plugins import (
             set_thread_tool_whitelist,
             clear_thread_tool_whitelist,
         )
 
         monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
+            "reames_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [],
         )
         set_thread_tool_whitelist({"memory", "skill_manage"})
@@ -800,13 +800,13 @@ class TestThreadToolWhitelist:
             clear_thread_tool_whitelist()
 
     def test_disallowed_tool_blocked_with_message(self, monkeypatch):
-        from hermes_cli.plugins import (
+        from reames_cli.plugins import (
             set_thread_tool_whitelist,
             clear_thread_tool_whitelist,
         )
 
         monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
+            "reames_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [],
         )
         set_thread_tool_whitelist(
@@ -819,13 +819,13 @@ class TestThreadToolWhitelist:
             clear_thread_tool_whitelist()
 
     def test_clear_restores_unrestricted_behavior(self, monkeypatch):
-        from hermes_cli.plugins import (
+        from reames_cli.plugins import (
             set_thread_tool_whitelist,
             clear_thread_tool_whitelist,
         )
 
         monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
+            "reames_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [],
         )
         set_thread_tool_whitelist({"memory"})
@@ -838,13 +838,13 @@ class TestThreadToolWhitelist:
         """Setting a whitelist in one thread must NOT leak into another."""
         import threading
 
-        from hermes_cli.plugins import (
+        from reames_cli.plugins import (
             set_thread_tool_whitelist,
             clear_thread_tool_whitelist,
         )
 
         monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
+            "reames_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [],
         )
 
@@ -1036,7 +1036,7 @@ class TestPluginToolVisibility:
 
     def test_plugin_tools_in_definitions(self, tmp_path, monkeypatch):
         """Plugin tools are included when their toolset is in enabled_toolsets."""
-        import hermes_cli.plugins as plugins_mod
+        import reames_cli.plugins as plugins_mod
 
         plugins_dir = tmp_path / "hermes_test" / "plugins"
         plugin_dir = plugins_dir / "vis_plugin"
@@ -1316,7 +1316,7 @@ class TestPluginCommands:
         manifest = PluginManifest(name="test-plugin", source="user")
         ctx = PluginContext(manifest, mgr)
 
-        with caplog.at_level(logging.WARNING, logger="hermes_cli.plugins"):
+        with caplog.at_level(logging.WARNING, logger="reames_cli.plugins"):
             ctx.register_command("", lambda a: a)
         assert len(mgr._plugin_commands) == 0
         assert "empty name" in caplog.text
@@ -1327,7 +1327,7 @@ class TestPluginCommands:
         manifest = PluginManifest(name="test-plugin", source="user")
         ctx = PluginContext(manifest, mgr)
 
-        with caplog.at_level(logging.WARNING, logger="hermes_cli.plugins"):
+        with caplog.at_level(logging.WARNING, logger="reames_cli.plugins"):
             ctx.register_command("help", lambda a: a)
         assert "help" not in mgr._plugin_commands
         assert "conflicts" in caplog.text.lower()
@@ -1350,14 +1350,14 @@ class TestPluginCommands:
         handler = lambda args: f"result: {args}"
         ctx.register_command("mycmd", handler, description="test")
 
-        with patch("hermes_cli.plugins._plugin_manager", mgr):
+        with patch("reames_cli.plugins._plugin_manager", mgr):
             result = get_plugin_command_handler("mycmd")
             assert result is handler
 
     def test_get_plugin_command_handler_not_found(self):
         """get_plugin_command_handler() returns None for unregistered commands."""
         mgr = PluginManager()
-        with patch("hermes_cli.plugins._plugin_manager", mgr):
+        with patch("reames_cli.plugins._plugin_manager", mgr):
             assert get_plugin_command_handler("nonexistent") is None
 
     def test_get_plugin_commands_returns_dict(self):
@@ -1368,7 +1368,7 @@ class TestPluginCommands:
         ctx.register_command("cmd-a", lambda a: a, description="A")
         ctx.register_command("cmd-b", lambda a: a, description="B")
 
-        with patch("hermes_cli.plugins._plugin_manager", mgr):
+        with patch("reames_cli.plugins._plugin_manager", mgr):
             cmds = get_plugin_commands()
             assert "cmd-a" in cmds
             assert "cmd-b" in cmds
@@ -1384,7 +1384,7 @@ class TestPluginCommands:
         )
         monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes_test"))
 
-        import hermes_cli.plugins as plugins_mod
+        import reames_cli.plugins as plugins_mod
 
         with patch.object(plugins_mod, "_plugin_manager", None):
             handler = get_plugin_command_handler("lazycmd")
@@ -1401,7 +1401,7 @@ class TestPluginCommands:
         )
         monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes_test"))
 
-        import hermes_cli.plugins as plugins_mod
+        import reames_cli.plugins as plugins_mod
 
         with patch.object(plugins_mod, "_plugin_manager", None):
             cmds = get_plugin_commands()
@@ -1442,7 +1442,7 @@ class TestPluginCommands:
         )
         monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 
-        import hermes_cli.plugins as plugins_mod
+        import reames_cli.plugins as plugins_mod
 
         with patch.object(plugins_mod, "_plugin_manager", None):
             engine = plugins_mod.get_plugin_context_engine()
@@ -1534,7 +1534,7 @@ class TestPluginCommandResultResolution:
         async def _handler():
             return "threaded-ok"
 
-        monkeypatch.setattr("hermes_cli.plugins.asyncio.get_running_loop", lambda: _Loop())
+        monkeypatch.setattr("reames_cli.plugins.asyncio.get_running_loop", lambda: _Loop())
         assert resolve_plugin_command_result(_handler()) == "threaded-ok"
 
     def test_running_loop_timeout_does_not_hang_forever(self, monkeypatch):
@@ -1548,8 +1548,8 @@ class TestPluginCommandResultResolution:
             await _asyncio.sleep(10)
             return "should-not-reach"
 
-        monkeypatch.setattr("hermes_cli.plugins.asyncio.get_running_loop", lambda: _Loop())
-        monkeypatch.setattr("hermes_cli.plugins._PLUGIN_COMMAND_AWAIT_TIMEOUT_SECS", 0.1)
+        monkeypatch.setattr("reames_cli.plugins.asyncio.get_running_loop", lambda: _Loop())
+        monkeypatch.setattr("reames_cli.plugins._PLUGIN_COMMAND_AWAIT_TIMEOUT_SECS", 0.1)
 
         with pytest.raises(TimeoutError):
             resolve_plugin_command_result(_slow_handler())
@@ -1570,7 +1570,7 @@ class TestPluginDispatchTool:
         mock_registry = MagicMock()
         mock_registry.dispatch.return_value = '{"result": "ok"}'
 
-        with patch("hermes_cli.plugins.PluginContext.dispatch_tool.__module__", "hermes_cli.plugins"):
+        with patch("reames_cli.plugins.PluginContext.dispatch_tool.__module__", "reames_cli.plugins"):
             with patch.dict("sys.modules", {}):
                 with patch("tools.registry.registry", mock_registry):
                     result = ctx.dispatch_tool("web_search", {"query": "test"})
@@ -1693,7 +1693,7 @@ class TestPluginDebugLogging:
     def test_debug_handler_not_installed_when_env_var_absent(self, monkeypatch):
         """Without the env var, no stderr handler is attached."""
         monkeypatch.delenv("HERMES_PLUGINS_DEBUG", raising=False)
-        from hermes_cli import plugins as plugins_mod
+        from reames_cli import plugins as plugins_mod
 
         # Snapshot, then force a re-evaluation.
         original_installed = plugins_mod._DEBUG_HANDLER_INSTALLED
@@ -1714,7 +1714,7 @@ class TestPluginDebugLogging:
     def test_debug_handler_installed_when_env_var_set(self, monkeypatch):
         """With HERMES_PLUGINS_DEBUG=1, a DEBUG-level stderr handler is attached."""
         monkeypatch.setenv("HERMES_PLUGINS_DEBUG", "1")
-        from hermes_cli import plugins as plugins_mod
+        from reames_cli import plugins as plugins_mod
 
         original_installed = plugins_mod._DEBUG_HANDLER_INSTALLED
         original_debug = plugins_mod._PLUGINS_DEBUG
@@ -1741,7 +1741,7 @@ class TestPluginDebugLogging:
     def test_debug_handler_idempotent(self, monkeypatch):
         """Calling install twice (without force) does not double-attach."""
         monkeypatch.setenv("HERMES_PLUGINS_DEBUG", "1")
-        from hermes_cli import plugins as plugins_mod
+        from reames_cli import plugins as plugins_mod
 
         original_installed = plugins_mod._DEBUG_HANDLER_INSTALLED
         original_debug = plugins_mod._PLUGINS_DEBUG

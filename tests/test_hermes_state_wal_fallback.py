@@ -18,8 +18,8 @@ from unittest.mock import patch
 
 import pytest
 
-import hermes_state
-from hermes_state import (
+import reames_state
+from reames_state import (
     SessionDB,
     apply_wal_with_fallback,
     format_session_db_unavailable,

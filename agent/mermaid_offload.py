@@ -27,7 +27,7 @@ def _get_ref_dir():
     global _REF_DIR
     if _REF_DIR is None:
         try:
-            from hermes_constants import get_hermes_home
+            from reames_constants import get_hermes_home
             _REF_DIR = str(get_hermes_home()) + '/memory/refs'
         except Exception:
             _REF_DIR = tempfile.gettempdir() + '/hermes-refs'

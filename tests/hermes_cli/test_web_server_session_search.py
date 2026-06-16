@@ -1,6 +1,6 @@
 import asyncio
 
-from hermes_cli import web_server
+from reames_cli import web_server
 
 
 class _FakeSessionDB:

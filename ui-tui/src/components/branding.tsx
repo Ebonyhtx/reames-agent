@@ -2,7 +2,6 @@ import { Box, Text, useStdout } from '@hermes/ink'
 import { useEffect, useState } from 'react'
 import unicodeSpinners from 'unicode-animations'
 
-import { artWidth, caduceus, CADUCEUS_WIDTH, logo, LOGO_WIDTH } from '../banner.js'
 import { flat } from '../lib/text.js'
 import type { Theme } from '../theme.js'
 import type { PanelSection, SessionInfo } from '../types.js'
@@ -24,18 +23,6 @@ function InlineLoader({ label, t }: { label: string; t: Theme }) {
     <Text color={t.color.muted} wrap="truncate">
       <Text color={t.color.accent}>{frame}</Text> {label}
     </Text>
-  )
-}
-
-export function ArtLines({ lines }: { lines: [string, string][] }) {
-  return (
-    <Box flexDirection="column" height={lines.length} opaque width={artWidth(lines)}>
-      {lines.map(([c, text], i) => (
-        <Text color={c} key={i} wrap="truncate-end">
-          {text}
-        </Text>
-      ))}
-    </Box>
   )
 }
 
@@ -86,35 +73,16 @@ export function Banner({ maxWidth, t }: { maxWidth?: number; t: Theme }) {
   const term = useStdout().stdout?.columns ?? 80
   const cols = Math.max(1, Math.min(term, maxWidth ?? term))
 
-  if (cols < HIDE_BELOW) {
+  if (cols < 30) {
     return null
   }
 
-  const logoLines = logo(t.color, t.bannerLogo || undefined)
-  const logoW = t.bannerLogo ? artWidth(logoLines) : LOGO_WIDTH
-
-  if (cols >= logoW + 2) {
-    return (
-      <Box flexDirection="column" marginBottom={1}>
-        <ArtLines lines={logoLines} />
-        <Text color={t.color.muted} wrap="truncate-end">
-          {t.brand.icon} {TAG_FULL}
-        </Text>
-      </Box>
-    )
-  }
-
-  if (cols >= COMPACT_FROM) {
-    return <CompactBanner cols={cols} t={t} />
-  }
-
   const name = cols >= 52 ? t.brand.name : (t.brand.name.split(' ')[0] ?? t.brand.name)
-  const tag = cols >= 64 ? TAG_FULL : cols >= 46 ? TAG_MID : TAG_TINY
+  const ver = cols >= 64 ? `v0.16.0` : ''
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text bold color={t.color.primary} wrap="truncate-end">{t.brand.icon} {name}</Text>
-      <Text color={t.color.muted} wrap="truncate-end">{t.brand.icon} {tag}</Text>
+      <Text bold color={t.color.primary} wrap="truncate-end">{t.brand.icon} {name} {ver}</Text>
     </Box>
   )
 }
@@ -160,10 +128,8 @@ const TOOLSETS_MAX = 8
 export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
   const term = useStdout().stdout?.columns ?? 100
   const cols = Math.max(20, Math.min(term, maxWidth ?? term))
-  const heroLines = caduceus(t.color, t.bannerHero || undefined)
-  const leftW = Math.min((artWidth(heroLines) || CADUCEUS_WIDTH) + 4, Math.floor(cols * 0.4))
-  const wide = cols >= 90 && leftW + 40 < cols
-  const w = Math.max(20, wide ? cols - leftW - 14 : cols - 12)
+  const wide = false
+  const w = Math.max(20, cols - 12)
   const lineBudget = Math.max(12, w - 2)
   const strip = (s: string) => (s.endsWith('_tools') ? s.slice(0, -6) : s)
 
@@ -215,6 +181,7 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
         {overflow > 0 && (
           <Text color={t.color.muted}>(and {overflow} more categories…)</Text>
         )}
+
       </>
     )
   }
@@ -279,45 +246,12 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
 
   return (
     <Box borderColor={t.color.border} borderStyle="round" marginBottom={1} paddingX={2} paddingY={1}>
-      {wide && (
-        <Box flexDirection="column" marginRight={2} width={leftW}>
-          <ArtLines lines={heroLines} />
-          <Text />
-
-          <Text color={t.color.accent}>
-            {info.model.split('/').pop()}
-            <Text color={t.color.muted}> · Nous Research</Text>
-          </Text>
-
-          <Text color={t.color.muted} wrap="truncate-end">
-            {info.cwd || process.cwd()}
-          </Text>
-
-          {sid && (
-            <Text>
-              <Text color={t.color.sessionLabel}>Session: </Text>
-              <Text color={t.color.sessionBorder}>{sid}</Text>
-            </Text>
-          )}
-        </Box>
-      )}
 
       <Box flexDirection="column" width={w}>
-        {wide ? (
-          <Box justifyContent="center" marginBottom={1}>
-            <Text bold color={t.color.primary}>
-              {t.brand.name}
-              {info.version ? ` v${info.version}` : ''}
-              {info.release_date ? ` (${info.release_date})` : ''}
-            </Text>
-          </Box>
-        ) : (
-          // Narrow layout hides the hero column; surface model/cwd/session
-          // here so they aren't lost.
-          <Box flexDirection="column" marginBottom={1}>
+<Box flexDirection="column" marginBottom={1}>
             <Text color={t.color.accent} wrap="truncate-end">
               {info.model.split('/').pop()}
-              <Text color={t.color.muted}> · Nous Research</Text>
+              <Text color={t.color.muted}> · Reames</Text>
             </Text>
             <Text color={t.color.muted} wrap="truncate-end">
               {info.cwd || process.cwd()}
@@ -329,7 +263,6 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
               </Text>
             )}
           </Box>
-        )}
 
         {/* ── Tools (expanded by default) ── */}
         <Box flexDirection="column" marginTop={1}>

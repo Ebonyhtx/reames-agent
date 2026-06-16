@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from hermes_cli import main as hermes_main
+from reames_cli import main as hermes_main
 
 
 # ---------------------------------------------------------------------------

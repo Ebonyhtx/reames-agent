@@ -791,7 +791,7 @@ def test_curator_review_prompt_offers_support_file_actions():
 
 def test_cli_unpin_refuses_bundled_skill(curator_env, capsys):
     """hermes curator unpin must refuse bundled/hub skills too (matches pin)."""
-    from hermes_cli import curator as cli
+    from reames_cli import curator as cli
     skills_dir = curator_env["home"] / "skills"
     _write_skill(skills_dir, "ship-skill")
     (skills_dir / ".bundled_manifest").write_text(
@@ -808,7 +808,7 @@ def test_cli_unpin_refuses_bundled_skill(curator_env, capsys):
 
 
 def test_cli_pin_refuses_bundled_skill(curator_env, capsys):
-    from hermes_cli import curator as cli
+    from reames_cli import curator as cli
     skills_dir = curator_env["home"] / "skills"
     _write_skill(skills_dir, "ship-skill")
     (skills_dir / ".bundled_manifest").write_text(
@@ -1030,9 +1030,9 @@ def test_curator_slot_is_canonical_aux_task():
     (test_aux_config.py) for the main tasks — this test pins `curator`
     specifically so the unification doesn't silently regress.
     """
-    from hermes_cli.config import DEFAULT_CONFIG
-    from hermes_cli.main import _AUX_TASKS
-    from hermes_cli.web_server import _AUX_TASK_SLOTS
+    from reames_cli.config import DEFAULT_CONFIG
+    from reames_cli.main import _AUX_TASKS
+    from reames_cli.web_server import _AUX_TASK_SLOTS
 
     # 1. DEFAULT_CONFIG.auxiliary — schema source
     assert "curator" in DEFAULT_CONFIG["auxiliary"], \

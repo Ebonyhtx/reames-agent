@@ -12,7 +12,7 @@ import contextlib
 import socket
 
 
-from hermes_cli import auth as auth_mod
+from reames_cli import auth as auth_mod
 
 
 def _cap(fn):

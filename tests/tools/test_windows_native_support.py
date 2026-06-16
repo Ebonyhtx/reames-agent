@@ -26,7 +26,7 @@ import pytest
 
 
 class TestConfigureWindowsStdio:
-    """``hermes_cli.stdio.configure_windows_stdio`` wiring.
+    """``reames_cli.stdio.configure_windows_stdio`` wiring.
 
     The function must:
     - be a no-op on non-Windows
@@ -41,30 +41,30 @@ class TestConfigureWindowsStdio:
     def _reset_configured(self, monkeypatch):
         """Reload the module before each test so the _CONFIGURED flag resets."""
         # Remove from sys.modules so import triggers a fresh load
-        sys.modules.pop("hermes_cli.stdio", None)
-        # Fresh import now; tests import from hermes_cli.stdio themselves,
+        sys.modules.pop("reames_cli.stdio", None)
+        # Fresh import now; tests import from reames_cli.stdio themselves,
         # but this guarantees the module they get is a brand-new copy.
-        import hermes_cli.stdio as _s
+        import reames_cli.stdio as _s
         _s._CONFIGURED = False
         yield
-        sys.modules.pop("hermes_cli.stdio", None)
+        sys.modules.pop("reames_cli.stdio", None)
 
     def test_no_op_on_posix(self):
-        from hermes_cli import stdio
+        from reames_cli import stdio
 
         assert stdio.is_windows() is False
         result = stdio.configure_windows_stdio()
         assert result is False
 
     def test_idempotent(self):
-        from hermes_cli import stdio
+        from reames_cli import stdio
 
         stdio.configure_windows_stdio()
         # Second call returns False because _CONFIGURED is set
         assert stdio.configure_windows_stdio() is False
 
     def test_windows_path_sets_env_and_reconfigures_streams(self, monkeypatch):
-        from hermes_cli import stdio
+        from reames_cli import stdio
 
         monkeypatch.setattr(stdio, "is_windows", lambda: True)
         # Pretend the user has no prior setting
@@ -103,7 +103,7 @@ class TestConfigureWindowsStdio:
 
     def test_respects_existing_editor_var(self, monkeypatch):
         """User's explicit EDITOR wins over our default."""
-        from hermes_cli import stdio
+        from reames_cli import stdio
 
         monkeypatch.setattr(stdio, "is_windows", lambda: True)
         monkeypatch.setenv("EDITOR", "code --wait")
@@ -116,7 +116,7 @@ class TestConfigureWindowsStdio:
 
     def test_respects_existing_visual_var(self, monkeypatch):
         """VISUAL takes precedence over our EDITOR default too."""
-        from hermes_cli import stdio
+        from reames_cli import stdio
 
         monkeypatch.setattr(stdio, "is_windows", lambda: True)
         monkeypatch.delenv("EDITOR", raising=False)
@@ -133,7 +133,7 @@ class TestConfigureWindowsStdio:
 
     def test_respects_existing_env_var(self, monkeypatch):
         """User's explicit PYTHONIOENCODING wins over our default."""
-        from hermes_cli import stdio
+        from reames_cli import stdio
 
         monkeypatch.setattr(stdio, "is_windows", lambda: True)
         monkeypatch.setenv("PYTHONIOENCODING", "latin-1")
@@ -145,7 +145,7 @@ class TestConfigureWindowsStdio:
 
     @pytest.mark.parametrize("optout", ["1", "true", "True", "yes"])
     def test_disable_flag_short_circuits(self, monkeypatch, optout):
-        from hermes_cli import stdio
+        from reames_cli import stdio
 
         monkeypatch.setattr(stdio, "is_windows", lambda: True)
         monkeypatch.setenv("HERMES_DISABLE_WINDOWS_UTF8", optout)
@@ -163,7 +163,7 @@ class TestConfigureWindowsStdio:
 
     def test_reconfigure_stream_handles_missing_method(self, monkeypatch):
         """StringIO-like objects without .reconfigure() must not blow up."""
-        from hermes_cli import stdio
+        from reames_cli import stdio
         import io
 
         buf = io.StringIO()
@@ -292,7 +292,7 @@ class TestSigkillFallback:
     @pytest.mark.parametrize(
         "module_path, line_pattern",
         [
-            ("hermes_cli.kanban_db", 'getattr(signal, "SIGKILL", signal.SIGTERM)'),
+            ("reames_cli.kanban_db", 'getattr(signal, "SIGKILL", signal.SIGTERM)'),
         ],
     )
     def test_module_uses_getattr_fallback(self, module_path, line_pattern):
@@ -501,7 +501,7 @@ class TestEntryPointsConfigureStdio:
         root = Path(__file__).resolve().parents[2]
         source = (root / relpath).read_text(encoding="utf-8")
         assert "configure_windows_stdio" in source, (
-            f"{relpath} must call hermes_cli.stdio.configure_windows_stdio() "
+            f"{relpath} must call reames_cli.stdio.configure_windows_stdio() "
             "early in startup so Windows consoles render Unicode without crashing"
         )
 
@@ -515,12 +515,12 @@ class TestSubprocessCompatHelpers:
     """hermes_cli/_subprocess_compat.py POSIX + Windows behaviour."""
 
     def test_is_windows_matches_sys_platform(self):
-        from hermes_cli import _subprocess_compat as sc
+        from reames_cli import _subprocess_compat as sc
         assert sc.IS_WINDOWS == (sys.platform == "win32")
 
     def test_resolve_node_command_returns_absolute_on_posix(self):
         """On Linux, resolve_node_command('sh', ['-c','echo hi']) picks up /bin/sh."""
-        from hermes_cli._subprocess_compat import resolve_node_command
+        from reames_cli._subprocess_compat import resolve_node_command
         # We can't assert "npm is on PATH" portably; use `sh` which is
         # guaranteed on POSIX.  On Windows the test only confirms the
         # no-crash fallback path.
@@ -530,7 +530,7 @@ class TestSubprocessCompatHelpers:
         # name (fallback) — both are acceptable behaviours.
 
     def test_resolve_node_command_fallback_when_absent(self):
-        from hermes_cli._subprocess_compat import resolve_node_command
+        from reames_cli._subprocess_compat import resolve_node_command
         argv = resolve_node_command(
             "zzz-definitely-not-on-path-xyzzy", ["--help"]
         )
@@ -539,7 +539,7 @@ class TestSubprocessCompatHelpers:
         assert argv[1:] == ["--help"]
 
     def test_windows_flags_zero_on_posix(self):
-        from hermes_cli._subprocess_compat import (
+        from reames_cli._subprocess_compat import (
             windows_detach_flags,
             windows_detach_flags_without_breakaway,
             windows_hide_flags,
@@ -550,7 +550,7 @@ class TestSubprocessCompatHelpers:
             assert windows_hide_flags() == 0
 
     def test_windows_detach_popen_kwargs_is_posix_equivalent_on_posix(self):
-        from hermes_cli._subprocess_compat import windows_detach_popen_kwargs
+        from reames_cli._subprocess_compat import windows_detach_popen_kwargs
         kwargs = windows_detach_popen_kwargs()
         if sys.platform != "win32":
             # POSIX path MUST produce start_new_session=True, which maps to
@@ -568,7 +568,7 @@ class TestSubprocessCompatHelpers:
 
     def test_windows_detach_flags_has_expected_win32_bits(self, monkeypatch):
         """Simulate Windows to verify flag bundle."""
-        from hermes_cli import _subprocess_compat as sc
+        from reames_cli import _subprocess_compat as sc
         monkeypatch.setattr(sc, "IS_WINDOWS", True)
         flags = sc.windows_detach_flags()
         # CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS | CREATE_NO_WINDOW |
@@ -592,7 +592,7 @@ class TestSubprocessCompatHelpers:
         ``fix/windows-gateway-reliability`` (PR #40909) and the bit must
         stay in the default bundle going forward.
         """
-        from hermes_cli import _subprocess_compat as sc
+        from reames_cli import _subprocess_compat as sc
         monkeypatch.setattr(sc, "IS_WINDOWS", True)
         assert sc.windows_detach_flags() & 0x01000000, (
             "CREATE_BREAKAWAY_FROM_JOB (0x01000000) must remain in the "
@@ -612,7 +612,7 @@ class TestSubprocessCompatHelpers:
         It must drop ONLY the breakaway bit — DETACHED_PROCESS et al.
         are still required for the child to survive the parent's exit.
         """
-        from hermes_cli import _subprocess_compat as sc
+        from reames_cli import _subprocess_compat as sc
         monkeypatch.setattr(sc, "IS_WINDOWS", True)
         full = sc.windows_detach_flags()
         fallback = sc.windows_detach_flags_without_breakaway()
@@ -758,7 +758,7 @@ class TestCronSchedulerBashResolution:
 
 class TestNpmBareSpawnsResolved:
     """Every spawn site that launches ``npm``/``npx`` must resolve via
-    shutil.which / hermes_cli._subprocess_compat.resolve_node_command
+    shutil.which / reames_cli._subprocess_compat.resolve_node_command
     so Windows can execute the .cmd batch shims."""
 
     @pytest.mark.parametrize(

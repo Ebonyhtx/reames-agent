@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hermes_cli.main import _resolve_last_session
+from reames_cli.main import _resolve_last_session
 
 
 class _FakeDB:
@@ -51,7 +51,7 @@ def test_search_sessions_exposes_last_active_column(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
 
-    import hermes_state
+    import reames_state
 
     from pathlib import Path
 
@@ -124,7 +124,7 @@ def test_resolve_last_session_not_limited_to_newest_started_20(tmp_path, monkeyp
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
 
-    import hermes_state
+    import reames_state
 
     from pathlib import Path
 

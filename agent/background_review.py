@@ -462,7 +462,7 @@ def _run_review_in_thread(
             review_agent.compression_enabled = False
 
             from model_tools import get_tool_definitions
-            from hermes_cli.plugins import (
+            from reames_cli.plugins import (
                 set_thread_tool_whitelist,
                 clear_thread_tool_whitelist,
             )

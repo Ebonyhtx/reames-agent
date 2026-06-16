@@ -242,7 +242,7 @@ def main():
         for m in list(sys.modules.keys()):
             if m.startswith("hermes_cli"):
                 del sys.modules[m]
-        from hermes_cli import kanban_db as kb
+        from reames_cli import kanban_db as kb
 
         kb.init_db()
         conn = kb.connect()

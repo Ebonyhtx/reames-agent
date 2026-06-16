@@ -36,7 +36,7 @@ If you're just running the Hermes Agent and want to use Docker, see `website/doc
 │   │   ├── chown /opt/data/profiles (every boot)
 │   │   ├── seed .env / config.yaml / SOUL.md
 │   │   └── skills_sync.py
-│   └── 02-reconcile-profiles          ← hermes_cli.container_boot
+│   └── 02-reconcile-profiles          ← reames_cli.container_boot
 │       ├── chown /run/service (hermes-writable for runtime register)
 │       └── walk $HERMES_HOME/profiles/<name>/gateway_state.json
 │           → recreate /run/service/gateway-<name>/
@@ -65,7 +65,7 @@ If you're just running the Hermes Agent and want to use Docker, see `website/doc
 |---|---|
 | `Dockerfile` | s6-overlay install + cont-init.d wiring + `ENTRYPOINT ["/init", "/opt/hermes/docker/main-wrapper.sh"]` |
 | `docker/stage2-hook.sh` | The "old entrypoint logic" — UID remap, chown, seed, skills sync. Runs as cont-init.d/01-hermes-setup. |
-| `docker/cont-init.d/02-reconcile-profiles` | Calls `hermes_cli.container_boot` on every boot to restore profile gateway slots from the persistent volume. |
+| `docker/cont-init.d/02-reconcile-profiles` | Calls `reames_cli.container_boot` on every boot to restore profile gateway slots from the persistent volume. |
 | `docker/main-wrapper.sh` | The container's CMD. Routes user args, drops to hermes via `s6-setuidgid`, exec's the chosen program. |
 | `docker/s6-rc.d/main-hermes/run` | No-op `sleep infinity` — slot exists so the s6-rc user bundle is valid; main hermes runs as the CMD, not as a supervised service. |
 | `docker/s6-rc.d/dashboard/run` | Conditional service — `exec sleep infinity` unless `HERMES_DASHBOARD` is truthy. |

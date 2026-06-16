@@ -19,7 +19,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from hermes_constants import get_hermes_home
+from reames_constants import get_hermes_home
 from typing import Any, Optional
 from utils import atomic_json_write
 
@@ -171,7 +171,7 @@ def _looks_like_gateway_process(pid: int) -> bool:
         return False
 
     patterns = (
-        "hermes_cli.main gateway",
+        "reames_cli.main gateway",
         "hermes_cli/main.py gateway",
         "hermes gateway",
         "hermes-gateway",
@@ -192,7 +192,7 @@ def _record_looks_like_gateway(record: dict[str, Any]) -> bool:
     # Normalize Windows backslashes so patterns match cross-platform.
     cmdline = " ".join(str(part) for part in argv).replace("\\", "/")
     patterns = (
-        "hermes_cli.main gateway",
+        "reames_cli.main gateway",
         "hermes_cli/main.py gateway",
         "hermes gateway",
         "gateway/run.py",

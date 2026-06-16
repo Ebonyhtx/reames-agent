@@ -36,7 +36,7 @@ def _restore_tool_modules():
         if name == "tools"
         or name.startswith("tools.")
         or name == "hermes_cli"
-        or name.startswith("hermes_cli.")
+        or name.startswith("reames_cli.")
         or name == "modal"
         or name.startswith("modal.")
     }
@@ -60,11 +60,11 @@ def _install_modal_test_modules(
     _reset_modules(("tools", "hermes_cli", "modal"))
 
     hermes_cli = types.ModuleType("hermes_cli")
-    hermes_cli.__path__ = []  # type: ignore[attr-defined]
+    reames_cli.__path__ = []  # type: ignore[attr-defined]
     sys.modules["hermes_cli"] = hermes_cli
     hermes_home = tmp_path / "hermes-home"
     os.environ["HERMES_HOME"] = str(hermes_home)
-    sys.modules["hermes_cli.config"] = types.SimpleNamespace(
+    sys.modules["reames_cli.config"] = types.SimpleNamespace(
         get_hermes_home=lambda: hermes_home,
     )
 

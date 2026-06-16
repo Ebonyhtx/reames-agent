@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hermes_cli import main as cli_main
+from reames_cli import main as cli_main
 
 
 # Tests in this module either exercise the REAL _detect_concurrent_hermes_instances

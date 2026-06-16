@@ -257,8 +257,8 @@ all = [
 ]
 
 [project.scripts]
-reames = "hermes_cli.main:main"
-hermes = "hermes_cli.main:main"
+reames = "reames_cli.main:main"
+hermes = "reames_cli.main:main"
 reames-agent = "run_agent:main"
 hermes-acp = "acp_adapter.entry:main"
 
@@ -275,13 +275,13 @@ py-modules = ["run_agent", "model_tools", "toolsets", "batch_runner", "trajector
 locales = ["locales/*.yaml"]
 
 [tool.setuptools.package-data]
-hermes_cli = ["web_dist/**/*", "tui_dist/**/*", "scripts/install.sh", "scripts/install.ps1"]
+reames_cli = ["web_dist/**/*", "tui_dist/**/*", "scripts/install.sh", "scripts/install.ps1"]
 gateway = ["assets/**/*"]
 plugins = [
   "*/dashboard/manifest.json",
   "*/dashboard/dist/*",
   "*/dashboard/dist/**/*",
-  # Plugin discovery (hermes_cli/plugins.py) reads a plugin.yaml/plugin.yml
+  # Plugin discovery (reames_cli/plugins.py) reads a plugin.yaml/plugin.yml
   # manifest from each bundled plugin directory to register it. Wheels only
   # carry files declared here, so without this glob the wheel ships every
   # plugin's Python code but none of its manifests — the scan finds zero
@@ -293,7 +293,7 @@ plugins = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["agent", "agent.*", "tools", "tools.*", "hermes_cli", "hermes_cli.*", "gateway", "gateway.*", "tui_gateway", "tui_gateway.*", "cron", "acp_adapter", "plugins", "plugins.*", "providers", "providers.*"]
+include = ["agent", "agent.*", "tools", "tools.*", "reames_cli", "reames_cli.*", "gateway", "gateway.*", "tui_gateway", "tui_gateway.*", "cron", "acp_adapter", "plugins", "plugins.*", "providers", "providers.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

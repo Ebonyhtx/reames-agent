@@ -38,7 +38,7 @@ def _fresh_import():
     runs again and the platform check re-evaluates.
     """
     sys.modules.pop("hermes_bootstrap", None)
-    import hermes_bootstrap  # noqa: WPS433
+    import reames_bootstrap  # noqa: WPS433
     return hermes_bootstrap
 
 
@@ -232,13 +232,13 @@ class TestStdioReconfigureErrorHandling:
 
 
 class TestEntryPointsImportBootstrap:
-    """Every Hermes entry point must import hermes_bootstrap as its
+    """Every Hermes entry point must import reames_bootstrap as its
     first non-docstring import.  We check this by scanning source files
     rather than invoking the entry points (which would require a full
     agent context)."""
 
     # Entry points that invoke Hermes as a process.  Each one must
-    # import hermes_bootstrap before doing any file I/O or stdout writes.
+    # import reames_bootstrap before doing any file I/O or stdout writes.
     ENTRY_POINTS = [
         "hermes_cli/main.py",   # hermes CLI (console_script)
         "run_agent.py",          # hermes-agent (console_script)
@@ -250,7 +250,7 @@ class TestEntryPointsImportBootstrap:
 
     @pytest.mark.parametrize("path", ENTRY_POINTS)
     def test_entry_point_imports_bootstrap(self, path):
-        """The file must contain 'import hermes_bootstrap' and that
+        """The file must contain 'import reames_bootstrap' and that
         line must appear before the first 'import' of anything else.
 
         We're lenient about the docstring (can be arbitrarily long) and
@@ -309,5 +309,5 @@ class TestEntryPointsImportBootstrap:
             f"{path}: first top-level import is {first_import_name!r}, "
             f"but it must be 'hermes_bootstrap' so UTF-8 stdio is "
             f"configured before anything else initializes.  Move the "
-            f"'import hermes_bootstrap' line to be the first import."
+            f"'import reames_bootstrap' line to be the first import."
         )

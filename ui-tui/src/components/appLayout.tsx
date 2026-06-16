@@ -112,10 +112,17 @@ const TranscriptPane = memo(function TranscriptPane({
               )}
 
               {row.msg.kind === 'intro' ? (
-                <Box flexDirection="column" paddingTop={1}>
-                  <Banner maxWidth={Math.max(1, composer.cols - 2)} t={ui.theme} />
+                <Box flexDirection="column" paddingTop={1} maxWidth={Math.max(40, Math.floor(composer.cols * 0.8))}>
+                  <Box marginBottom={1}>
+                    <Text bold color={ui.theme.color.primary}>◆  Reames Agent</Text>
+                    {row.msg.info && (
+                      <Text color={ui.theme.color.muted} dimColor wrap="truncate-end">
+                        {' '}· {row.msg.info.model.split('/').pop()}
+                      </Text>
+                    )}
+                  </Box>
 
-                  {row.msg.info && <SessionPanel info={row.msg.info} maxWidth={Math.max(1, composer.cols - 2)} sid={ui.sid} t={ui.theme} />}
+                  {row.msg.info && <SessionPanel info={row.msg.info} maxWidth={Math.max(40, Math.floor(composer.cols * 0.8))} sid={ui.sid} t={ui.theme} />}
                 </Box>
               ) : row.msg.kind === 'panel' && row.msg.panelData ? (
                 <Panel sections={row.msg.panelData.sections} t={ui.theme} title={row.msg.panelData.title} />

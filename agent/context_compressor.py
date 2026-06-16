@@ -1274,7 +1274,7 @@ Summary generation was unavailable, so this is a best-effort deterministic fallb
         # date here never affects prompt-cache stability. Resolved defensively —
         # a clock failure must never block compaction.
         try:
-            from hermes_time import now as _hermes_now
+            from reames_time import now as _hermes_now
 
             _today_str = _hermes_now().strftime("%Y-%m-%d")
         except Exception:  # pragma: no cover - clock resolution is best-effort

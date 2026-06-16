@@ -208,7 +208,7 @@ class FetchResult:
 
 def _hermes_bin_dir() -> Path:
     """Where Hermes stores its managed binaries.  Profile-aware."""
-    from hermes_constants import get_hermes_home
+    from reames_constants import get_hermes_home
 
     return get_hermes_home() / "bin"
 
@@ -582,7 +582,7 @@ def _is_valid_env_name(name: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Public entry point — called from hermes_cli.env_loader
+# Public entry point — called from reames_cli.env_loader
 # ---------------------------------------------------------------------------
 
 

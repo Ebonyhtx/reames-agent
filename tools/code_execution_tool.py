@@ -1263,7 +1263,7 @@ def execute_code(
 
         # Per-profile HOME isolation: redirect system tool configs into
         # {HERMES_HOME}/home/ when that directory exists.
-        from hermes_constants import get_subprocess_home
+        from reames_constants import get_subprocess_home
         _profile_home = get_subprocess_home()
         if _profile_home:
             child_env["HOME"] = _profile_home
@@ -1559,7 +1559,7 @@ def _load_config() -> dict:
     key cleanly falls back to DEFAULT_EXECUTION_MODE.
     """
     try:
-        from hermes_cli.config import read_raw_config
+        from reames_cli.config import read_raw_config
 
         cfg = read_raw_config().get("code_execution", {})
         return cfg if isinstance(cfg, dict) else {}

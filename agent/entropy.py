@@ -27,7 +27,7 @@ _LAST_REPORT = None
 def _get_hermes_home():
     """Get Reames home directory."""
     try:
-        from hermes_constants import get_hermes_home as gh
+        from reames_constants import get_hermes_home as gh
         return str(gh())
     except Exception:
         return os.path.expanduser("~/.hermes")
@@ -166,13 +166,13 @@ def check_plugin_health():
 # ─── 配置漂移检测（使用 config 系统）────
 
 def detect_config_drift():
-    """Detect config drift using hermes_cli.config DEFAULT_CONFIG comparison.
+    """Detect config drift using reames_cli.config DEFAULT_CONFIG comparison.
     
     Returns list of (key, status, detail).
     """
     results = []
     try:
-        from hermes_cli.config import DEFAULT_CONFIG, load_config_readonly
+        from reames_cli.config import DEFAULT_CONFIG, load_config_readonly
         current = load_config_readonly()
         
         # Check for keys in current that differ from defaults

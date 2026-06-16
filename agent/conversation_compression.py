@@ -532,7 +532,7 @@ def compress_context(
             # compaction boundary (see #34089). Guarded separately so a logging
             # failure can never regress the routing update above.
             try:
-                from hermes_logging import set_session_context
+                from reames_logging import set_session_context
 
                 set_session_context(agent.session_id)
             except Exception:

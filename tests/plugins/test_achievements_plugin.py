@@ -54,7 +54,7 @@ def plugin_api(tmp_path, monkeypatch):
     # swap ``sys.modules['hermes_state']`` with auto-restoration. Without
     # this, a raw ``sys.modules[...] = fake`` assignment would leak the
     # fake into later tests in the same xdist worker — breaking every
-    # test that does ``from hermes_state import SessionDB``.
+    # test that does ``from reames_state import SessionDB``.
     module._test_monkeypatch = monkeypatch
     yield module
 

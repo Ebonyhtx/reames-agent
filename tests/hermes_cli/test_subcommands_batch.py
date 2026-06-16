@@ -13,31 +13,31 @@ import argparse
 
 import pytest
 
-from hermes_cli.subcommands.auth import build_auth_parser
-from hermes_cli.subcommands.backup import build_backup_parser
-from hermes_cli.subcommands.config import build_config_parser
-from hermes_cli.subcommands.dashboard import build_dashboard_parser
-from hermes_cli.subcommands.debug import build_debug_parser
-from hermes_cli.subcommands.doctor import build_doctor_parser
-from hermes_cli.subcommands.dump import build_dump_parser
-from hermes_cli.subcommands.gui import build_gui_parser
-from hermes_cli.subcommands.hooks import build_hooks_parser
-from hermes_cli.subcommands.import_cmd import build_import_cmd_parser
-from hermes_cli.subcommands.login import build_login_parser
-from hermes_cli.subcommands.logout import build_logout_parser
-from hermes_cli.subcommands.logs import build_logs_parser
-from hermes_cli.subcommands.model import build_model_parser
-from hermes_cli.subcommands.postinstall import build_postinstall_parser
-from hermes_cli.subcommands.prompt_size import build_prompt_size_parser
-from hermes_cli.subcommands.security import build_security_parser
-from hermes_cli.subcommands.setup import build_setup_parser
-from hermes_cli.subcommands.slack import build_slack_parser
-from hermes_cli.subcommands.status import build_status_parser
-from hermes_cli.subcommands.uninstall import build_uninstall_parser
-from hermes_cli.subcommands.update import build_update_parser
-from hermes_cli.subcommands.version import build_version_parser
-from hermes_cli.subcommands.webhook import build_webhook_parser
-from hermes_cli.subcommands.whatsapp import build_whatsapp_parser
+from reames_cli.subcommands.auth import build_auth_parser
+from reames_cli.subcommands.backup import build_backup_parser
+from reames_cli.subcommands.config import build_config_parser
+from reames_cli.subcommands.dashboard import build_dashboard_parser
+from reames_cli.subcommands.debug import build_debug_parser
+from reames_cli.subcommands.doctor import build_doctor_parser
+from reames_cli.subcommands.dump import build_dump_parser
+from reames_cli.subcommands.gui import build_gui_parser
+from reames_cli.subcommands.hooks import build_hooks_parser
+from reames_cli.subcommands.import_cmd import build_import_cmd_parser
+from reames_cli.subcommands.login import build_login_parser
+from reames_cli.subcommands.logout import build_logout_parser
+from reames_cli.subcommands.logs import build_logs_parser
+from reames_cli.subcommands.model import build_model_parser
+from reames_cli.subcommands.postinstall import build_postinstall_parser
+from reames_cli.subcommands.prompt_size import build_prompt_size_parser
+from reames_cli.subcommands.security import build_security_parser
+from reames_cli.subcommands.setup import build_setup_parser
+from reames_cli.subcommands.slack import build_slack_parser
+from reames_cli.subcommands.status import build_status_parser
+from reames_cli.subcommands.uninstall import build_uninstall_parser
+from reames_cli.subcommands.update import build_update_parser
+from reames_cli.subcommands.version import build_version_parser
+from reames_cli.subcommands.webhook import build_webhook_parser
+from reames_cli.subcommands.whatsapp import build_whatsapp_parser
 
 
 def _h(name):

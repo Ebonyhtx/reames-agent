@@ -112,8 +112,8 @@ class TestGatewayRunnerRegistration:
         # Stub out heavy dependencies if not already present
         stubs = [
             "dotenv",
-            "hermes_cli.env_loader",
-            "hermes_cli.config",
+            "reames_cli.env_loader",
+            "reames_cli.config",
             "hermes_constants",
         ]
         _orig = {}
