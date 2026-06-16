@@ -452,12 +452,6 @@ def run_conversation(
             agent._cache_stats = None
     _cache_stats = agent._cache_stats
 
-    # Share local cache stats with status bar (single source of truth)
-    if agent._status_bar is not None and _cache_stats is not None:
-        try:
-            agent._status_bar.set_cache_stats(_cache_stats)
-        except Exception:
-            pass
     interrupted = False
     failed = False
     codex_ack_continuations = 0
