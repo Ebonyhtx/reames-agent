@@ -2,13 +2,13 @@
 Reames CLI - Unified command-line interface for Reames Agent.
 
 Provides subcommands for:
-- reames chat          - Interactive chat (same as ./hermes)
+- reames chat          - Interactive chat
 - reames gateway       - Run gateway in foreground
 - reames gateway start - Start gateway service
 - reames gateway stop  - Stop gateway service
 - reames setup         - Interactive setup wizard
-- hermes status        - Show status of all components
-- hermes cron          - Manage cron jobs
+- reames status       - Show status of all components
+- reames cron          - Manage cron jobs
 """
 
 import os
