@@ -1,6 +1,35 @@
 # Reames Agent — Changelog
 
 
+
+## [v0.16.0-reames.2] — 2026-06-16
+
+### 🏗 Hermes 配置完全隔离
+
+- 28 处硬编码 `~/.hermes` 路径改为 `get_hermes_home()`（返回 `~/.reames`）
+- `get_hermes_home()` 忽略指向 `.hermes` 的旧 `HERMES_HOME` 环境变量
+- `REAMES_HOME` 环境变量可自定义路径（优先级最高）
+- `file_safety.py`、`backup.py` 安全检查兼容 `.reames`
+
+### 📦 首次启动自动配置
+
+- 首次启动自动生成 `~/.reames/config.yaml`（13 个完整配置段）
+- 覆盖：model、providers、agent、terminal、memory、display、approvals、hooks、cron、gateway、web、browser、compression
+- `${DEEPSEEK_API_KEY}` 和 `${MEMORY_EMBEDDING_API_KEY}` 自动从环境变量解析
+- 缺失配置段由 `DEFAULT_CONFIG` 运行时补全
+
+### 🚀 Windows 一键安装
+
+- 新增 `install.ps1`：`irm ... | iex` 一行命令安装
+- 自动检测 Python/Git → 克隆 → venv → pip → PATH → 配置向导
+- 安装向导引导设置 `DEEPSEEK_API_KEY` 和 `MEMORY_EMBEDDING_API_KEY`
+- 自动检测并隔离旧 Hermes 安装
+
+### 🐛 Bug 修复
+
+- 修复 `env_loader.py` 缺 `get_hermes_home` import 导致启动崩溃
+- 修复旧 `HERMES_HOME` 指向 `.hermes` 时仍被 Reames 读取的问题
+
 ## [v0.16.0-reames.1] — 2026-06-16
 
 ### 🔧 记忆系统完善与 Bug 修复（7 轮手术刀）
