@@ -332,8 +332,10 @@ class ReamesMemory:
                     results += [(r[0], weight/(i+1)) for i, r in enumerate(rows)]
                 except Exception:
                     pass
-        # LIKE search always runs alongside FTS5 (needed for CJK text)
-        for table, weight in [('memories', 0.3), ('messages', 0.15)]:
+        # LIKE fallback for CJK text — must be inside its own `with` block
+        # (the conn from the FTS5 `with` above is already closed here)
+        with sqlite3.connect(str(self._db_path)) as conn:
+            for table, weight in [('memories', 0.3), ('messages', 0.15)]:
                 try:
                     rows = conn.execute(
                         f'SELECT content FROM {table} WHERE content LIKE ? LIMIT ?',
@@ -364,6 +366,8 @@ class ReamesMemory:
         with __import__("sqlite3").connect(str(self._db_path)) as conn:
             for content, score in results:
                 row = conn.execute("SELECT created_at FROM memories WHERE content=? LIMIT 1", (content,)).fetchone()
+                if not row:
+                    row = conn.execute("SELECT created_at FROM messages WHERE content=? LIMIT 1", (content,)).fetchone()
                 if row and row[0]:
                     try:
                         ts = datetime.strptime(row[0][:19], "%Y-%m-%d %H:%M:%S")
@@ -390,6 +394,11 @@ class ReamesMemory:
                     "SELECT created_at FROM memories WHERE content = ? LIMIT 1",
                     (content,)
                 ).fetchone()
+                if not row:
+                    row = conn.execute(
+                        "SELECT created_at FROM messages WHERE content = ? LIMIT 1",
+                        (content,)
+                    ).fetchone()
                 if row and row[0]:
                     try:
                         ts = datetime.strptime(row[0][:19], "%Y-%m-%d %H:%M:%S")

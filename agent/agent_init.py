@@ -1133,7 +1133,12 @@ def init_agent(
                 agent=agent,
             )
             # Configure embedding if provided
-            _emb_key = mem_cfg.get("embedding_api_key", "") or os.environ.get("MEMORY_EMBEDDING_API_KEY", "")
+            # Resolve ${VAR} in mem_cfg values
+            for _k in mem_cfg:
+                _v = mem_cfg[_k]
+                if isinstance(_v, str) and "${" in _v:
+                    mem_cfg[_k] = re.sub(r'\$\{(\w+)\}', lambda m: os.environ.get(m.group(1), ""), _v)
+            _emb_key = mem_cfg.get("embedding_api_key", "")
             if _emb_key:
                 agent._memory_core.configure_embedding(
                     api_key=_emb_key,
