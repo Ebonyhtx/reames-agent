@@ -164,9 +164,19 @@ class ReamesMemory:
                 with sqlite3.connect(str(self._db_path)) as conn:
                     cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
                 if cnt >= self._l2_interval and not self._scenes_path.exists():
-                    threading.Thread(target=self._aggregate_l2, name="reames-l2").start()
+                    try:
+                        logger.info("L2 aggregation triggered (%d facts)", cnt)
+                        self._aggregate_l2()
+                        logger.info("L2 aggregation complete")
+                    except Exception as e:
+                        logger.warning("L2 aggregation failed: %s", e)
                 if cnt >= self._l3_interval and not self._persona_path.exists():
-                    threading.Thread(target=self._synthesize_l3, name="reames-l3").start()
+                    try:
+                        logger.info("L3 synthesis triggered (%d facts)", cnt)
+                        self._synthesize_l3()
+                        logger.info("L3 synthesis complete")
+                    except Exception as e:
+                        logger.warning("L3 synthesis failed: %s", e)
             except Exception:
                 pass
 
