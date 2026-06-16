@@ -76,7 +76,8 @@ def get_hermes_home() -> Path:
     if val:
         return Path(val)
     val = os.environ.get("HERMES_HOME", "").strip()
-    if val:
+    # REAMES: ignore old Hermes home path to avoid config contamination
+    if val and".hermes" not in val and not val.endswith(".hermes"):
         return Path(val)
 
     # Guard: if a non-default profile is sticky-active, warn once that
