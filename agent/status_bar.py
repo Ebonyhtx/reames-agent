@@ -107,6 +107,12 @@ class StatusBar:
             return f"¥{cost:.6f}"
         return f"¥{cost:.4f}"
     
+    def _ctx_bar(self, pct: int) -> str:
+        """Visual progress bar for context usage."""
+        filled = pct // 10
+        bar = "█" * filled + "░" * (10 - filled)
+        return f"[{bar}] {pct}%"
+    
     def _cache_hit_rate(self) -> float:
         """Get cache hit rate from CacheStats or fallback."""
         if self._cache_stats is not None:
@@ -119,18 +125,13 @@ class StatusBar:
         hit_rate = self.last_cache_hit_pct
         avg_hit = self._hit_pct_total / self.turn_count if self.turn_count > 0 else hit_rate
         
-        session_tokens = self.session_prompt_tokens + self.session_completion_tokens
-        turn_tokens = self.last_turn_prompt_tokens + self.last_turn_completion_tokens
-        
         parts = [
             f"{_CYAN}{model}{_RESET}",
             f"{_GREEN}{hit_rate:.2f}%{_RESET}",
             f"{_DIM}avg {avg_hit:.2f}%{_RESET}",
-            f"{_DIM}{self._fmt_tokens(session_tokens)}{_RESET}",
-            f"{self._fmt_tokens(turn_tokens)}",
             f"{self._fmt_cost(self.last_turn_cost)}",
             f"{self.turn_count} turns",
-            f"{_YELLOW}{self.context_used_pct}%{_RESET}",
+            f"ctx {self._ctx_bar(self.context_used_pct)}",
             f"{self.compression_threshold}%",
             f"{_BOLD}{self._fmt_cost(self.session_cost)}{_RESET}",
         ]

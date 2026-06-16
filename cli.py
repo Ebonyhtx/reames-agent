@@ -4024,10 +4024,6 @@ class ReamesCLI:
                 chp_str = f"{chp:.2f}%" if chp is not None else "--"
                 avgp = snapshot.get("cache_avg_hit_pct")
                 avgp_str = f"{avgp:.2f}%" if avgp is not None else "--"
-                stok = snapshot.get("session_total_tokens", 0)
-                stok_str = format_token_count_compact(stok) if stok else "0"
-                ttok = snapshot.get("turn_tokens", 0)
-                ttok_str = format_token_count_compact(ttok) if ttok else "0"
                 tc = snapshot.get("turn_cost", 0.0)
                 tc_str = f"¥{tc:.4f}" if tc else "¥0"
                 sc = snapshot.get("session_cost", 0.0)
@@ -4036,15 +4032,20 @@ class ReamesCLI:
                 bal = snapshot.get("balance", "") or ""
                 ctx_pct = percent_label
                 comp_thresh = snapshot.get("compression_threshold", 80)
+                # Build context progress bar
+                try:
+                    ctx_val = int(ctx_pct.rstrip("%")) if ctx_pct and ctx_pct != "--" else 0
+                    filled = ctx_val // 10
+                    ctx_bar = "[" + "█" * filled + "░" * (10 - filled) + "] " + str(ctx_val) + "%"
+                except:
+                    ctx_bar = ctx_pct
                 parts = [
                     f"◆ {model}",
                     f"命中 {chp_str}",
                     f"平均 {avgp_str}",
-                    f"会话 {stok_str}",
-                    f"本次 {ttok_str}",
                     f"{tc_str}",
                     f"{turns}轮",
-                    f"ctx {ctx_pct}",
+                    f"ctx {ctx_bar}",
                     f"压缩 {comp_thresh}%",
                     f"{sc_str}",
                 ]
