@@ -1127,10 +1127,14 @@ def init_agent(
 
     # Memory provider plugin (external — one at a time, alongside built-in)
     # Reads memory.provider from config to select which plugin to activate.
+    # Reames: defaults to memory_tencentdb (deep integration — 4-layer memory)
     agent._memory_manager = None
     if not skip_memory:
         try:
             _mem_provider_name = mem_config.get("provider", "") if mem_config else ""
+            # Default to TencentDB when no provider configured
+            if not _mem_provider_name or not _mem_provider_name.strip():
+                _mem_provider_name = "memory_tencentdb"
 
             if _mem_provider_name and _mem_provider_name.strip():
                 from agent.memory_manager import MemoryManager as _MemoryManager
