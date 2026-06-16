@@ -207,7 +207,7 @@ class ReamesMemory:
                 pass
         if self._persona_path.exists():
             try:
-                extra += self._persona_path.read_text(encoding="utf-8")[:200] + "\n"
+                extra += self._persona_path.read_text(encoding="utf-8")[:150] + "\n"
             except Exception:
                 pass
 
