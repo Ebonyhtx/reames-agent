@@ -1672,7 +1672,7 @@ def run_conversation(
                                 prompt_tokens=getattr(_cu, 'prompt_tokens', 0) if _cu is not None else 0,
                                 completion_tokens=getattr(_cu, 'output_tokens', 0) if _cu is not None else 0,
                                 cache_hit_tokens=getattr(_cu, 'cache_read_tokens', 0) if _cu is not None else 0,
-                                cost=float(cost_result.cost) if cost_result and cost_result.cost else 0.0,
+                                cost=float(cost_result.amount_usd) if cost_result and cost_result.amount_usd else 0.0,
                                 model=agent.model or '',
                                 context_window=getattr(getattr(agent, 'context_compressor', None), 'context_length', 0) or 0,
                                 context_used=getattr(_cu, 'total_tokens', 0) if _cu is not None else 0,
