@@ -4675,6 +4675,15 @@ def _inject_mermaid_offload_hook(agent, tool_name, tool_use_id, result_text):
     """Hook into tool result processing for Mermaid offload."""
     try:
         from agent.tool_executor import _post_tool_mermaid_offload
-        return _post_tool_mermaid_offload(tool_name, tool_use_id, result_text)
+        _result = _post_tool_mermaid_offload(tool_name, tool_use_id, result_text)
+        if _result != result_text and agent._memory_core:
+            try:
+                agent._memory_core.capture_turn(
+                    "[offload: " + tool_name + "]",
+                    result_text[:3000]
+                )
+            except Exception:
+                pass
+        return _result
     except Exception:
         return result_text
