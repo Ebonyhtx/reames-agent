@@ -204,12 +204,12 @@ class ReamesMemory:
             try:
                 scene_text = self._scenes_path.read_text(encoding="utf-8")
                 titles = [l for l in scene_text.split(chr(10)) if l.startswith("## ")]
-                if any(query.lower() in t.lower() for t in titles):
+                # Match: space tokens + Chinese 2-gram chunks
+                cjk = "".join(c for c in query if "一" <= c <= "鿿")
+                chunks = query.split() + [cjk[i:i+2] for i in range(len(cjk)-1)]
+                if any(c in t.lower() for c in chunks for t in titles):
                     extra += scene_text[:300] + chr(10)
             except Exception:
-                pass
-                pass
-                pass
                 pass
         if self._persona_path.exists():
             try:
