@@ -1673,16 +1673,11 @@ def run_conversation(
                                 cache_hit_tokens=getattr(canonical_usage, 'cache_read_tokens', 0),
                                 cost=float(cost_result.cost) if cost_result and cost_result.cost else 0.0,
                                 model=agent.model or '',
-                                context_window=getattr(agent.context_compressor, 'context_length', 0) or 0,
+                                context_window=getattr(getattr(agent, 'context_compressor', None), 'context_length', 0) or 0,
                                 context_used=getattr(canonical_usage, 'total_tokens', 0) or 0,
                             )
                         except Exception:
                             pass
-                    # Print status bar after recording API usage
-                    try:
-                        agent._status_bar.print_status_line()
-                    except Exception:
-                        pass
                     agent.session_cost_source = cost_result.source
 
                     # Persist token counts to session DB for /insights.
