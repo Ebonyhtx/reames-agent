@@ -1219,6 +1219,7 @@ def init_agent(
                     _template = chr(10).join(_lines)
                     with open(reames_cfg, "w", encoding="utf-8") as f:
                         f.write(_template)
+                    print(f"[Reames] First launch — config generated at {reames_cfg}")
                 except Exception:
                     pass
             if not mem_cfg:
