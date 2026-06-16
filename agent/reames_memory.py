@@ -15,9 +15,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_L1_INTERVAL = 10
-DEFAULT_L2_INTERVAL = 50
-DEFAULT_L3_INTERVAL = 200
+DEFAULT_L1_INTERVAL = 10  # user-LLM turns
+DEFAULT_L2_INTERVAL = 20
+DEFAULT_L3_INTERVAL = 50
 DEFAULT_RECALL_COUNT = 5
 
 
@@ -221,7 +221,7 @@ class ReamesMemory:
                 t = threading.Thread(target=self._synthesize_l3, daemon=True, name="reames-l3")
                 t.start()
             # Auto-prune every 50 sessions to prevent unbounded growth
-            if cnt >= 500:
+            if cnt >= 200:
                 t = threading.Thread(target=self.prune, daemon=True, name="reames-prune")
                 t.start()
         except Exception as e:
