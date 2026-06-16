@@ -71,7 +71,7 @@ TIPS = [
     "hermes chat -q \"query\" runs a single non-interactive query and exits.",
     "hermes chat --max-turns 200 overrides the default 90-iteration limit per turn.",
     "hermes chat --checkpoints enables filesystem snapshots before every destructive file change.",
-    "hermes --yolo bypasses all dangerous command approval prompts for the entire session.",
+    "reames --yolo bypasses all dangerous command approval prompts for the entire session.",
     "hermes chat --source telegram tags the session for filtering in hermes sessions list.",
     "hermes -p work chat runs under a specific profile without changing your default.",
 
