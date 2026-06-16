@@ -1103,6 +1103,8 @@ def init_agent(
     agent._turns_since_memory = 0
     agent._memory_nudge_interval = 0  # disabled: TencentDB handles memory
 
+    agent._memory_store = None  # disabled: TencentDB replaces MemoryStore
+
     # Reames: Native Python memory engine (L0-L3, SQLite-backed)
     agent._memory_core = None
     agent._iters_since_skill = 0

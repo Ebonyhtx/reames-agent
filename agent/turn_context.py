@@ -210,7 +210,7 @@ def build_turn_context(
     should_review_memory = False
     if (agent._memory_nudge_interval > 0
             and "memory" in agent.valid_tool_names
-            and agent._memory_store):
+            and getattr(agent, "_memory_store", None)):
         agent._turns_since_memory += 1
         if agent._turns_since_memory >= agent._memory_nudge_interval:
             should_review_memory = True
