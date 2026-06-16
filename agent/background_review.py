@@ -417,8 +417,8 @@ def _run_review_in_thread(
             review_agent._memory_write_origin = "background_review"
             review_agent._memory_write_context = "background_review"
             review_agent._memory_store = getattr(agent, "_memory_store", None)
-            review_agent._memory_enabled = agent._memory_enabled
-            review_agent._user_profile_enabled = agent._user_profile_enabled
+            review_agent._memory_enabled = getattr(agent, "_memory_enabled", False)
+            review_agent._user_profile_enabled = getattr(agent, "_user_profile_enabled", False)
             review_agent._memory_nudge_interval = 0
             review_agent._skill_nudge_interval = 0
             # Suppress all status/warning emits from the fork so the
