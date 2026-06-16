@@ -99,8 +99,9 @@ class StatusBar:
             )
             resp = urllib.request.urlopen(req, timeout=5)
             data = json.loads(resp.read())
-            bal = data.get("balance", data.get("total_balance", ""))
-            if bal is not None:
+            infos = data.get("balance_infos", [])
+            if infos:
+                bal = infos[0].get("total_balance", "0")
                 self.balance = f"¥{float(bal):.2f}"
         except Exception:
             pass
