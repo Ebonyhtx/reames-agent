@@ -21,15 +21,29 @@ Write-Color @"
 "@ "Cyan"
 
 # ── Find Python ──
-$pythonCmd = $null
-try { $null = Get-Command python3 -ErrorAction Stop; $pythonCmd = "python3" } catch {}
-if (-not $pythonCmd) { try { $null = Get-Command python -ErrorAction Stop; $pythonCmd = "python" } catch {} }
-if (-not $pythonCmd) {
+ = 
+foreach ( in @("python3", "python")) {
+    try {  = Get-Command  -ErrorAction Stop;  = ; break } catch {}
+}
+if (-not ) {
+     = Get-Item ":APPDATA\uv\python\cpython-3.*-windows-x86_64-none\python.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if () {  = .FullName }
+}
+if (-not ) {
+     = Get-Item ":LOCALAPPDATA\Programs\Python\Python3*\python.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if () {  = .FullName }
+}
+if (-not ) {
+    Write-Color "Python not found. Trying winget install..." "Yellow"
+    try { winget install Python.Python.3.12 --silent --accept-package-agreements 2>&1 | Out-Null } catch {}
+     = Get-Item ":LOCALAPPDATA\Programs\Python\Python312\python.exe" -ErrorAction SilentlyContinue
+    if () {  = .FullName }
+}
+if (-not ) {
     Write-Color "Python not found. Install from https://python.org (3.10+ required)" "Red"; exit 1
 }
-$ver = & $pythonCmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
-Write-Color "[OK] Python $ver" "Green"
-
+ = &  -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+Write-Color "[OK] Python " "Green"
 # ── Find Git ──
 try { git --version | Out-Null } catch {
     Write-Color "Git not found. Install from https://git-scm.com" "Red"; exit 1
