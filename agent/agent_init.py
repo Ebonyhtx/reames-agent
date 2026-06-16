@@ -1128,10 +1128,23 @@ def init_agent(
                     os.makedirs(os.path.dirname(reames_cfg), exist_ok=True)
                     _lines = [
                         "# Reames Agent configuration",
+                        "#",
                         "# Set these env vars before starting:",
-                        "#   DEEPSEEK_API_KEY - your DeepSeek API key",
-                        "#   MEMORY_EMBEDDING_API_KEY - SiliconFlow key",
+                        "#   DEEPSEEK_API_KEY     = your DeepSeek API key",
+                        "#   MEMORY_EMBEDDING_API_KEY = SiliconFlow embedding key",
                         "",
+                        "# --- Model ---",
+                        "model:",
+                        "  default: deepseek-v4-flash",
+                        "  provider: deepseek",
+                        "",
+                        "# --- Providers ---",
+                        "providers:",
+                        "  deepseek:",
+                        "    base_url: https://api.deepseek.com",
+                        "    api_key: ${DEEPSEEK_API_KEY}",
+                        "",
+                        "# --- Memory ---",
                         "memory:",
                         "  data_dir: ~/.reames/memory",
                         "  l1_every_n: 10",
@@ -1140,6 +1153,10 @@ def init_agent(
                         "  embedding_api_key: ${MEMORY_EMBEDDING_API_KEY}",
                         "  embedding_api_base: https://api.siliconflow.cn/v1",
                         "  embedding_model: BAAI/bge-m3",
+                        "",
+                        "# --- Display ---",
+                        "display:",
+                        "  status_bar: true",
                     ]
                     _template = chr(10).join(_lines)
                     with open(reames_cfg, "w", encoding="utf-8") as f:
