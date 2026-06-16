@@ -1242,6 +1242,7 @@ def init_agent(
                         "#   hygiene_hard_message_limit: 400",
                         "#   protect_first_n: 3",
                         "#   abort_on_summary_failure: false",
+                        "#   cache_first: false          # skip LLM summarization, preserve prefix cache",
                         "#",
                         "# prompt_caching:",
                         "#   cache_ttl: 5m",
