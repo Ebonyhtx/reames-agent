@@ -645,9 +645,13 @@ def compress_context(
 def _fire_cache_warmup(agent: Any, messages: list) -> None:
     """Background cache warm-up: send a minimal request so DeepSeek computes
     KV cache for the new prefix after compression.  Daemon thread, best-effort.
+    Only fires for DeepSeek models where prefix caching provides real value.
     """
     if not getattr(agent, "_cache_stats", None):
-        return  # only warm when cache tracking is active
+        return
+    _model = (getattr(agent, "model", "") or "").lower()
+    if not _model.startswith("deepseek"):
+        return  # only DeepSeek has meaningful prefix cache
     try:
         import json, urllib.request, threading
         _warm = messages + [{"role": "user", "content": "."}]
