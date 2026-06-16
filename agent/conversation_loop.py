@@ -1665,16 +1665,17 @@ def run_conversation(
                         agent.session_estimated_cost_usd += float(cost_result.amount_usd)
                     agent.session_cost_status = cost_result.status
                     # Update status bar
+                    _cu = locals().get('canonical_usage')
                     if hasattr(agent, '_status_bar') and agent._status_bar is not None:
                         try:
                             agent._status_bar.record_api_usage(
-                                prompt_tokens=getattr(canonical_usage, 'prompt_tokens', 0),
-                                completion_tokens=getattr(canonical_usage, 'output_tokens', 0),
-                                cache_hit_tokens=getattr(canonical_usage, 'cache_read_tokens', 0),
+                                prompt_tokens=getattr(_cu, 'prompt_tokens', 0) if _cu is not None else 0,
+                                completion_tokens=getattr(_cu, 'output_tokens', 0) if _cu is not None else 0,
+                                cache_hit_tokens=getattr(_cu, 'cache_read_tokens', 0) if _cu is not None else 0,
                                 cost=float(cost_result.cost) if cost_result and cost_result.cost else 0.0,
                                 model=agent.model or '',
                                 context_window=getattr(getattr(agent, 'context_compressor', None), 'context_length', 0) or 0,
-                                context_used=getattr(canonical_usage, 'total_tokens', 0) or 0,
+                                context_used=getattr(_cu, 'total_tokens', 0) if _cu is not None else 0,
                             )
                         except Exception:
                             pass
