@@ -4678,10 +4678,7 @@ def _inject_mermaid_offload_hook(agent, tool_name, tool_use_id, result_text):
         _result = _post_tool_mermaid_offload(tool_name, tool_use_id, result_text)
         if _result != result_text and agent._memory_core:
             try:
-                agent._memory_core.capture_turn(
-                    "[offload: " + tool_name + "]",
-                    result_text[:3000]
-                )
+                agent._memory_core.capture_offload(tool_name, result_text[:3000])
             except Exception:
                 pass
         return _result

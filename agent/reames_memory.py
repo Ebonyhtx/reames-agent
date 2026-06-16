@@ -123,6 +123,17 @@ class ReamesMemory:
         self._turn_count = 0
         logger.info("ReamesMemory: initialized session=%s", session_id)
 
+    def capture_offload(self, tool_name: str, content: str):
+        """Store offloaded tool output for future retrieval (L0, tool role)."""
+        if not content:
+            return
+        with sqlite3.connect(str(self._db_path)) as conn:
+            conn.execute(
+                "INSERT INTO messages (session_id, role, content) VALUES (?,?,?)",
+                (self._session_id, "tool", f"[{tool_name}] {content[:3000]}")
+            )
+            conn.commit()
+
     def capture_turn(self, user_content: str, assistant_content: str):
         if not user_content:
             return
