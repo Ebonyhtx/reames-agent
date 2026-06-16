@@ -6,7 +6,7 @@
 
 | 模块 | 说明 | 状态 |
 |:---|:---|:---:|
-| **记忆系统** | L0-L4 渐进式披露 + Mermaid Offload + 记忆后端 | ✅ |
+| **记忆系统** | ReamesMemory (TencentDB 自研) + 向量检索 + 新鲜度权重 | ✅ |
 | **MCP 集群** | SearXNG 搜索 + GitHub + MarkItDown 文档解析 | ✅ |
 | **原生插件** | Git(7) + Build(4) + CodeAnalysis(2) + Crawler(1) | ✅ |
 | **钩子系统** | PreToolUse / PostToolUse / Stop 三层校验 | ✅ |
@@ -90,3 +90,7 @@ hermes
 - **记忆后端**: 多后端记忆系统
 - **搜索**: SearXNG
 - **文档解析**: Microsoft MarkItDown
+
+## 最近更新
+
+见 [CHANGELOG.md](CHANGELOG.md) — v0.16.0-reames.1
