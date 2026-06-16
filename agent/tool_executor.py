@@ -1011,30 +1011,8 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                 agent._vprint(f"  {_get_cute_tool_message_impl('session_search', function_args, tool_duration, result=function_result)}")
         elif function_name == "memory":
             def _execute(next_args: dict) -> Any:
-                target = next_args.get("target", "memory")
-                from tools.memory_tool import memory_tool as _memory_tool
-                result = _memory_tool(
-                    action=next_args.get("action"),
-                    target=target,
-                    content=next_args.get("content"),
-                    old_text=next_args.get("old_text"),
-                    store=agent._memory_core,
-                )
-                # Bridge: notify external memory provider of built-in memory writes
-                if agent._memory_core and next_args.get("action") in {"add", "replace"}:
-                    try:
-                        agent._memory_core.on_memory_write(
-                            next_args.get("action", ""),
-                            target,
-                            next_args.get("content", ""),
-                            metadata=agent._build_memory_write_metadata(
-                                task_id=effective_task_id,
-                                tool_call_id=getattr(tool_call, "id", None),
-                            ),
-                        )
-                    except Exception:
-                        pass
-                return result
+                # memory_tool removed - TencentDB handles memory via sync_turn
+                return "Memory tool removed. TencentDB handles memory automatically."
             function_result, function_args = _run_agent_tool_execution_middleware(
                 agent,
                 function_name=function_name,

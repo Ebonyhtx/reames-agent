@@ -30,7 +30,7 @@ import re
 import inspect
 from typing import Any, Dict, List, Optional
 
-from agent.memory_provider import MemoryProvider
+# MemoryProvider removed — TencentDB is the only memory system
 from tools.registry import tool_error
 
 logger = logging.getLogger(__name__)

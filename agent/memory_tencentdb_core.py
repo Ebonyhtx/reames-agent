@@ -537,10 +537,10 @@ class GatewaySupervisor:
 
 # ========== MemoryTencentdbCore ==========
 
-from agent.memory_provider import MemoryProvider
+# MemoryTencentdbCore deleted — TencentDB is the only memory system
 
-from .client import MemoryTencentdbSdkClient
-from .supervisor import GatewaySupervisor
+# MemoryTencentdbSdkClient defined in this module
+# GatewaySupervisor defined in this module
 
 
 # Circuit breaker: after N consecutive failures, pause API calls
@@ -864,10 +864,10 @@ CONVERSATION_SEARCH_SCHEMA = {
 
 
 # ---------------------------------------------------------------------------
-# MemoryProvider implementation
+# MemoryTencentdbCore implementation
 # ---------------------------------------------------------------------------
 
-class MemoryTencentdbProvider(MemoryProvider):
+class MemoryTencentdbCore:
     """memory-tencentdb four-layer memory via local Gateway sidecar."""
 
     def __init__(self):
