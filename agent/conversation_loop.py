@@ -742,8 +742,12 @@ def run_conversation(
                 _cache_stats.record_turn(api_messages)
                 if _cache_stats._total % 10 == 0:  # log every 10 turns
                     logger.info("CacheStats: %s", _cache_stats.report())
-            except Exception:
-                pass
+                # DEBUG: check if CacheStats is working
+                import sys as _sys
+                _sys.stderr.write("CACHESTATS: total=" + str(_cache_stats._total) + " hits=" + str(_cache_stats._hits) + " rate=" + str(_cache_stats.hit_rate) + chr(10))
+            except Exception as _e:
+                import sys as _sys
+                _sys.stderr.write("CACHESTATS ERROR: " + str(_e) + chr(10))
 
         # Normalize message whitespace and tool-call JSON for consistent
         # prefix matching.  Ensures bit-perfect prefixes across turns,
