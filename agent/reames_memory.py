@@ -436,12 +436,15 @@ class ReamesMemory:
     def _blob_from_vec(vec: Optional[List[float]]) -> Optional[bytes]:
         if vec is None:
             return None
-        return b"".join(str(v).encode() + b"," for v in vec)
+        import struct as _struct
+        return _struct.pack(f"<{len(vec)}d", *vec)
 
     @staticmethod
     def _blob_to_vector(blob: bytes) -> List[float]:
         try:
-            return [float(p) for p in blob.decode().rstrip(",").split(",") if p]
+            import struct as _struct
+            count = len(blob) // 8
+            return list(_struct.unpack(f"<{count}d", blob))
         except Exception:
             return []
 
@@ -460,6 +463,11 @@ class ReamesMemory:
         }, {
             "name": "reames_memory_prune",
             "description": "Manually prune old memories.",
+            "parameters": {"type": "object", "properties": {"max_count": {"type": "integer", "default": 500}}, "required": []}
+        }, {
+            "name": "reames_memory_list",
+            "description": "List recent memories.",
+            "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "default": 20}}, "required": []},
             "parameters": {"type": "object", "properties": {}, "required": []}
         }, {
             "name": "reames_memory_search",
@@ -486,12 +494,37 @@ class ReamesMemory:
             "ReamesMemory L0=%d L1=%d(e=%d) L2=%s L3=%s DB=%.0fKB turns=%d"
             % (msg_cnt, mem_cnt, emb_cnt, scenes, persona, db_kb, self._turn_count)
         )
-    def manual_prune(self) -> str:
+    def restore_from_archive(self, archive_path: str) -> str:
+        """Restore memory database from an archive file."""
+        import shutil
+        src = Path(archive_path)
+        if not src.exists():
+            return f"Archive not found: {archive_path}"
+        self.shutdown()
+        shutil.copy2(str(src), str(self._db_path))
+        return f"Restored from {src.name} ({src.stat().st_size/1024:.0f}KB)"
+
+    def list_memories(self, limit: int = 20) -> str:
+        """List recent memories for inspection."""
+        with sqlite3.connect(str(self._db_path)) as conn:
+            rows = conn.execute(
+                "SELECT content, created_at FROM memories ORDER BY id DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+        if not rows:
+            return "(no memories)"
+        out = []
+        out.append("Recent memories:")
+        for idx, (content, ts) in enumerate(rows, 1):
+            out.append("  %d. [%s] %s" % (idx, ts[:10], content[:120]))
+        return chr(10).join(out)
+
+    def manual_prune(self, max_count: int = 500) -> str:
         """Manually trigger prune and return result."""
         with sqlite3.connect(str(self._db_path)) as conn:
             before = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
         self.archive()
-        self.prune()
+        self.prune(max_memories=max_count)
         with sqlite3.connect(str(self._db_path)) as conn:
             after = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
         return f"Pruned: {before} -> {after} memories"
@@ -573,11 +606,13 @@ class ReamesMemory:
         if tool_name == "reames_memory_status":
             return self.get_status()
         if tool_name == "reames_memory_prune":
-            return self.manual_prune()
+            return self.manual_prune(int(args.get("max_count", 500)))
+        if tool_name == "reames_memory_list":
+            return self.list_memories(int(args.get("limit", 20)))
         return f"Unknown tool: {tool_name}"
 
     def has_tool(self, tool_name: str) -> bool:
-        return tool_name in ("reames_memory_search", "reames_memory_status", "reames_memory_prune")
+        return tool_name in ("reames_memory_search", "reames_memory_status", "reames_memory_prune", "reames_memory_list")
 
 
 def get_tool_schemas() -> List[dict]:
