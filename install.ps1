@@ -107,7 +107,7 @@ if (Test-Path $repoDir) {
 Set-Location $repoDir
 if (-not (Test-Path ".venv")) { & $pythonCmd -m venv .venv }
 
-$pip = Join-Path ".venv" "Scripts" "pip.exe"
+$pip = Join-Path (Join-Path ".venv" "Scripts") "pip.exe"
 try { & $pip install --quiet --upgrade pip 2>&1 | Out-Null } catch {}
 Write-Host "Installing dependencies (1-3 min)..." -ForegroundColor Cyan
 & $pip install --quiet -e . 2>&1 | Out-Null
@@ -116,7 +116,7 @@ Write-Host "[OK] Reames Agent installed!" -ForegroundColor Green
 # ============================================================
 # PATH
 # ============================================================
-$binDir = Join-Path $repoDir ".venv" "Scripts"
+$binDir = Join-Path (Join-Path $repoDir ".venv") "Scripts"
 $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
 if ($userPath -notlike "*$binDir*") {
     [Environment]::SetEnvironmentVariable("PATH", "$userPath;$binDir", "User")
