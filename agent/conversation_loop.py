@@ -1686,7 +1686,7 @@ def run_conversation(
                                 cost=float(cost_result.amount_usd) if cost_result and cost_result.amount_usd else 0.0,
                                 model=agent.model or '',
                                 context_window=getattr(getattr(agent, 'context_compressor', None), 'context_length', 0) or 0,
-                                context_used=getattr(agent, 'session_total_tokens', 0) or 0,
+                                context_used=getattr(getattr(agent, 'context_compressor', None), 'last_prompt_tokens', 0) or 0,
                             )
                         except Exception:
                             pass
