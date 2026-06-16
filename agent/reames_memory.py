@@ -285,24 +285,12 @@ class ReamesMemory:
                     results += [(r[0], weight/(i+1)) for i, r in enumerate(rows)]
                 except Exception:
                     pass
-        # Fallback: LIKE for Chinese text (FTS5 doesn't handle CJK well)
-        if not results:
-            for table, weight in [('memories', 0.3), ('messages', 0.15)]:
+        # LIKE search always runs alongside FTS5 (needed for CJK text)
+        for table, weight in [('memories', 0.3), ('messages', 0.15)]:
                 try:
                     rows = conn.execute(
                         f'SELECT content FROM {table} WHERE content LIKE ? LIMIT ?',
                         ('%' + query + '%', limit)
-                    ).fetchall()
-                    results += [(r[0], weight/(i+1)) for i, r in enumerate(rows)]
-                except Exception:
-                    pass
-        # Fallback: LIKE for Chinese/CJK text
-        if not results:
-            for table, weight in [("memories", 0.3), ("messages", 0.15)]:
-                try:
-                    rows = conn.execute(
-                        f"SELECT content FROM {table} WHERE content LIKE ? LIMIT ?",
-                        ("%" + query + "%", limit)
                     ).fetchall()
                     results += [(r[0], weight/(i+1)) for i, r in enumerate(rows)]
                 except Exception:
