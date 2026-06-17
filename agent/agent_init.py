@@ -1451,9 +1451,16 @@ def init_agent(
     compression_abort_on_summary_failure = str(
         _compression_cfg.get("abort_on_summary_failure", False)
     ).lower() in {"true", "1", "yes"}
-    compression_cache_first = str(
-        _compression_cfg.get("cache_first", False)
-    ).lower() in {"true", "1", "yes"}
+    _cache_first_raw = _compression_cfg.get("cache_first")
+    if _cache_first_raw is not None:
+        compression_cache_first = str(_cache_first_raw).lower() in {"true", "1", "yes"}
+    else:
+        # Not configured — auto-enable for DeepSeek models.
+        # DeepSeek's KV prefix cache is storage-based with no size limit,
+        # so keeping the prefix byte-stable is pure win with no downside.
+        compression_cache_first = bool(
+            agent.model and "deepseek" in agent.model.lower()
+        )
 
     # Read optional explicit context_length override for the auxiliary
     # compression model. Custom endpoints often cannot report this via
