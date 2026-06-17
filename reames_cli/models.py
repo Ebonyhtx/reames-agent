@@ -1168,6 +1168,7 @@ _PROVIDER_ALIASES = {
 # hit the Portal; this fallback must stay cheap and network-free.
 _PROVIDER_SILENT_DEFAULT_OVERRIDES: dict[str, str] = {
     "nous": "deepseek/deepseek-v4-flash",
+    "deepseek": "deepseek-v4-flash",
 }
 
 
