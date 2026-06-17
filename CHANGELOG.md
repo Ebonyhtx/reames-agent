@@ -165,3 +165,58 @@
 ---
 
 *以上改动由 Reasonix (deepseek-v4-flash) 辅助完成。用户：阿波。*
+
+
+## [v0.16.0-reames.4] — 2026-06-17
+
+### 🔥 缓存优先压缩模式（`cache_first`）
+
+**核心思路：** Reasonix 的缓存优化理念融入 Hermes 压缩管道。
+
+```
+旧压缩流程（Hermes 遗留）：
+  Phase 1: 工具结果修剪  ← 保留对话结构
+  Phase 2: 边界计算
+  Phase 3: LLM 摘要生成  ← 改变消息结构 → DeepSeek 缓存 MISS ❌
+
+新 cache_first 模式：
+  Phase 1: 工具结果修剪  ← 对话结构原封不动
+  Phase 2: 边界计算
+  [跳过 Phase 3]          ← 前缀字节稳定 → DeepSeek 缓存命中 ✅
+```
+
+**依据：** DeepSeek 磁盘 KV 缓存无固定大小限制，缓存命中的唯一条件是前缀字节稳定性。
+LLM 摘要改变消息结构 → 缓存失效。工具修剪不改变对话结构 → 缓存持续命中。
+（来源：DeepSeek 官方文档 — Context Caching 章节）
+
+| 文件 | 改动 |
+|------|------|
+| `agent/context_compressor.py` | 新增 `cache_first: bool = False` 参数；`compress()` 中 Phase 1 后判断跳过 Phase 3 |
+| `agent/agent_init.py` | 从 `config.yaml` 读取 `compression.cache_first`，传递给 ContextCompressor 构造器 |
+| `agent/agent_init.py` | config 自动生成模板新增 `# cache_first: false` 配置项 |
+
+### 🌡️ 压缩后缓存预热（Cache Warming）
+
+压缩后新前缀的 KV cache 未被计算，下一轮必定 MISS。预热提前触发 DeepSeek 计算 KV cache。
+
+- daemon 线程，`max_tokens=1`，`temperature=0.0`
+- **仅对 DeepSeek 模型触发**（检查 `model.startswith("deepseek")`）
+- 全 `try/except` + `timeout=10`，失败无害
+- 费用 ≈ `max_tokens=1` 输出 ≈ $0.000001
+
+| 文件 | 改动 |
+|------|------|
+| `agent/conversation_compression.py` | 新增 `_fire_cache_warmup()` 函数；`compress_context()` 末尾调用 |
+
+### 🧪 待测试项
+
+- [ ] `cache_first=True` 时 `compress()` 跳过 Phase 3
+- [ ] `cache_first=True` 仍然执行工具修剪
+- [ ] 缓存预热仅 DeepSeek 模型触发
+- [ ] 非 DeepSeek 模型不触发预热
+- [ ] 无 `_cache_stats` 时不触发预热
+- [ ] `cache_first` 默认 False 不改变现有行为
+
+---
+
+*以上改动由 Reasonix (deepseek-v4-flash) 辅助完成。*
