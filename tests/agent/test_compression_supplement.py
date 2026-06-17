@@ -1,3 +1,6 @@
+from __future__ import annotations
+from unittest.mock import MagicMock
+import pytest
 
 # ===================================================================
 # Supplementary: compression session rotation, strip_media edge cases

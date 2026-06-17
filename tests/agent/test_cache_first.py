@@ -84,7 +84,7 @@ class TestCacheFirstCompressBehavior:
     def test_cache_first_skips_summary(self):
         """cache_first=True -> _generate_summary not called."""
         from agent.context_compressor import ContextCompressor
-        comp = ContextCompressor(context_length=128000, threshold_percent=0.5, cache_first=True)
+        comp = ContextCompressor(model="test", threshold_percent=0.5, cache_first=True)
 
         messages = [
             {'role': 'system', 'content': 'sys'},
@@ -105,7 +105,7 @@ class TestCacheFirstCompressBehavior:
     def test_cache_first_still_prunes_tools(self):
         """cache_first=True -> tool pruning still runs."""
         from agent.context_compressor import ContextCompressor
-        comp = ContextCompressor(context_length=128000, threshold_percent=0.5, cache_first=True)
+        comp = ContextCompressor(model="test", threshold_percent=0.5, cache_first=True)
 
         messages = [
             {'role': 'system', 'content': 'sys'},
@@ -122,13 +122,17 @@ class TestCacheFirstCompressBehavior:
     def test_cache_false_still_uses_summary(self):
         """cache_first=False -> _generate_summary called."""
         from agent.context_compressor import ContextCompressor
-        comp = ContextCompressor(context_length=128000, threshold_percent=0.5, cache_first=False)
+        comp = ContextCompressor(model="test", threshold_percent=0.5, cache_first=False)
         messages = [
             {'role': 'system', 'content': 'sys'},
             {'role': 'user', 'content': 'q'},
             {'role': 'assistant', 'content': 'r'},
             {'role': 'user', 'content': 'q2'},
             {'role': 'assistant', 'content': 'r2'},
+            {'role': 'user', 'content': 'q3'},
+            {'role': 'assistant', 'content': 'r3'},
+            {'role': 'user', 'content': 'q4'},
+            {'role': 'assistant', 'content': 'r4'},
         ]
         comp._generate_summary = MagicMock(return_value='summary text')
         comp._sanitize_tool_pairs = lambda ms: ms

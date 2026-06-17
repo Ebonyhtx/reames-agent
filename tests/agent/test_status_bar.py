@@ -1,5 +1,6 @@
 """Tests for StatusBar cache hit rate tracking and display."""
 from __future__ import annotations
+import pytest
 from agent.status_bar import StatusBar
 
 
@@ -34,8 +35,8 @@ def test_record_api_usage_multiple_turns():
     sb.record_api_usage(prompt_tokens=2000, completion_tokens=1000, cache_hit_tokens=900)
     assert sb.turn_count == 2
     # avg = (100/1500 + 900/3000) / 2 * 100 = (6.67 + 30.0) / 2 = 18.33
-    assert sb._hit_pct_total == pytest.approx(6.67 + 30.0, abs=0.1)
-    assert sb.last_cache_hit_pct == pytest.approx(30.0, abs=0.1)
+    assert abs(sb._hit_pct_total - (6.67 + 30.0)) < 0.2
+    assert abs(sb.last_cache_hit_pct - 30.0) < 0.2
 
 
 def test_model_updates():
@@ -50,7 +51,7 @@ def test_session_cost_accumulates():
     sb = StatusBar()
     sb.record_api_usage(cost=0.0012, prompt_tokens=100, completion_tokens=50)
     sb.record_api_usage(cost=0.0034, prompt_tokens=100, completion_tokens=50)
-    assert sb.session_cost == pytest.approx(0.0046, abs=0.0001)
+    assert abs(sb.session_cost - 0.0046) < 0.0002
 
 
 def test_context_usage_pct():

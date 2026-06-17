@@ -47,21 +47,26 @@ def test_cache_stats_changed_prefix_miss():
     cs = CacheStats()
     msgs = [{'role': 'system', 'content': 'sys'}, {'role': 'user', 'content': 'hello'}]
     cs.record_turn(msgs)
+    # prefix = messages[:-1] = [system]; last msg not in prefix
     msgs[-1]['content'] = 'world'
-    r = cs.record_turn(msgs)
-    assert r is False
-    assert cs._hits == 0 and cs._misses == 2
+    r = cs.record_turn(msgs)  # prefix unchanged -> hit
+    assert r is True
+    assert cs._hits == 1 and cs._misses == 1
 
 def test_cache_stats_sequence():
     cs = CacheStats()
     sys_msg = {'role': 'system', 'content': 'sys'}
     msgs = [sys_msg, {'role': 'user', 'content': 'q'}]
-    cs.record_turn(msgs)  # miss
+    cs.record_turn(msgs)  # miss (prefix=[sys_msg])
+    # change ONLY the last message (excluded from prefix) -> hit
     msgs[-1]['content'] = 'q2'
-    cs.record_turn(msgs)  # miss (changed)
-    cs.record_turn(msgs)  # hit (same)
-    cs.record_turn(msgs)  # hit
-    assert cs._hits == 2 and cs._total == 4
+    cs.record_turn(msgs)  # hit (prefix unchanged)
+    msgs[-1]['content'] = 'q3'
+    cs.record_turn(msgs)  # hit (prefix unchanged)
+    # change something IN the prefix -> miss
+    msgs[0]['content'] = 'sys2'
+    cs.record_turn(msgs)  # miss (prefix changed)
+    assert cs._hits == 2 and cs._misses == 2 and cs._total == 4
     assert cs.hit_rate == 0.5
 
 def test_cache_stats_prefix_excludes_last():

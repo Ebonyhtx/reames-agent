@@ -84,15 +84,15 @@ class TestStatusBarCacheFlow:
         from agent.usage_pricing import CanonicalUsage
         sb = StatusBar()
         cu = CanonicalUsage(input_tokens=100, output_tokens=200, cache_read_tokens=300)
-        total = cu.prompt_tokens  # 100
+        total = cu.prompt_tokens  # input_tokens(100) + cache_read_tokens(300) = 400
         sb.record_api_usage(
             prompt_tokens=total,
             completion_tokens=cu.output_tokens,
             cache_hit_tokens=cu.cache_read_tokens,
             model='deepseek-v4-flash',
         )
-        # cache_hit_pct = 300 / (100 + 200) * 100 = 100.0
-        assert sb.last_cache_hit_pct == 100.0
+        # cache_hit_pct = 300 / (400 + 200) * 100 = 50.0
+        assert sb.last_cache_hit_pct == 50.0
 
     def test_full_prompt_is_cache(self):
         """All prompt tokens are cached -> hit rate includes prompt in total."""
@@ -135,10 +135,15 @@ class TestDoubleMetricsCoherence:
         sb.set_cache_stats(cs)
 
         msgs = [{'role': 'system', 'content': 'sys'}, {'role': 'user', 'content': 'q'}]
-        cs.record_turn(msgs)
+        # prefix = messages[:-1] = [system]; last msg not in prefix
+        cs.record_turn(msgs)  # miss (first turn)
+        # changing last msg (excluded from prefix) -> hits
         msgs[-1]['content'] = 'q2'
-        cs.record_turn(msgs)
+        cs.record_turn(msgs)  # hit
         msgs[-1]['content'] = 'q3'
-        cs.record_turn(msgs)
-        assert cs._hits == 0
-        assert cs._misses == 3
+        r = cs.record_turn(msgs)  # hit
+        # change something IN the prefix
+        msgs[0]['content'] = 'sys2'
+        cs.record_turn(msgs)  # miss (prefix changed)
+        assert cs._hits == 2
+        assert cs._misses == 2

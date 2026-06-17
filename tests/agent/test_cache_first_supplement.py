@@ -4,6 +4,9 @@
 # ===================================================================
 
 
+from unittest.mock import MagicMock, patch
+
+
 class TestCacheWarmupRequest:
     def test_warmup_fires_only_for_deepseek(self):
         from agent.conversation_compression import _fire_cache_warmup
@@ -77,7 +80,7 @@ class TestCacheWarmupRequest:
 class TestCacheFirstCompressEdgeCases:
     def test_cache_first_compress_empty_messages(self):
         from agent.context_compressor import ContextCompressor
-        comp = ContextCompressor(context_length=128000, threshold_percent=0.5, cache_first=True)
+        comp = ContextCompressor(model="test", threshold_percent=0.5, cache_first=True)
         comp._generate_summary = MagicMock()
         result = comp.compress([], current_tokens=0)
         assert result == []
@@ -85,7 +88,7 @@ class TestCacheFirstCompressEdgeCases:
     def test_cache_first_compress_minimal_messages(self):
         """Only 2-3 messages, not enough to compress -> return unchanged."""
         from agent.context_compressor import ContextCompressor
-        comp = ContextCompressor(context_length=128000, threshold_percent=0.5, cache_first=True)
+        comp = ContextCompressor(model="test", threshold_percent=0.5, cache_first=True)
         comp._generate_summary = MagicMock()
         msgs = [{'role': 'system', 'content': 's'}, {'role': 'user', 'content': 'q'}]
         result = comp.compress(msgs, current_tokens=500)
@@ -93,7 +96,7 @@ class TestCacheFirstCompressEdgeCases:
 
     def test_cache_first_ineffective_compression_counter(self):
         from agent.context_compressor import ContextCompressor
-        comp = ContextCompressor(context_length=128000, threshold_percent=0.5, cache_first=True)
+        comp = ContextCompressor(model="test", threshold_percent=0.5, cache_first=True)
         comp._generate_summary = MagicMock()
         # Very small messages that won't save much
         msgs = [{'role': 'system', 'content': 's'}, {'role': 'user', 'content': 'q1'}, {'role': 'assistant', 'content': 'a1'}, {'role': 'user', 'content': 'q2'}, {'role': 'assistant', 'content': 'a2'}, {'role': 'user', 'content': 'q3'}, {'role': 'assistant', 'content': 'a3'}]
