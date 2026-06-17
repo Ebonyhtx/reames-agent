@@ -4602,15 +4602,6 @@ def run_conversation(
         messages=messages,
     )
 
-    # ReamesMemory: direct L0 capture (safety net if sync mechanism fails)
-    if agent._memory_core and final_response and original_user_message:
-        try:
-            agent._memory_core.capture_turn(
-                str(original_user_message)[:2000],
-                str(final_response)[:2000]
-            )
-        except Exception:
-            pass
 
     # Background memory/skill review — runs AFTER the response is delivered
     # so it never competes with the user's task for model attention.

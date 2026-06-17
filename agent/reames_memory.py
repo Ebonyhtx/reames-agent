@@ -10,6 +10,7 @@ import logging
 import os
 import sqlite3
 import threading
+import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -178,13 +179,11 @@ class ReamesMemory:
                 conn.commit()
             self._l1_pending += 1
 
-        if self._l1_pending >= self._l1_interval and self._agent:
-            self._l1_pending = 0
-            t = threading.Thread(target=self._extract_l1, daemon=True, name="reames-l1")
-            t.start()
-
-        # Check L2/L3 accumulation after each turn
-        if self._l1_pending > 0 and self._l1_pending % 5 == 0:
+        # L2 accumulation check (before L1 resets _l1_pending).
+        # L3 is only triggered at session start (initialize) and session end
+        # (on_session_end) — it doesn't run mid-session.
+        # Throttle: only check every _l1_interval turns.
+        if self._turn_count % self._l1_interval == 0:
             try:
                 with sqlite3.connect(str(self._db_path)) as conn:
                     cnt = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
@@ -192,6 +191,11 @@ class ReamesMemory:
                     threading.Thread(target=self._aggregate_l2, name="reames-l2").start()
             except Exception:
                 pass
+
+        if self._l1_pending >= self._l1_interval and self._agent:
+            self._l1_pending = 0
+            t = threading.Thread(target=self._extract_l1, daemon=True, name="reames-l1")
+            t.start()
 
     def recall(self, query: str, *, session_id: str = "") -> str:
         """Search all layers (L0+L1+L2+L3) and return ranked results."""
@@ -457,8 +461,8 @@ class ReamesMemory:
             if not recent:
                 return
             prompt = (
-                "Extract key facts from this conversation (user preferences, project info, "
-                "technical decisions). One fact per line. No commentary.\n\n"
+                "从以下对话中提取关键事实（用户偏好、项目信息、技术决策）。"
+                "每行一条事实，不要评论。\n\n"
                 + recent
             )
             facts = self._call_llm(prompt)
@@ -564,7 +568,9 @@ class ReamesMemory:
                 (self._session_id, limit)
             ).fetchall()
         rows = list(reversed(rows))
-        return "\n".join(f"{r[0]}: {r[1][:500]}" for r in rows)
+        text = "\n".join(f"{r[0]}: {r[1][:500]}" for r in rows)
+        text = re.sub(r"<\s*memory-context\s*>[\s\S]*?<\s*/memory-context\s*>", "", text, flags=re.IGNORECASE)
+        return text
 
     @staticmethod
     def _blob_from_vec(vec: Optional[List[float]]) -> Optional[bytes]:
