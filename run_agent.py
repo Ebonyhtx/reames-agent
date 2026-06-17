@@ -2930,7 +2930,7 @@ class AIAgent:
             except Exception:
                 pass
 
-    def _sync_tencentdb_memory_for_turn(
+    def _sync_reames_memory_for_turn(
         self,
         *,
         original_user_message: Any,

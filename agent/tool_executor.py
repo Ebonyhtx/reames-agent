@@ -1011,8 +1011,8 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                 agent._vprint(f"  {_get_cute_tool_message_impl('session_search', function_args, tool_duration, result=function_result)}")
         elif function_name == "memory":
             def _execute(next_args: dict) -> Any:
-                # memory_tool removed - TencentDB handles memory via sync_turn
-                return "Memory tool removed. TencentDB handles memory automatically."
+                # memory_tool removed - ReamesMemory handles memory via sync_turn
+                return "Memory tool removed. ReamesMemory handles memory automatically."
             function_result, function_args = _run_agent_tool_execution_middleware(
                 agent,
                 function_name=function_name,
@@ -1386,7 +1386,7 @@ __all__ = [
     "execute_tool_calls_sequential",
 ]
 
-# === TencentDB Mermaid integration (deep customization) ===
+# === ReamesMemory integration ===
 from agent.mermaid_offload import maybe_offload as _mermaid_offload
 
 def _post_tool_mermaid_offload(tool_name, tool_use_id, result_text):

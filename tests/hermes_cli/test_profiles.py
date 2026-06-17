@@ -1051,7 +1051,7 @@ class TestExportImport:
             (sub / "marker.txt").write_text("excluded")
 
         for f in ("state.db", "gateway.pid", "gateway_state.json",
-                  "processes.json", "errors.log", ".hermes_history",
+                  "processes.json", "errors.log", ".reames_history",
                   "active_profile", ".update_check", "auth.lock"):
             (default_dir / f).write_text("excluded")
 
@@ -1078,7 +1078,7 @@ class TestExportImport:
         excluded_files = [
             "default/state.db", "default/gateway.pid",
             "default/gateway_state.json", "default/processes.json",
-            "default/errors.log", "default/.hermes_history",
+            "default/errors.log", "default/.reames_history",
             "default/active_profile", "default/.update_check",
             "default/auth.lock",
         ]

@@ -3393,7 +3393,15 @@ class ReamesCLI:
             self.session_id = f"{timestamp_str}_{short_uuid}"
         
         # History file for persistent input recall across sessions
-        self._history_file = _hermes_home / ".hermes_history"
+        # Migrate old .hermes_history to .reames_history if present
+        _old_history = _hermes_home / ".hermes_history"
+        _new_history = _hermes_home / ".reames_history"
+        if _old_history.exists() and not _new_history.exists():
+            try:
+                _old_history.rename(_new_history)
+            except OSError:
+                pass  # best-effort migration
+        self._history_file = _new_history
         self._last_invalidate: float = 0.0  # throttle UI repaints
         self._app = None
 

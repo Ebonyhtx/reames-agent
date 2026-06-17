@@ -1101,9 +1101,9 @@ def init_agent(
     agent._aux_compression_context_length_config = None
 
     agent._turns_since_memory = 0
-    agent._memory_nudge_interval = 0  # disabled: TencentDB handles memory
+    agent._memory_nudge_interval = 0  # ReamesMemory handles memory
 
-    agent._memory_store = None  # disabled: TencentDB replaces MemoryStore
+    agent._memory_store = None  # ReamesMemory replaces MemoryStore
     agent._memory_enabled = False
     agent._user_profile_enabled = False
 

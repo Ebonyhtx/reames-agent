@@ -306,7 +306,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # ── Volatile tier (changes per session/turn — never cached) ───
     volatile_parts: List[str] = []
 
-    # Reames: TencentDB L3 Persona (direct integration, no abstraction)
+    # ReamesMemory: L3 Persona (direct integration, no abstraction)
     if agent._memory_core:
         try:
             _l3_block = agent._memory_core.system_prompt_block()

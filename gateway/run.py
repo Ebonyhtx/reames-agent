@@ -15303,7 +15303,6 @@ class GatewayRunner(GatewayKanbanWatchersMixin):
     def _extract_honcho_cache_busting_config(cls) -> dict[str, Any]:
         """Extract Honcho identity keys, memoized by honcho.json mtime."""
         try:
-            from plugins.memory.honcho.client import HonchoClientConfig, resolve_config_path
 
             path = resolve_config_path()
             try:

@@ -30,7 +30,7 @@ import re
 import inspect
 from typing import Any, Dict, List, Optional
 
-# MemoryProvider removed — TencentDB is the only memory system
+# MemoryProvider removed — ReamesMemory is the only memory system
 from tools.registry import tool_error
 
 logger = logging.getLogger(__name__)
@@ -225,7 +225,7 @@ class StreamingContextScrubber:
 
 
 def build_memory_context_block(raw_context: str) -> str:
-    """Progressive disclosure memory context block (TencentDB deep integration)."""
+    """Progressive disclosure memory context block (ReamesMemory integration)."""
     if not raw_context or not raw_context.strip():
         return ""
     clean = sanitize_context(raw_context)

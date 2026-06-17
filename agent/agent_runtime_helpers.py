@@ -1746,7 +1746,7 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
             )
     elif function_name == "memory":
         def _execute(next_args: dict) -> Any:
-            # memory_tool removed — TencentDB handles memory via sync_turn
+            # memory_tool removed — ReamesMemory handles memory via sync_turn
             return _finish_agent_tool(result, next_args)
     elif agent._memory_core and agent._memory_core.has_tool(function_name):
         def _execute(next_args: dict) -> Any:

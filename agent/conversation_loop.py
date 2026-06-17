@@ -4593,9 +4593,9 @@ def run_conversation(
         agent._iters_since_skill = 0
 
     # External memory provider: sync the completed turn + queue next prefetch.
-    # === TencentDB deep customization: trigger L3 persona update ===
+    # === ReamesMemory: trigger L3 persona update ===
     _maybe_trigger_l3_persona_update(agent)
-    agent._sync_tencentdb_memory_for_turn(
+    agent._sync_reames_memory_for_turn(
         original_user_message=original_user_message,
         final_response=final_response,
         interrupted=interrupted,
@@ -4663,7 +4663,7 @@ def run_conversation(
 __all__ = ["run_conversation"]
 
 
-# === TencentDB deep customization helpers ===
+# === ReamesMemory helpers ===
 import logging as _tdb_logging
 _tdb_logger = _tdb_logging.getLogger(__name__)
 

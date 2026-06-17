@@ -601,8 +601,7 @@ class ReamesMemory:
         }, {
             "name": "reames_memory_list",
             "description": "List recent memories.",
-            "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "default": 20}}, "required": []},
-            "parameters": {"type": "object", "properties": {}, "required": []}
+            "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "default": 20}}, "required": []}
         }, {
             "name": "reames_memory_search",
             "description": "Search Reames memory (L0-L3): conversations, facts, scenes, persona.",

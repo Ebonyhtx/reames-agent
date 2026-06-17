@@ -10837,7 +10837,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
         # Sync Honcho host blocks to all profiles
         try:
-            from plugins.memory.honcho.cli import sync_honcho_profiles_quiet
 
             synced = sync_honcho_profiles_quiet()
             if synced:
@@ -11834,7 +11833,6 @@ def cmd_profile(args):
             # Auto-clone Honcho config for the new profile (only with --clone/--clone-all)
             if clone or clone_all:
                 try:
-                    from plugins.memory.honcho.cli import clone_honcho_for_profile
 
                     if clone_honcho_for_profile(name):
                         print(f"Honcho config cloned (peer: {name})")
