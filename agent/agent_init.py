@@ -1175,6 +1175,10 @@ def init_agent(
                         "  embedding_api_base: https://api.siliconflow.cn/v1",
                         "  embedding_model: BAAI/bge-m3",
                         "",
+                        "# --- Mermaid Offload (large tool output handling) ---
+                        "# offload:",
+                        "#   retention_days: 60    # auto-clean ref files after N days (0 = never)",
+                        "",
                         "# --- Display & Status Bar ---",
                         "display:",
                         "  status_bar: true",
@@ -1331,6 +1335,16 @@ def init_agent(
             )
             _ra().logger.info("ReamesMemory engine activated")
             agent._memory_core.register_signal_handler()
+            
+            # Configure mermaid offload retention
+            _offload_cfg = _agent_cfg.get("offload", {}) if _agent_cfg else {}
+            _retention_days = _offload_cfg.get("retention_days")
+            if _retention_days is not None:
+                try:
+                    from agent.mermaid_offload import configure_offload as _cfg_offload
+                    _cfg_offload(retention_days=int(_retention_days))
+                except Exception:
+                    pass
             
             # Register memory tool
             if agent.tools is not None:

@@ -6,7 +6,7 @@ import tempfile
 
 MERMAID_OFFLOAD_THRESHOLD = 5000
 _REF_DIR = None
-_REF_RETENTION_SECONDS = 86400  # 24 hours
+_REF_RETENTION_SECONDS = 5184000  # 60 days
 _HAS_OFFLOADED = False  # Track whether offload happened this session
 
 
@@ -21,6 +21,13 @@ def _cleanup_old_refs(ref_dir):
                 os.remove(fp)
     except Exception:
         logger.debug("Failed to cleanup old refs")
+
+
+def configure_offload(retention_days=None):
+    """Configure offload retention. Called from agent_init at startup."""
+    global _REF_RETENTION_SECONDS
+    if retention_days is not None:
+        _REF_RETENTION_SECONDS = retention_days * 86400
 
 
 def _get_ref_dir():
