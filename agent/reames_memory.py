@@ -36,7 +36,7 @@ class ReamesMemory:
 
     def __init__(self, data_dir: Optional[str] = None):
         if data_dir:
-            self._data_dir = Path(data_dir)
+            self._data_dir = Path(data_dir).expanduser()
         else:
             home = os.environ.get("HOME") or os.environ.get("USERPROFILE") or "."
             self._data_dir = Path(home) / ".reames" / "memory"
