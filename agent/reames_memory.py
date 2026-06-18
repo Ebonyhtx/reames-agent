@@ -310,11 +310,11 @@ class ReamesMemory:
         """Compatibility: prefetch for all layers."""
         return self.recall(query) or ""
 
-    def queue_prefetch_all(self, query: str):
+    def queue_prefetch_all(self, query: str, **kwargs):
         """Compatibility: queue async prefetch (sync in ReamesMemory)."""
         pass
 
-    def sync_all(self, user_content: str, assistant_content: str, *, session_id: str = ""):
+    def sync_all(self, user_content: str, assistant_content: str, *, session_id: str = "", **kwargs):
         """Compatibility: sync all providers."""
         self.capture_turn(user_content, assistant_content)
 
