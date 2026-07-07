@@ -1,4 +1,4 @@
-// Package bot 实现 Reasonix 多渠道 IM bot 消息网关，支持 QQ、飞书、微信。
+// Package bot 实现 Reames Agent 多渠道 IM bot 消息网关，支持 QQ、飞书、微信。
 // 架构参考 Hermes Agent 的 gateway/adapter/session 模式。
 package bot
 
@@ -142,3 +142,60 @@ type Adapter interface {
 
 // MessageHandler 是 BotGateway 处理入站消息的回调。
 type MessageHandler func(ctx context.Context, msg InboundMessage)
+
+// PlatformAdapter 是第三方平台适配器的接口。实现此接口即可将新 IM 平台接入
+// Reames Agent Gateway，无需修改核心代码。
+type PlatformAdapter interface {
+	// Name 返回平台标识（如 "telegram"、"discord"）。
+	Name() Platform
+
+	// Start 启动平台连接，开始接收消息。ctx 取消时停止。
+	Start(ctx context.Context, handler MessageHandler) error
+
+	// Send 向指定会话发送消息。
+	Send(ctx context.Context, target SessionSource, text string, mediaURLs []string) error
+
+	// Capabilities 返回平台支持的能力。
+	Capabilities() PlatformCapabilities
+}
+
+
+// PlatformCapabilities 描述平台支持的能力。
+type PlatformCapabilities struct {
+	RichText    bool // 富文本（Markdown）
+	Cards       bool // 交互卡片（审批按钮等）
+	MediaUpload bool // 媒体文件上传
+	Reactions   bool // 表情反应
+	Threads     bool // 消息线程
+	Voice       bool // 语音消息
+}
+
+// PlatformRegistry 管理已注册的平台适配器。
+type PlatformRegistry struct {
+	adapters map[Platform]PlatformAdapter
+}
+
+// NewPlatformRegistry 创建空注册表。
+func NewPlatformRegistry() *PlatformRegistry {
+	return &PlatformRegistry{adapters: make(map[Platform]PlatformAdapter)}
+}
+
+// Register 注册一个平台适配器。
+func (r *PlatformRegistry) Register(a PlatformAdapter) {
+	r.adapters[a.Name()] = a
+}
+
+// Get 获取已注册的平台适配器。
+func (r *PlatformRegistry) Get(name Platform) (PlatformAdapter, bool) {
+	a, ok := r.adapters[name]
+	return a, ok
+}
+
+// List 列出所有已注册平台。
+func (r *PlatformRegistry) List() []Platform {
+	names := make([]Platform, 0, len(r.adapters))
+	for name := range r.adapters {
+		names = append(names, name)
+	}
+	return names
+}
