@@ -17,7 +17,7 @@ func mergeInstalledPluginPackages(cfg *Config, root string) []string {
 	if cfg == nil {
 		return nil
 	}
-	reamesAgentHome := ReasonixHomeDir()
+	reamesAgentHome := ReamesAgentHomeDir()
 	if strings.TrimSpace(reamesAgentHome) == "" {
 		return nil
 	}

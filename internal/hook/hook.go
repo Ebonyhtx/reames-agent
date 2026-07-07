@@ -654,7 +654,7 @@ func reamesAgentHome(override string) string {
 	if override != "" {
 		return filepath.Join(override, SettingsDirname)
 	}
-	if dir := config.ReasonixHomeDir(); dir != "" {
+	if dir := config.ReamesAgentHomeDir(); dir != "" {
 		return dir
 	}
 	if h, err := os.UserHomeDir(); err == nil {

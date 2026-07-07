@@ -16,7 +16,7 @@ import (
 // Load builds the configuration: defaults, then user config, then project
 // config, then MCP servers from Claude Code's .mcp.json, then (lowest priority)
 // the v0.x ~/.reames-agent/config.json's mcpServers. Provider api_key_env values
-// resolve from Reasonix's global .env, not from project .env files.
+// resolve from Reames Agent's global .env, not from project .env files.
 func Load() (*Config, error) {
 	return LoadForRoot(".")
 }
@@ -367,7 +367,7 @@ func mergeTOMLProviderAccess(paths []string) ([]string, bool, error) {
 // LoadForEdit returns a config to seed the `reamesAgent setup` wizard when reconfiguring:
 // the built-in defaults with the file at path (if present) decoded on top, so a
 // reconfigure preserves the user's existing providers and agent settings instead
-// of resetting to defaults. Reasonix's global .env is loaded so api_key_env
+// of resetting to defaults. Reames Agent's global .env is loaded so api_key_env
 // resolution works while the wizard decides which keys are still missing.
 func LoadForEdit(path string) *Config {
 	cfg, err := loadForEditStrict(path, true)

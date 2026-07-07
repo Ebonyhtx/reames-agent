@@ -173,7 +173,7 @@ func TestSessionInUseMessageFallsBackWithoutInfo(t *testing.T) {
 		"zero pid":   &agent.SessionLeaseError{Info: &agent.SessionLeaseInfo{PID: 0}},
 	} {
 		msg := SessionInUseMessage(err)
-		if msg != "this session is in use by another Reasonix window or process" {
+		if msg != "this session is in use by another Reames Agent window or process" {
 			t.Fatalf("%s: message = %q, want generic fallback", name, msg)
 		}
 		if strings.Contains(msg, "pid "+strconv.Itoa(os.Getpid())) {

@@ -262,7 +262,7 @@ func render(results []result) string {
 		}
 	}
 
-	fmt.Fprintf(&b, "## 🤖 Reasonix e2e benchmark\n\n")
+	fmt.Fprintf(&b, "## 🤖 Reames Agent e2e benchmark\n\n")
 	fmt.Fprintf(&b, "**Accuracy:** %d/%d (%s) · **Cache hit:** %s · **Tokens:** %s (prompt %s / completion %s) · **Compactions:** %d · **Cost:** %s%.4f\n\n",
 		passed, ran, pct(passed, ran), pct(hit, hit+miss),
 		comma(pTok+cTok), comma(pTok), comma(cTok), compacts, currencySym(currency), cost)

@@ -90,7 +90,7 @@ func assertReasonixBlue(t *testing.T, name string, colorValue color.Color) {
 	r16, g16, b16, _ := colorValue.RGBA()
 	r, g, b := uint8(r16>>8), uint8(g16>>8), uint8(b16>>8)
 	if !near(r, 0x01, 2) || !near(g, 0x53, 2) || !near(b, 0xe5, 2) {
-		t.Fatalf("%s edge must use Reasonix blue background, got #%02x%02x%02x", name, r, g, b)
+		t.Fatalf("%s edge must use Reames Agent blue background, got #%02x%02x%02x", name, r, g, b)
 	}
 }
 

@@ -91,7 +91,7 @@ func NewTool(opts Options) tool.Tool {
 	reamesAgentHome := ""
 	if opts.HomeDir != "" {
 		reamesAgentHome = filepath.Join(home, ".reames-agent")
-	} else if dir := config.ReasonixHomeDir(); dir != "" {
+	} else if dir := config.ReamesAgentHomeDir(); dir != "" {
 		reamesAgentHome = dir
 	} else if home != "" {
 		reamesAgentHome = filepath.Join(home, ".reames-agent")

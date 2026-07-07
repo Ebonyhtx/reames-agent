@@ -263,11 +263,11 @@ func LegacyUserConfigPaths() []string {
 	return out
 }
 
-// ReasonixHomeDir is the current Reasonix home directory. It honors
+// ReamesAgentHomeDir is the current Reasonix home directory. It honors
 // REAMES_AGENT_HOME, then uses ~/.reamesAgent on macOS/Linux or %APPDATA%/reamesAgent on
 // Windows, with a %USERPROFILE%/AppData/Roaming fallback when %APPDATA% is
 // unavailable.
-func ReasonixHomeDir() string { return reamesAgentHomeDir() }
+func ReamesAgentHomeDir() string { return reamesAgentHomeDir() }
 
 // UserCredentialsPath is the reamesAgent-owned global .env file under Reasonix
 // home. It is the single source for provider credentials saved by Reasonix, so

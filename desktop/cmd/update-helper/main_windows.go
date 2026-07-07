@@ -60,7 +60,7 @@ func run(args []string) int {
 func newLogger() *log.Logger {
 	dir, err := os.UserCacheDir()
 	if err == nil {
-		dir = filepath.Join(dir, "Reasonix", "updates")
+		dir = filepath.Join(dir, "Reames Agent", "updates")
 		if err := os.MkdirAll(dir, 0o700); err == nil {
 			if f, err := os.OpenFile(filepath.Join(dir, "update-helper.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
 				return log.New(f, "", log.LstdFlags)

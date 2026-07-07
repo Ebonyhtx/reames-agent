@@ -591,7 +591,7 @@ func mergeEnv(base, overlay map[string]string) map[string]string {
 	return out
 }
 
-// writeCredentialsEnv merges lines into Reasonix's global .env
+// writeCredentialsEnv merges lines into Reames Agent's global .env
 // and pins them into the current process env so the just-built session resolves
 // the key without a restart. Falls back to ~/.env only when Reasonix home can't
 // be resolved — never a project .env, so a migration keeps secrets out of the

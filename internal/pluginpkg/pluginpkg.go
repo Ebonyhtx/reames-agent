@@ -1,4 +1,4 @@
-// Package pluginpkg handles installed Reasonix plugin packages.
+// Package pluginpkg handles installed Reames Agent plugin packages.
 //
 // Plugin packages are higher-level bundles that can contribute skills, hooks,
 // and MCP servers. They are intentionally parsed into package-local structs so

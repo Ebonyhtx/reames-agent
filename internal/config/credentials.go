@@ -73,7 +73,7 @@ func NewCredentialResolverForRoot(root string) *CredentialResolver {
 	return &CredentialResolver{root: resolveRoot(root)}
 }
 
-// ResolveGlobalFirst resolves key from Reasonix's global .env only. Repeated
+// ResolveGlobalFirst resolves key from Reames Agent's global .env only. Repeated
 // calls for the same key reuse the first result so UI views with multiple
 // provider entries sharing api_key_env stay consistent.
 func (r *CredentialResolver) ResolveGlobalFirst(key string) CredentialResolution {
@@ -221,11 +221,11 @@ func loadCredentialStoreForRoot(root string) {
 		return
 	}
 	if p := UserCredentialsPath(); p != "" {
-		loadDotEnvFileAs(p, CredentialSource{Kind: CredentialSourceCredentials, Path: p, Label: "Reasonix credentials (.env)"})
+		loadDotEnvFileAs(p, CredentialSource{Kind: CredentialSourceCredentials, Path: p, Label: "Reames Agent credentials (.env)"})
 	}
 }
 
-// StoreCredentialLines stores KEY=value assignments in Reasonix's global .env
+// StoreCredentialLines stores KEY=value assignments in Reames Agent's global .env
 // and pins them into the current process environment.
 func StoreCredentialLines(lines []string) (string, error) {
 	assignments := parseCredentialLines(lines)
@@ -323,7 +323,7 @@ func parseCredentialLines(lines []string) map[string]string {
 func pinCredentialAssignments(assignments map[string]string) {
 	for key, value := range assignments {
 		_ = os.Setenv(key, value)
-		recordCredentialSource(key, value, CredentialSource{Kind: CredentialSourceCredentials, Path: UserCredentialsPath(), Label: "Reasonix credentials (.env)"})
+		recordCredentialSource(key, value, CredentialSource{Kind: CredentialSourceCredentials, Path: UserCredentialsPath(), Label: "Reames Agent credentials (.env)"})
 	}
 }
 
@@ -376,11 +376,11 @@ func credentialSourceLabel(source CredentialSource) string {
 	case CredentialSourceProjectEnv:
 		return "project .env"
 	case CredentialSourceCredentials:
-		return "Reasonix credentials"
+		return "Reames Agent credentials"
 	case CredentialSourceHomeEnv:
 		return "home .env"
 	case CredentialSourceLegacy:
-		return "legacy Reasonix credentials"
+		return "legacy Reames Agent credentials"
 	case CredentialSourceEnvironment:
 		return "environment variable"
 	default:
@@ -441,7 +441,7 @@ func resolveCredentialForRootGlobalFirst(root, key string) CredentialResolution 
 func storedCredentialValue(key string) (string, CredentialSource, bool) {
 	if p := UserCredentialsPath(); p != "" {
 		if value, ok := envFileValue(p, key); ok && value != "" {
-			return value, CredentialSource{Kind: CredentialSourceCredentials, Path: p, Label: "Reasonix credentials (.env)"}, true
+			return value, CredentialSource{Kind: CredentialSourceCredentials, Path: p, Label: "Reames Agent credentials (.env)"}, true
 		}
 	}
 	return "", CredentialSource{}, false

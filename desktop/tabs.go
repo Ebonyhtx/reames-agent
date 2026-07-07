@@ -3788,7 +3788,7 @@ func singleSurfaceTabsFile(f desktopTabsFile) desktopTabsFile {
 }
 
 func desktopConfigDir() string {
-	return config.ReasonixHomeDir()
+	return config.ReamesAgentHomeDir()
 }
 
 func (a *App) saveTabsLocked() {

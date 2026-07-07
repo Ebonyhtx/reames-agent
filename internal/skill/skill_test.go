@@ -169,14 +169,14 @@ func TestConventionDirsDiscovered(t *testing.T) {
 	}
 }
 
-func TestReasonixHomeDirOverridesGlobalReasonixSkills(t *testing.T) {
+func TestReamesAgentHomeDirOverridesGlobalReasonixSkills(t *testing.T) {
 	home := t.TempDir()
 	reamesAgentHome := filepath.Join(t.TempDir(), "rx-home")
 	writeSkill(t, home, ".reames-agent/skills/old.md", "---\ndescription: old\n---\nold")
 	writeSkill(t, home, ".reames-agent/skills/current.md", "---\ndescription: old current\n---\nold current")
 	currentPath := writeSkill(t, reamesAgentHome, "skills/current.md", "---\ndescription: current\n---\ncurrent")
 
-	st := New(Options{HomeDir: home, ReasonixHomeDir: reamesAgentHome, DisableBuiltins: true})
+	st := New(Options{HomeDir: home, ReamesAgentHomeDir: reamesAgentHome, DisableBuiltins: true})
 	list := st.List()
 	current, ok := find(list, "current")
 	if !ok {

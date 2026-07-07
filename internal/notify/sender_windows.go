@@ -9,13 +9,13 @@ type PlatformSender struct{}
 
 // NewPlatformSender returns the best-effort sender for the current platform.
 func NewPlatformSender() PlatformSender {
-	_ = toast.SetAppData(toast.AppData{AppID: "Reasonix"})
+	_ = toast.SetAppData(toast.AppData{AppID: "Reames Agent"})
 	return PlatformSender{}
 }
 
 func (PlatformSender) Send(m Message) error {
 	notification := toast.Notification{
-		AppID: "Reasonix",
+		AppID: "Reames Agent",
 		Title: m.Title,
 		Body:  m.Body,
 	}

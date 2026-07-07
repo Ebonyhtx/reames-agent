@@ -65,7 +65,7 @@ func (t *installSourceTool) applySkillRoot(req request, act *action) error {
 	if err := cfg.SaveTo(act.ConfigPath); err != nil {
 		return err
 	}
-	store := skill.New(skill.Options{HomeDir: t.home, ReasonixHomeDir: t.reamesAgentHome, ProjectRoot: t.root, CustomPaths: append(cfg.SkillCustomPaths(), act.Source)})
+	store := skill.New(skill.Options{HomeDir: t.home, ReamesAgentHomeDir: t.reamesAgentHome, ProjectRoot: t.root, CustomPaths: append(cfg.SkillCustomPaths(), act.Source)})
 	for _, name := range act.Skills {
 		sk, ok := store.Read(name)
 		if !ok {

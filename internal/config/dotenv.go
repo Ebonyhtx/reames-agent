@@ -15,7 +15,7 @@ type dotEnvFile struct {
 	Duplicates []string
 }
 
-// loadDotEnv loads Reasonix's global .env for provider credentials. The
+// loadDotEnv loads Reames Agent's global .env for provider credentials. The
 // workspace .env values returned by loadDotEnvForRoot are ignored here because
 // loadDotEnv has no Config to carry a workspace-scoped expansion environment.
 func loadDotEnv() {
@@ -23,7 +23,7 @@ func loadDotEnv() {
 }
 
 // loadDotEnvForRoot returns workspace .env values for scoped plugin/MCP/proxy
-// expansion, then loads Reasonix's global .env for provider credentials.
+// expansion, then loads Reames Agent's global .env for provider credentials.
 // Workspace .env values are deliberately not written into the process
 // environment, so multiple desktop/ACP workspaces cannot leak tokens into each
 // other and project files cannot redirect Reasonix's own config/credential

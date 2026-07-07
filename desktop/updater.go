@@ -243,7 +243,7 @@ func defaultUpdateCacheBaseDir() (string, error) {
 	if err != nil {
 		base = os.TempDir()
 	}
-	return filepath.Join(base, "Reasonix", "updates"), nil
+	return filepath.Join(base, "Reames Agent", "updates"), nil
 }
 
 func updateCacheDir() (string, error) {

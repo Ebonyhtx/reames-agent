@@ -1,4 +1,4 @@
-// Command reames-agent-plugin-example is a reference Reasonix plugin: a minimal MCP stdio
+// Command reames-agent-plugin-example is a reference Reames Agent plugin: a minimal MCP stdio
 // server speaking newline-delimited JSON-RPC 2.0 on stdin/stdout. It exists to
 // document the contract end-to-end (the protocol the internal/plugin client
 // drives) and to give users a working example to copy.

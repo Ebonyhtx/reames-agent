@@ -306,7 +306,7 @@ func renderStatuslineViewWithGitAndEffort(t *testing.T) string {
 	m.label = "deepseek-v4-flash"
 	m.effortLevel = "auto"
 	m.gitStatus = gitStatus{
-		Repo:      "Reasonix",
+		Repo:      "Reames Agent",
 		Branch:    "codex/demo",
 		Added:     3,
 		Removed:   1,

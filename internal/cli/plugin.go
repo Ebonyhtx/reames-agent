@@ -185,7 +185,7 @@ func runInstallSourceJSON(body map[string]any) int {
 }
 
 func pluginListCommand() int {
-	st, err := pluginpkg.LoadState(config.ReasonixHomeDir())
+	st, err := pluginpkg.LoadState(config.ReamesAgentHomeDir())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -222,7 +222,7 @@ func pluginShowCommand(args []string) int {
 		fmt.Fprintf(os.Stderr, "plugin %q is not installed\n", args[0])
 		return 1
 	}
-	root := pluginpkg.ResolveRoot(config.ReasonixHomeDir(), p.Root)
+	root := pluginpkg.ResolveRoot(config.ReamesAgentHomeDir(), p.Root)
 	pkg, warnings, err := pluginpkg.ParseDir(root)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -303,7 +303,7 @@ func pluginDoctorCommand(args []string) int {
 		fmt.Fprintf(os.Stderr, "plugin %q is not installed\n", args[0])
 		return 1
 	}
-	root := pluginpkg.ResolveRoot(config.ReasonixHomeDir(), p.Root)
+	root := pluginpkg.ResolveRoot(config.ReamesAgentHomeDir(), p.Root)
 	pkg, warnings, err := pluginpkg.ParseDir(root)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "invalid:", err)
@@ -327,7 +327,7 @@ func pluginSetEnabledCommand(args []string, enabled bool) int {
 		fmt.Fprintln(os.Stderr, "plugin enable/disable requires a plugin name")
 		return 2
 	}
-	if err := pluginpkg.SetEnabled(config.ReasonixHomeDir(), args[0], enabled); err != nil {
+	if err := pluginpkg.SetEnabled(config.ReamesAgentHomeDir(), args[0], enabled); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -336,7 +336,7 @@ func pluginSetEnabledCommand(args []string, enabled bool) int {
 }
 
 func findInstalledPlugin(name string) (pluginpkg.InstalledPlugin, bool, error) {
-	st, err := pluginpkg.LoadState(config.ReasonixHomeDir())
+	st, err := pluginpkg.LoadState(config.ReamesAgentHomeDir())
 	if err != nil {
 		return pluginpkg.InstalledPlugin{}, false, err
 	}

@@ -97,7 +97,7 @@ const SessionLeaseCloseHint = "close the other Reasonix window or process first"
 // generic line otherwise. The session file path is deliberately omitted — the
 // caller already knows which session it asked for.
 func SessionInUseMessage(err error) string {
-	const fallback = "this session is in use by another Reasonix window or process"
+	const fallback = "this session is in use by another Reames Agent window or process"
 	var leaseErr *agent.SessionLeaseError
 	if !errors.As(err, &leaseErr) || leaseErr == nil || leaseErr.Info == nil || leaseErr.Info.PID <= 0 {
 		return fallback

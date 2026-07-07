@@ -435,7 +435,7 @@ func TestStreamSupportsBearerAuthHeaderAndCustomHeaders(t *testing.T) {
 		Extra: map[string]any{
 			"auth_header": true,
 			"headers": map[string]string{
-				"User-Agent":        "Reasonix",
+				"User-Agent":        "Reames Agent",
 				"Authorization":     "Bearer wrong",
 				"x-api-key":         "wrong",
 				"anthropic-version": "bad",
@@ -463,7 +463,7 @@ func TestStreamSupportsBearerAuthHeaderAndCustomHeaders(t *testing.T) {
 	if gotVersion != anthropicVersion {
 		t.Fatalf("anthropic-version = %q, want %q", gotVersion, anthropicVersion)
 	}
-	if gotUserAgent != "Reasonix" {
+	if gotUserAgent != "Reames Agent" {
 		t.Fatalf("User-Agent = %q, want Reasonix", gotUserAgent)
 	}
 }

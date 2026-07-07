@@ -725,7 +725,7 @@ var curatedProviderPresets = []ProviderPreset{
 			Models:    gmiModels,
 			Default:   "zai-org/GLM-5.2-FP8",
 			APIKeyEnv: "GMI_API_KEY",
-			Headers:   map[string]string{"User-Agent": "Reasonix"},
+			Headers:   map[string]string{"User-Agent": "Reames Agent"},
 		}},
 	},
 	{
