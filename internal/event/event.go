@@ -92,6 +92,18 @@ const (
 	// for the current turn. Appended last to keep earlier Kind values stable.
 	MemoryCompilerStatsEvent
 	// GuardianAssessment reports the outcome of a guardian sub-agent safety review.
+	// SubagentStarted fires when a sub-agent task or skill spawn begins.
+	// Text carries the sub-agent label (e.g. "code-review", "explore").
+	SubagentStarted
+	// SubagentCompleted fires when a sub-agent finishes. Text carries the
+	// sub-agent label and summary. Err is non-nil if the sub-agent failed.
+	SubagentCompleted
+	// CacheUpdated carries a prefix-cache diagnostic snapshot (Cache payload).
+	// Emitted at turn end so a frontend can show cache-hit ratio trends.
+	CacheUpdated
+	// ModeChanged fires when the agent mode changes (plan/code/normal).
+	// Text carries the new mode name.
+	ModeChanged
 	// Carries GuardianResult payload (Outcome, RiskLevel, Rationale, etc.).
 	GuardianAssessment
 	// KindCount is a sentinel one past the last real Kind. New event kinds must

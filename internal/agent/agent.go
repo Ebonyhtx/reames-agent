@@ -1124,6 +1124,10 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 				UsageSource:      a.usageSource,
 				CacheDiagnostics: &cacheDiagnostics,
 				SessionHit:       int(a.sessCacheHit.Load()), SessionMiss: int(a.sessCacheMiss.Load())})
+    		// Emit a dedicated cache-update event so frontends can track cache-hit trends.
+    		a.sink.Emit(event.Event{Kind: event.CacheUpdated, CacheDiagnostics: &cacheDiagnostics,
+    		    SessionHit: int(a.sessCacheHit.Load()), SessionMiss: int(a.sessCacheMiss.Load())})
+
 		}
 		if msg, ok := finishReasonMessage(usage); ok {
 			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: msg})
