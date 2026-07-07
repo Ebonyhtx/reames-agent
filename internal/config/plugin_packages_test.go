@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"reasonix/internal/pluginpkg"
+	"reames-agent/internal/pluginpkg"
 )
 
 func TestLoadMergesInstalledPluginSkillRootsAndMCP(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REAMES_AGENT_HOME", home)
 	root := filepath.Join(home, "plugins", "superpowers")
 	writeConfigTestFile(t, filepath.Join(root, pluginpkg.NativeManifest), `{
   "name": "superpowers",
@@ -24,7 +24,7 @@ func TestLoadMergesInstalledPluginSkillRootsAndMCP(t *testing.T) {
 		Name:         "superpowers",
 		Root:         "plugins/superpowers",
 		Version:      "1.0.0",
-		ManifestKind: "reasonix",
+		ManifestKind: "reames-agent",
 		Enabled:      true,
 	}); err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestLoadMergesInstalledPluginSkillRootsAndMCP(t *testing.T) {
 			if p.Command != filepath.Join(root, "bin", "helper") {
 				t.Fatalf("plugin command = %q", p.Command)
 			}
-			if p.Env["REASONIX_PLUGIN_NAME"] != "superpowers" {
+			if p.Env["REAMES_AGENT_PLUGIN_NAME"] != "superpowers" {
 				t.Fatalf("plugin env = %#v", p.Env)
 			}
 		}

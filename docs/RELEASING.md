@@ -1,6 +1,6 @@
 # Releasing
 
-How Reasonix ships, who can ship what, and the canary-before-stable flow.
+How Reames Agent ships, who can ship what, and the canary-before-stable flow.
 
 ## Branch model: trunk + tags
 
@@ -17,7 +17,7 @@ provides the pre-release buffer instead of a long-lived branch.
 
 | Surface | Stable | Pre-release buffer |
 |---|---|---|
-| npm | `latest` (current 1.x stable) | `next` (rc), `canary` (`npm i reasonix@canary`) |
+| npm | `latest` (current 1.x stable) | `next` (rc), `canary` (`npm i reames-agent@canary`) |
 | Desktop | R2 `latest/` pointer + release gateway | R2 `canary/` pointer + release gateway proxy (never on the GitHub releases page) |
 
 A canary build is isolated: it **never** moves `latest` / `next` / desktop `latest/`.
@@ -47,7 +47,7 @@ the `release` environment deployment.
    - Desktop: Actions → **Release desktop** → `channel: canary`, `base_version: 1.4.0`
    - CLI: Actions → **Release npm** → `base_version: 1.4.0`
    - Publishes `1.4.0-canary.N` to the desktop R2 `canary/` pointer (no GitHub release) and npm `@canary`.
-3. **Test** — testers install `reasonix@canary` (CLI) or grab the desktop canary
+3. **Test** — testers install `reames-agent@canary` (CLI) or grab the desktop canary
    build from its R2 link, and report bugs.
 4. **Fix** on `main-v2` via PRs; re-cut the canary as needed (`canary.N` bumps).
 5. **Ship stable** when the canary is clean — push the three tags:
@@ -71,7 +71,7 @@ the `release` environment deployment.
 - Canary version numbers use the workflow `run_number`, so the desktop and CLI canary
   numbers differ (e.g. `canary.11` vs `canary.2`). Only monotonicity per channel matters.
 - A stable `-rc` tag (e.g. `npm-v1.4.0-rc.1`) still ships under `next`, not `canary`.
-- Desktop in-app updates use R2 first, then the `crash.reasonix.io` desktop release
+- Desktop in-app updates use R2 first, then the `crash.reames-agent.io` desktop release
   gateway. The gateway resolves the `desktop-v*` release line directly and never uses
   GitHub's repository-wide `/releases/latest`, because plain `v*` tags are the CLI
   release line. Stable CLI releases also carry a compatibility `latest.json` asset so

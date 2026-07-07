@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 func TestDeleteSessionFilesSweepsEventLogAndSidecars(t *testing.T) {

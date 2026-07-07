@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/control"
-	"reasonix/internal/proc"
+	"reames-agent/internal/control"
+	"reames-agent/internal/proc"
 )
 
 type gitStatusEntry struct {

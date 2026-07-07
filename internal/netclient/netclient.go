@@ -15,7 +15,7 @@ import (
 
 	"golang.org/x/net/http/httpproxy"
 
-	"reasonix/internal/sysproxy"
+	"reames-agent/internal/sysproxy"
 )
 
 const (

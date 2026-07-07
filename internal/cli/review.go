@@ -7,14 +7,14 @@ import (
 	"os"
 	"strings"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/boot"
-	"reasonix/internal/config"
-	"reasonix/internal/event"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/skill"
-	"reasonix/internal/tool"
-	"reasonix/internal/tool/builtin"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/boot"
+	"reames-agent/internal/config"
+	"reames-agent/internal/event"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/skill"
+	"reames-agent/internal/tool"
+	"reames-agent/internal/tool/builtin"
 )
 
 func reviewCommand(args []string) int {

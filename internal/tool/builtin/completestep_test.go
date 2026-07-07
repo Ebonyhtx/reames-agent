@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/evidence"
-	"reasonix/internal/instruction"
-	"reasonix/internal/provider"
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/instruction"
+	"reames-agent/internal/provider"
 )
 
 func TestTodoInventoryListsTurnTodos(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"reasonix/internal/checkpoint"
-	"reasonix/internal/diff"
+	"reames-agent/internal/checkpoint"
+	"reames-agent/internal/diff"
 )
 
 // checkpointManager owns the snapshot-based rewind bookkeeping: the per-session

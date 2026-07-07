@@ -29,7 +29,7 @@ func TestSingleInstanceLockRestoresExistingInstance(t *testing.T) {
 }
 
 func TestSingleInstanceLockSkipsInDevMode(t *testing.T) {
-	t.Setenv("REASONIX_DEV", "1")
+	t.Setenv("REAMES_AGENT_DEV", "1")
 	if lock := singleInstanceLock(NewApp()); lock != nil {
 		t.Fatalf("singleInstanceLock returned %#v, want nil in dev mode", lock)
 	}

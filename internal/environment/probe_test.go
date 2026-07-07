@@ -41,7 +41,7 @@ func TestFormatSectionSortsAndRedacts(t *testing.T) {
 }
 
 func TestRunProbesReportsMissingCommand(t *testing.T) {
-	results := RunProbes(context.Background(), []string{"__reasonix_missing_probe__ --version"})
+	results := RunProbes(context.Background(), []string{"__reamesAgent_missing_probe__ --version"})
 	if len(results) != 1 {
 		t.Fatalf("results len = %d, want 1", len(results))
 	}
@@ -91,7 +91,7 @@ func TestRunProbesAllowsStaticEnvAssignment(t *testing.T) {
 	toolPath := filepath.Join(dir, "envtool")
 	toolPath = writeEnvProbeTool(t, toolPath)
 
-	results := RunProbesWithOverrides(context.Background(), []string{`REASONIX_PROBE_ENV=ok envtool --version`}, map[string]string{"envtool": toolPath})
+	results := RunProbesWithOverrides(context.Background(), []string{`REAMES_AGENT_PROBE_ENV=ok envtool --version`}, map[string]string{"envtool": toolPath})
 	if len(results) != 1 {
 		t.Fatalf("results len = %d, want 1", len(results))
 	}
@@ -176,7 +176,7 @@ func TestRunProbesReportsTimeout(t *testing.T) {
 }
 
 func TestPrepareProbeCommandSetsCancellationBudget(t *testing.T) {
-	cmd := exec.Command("reasonix-test-probe")
+	cmd := exec.Command("reamesAgent-test-probe")
 	prepareProbeCommand(cmd)
 	if cmd.Cancel == nil {
 		t.Fatal("probe command must install a cancellation hook")
@@ -288,12 +288,12 @@ func writeProbeTool(t *testing.T, path, output string) string {
 func writeEnvProbeTool(t *testing.T, path string) string {
 	t.Helper()
 	setProbeTimeoutForTest(t, 10*time.Second)
-	body := "#!/bin/sh\nprintf '%s\\n' \"$REASONIX_PROBE_ENV\"\n"
+	body := "#!/bin/sh\nprintf '%s\\n' \"$REAMES_AGENT_PROBE_ENV\"\n"
 	if runtime.GOOS == "windows" {
 		if !strings.HasSuffix(path, ".bat") {
 			path += ".bat"
 		}
-		body = "@echo %REASONIX_PROBE_ENV%\r\n"
+		body = "@echo %REAMES_AGENT_PROBE_ENV%\r\n"
 	}
 	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatalf("write env tool: %v", err)

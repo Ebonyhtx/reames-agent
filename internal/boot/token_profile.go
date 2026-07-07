@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/planmode"
-	"reasonix/internal/plugin"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/planmode"
+	"reames-agent/internal/plugin"
+	"reames-agent/internal/tool"
 )
 
 const (

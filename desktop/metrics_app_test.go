@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"reasonix/internal/config"
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
+	"reames-agent/internal/config"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
 )
 
 func TestObserveClassifiesEvents(t *testing.T) {

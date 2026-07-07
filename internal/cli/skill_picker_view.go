@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/i18n"
-	"reasonix/internal/skill"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/skill"
 )
 
 const (

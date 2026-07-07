@@ -1,9 +1,9 @@
-# Deploy: wrangler d1 create reasonix-crash → paste database_id → wrangler deploy.
-name = "reasonix-crash-report"
+# Deploy: wrangler d1 create reames-agent-crash → paste database_id → wrangler deploy.
+name = "reames-agent-crash-report"
 main = "src/index.ts"
 compatibility_date = "2026-06-01"
 
-routes = [{ pattern = "crash.reasonix.io", custom_domain = true }]
+routes = [{ pattern = "crash.reames-agent.io", custom_domain = true }]
 
 [vars]
 # Emails force-promoted to dashboard admin — the owner is never locked out even
@@ -11,23 +11,23 @@ routes = [{ pattern = "crash.reasonix.io", custom_domain = true }]
 ADMIN_EMAILS = "359807859@qq.com"
 # Shared identity service (resolves the session) and the site hosting its login
 # page. Override for local dev.
-ID_ORIGIN = "https://id.reasonix.io"
-APP_ORIGIN = "https://reasonix.io"
+ID_ORIGIN = "https://id.reames-agent.io"
+APP_ORIGIN = "https://reames-agent.io"
 # Browsers allowed to call the folded registry API with credentials.
-ALLOWED_ORIGINS = "https://reasonix.io,https://www.reasonix.io"
+ALLOWED_ORIGINS = "https://reames-agent.io,https://www.reames-agent.io"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "reasonix-crash"
+database_name = "reames-agent-crash"
 database_id = "54825184-366f-4877-80fc-924efab0239b"
 
 # Skill/MCP registry data plane, folded in from the standalone worker. Before
 # merging (the crash worker auto-deploys on push to main-v2):
-#   wrangler d1 create reasonix-registry   # paste the id below
-#   wrangler d1 execute reasonix-registry --remote --file=registry-schema.sql
+#   wrangler d1 create reames-agent-registry   # paste the id below
+#   wrangler d1 execute reames-agent-registry --remote --file=registry-schema.sql
 [[d1_databases]]
 binding = "REGISTRY_DB"
-database_name = "reasonix-registry"
+database_name = "reames-agent-registry"
 database_id = "83786761-5cc5-487d-8624-5cf565d1a57c"
 
 [[unsafe.bindings]]

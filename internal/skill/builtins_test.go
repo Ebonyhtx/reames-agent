@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/tool"
+	"reames-agent/internal/tool"
 )
 
 type builtinTestTool struct {

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"reasonix/internal/diff"
-	"reasonix/internal/provider"
+	"reames-agent/internal/diff"
+	"reames-agent/internal/provider"
 )
 
 // Tool is a capability the model can invoke.

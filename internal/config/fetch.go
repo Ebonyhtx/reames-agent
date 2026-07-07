@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/provider/openai"
+	"reames-agent/internal/provider/openai"
 )
 
 var knownModelFetchCompatSuffixes = []string{

@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/proc"
-	"reasonix/internal/shellparse"
+	"reames-agent/internal/proc"
+	"reames-agent/internal/shellparse"
 )
 
 const ProbeTimeout = 2 * time.Second

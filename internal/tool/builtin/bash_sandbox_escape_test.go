@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/event"
-	"reasonix/internal/jobs"
-	"reasonix/internal/sandbox"
+	"reames-agent/internal/event"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/sandbox"
 )
 
 type fakeSandboxEscapeApprover struct {
@@ -233,7 +233,7 @@ func TestBashWindowsSandboxRuntimeFailureRequiresHelperMarker(t *testing.T) {
 	defer restore()
 
 	payload := "encoded-payload"
-	argv := []string{"reasonix", sandbox.WindowsHelperCommand, payload, "--", "cmd"}
+	argv := []string{"reames-agent", sandbox.WindowsHelperCommand, payload, "--", "cmd"}
 	marker := sandbox.WindowsSandboxFailureMarker(payload)
 	err := exit126Error(t)
 

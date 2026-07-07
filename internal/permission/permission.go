@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"reasonix/internal/shellparse"
+	"reames-agent/internal/shellparse"
 )
 
 // Decision is the outcome of evaluating a tool call against a Policy.

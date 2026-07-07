@@ -3,12 +3,12 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 	"strings"
 	"testing"
 
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 // stubGate denies any call whose tool name is in deny; everything else allows.

@@ -13,9 +13,9 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// legacyConfig is the subset of the v0.x (~/.reasonix/config.json) schema this
+// legacyConfig is the subset of the v0.x (~/.reames-agent/config.json) schema this
 // import carries forward. Fields absent here are dropped on purpose: desktop tab
-// state is frontend-owned, and skills already live in the shared ~/.reasonix/skills
+// state is frontend-owned, and skills already live in the shared ~/.reames-agent/skills
 // root that v1+ also scans, so they need no migration.
 type legacyConfig struct {
 	APIKey      string                       `json:"apiKey"`
@@ -73,7 +73,7 @@ func (r *MigrationResult) Notice() string {
 		fmt.Fprintf(&b, " (%d MCP server(s))", r.Plugins)
 	}
 	if r.KeyToEnv {
-		b.WriteString("; API key saved to reasonix's credentials store")
+		b.WriteString("; API key saved to reamesAgent's credentials store")
 	}
 	b.WriteString(". The old files were left untouched.")
 	for _, w := range r.Warnings {
@@ -84,7 +84,7 @@ func (r *MigrationResult) Notice() string {
 
 // MigrateLegacyIfNeeded performs a one-time, non-destructive import of older
 // installs into the current user config when the latter does not exist yet. It
-// checks v1-era TOML first, then v0.5/v0.x ~/.reasonix/config.json, and never
+// checks v1-era TOML first, then v0.5/v0.x ~/.reames-agent/config.json, and never
 // modifies or deletes the legacy files. Returns nil when there is nothing to
 // migrate, or when the current user config already exists.
 func MigrateLegacyIfNeeded() (*MigrationResult, error) {
@@ -113,7 +113,7 @@ func MigrateLegacyIfNeededForRoot(root string) (*MigrationResult, error) {
 		}
 		return res, err
 	}
-	src := filepath.Join(home, ".reasonix", "config.json")
+	src := filepath.Join(home, ".reames-agent", "config.json")
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return nil, nil
@@ -152,7 +152,7 @@ func MigrateLegacyIfNeededForRoot(root string) (*MigrationResult, error) {
 	}
 	if qqSecret := strings.TrimSpace(legacy.QQ.AppSecret); qqSecret != "" {
 		envLines = append(envLines, "QQ_BOT_APP_SECRET="+qqSecret)
-		res.Warnings = append(res.Warnings, "your previous QQ Bot App Secret was saved to reasonix's credentials store")
+		res.Warnings = append(res.Warnings, "your previous QQ Bot App Secret was saved to reamesAgent's credentials store")
 	}
 	migrateLegacyQQConfig(cfg, legacy.QQ)
 
@@ -248,7 +248,7 @@ func migrateMCPToUserConfig(projectRoots []string) (*MCPGlobalMigrationResult, e
 		addEntries(loadPluginEntriesFromTOML(path))
 	}
 	for _, root := range normalizedMCPMigrationRoots(projectRoots) {
-		addEntries(loadPluginEntriesFromTOML(filepath.Join(root, "reasonix.toml")))
+		addEntries(loadPluginEntriesFromTOML(filepath.Join(root, "reamesAgent.toml")))
 		if entries, err := loadMCPJSON(filepath.Join(root, mcpJSONFile)); err == nil {
 			addEntries(entries)
 		}
@@ -481,11 +481,11 @@ func legacyTOMLPaths(dest, home string) []string {
 	}
 	for _, legacy := range legacyXDGConfigPaths() {
 		add(legacy)
-		add(filepath.Join(filepath.Dir(legacy), "reasonix.toml"))
+		add(filepath.Join(filepath.Dir(legacy), "reamesAgent.toml"))
 	}
-	add(filepath.Join(filepath.Dir(dest), "reasonix.toml"))
+	add(filepath.Join(filepath.Dir(dest), "reamesAgent.toml"))
 	if home != "" {
-		add(filepath.Join(home, ".reasonix", "reasonix.toml"))
+		add(filepath.Join(home, ".reames-agent", "reamesAgent.toml"))
 	}
 	return paths
 }

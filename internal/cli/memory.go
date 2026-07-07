@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"reasonix/internal/i18n"
+	"reames-agent/internal/i18n"
 )
 
 // showMemory reports what memory is loaded and where it lives — the TUI analog

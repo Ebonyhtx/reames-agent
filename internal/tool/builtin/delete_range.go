@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"reasonix/internal/diff"
-	"reasonix/internal/tool"
+	"reames-agent/internal/diff"
+	"reames-agent/internal/tool"
 )
 
 func init() { tool.RegisterBuiltin(deleteRange{}) }

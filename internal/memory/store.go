@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/config"
-	"reasonix/internal/frontmatter"
+	"reames-agent/internal/config"
+	"reames-agent/internal/frontmatter"
 )
 
 // Store is the per-project auto-memory: a directory of one-fact-per-file
@@ -24,8 +24,8 @@ import (
 // all projects), while "project" and "reference" stay in the project-specific Dir.
 // List() and Index() merge both directories so every session sees the full set.
 type Store struct {
-	Dir       string // ...reasonix/projects/<slug>/memory
-	GlobalDir string // ...reasonix/memory/global (shared across projects)
+	Dir       string // ...reames-agent/projects/<slug>/memory
+	GlobalDir string // ...reames-agent/memory/global (shared across projects)
 }
 
 // Type classifies a memory, mirroring the auto-memory taxonomy.
@@ -70,7 +70,7 @@ type ArchivedMemory struct {
 }
 
 // StoreFor resolves the auto-memory directory for a project working dir under
-// Reasonix home, e.g. ~/.reasonix/projects/-Users-me-proj/memory.
+// Reasonix home, e.g. ~/.reames-agent/projects/-Users-me-proj/memory.
 // A "" userDir (config dir unresolvable) yields a zero Store, which all methods
 // treat as a disabled no-op.
 func StoreFor(userDir, cwd string) Store {

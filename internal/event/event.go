@@ -12,9 +12,9 @@
 package event
 
 import (
-	"reasonix/internal/evidence"
-	"reasonix/internal/nilutil"
-	"reasonix/internal/provider"
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/nilutil"
+	"reames-agent/internal/provider"
 )
 
 // Kind tags an Event. Read the field(s) documented for that kind.

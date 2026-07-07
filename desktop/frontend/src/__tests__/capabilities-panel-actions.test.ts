@@ -124,12 +124,12 @@ console.log("capabilities panel MCP actions");
   const rootEl = document.getElementById("root");
   if (!rootEl) throw new Error("missing root");
   const root = createRoot(rootEl);
-  const meta: Meta = { label: "test", ready: true, eventChannel: "test-channel", cwd: "/tmp/reasonix-test", workspaceRoot: "/tmp/reasonix-test" };
+  const meta: Meta = { label: "test", ready: true, eventChannel: "test-channel", cwd: "/tmp/reames-agent-test", workspaceRoot: "/tmp/reames-agent-test" };
   const tabs: TabMeta[] = [{
     id: "tab-1",
     scope: "project",
-    workspaceRoot: "/tmp/reasonix-test",
-    workspaceName: "reasonix-test",
+    workspaceRoot: "/tmp/reames-agent-test",
+    workspaceName: "reames-agent-test",
     topicId: "topic-1",
     topicTitle: "Test",
     label: "Test",
@@ -138,7 +138,7 @@ console.log("capabilities panel MCP actions");
     mode: "normal",
     toolApprovalMode: "auto",
     active: true,
-    cwd: "/tmp/reasonix-test",
+    cwd: "/tmp/reames-agent-test",
   }];
   let trustCalls = 0;
   let bulkTrustCalls = 0;
@@ -252,12 +252,12 @@ console.log("capabilities panel plugin actions");
   const rootEl = document.getElementById("root");
   if (!rootEl) throw new Error("missing root");
   const root = createRoot(rootEl);
-  const meta: Meta = { label: "test", ready: true, eventChannel: "plugin-channel", cwd: "/tmp/reasonix-test", workspaceRoot: "/tmp/reasonix-test" };
+  const meta: Meta = { label: "test", ready: true, eventChannel: "plugin-channel", cwd: "/tmp/reames-agent-test", workspaceRoot: "/tmp/reames-agent-test" };
   const tabs: TabMeta[] = [{
     id: "tab-plugin",
     scope: "project",
-    workspaceRoot: "/tmp/reasonix-test",
-    workspaceName: "reasonix-test",
+    workspaceRoot: "/tmp/reames-agent-test",
+    workspaceName: "reames-agent-test",
     topicId: "topic-plugin",
     topicTitle: "Plugins",
     label: "Plugins",
@@ -266,7 +266,7 @@ console.log("capabilities panel plugin actions");
     mode: "normal",
     toolApprovalMode: "auto",
     active: true,
-    cwd: "/tmp/reasonix-test",
+    cwd: "/tmp/reames-agent-test",
   }];
   let planCalls = 0;
   let installCalls = 0;
@@ -282,8 +282,8 @@ console.log("capabilities panel plugin actions");
     version: "0.1.0",
     description: "Shared agent skills and hooks.",
     source: "git:github.com/obra/superpowers",
-    root: "~/.reasonix/plugins/superpowers",
-    manifestKind: "reasonix",
+    root: "~/.reames-agent/plugins/superpowers",
+    manifestKind: "reames-agent",
     enabled: true,
     skills: 2,
     hooks: 1,
@@ -314,8 +314,8 @@ console.log("capabilities panel plugin actions");
             version: "0.1.1",
             description: "Shared agent skills and hooks.",
             source,
-            root: "~/.reasonix/plugins/superpowers",
-            manifestKind: "reasonix",
+            root: "~/.reames-agent/plugins/superpowers",
+            manifestKind: "reames-agent",
             enabled: true,
             skills: 3,
             hooks: 1,

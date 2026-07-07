@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/memory"
+	"reames-agent/internal/memory"
 )
 
 func TestExtractHostChecksFromStructuredSection(t *testing.T) {
@@ -13,7 +13,7 @@ func TestExtractHostChecksFromStructuredSection(t *testing.T) {
 		Scope: memory.ScopeProject,
 		Body: strings.Join([]string{
 			"# Project rules",
-			"## Reasonix host checks",
+			"## Reames Agent host checks",
 			"- verify: go test ./internal/...",
 			"* verify: git diff --check",
 			"- verify: go test ./internal/...",
@@ -49,7 +49,7 @@ func TestExtractHostChecksIgnoresOrdinaryGuidance(t *testing.T) {
 func TestExtractHostChecksIsCaseInsensitive(t *testing.T) {
 	docs := []memory.Source{{
 		Path: "REASONIX.md",
-		Body: "## reasonix HOST checks\n- verify: go test ./...",
+		Body: "## Reames Agent HOST checks\n- verify: go test ./...",
 	}}
 
 	checks := ExtractHostChecks(docs)

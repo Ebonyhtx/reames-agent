@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"reasonix/internal/bot"
-	"reasonix/internal/bot/weixin"
-	"reasonix/internal/botruntime"
-	"reasonix/internal/config"
+	"reames-agent/internal/bot"
+	"reames-agent/internal/bot/weixin"
+	"reames-agent/internal/botruntime"
+	"reames-agent/internal/config"
 )
 
 func botCommand(args []string, version string) int {
@@ -164,7 +164,7 @@ func botStart(args []string, version string) int {
 		gw.Stop()
 	}()
 
-	fmt.Fprintf(os.Stderr, "reasonix bot starting (model: %s, channels: %s)...\n", modelName, *channels)
+	fmt.Fprintf(os.Stderr, "reamesAgent bot starting (model: %s, channels: %s)...\n", modelName, *channels)
 	fmt.Fprintf(os.Stderr, "version: %s\n", version)
 
 	if err := gw.Start(ctx); err != nil {
@@ -333,7 +333,7 @@ func botDoctor(args []string) int {
 		} else if weixin.HasSavedAccount(bc.Weixin.AccountID) {
 			addCheck("bot.weixin.token", "ok", "saved iLink account is available")
 		} else {
-			addCheck("bot.weixin.token", "missing", bc.Weixin.TokenEnv+" is not set; run `reasonix bot weixin-login` to save an iLink account")
+			addCheck("bot.weixin.token", "missing", bc.Weixin.TokenEnv+" is not set; run `reamesAgent bot weixin-login` to save an iLink account")
 		}
 	} else {
 		addCheck("bot.weixin", "disabled", "")
@@ -468,12 +468,12 @@ func botPairing(args []string) int {
 }
 
 func botPairingUsage() {
-	fmt.Print(`reasonix bot pairing — approve pending bot DM pairings
+	fmt.Print(`reamesAgent bot pairing — approve pending bot DM pairings
 
 Usage:
-  reasonix bot pairing list
-  reasonix bot pairing approve CODE
-  reasonix bot pairing reject CODE
+  reamesAgent bot pairing list
+  reamesAgent bot pairing approve CODE
+  reamesAgent bot pairing reject CODE
 `)
 }
 
@@ -548,13 +548,13 @@ func botConfigIsUserOwned(bc config.BotConfig) bool {
 }
 
 func botUsage() {
-	fmt.Print(`reasonix bot — multi-channel IM bot gateway (QQ / Feishu / WeChat)
+	fmt.Print(`reamesAgent bot — multi-channel IM bot gateway (QQ / Feishu / WeChat)
 
 Usage:
-  reasonix bot start   [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
-  reasonix bot doctor  [--json] [--deep]
-  reasonix bot pairing list|approve|reject
-  reasonix bot weixin-login [--timeout SECONDS]
+  reamesAgent bot start   [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
+  reamesAgent bot doctor  [--json] [--deep]
+  reamesAgent bot pairing list|approve|reject
+  reamesAgent bot weixin-login [--timeout SECONDS]
 
 Subcommands:
   start         启动 bot 网关
@@ -563,12 +563,12 @@ Subcommands:
   weixin-login  微信 iLink 二维码登录
 
 Examples:
-  reasonix bot start --channels qq,feishu
-  reasonix bot start --dir /path/to/project --model deepseek-pro
-  reasonix bot doctor --json
+  reamesAgent bot start --channels qq,feishu
+  reamesAgent bot start --dir /path/to/project --model deepseek-pro
+  reamesAgent bot doctor --json
 
 Configuration:
-  Edit reasonix.toml:
+  Edit reamesAgent.toml:
     [bot]           enabled / model / max_steps
     [bot]           queue_mode / queue_cap / queue_drop
     [bot.pairing]   enabled / request_ttl_minutes / max_pending_per_platform

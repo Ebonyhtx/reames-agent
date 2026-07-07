@@ -16,7 +16,7 @@ func isolateUserConfigHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("AppData", filepath.Join(home, "AppData", "Roaming"))
 	return home
@@ -27,7 +27,7 @@ func isolateUserConfigHome(t *testing.T) string {
 // would otherwise race on the shared global.
 func setRuntimeGOOS(t *testing.T, goos string) {
 	t.Helper()
-	t.Setenv("REASONIX_TEST_GOOS", goos)
+	t.Setenv("REAMES_AGENT_TEST_GOOS", goos)
 	old := runtimeGOOS
 	runtimeGOOS = goos
 	t.Cleanup(func() { runtimeGOOS = old })
@@ -35,9 +35,9 @@ func setRuntimeGOOS(t *testing.T, goos string) {
 
 func expectedDefaultReasonixHome(home string) string {
 	if runtime.GOOS == "windows" {
-		return filepath.Join(home, "AppData", "Roaming", "reasonix")
+		return filepath.Join(home, "AppData", "Roaming", "reames-agent")
 	}
-	return filepath.Join(home, ".reasonix")
+	return filepath.Join(home, ".reames-agent")
 }
 
 func TestUserConfigDisplayPathCollapsesHome(t *testing.T) {
@@ -46,8 +46,8 @@ func TestUserConfigDisplayPathCollapsesHome(t *testing.T) {
 	if !strings.HasPrefix(got, "~/") {
 		t.Fatalf("display path = %q, want ~/ prefix", got)
 	}
-	if !strings.HasSuffix(got, "reasonix/config.toml") {
-		t.Fatalf("display path = %q, want reasonix/config.toml suffix", got)
+	if !strings.HasSuffix(got, "reames-agent/config.toml") {
+		t.Fatalf("display path = %q, want reamesAgent/config.toml suffix", got)
 	}
 	if strings.Contains(got, home) {
 		t.Fatalf("display path %q must not embed the absolute home", got)
@@ -65,7 +65,7 @@ func TestUserConfigPathUsesReasonixHome(t *testing.T) {
 func TestUserConfigPathHonorsReasonixHome(t *testing.T) {
 	home := isolateUserConfigHome(t)
 	custom := filepath.Join(home, "custom-home")
-	t.Setenv("REASONIX_HOME", custom)
+	t.Setenv("REAMES_AGENT_HOME", custom)
 
 	want := filepath.Join(custom, "config.toml")
 	if got := UserConfigPath(); filepath.Clean(got) != filepath.Clean(want) {
@@ -89,9 +89,9 @@ func TestLoadForRootUsesWindowsHomeFallbackWhenConfigDirUnavailable(t *testing.T
 		osUserHomeDir = oldHomeDir
 	})
 
-	t.Setenv("REASONIX_HOME", "")
+	t.Setenv("REAMES_AGENT_HOME", "")
 
-	configPath := filepath.Join(home, "AppData", "Roaming", "reasonix", "config.toml")
+	configPath := filepath.Join(home, "AppData", "Roaming", "reames-agent", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 			Server:   "127.0.0.1",
 			Port:     7890,
 			Username: "user",
-			Password: "${REASONIX_PROXY_PASSWORD}",
+			Password: "${REAMES_AGENT_PROXY_PASSWORD}",
 		},
 	}
 	orig.Environment.Enabled = boolPtr(false)
@@ -204,7 +204,7 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 		ChatID:           "oc_group",
 		Model:            "deepseek-pro",
 		ToolApprovalMode: "ask",
-		WorkspaceRoot:    "/tmp/reasonix-route",
+		WorkspaceRoot:    "/tmp/reamesAgent-route",
 	}}
 	orig.Bot.Connections = []BotConnectionConfig{{
 		ID:               "feishu-lark",
@@ -215,13 +215,13 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 		Status:           "connected",
 		Model:            "deepseek-pro",
 		ToolApprovalMode: "yolo",
-		WorkspaceRoot:    "/tmp/reasonix-bot",
+		WorkspaceRoot:    "/tmp/reamesAgent-bot",
 		Credential:       BotConnectionCredential{AppID: "cli_lark", AppSecretEnv: "LARK_BOT_APP_SECRET"},
 		SessionMappings: []BotConnectionSessionMapping{{
 			RemoteID:      "ou_123",
 			SessionID:     "topic:topic_bot",
 			Scope:         "project",
-			WorkspaceRoot: "/tmp/reasonix-bot",
+			WorkspaceRoot: "/tmp/reamesAgent-bot",
 			UpdatedAt:     "2026-06-11T00:00:00Z",
 		}},
 	}}
@@ -239,7 +239,7 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 		},
 	}
 	orig.Plugins = []PluginEntry{
-		{Name: "example", Command: "reasonix-plugin-example"},
+		{Name: "example", Command: "reames-agent-plugin-example"},
 		{Name: "stripe", Type: "http", URL: "https://mcp.stripe.com", Headers: map[string]string{"Authorization": "Bearer x"}, TrustedReadOnlyTools: []string{"customer_read"}, AutoStart: boolPtr(false), Tier: "background"},
 	}
 	mm, _ := orig.Provider("mimo-pro")
@@ -319,7 +319,7 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	if got.Agent.PlannerMaxSteps != orig.Agent.PlannerMaxSteps {
 		t.Errorf("planner_max_steps = %d, want %d", got.Agent.PlannerMaxSteps, orig.Agent.PlannerMaxSteps)
 	}
-	if len(got.Bot.Connections) != 1 || got.Bot.Connections[0].Model != "deepseek-pro" || got.Bot.Connections[0].WorkspaceRoot != "/tmp/reasonix-bot" {
+	if len(got.Bot.Connections) != 1 || got.Bot.Connections[0].Model != "deepseek-pro" || got.Bot.Connections[0].WorkspaceRoot != "/tmp/reamesAgent-bot" {
 		t.Errorf("bot connection not preserved: %+v", got.Bot.Connections)
 	}
 	if got.Bot.ToolApprovalMode != "auto" || got.Bot.Connections[0].ToolApprovalMode != "yolo" {
@@ -328,10 +328,10 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	if !got.Bot.Control.Enabled || got.Bot.Control.Addr != "127.0.0.1:39001" || got.Bot.Control.TokenEnv != "BOT_CONTROL_TOKEN" {
 		t.Errorf("bot control not preserved: %+v", got.Bot.Control)
 	}
-	if len(got.Bot.Routes) != 1 || got.Bot.Routes[0].WorkspaceRoot != "/tmp/reasonix-route" || got.Bot.Routes[0].ChatID != "oc_group" {
+	if len(got.Bot.Routes) != 1 || got.Bot.Routes[0].WorkspaceRoot != "/tmp/reamesAgent-route" || got.Bot.Routes[0].ChatID != "oc_group" {
 		t.Errorf("bot routes not preserved: %+v", got.Bot.Routes)
 	}
-	if len(got.Bot.Connections[0].SessionMappings) != 1 || got.Bot.Connections[0].SessionMappings[0].Scope != "project" || got.Bot.Connections[0].SessionMappings[0].WorkspaceRoot != "/tmp/reasonix-bot" {
+	if len(got.Bot.Connections[0].SessionMappings) != 1 || got.Bot.Connections[0].SessionMappings[0].Scope != "project" || got.Bot.Connections[0].SessionMappings[0].WorkspaceRoot != "/tmp/reamesAgent-bot" {
 		t.Errorf("bot session mapping scope not preserved: %+v", got.Bot.Connections[0].SessionMappings)
 	}
 	if got.Agent.Temperature != orig.Agent.Temperature {
@@ -1085,7 +1085,7 @@ func TestRenderTOMLDefaultStepsDoNotOverrideGlobalConfig(t *testing.T) {
 
 	projectDir := t.TempDir()
 	projectTOML := RenderTOML(Default())
-	projectPath := filepath.Join(projectDir, "reasonix.toml")
+	projectPath := filepath.Join(projectDir, "reamesAgent.toml")
 	if err := os.WriteFile(projectPath, []byte(projectTOML), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1113,15 +1113,15 @@ func TestRenderTOMLDefaultStepsDoNotOverrideGlobalConfig(t *testing.T) {
 }
 
 func TestIsolatedHomeDirEmptyByDefault(t *testing.T) {
-	t.Setenv("REASONIX_HOME", "")
+	t.Setenv("REAMES_AGENT_HOME", "")
 	if got := IsolatedHomeDir(); got != "" {
 		t.Fatalf("IsolatedHomeDir() = %q, want empty", got)
 	}
 }
 
 func TestIsolatedHomeDirReturnsCleanPath(t *testing.T) {
-	raw := filepath.Join(t.TempDir(), "isolated-reasonix")
-	t.Setenv("REASONIX_HOME", raw)
+	raw := filepath.Join(t.TempDir(), "isolated-reamesAgent")
+	t.Setenv("REAMES_AGENT_HOME", raw)
 	got := IsolatedHomeDir()
 	if filepath.Clean(got) != filepath.Clean(raw) {
 		t.Fatalf("IsolatedHomeDir() = %q, want %q", got, raw)
@@ -1130,7 +1130,7 @@ func TestIsolatedHomeDirReturnsCleanPath(t *testing.T) {
 
 func TestLegacyOSSupportDirEmptyWhenIsolated(t *testing.T) {
 	isolateUserConfigHome(t)
-	t.Setenv("REASONIX_HOME", filepath.Join(t.TempDir(), "isolated-home"))
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(t.TempDir(), "isolated-home"))
 	if got := legacyOSSupportDir(); got != "" {
 		t.Fatalf("legacyOSSupportDir() = %q, want empty when isolated", got)
 	}
@@ -1138,7 +1138,7 @@ func TestLegacyOSSupportDirEmptyWhenIsolated(t *testing.T) {
 
 func TestLegacyXDGConfigPathsEmptyWhenIsolated(t *testing.T) {
 	isolateUserConfigHome(t)
-	t.Setenv("REASONIX_HOME", filepath.Join(t.TempDir(), "isolated-home"))
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(t.TempDir(), "isolated-home"))
 	if got := legacyXDGConfigPaths(); got != nil {
 		t.Fatalf("legacyXDGConfigPaths() = %v, want nil when isolated", got)
 	}
@@ -1149,7 +1149,7 @@ func TestCacheDirHonorsReasonixHome(t *testing.T) {
 	isolated := filepath.Join(home, "isolated-home")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("REASONIX_HOME", isolated)
+	t.Setenv("REAMES_AGENT_HOME", isolated)
 
 	got := CacheDir()
 	want := filepath.Join(isolated, "cache")
@@ -1163,20 +1163,20 @@ func TestCacheDirHonorsReasonixCacheHomeOverReasonixHome(t *testing.T) {
 	cacheHome := filepath.Join(home, "custom-cache")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("REASONIX_HOME", filepath.Join(home, "isolated-home"))
-	t.Setenv("REASONIX_CACHE_HOME", cacheHome)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, "isolated-home"))
+	t.Setenv("REAMES_AGENT_CACHE_HOME", cacheHome)
 
 	got := CacheDir()
 	want := cacheHome
 	if filepath.Clean(got) != filepath.Clean(want) {
-		t.Fatalf("CacheDir() = %q, want %q (REASONIX_CACHE_HOME must win)", got, want)
+		t.Fatalf("CacheDir() = %q, want %q (REAMES_AGENT_CACHE_HOME must win)", got, want)
 	}
 }
 
 func TestUserConfigLoadPathNoLegacyFallbackWhenIsolated(t *testing.T) {
 	home := isolateUserConfigHome(t)
 	isolated := filepath.Join(home, "isolated-home")
-	t.Setenv("REASONIX_HOME", isolated)
+	t.Setenv("REAMES_AGENT_HOME", isolated)
 
 	// Create a legacy config at the OS production path — it must not be loaded.
 	productionHome := expectedDefaultReasonixHome(home)
@@ -1197,7 +1197,7 @@ func TestUserConfigLoadPathNoLegacyFallbackWhenIsolated(t *testing.T) {
 
 func TestCredentialSourceCandidatesSkipHomeEnvWhenIsolated(t *testing.T) {
 	isolateUserConfigHome(t)
-	t.Setenv("REASONIX_HOME", filepath.Join(t.TempDir(), "isolated-home"))
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(t.TempDir(), "isolated-home"))
 
 	// Write a key into the production home .env — it must not appear as a source.
 	if home, err := os.UserHomeDir(); err == nil {
@@ -1217,10 +1217,10 @@ func TestCredentialSourceCandidatesSkipHomeEnvWhenIsolated(t *testing.T) {
 func TestMigrateLegacyIfNeededSkipsWhenIsolated(t *testing.T) {
 	home := isolateUserConfigHome(t)
 	isolated := filepath.Join(home, "isolated-home")
-	t.Setenv("REASONIX_HOME", isolated)
+	t.Setenv("REAMES_AGENT_HOME", isolated)
 
 	// Create a legacy config.json in production home — migration must skip it.
-	legacyDir := filepath.Join(home, ".reasonix")
+	legacyDir := filepath.Join(home, ".reames-agent")
 	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

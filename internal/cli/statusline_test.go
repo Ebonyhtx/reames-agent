@@ -11,14 +11,14 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/agent/testutil"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/i18n"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/agent/testutil"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 // TestRunStatuslineCmd checks the custom status-line runner: it returns the

@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/boot"
-	"reasonix/internal/botruntime"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/provider"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/boot"
+	"reames-agent/internal/botruntime"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/provider"
 )
 
 // settings_app.go is the desktop Settings panel's command surface: it reads the
@@ -1064,7 +1064,7 @@ func botDomainOrDefault(domain string) string {
 // applyConfigChange mutates the user-global config and rebuilds the controller so
 // the change takes effect this session. Desktop settings such as providers and
 // keys are account-level, not per-project: writing them to the global config
-// rather than the cwd's reasonix.toml is what lets them survive a workspace switch.
+// rather than the cwd's reamesAgent.toml is what lets them survive a workspace switch.
 func (a *App) applyConfigChange(mutate func(*config.Config) error) error {
 	_, err := a.applyConfigChangeWithWarning("settings", mutate)
 	return err
@@ -1451,9 +1451,9 @@ func providerCredentialSourceNotice(apiKeyEnv, value string) string {
 
 func projectConfigPathForRoot(root string) string {
 	if strings.TrimSpace(root) == "" || root == "." {
-		return "reasonix.toml"
+		return "reamesAgent.toml"
 	}
-	return filepath.Join(root, "reasonix.toml")
+	return filepath.Join(root, "reamesAgent.toml")
 }
 
 func sameConfigPath(a, b string) bool {

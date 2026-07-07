@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"reasonix/internal/config"
-	"reasonix/internal/fileutil"
+	"reames-agent/internal/config"
+	"reames-agent/internal/fileutil"
 )
 
 // upsertDotEnv stores KEY=value in Reasonix's global .env and applies it to the

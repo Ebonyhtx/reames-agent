@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"reasonix/internal/evidence"
-	"reasonix/internal/tool"
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/tool"
 )
 
 func init() { tool.RegisterBuiltin(todoWrite{}) }

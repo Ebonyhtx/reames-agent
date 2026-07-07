@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/event"
-	"reasonix/internal/evidence"
-	"reasonix/internal/provider"
+	"reames-agent/internal/event"
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/provider"
 )
 
 func TestFinalReadinessFallsBackToCanonicalTodos(t *testing.T) {

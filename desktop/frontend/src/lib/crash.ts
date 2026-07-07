@@ -103,7 +103,7 @@ const lagSamples: number[] = [];
 let performanceMonitorInstalled = false;
 let lastPerformancePromptAt = 0;
 
-const PERF_REPORTED_STORAGE_KEY = "reasonix:perf-reported";
+const PERF_REPORTED_STORAGE_KEY = "reames-agent:perf-reported";
 
 // Idempotent per pressure label: once a category is reported (persisted per build) or
 // dismissed (session only), stop re-surfacing it so a steady slowdown can't spam prompts.

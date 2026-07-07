@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"reasonix/internal/tool"
+	"reames-agent/internal/tool"
 )
 
 func init() { tool.RegisterBuiltin(listDir{}) }

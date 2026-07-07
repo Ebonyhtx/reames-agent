@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
-	_ "reasonix/internal/tool/builtin"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
+	_ "reames-agent/internal/tool/builtin"
 )
 
 func TestBuiltinToolContractDocumentation(t *testing.T) {

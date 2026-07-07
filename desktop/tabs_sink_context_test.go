@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 )
 
 // All tabEventSink context mutations go through the locked setContext /

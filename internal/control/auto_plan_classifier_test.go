@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 type classifierProvider struct {

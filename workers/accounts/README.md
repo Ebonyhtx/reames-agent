@@ -1,8 +1,8 @@
-# reasonix-accounts
+# reames-agent-accounts
 
-The account service for `reasonix.io`: email/password sign-up, email verification,
+The account service for `reames-agent.io`: email/password sign-up, email verification,
 sessions, password reset, and public profiles. A Cloudflare Worker (Hono) backed
-by D1. Runs at `id.reasonix.io`, separate from the internal crash dashboard.
+by D1. Runs at `id.reames-agent.io`, separate from the internal crash dashboard.
 
 This is the backend API only — there are no HTML pages. The web frontend (and,
 later, the desktop/CLI) call these JSON endpoints.
@@ -92,14 +92,14 @@ Register a user, then read the verification link from the `wrangler dev` console
 ## Deploy
 
 ```sh
-wrangler d1 create reasonix-accounts        # paste database_id into wrangler.toml
-wrangler d1 migrations apply reasonix-accounts --remote
+wrangler d1 create reames-agent-accounts        # paste database_id into wrangler.toml
+wrangler d1 migrations apply reames-agent-accounts --remote
 wrangler secret put SESSION_PEPPER
 wrangler secret put RESEND_API_KEY          # if EMAIL_PROVIDER=resend
 wrangler deploy
 ```
 
-The `id.reasonix.io` custom domain route is declared in `wrangler.toml`; point the
+The `id.reames-agent.io` custom domain route is declared in `wrangler.toml`; point the
 DNS/custom-domain binding at this worker in the Cloudflare dashboard on first deploy.
 
 The steps above are the one-time bootstrap. After that, every merge to `main-v2`

@@ -11,10 +11,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
-	_ "reasonix/internal/tool/builtin"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
+	_ "reames-agent/internal/tool/builtin"
 )
 
 // TestTruncateToolOutputUnderCap leaves small payloads alone — the cap should

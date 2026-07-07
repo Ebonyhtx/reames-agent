@@ -1,9 +1,9 @@
-// Reasonix Community client. Renders the forum from the forum.reasonix.io API and
-// gates posting on the shared id.reasonix.io session (cookie sent cross-subdomain).
+// Reasonix Community client. Renders the forum from the forum.reames-agent.io API and
+// gates posting on the shared id.reames-agent.io session (cookie sent cross-subdomain).
 // Bilingual like the rest of the site: static labels via .l-en/.l-zh spans that the
-// shared `reasonix-lang` choice toggles; plain-text strings pick the current lang.
-const FORUM = (import.meta.env.PUBLIC_FORUM_API || "https://forum.reasonix.io").replace(/\/$/, "");
-const ACCOUNTS = (import.meta.env.PUBLIC_ACCOUNTS_API || "https://id.reasonix.io").replace(/\/$/, "");
+// shared `reames-agent-lang` choice toggles; plain-text strings pick the current lang.
+const FORUM = (import.meta.env.PUBLIC_FORUM_API || "https://forum.reames-agent.io").replace(/\/$/, "");
+const ACCOUNTS = (import.meta.env.PUBLIC_ACCOUNTS_API || "https://id.reames-agent.io").replace(/\/$/, "");
 
 const el = (id) => document.getElementById(id);
 const qp = new URLSearchParams(location.search);
@@ -22,12 +22,12 @@ function setLang(l) {
   document.body.dataset.lang = l;
   document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
   document.querySelectorAll(".lang-switch button").forEach((b) => b.classList.toggle("active", b.dataset.lang === l));
-  try { localStorage.setItem("reasonix-lang", l); } catch {}
+  try { localStorage.setItem("reames-agent-lang", l); } catch {}
   applyLangText();
 }
 function initLang() {
   let saved = "";
-  try { saved = localStorage.getItem("reasonix-lang") || ""; } catch {}
+  try { saved = localStorage.getItem("reames-agent-lang") || ""; } catch {}
   setLang(saved || ((navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en"));
   document.querySelectorAll(".lang-switch button").forEach((b) => b.addEventListener("click", () => setLang(b.dataset.lang)));
 }

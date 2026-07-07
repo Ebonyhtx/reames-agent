@@ -1,4 +1,4 @@
-// Dashboard authorization. Identity comes from id.reasonix.io (the shared
+// Dashboard authorization. Identity comes from id.reames-agent.io (the shared
 // account service); this worker only maps a signed-in identity to a per-dashboard
 // role via the `access` table.
 import type { Env } from "./env";
@@ -20,16 +20,16 @@ export function atLeast(role: Role, min: Role): boolean {
   return RANK[role] >= RANK[min];
 }
 
-// The id.reasonix.io session cookie is scoped to `.reasonix.io`, so the browser
+// The id.reames-agent.io session cookie is scoped to `.reames-agent.io`, so the browser
 // sends it here too; we hand it back as a Bearer token to resolve the identity.
 const SHARED_COOKIE = "rxid";
 
 function idOrigin(env: Env): string {
-  return (env.ID_ORIGIN ?? "https://id.reasonix.io").replace(/\/$/, "");
+  return (env.ID_ORIGIN ?? "https://id.reames-agent.io").replace(/\/$/, "");
 }
 
 function appOrigin(env: Env): string {
-  return (env.APP_ORIGIN ?? "https://reasonix.io").replace(/\/$/, "");
+  return (env.APP_ORIGIN ?? "https://reames-agent.io").replace(/\/$/, "");
 }
 
 export function getCookie(request: Request, name: string): string | null {
@@ -61,7 +61,7 @@ const IDENTITY_TTL_SECONDS = 60;
 async function identityCacheKey(token: string): Promise<Request> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return new Request(`https://id-cache.reasonix.io/${hex}`);
+  return new Request(`https://id-cache.reames-agent.io/${hex}`);
 }
 
 async function resolveIdentity(request: Request, env: Env): Promise<Identity | null> {
@@ -119,7 +119,7 @@ function selectAccess(env: Env, email: string): Promise<User | null> {
     .first<User>();
 }
 
-// Ends the shared id.reasonix.io session (best-effort) and returns a Set-Cookie
+// Ends the shared id.reames-agent.io session (best-effort) and returns a Set-Cookie
 // that clears the shared cookie browser-side.
 export async function sharedLogout(request: Request, env: Env): Promise<string> {
   const token = getCookie(request, SHARED_COOKIE);
@@ -129,7 +129,7 @@ export async function sharedLogout(request: Request, env: Env): Promise<string> 
       headers: { authorization: `Bearer ${token}` },
     }).catch(() => {});
   }
-  return `${SHARED_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.reasonix.io; Max-Age=0`;
+  return `${SHARED_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.reames-agent.io; Max-Age=0`;
 }
 
 export function isAdminEmail(env: Env, email: string): boolean {

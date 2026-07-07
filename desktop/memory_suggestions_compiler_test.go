@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/memory"
-	"reasonix/internal/memorycompiler"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/memorycompiler"
 )
 
 func seedCompilerFailures(t *testing.T, workspaceRoot string, turns int, errText string) {

@@ -59,7 +59,7 @@ func (g SessionDataGuard) Check(target string) error {
 		return nil
 	}
 	return fmt.Errorf("path %q is inside Reasonix's own session/state data (%s); the app is the only writer of these files, and edits from a chat race its saves — that surfaces as repeated save-conflict copies. "+
-		"Do not modify session or runtime-state files directly; report the underlying problem instead. If raw access is truly intended, add the directory to [sandbox] allow_write in reasonix.toml",
+		"Do not modify session or runtime-state files directly; report the underlying problem instead. If raw access is truly intended, add the directory to [sandbox] allow_write in reamesAgent.toml",
 		target, g.stateRoot)
 }
 
@@ -88,7 +88,7 @@ func runtimeStateFile(name string) bool {
 // session store or a runtime ledger file, and not explicitly allowed. All
 // comparisons are deny-side, so they fold case on case-insensitive platforms:
 // EvalSymlinks keeps the caller's spelling, and on default macOS/Windows
-// volumes ~/.reasonix/SESSIONS reaches the very same files (the same shape as
+// volumes ~/.reames-agent/SESSIONS reaches the very same files (the same shape as
 // the Windows lease-key case split fixed in #6023).
 func (g SessionDataGuard) denies(abs string) bool {
 	root := g.stateRoot

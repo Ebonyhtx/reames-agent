@@ -17,10 +17,10 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/config"
-	"reasonix/internal/pluginpkg"
-	"reasonix/internal/skill"
-	"reasonix/internal/tool"
+	"reames-agent/internal/config"
+	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/skill"
+	"reames-agent/internal/tool"
 )
 
 // MCPConnectResult is what the ConnectMCP callback returns. Disconnect is
@@ -62,7 +62,7 @@ type Options struct {
 type installSourceTool struct {
 	root         string
 	home         string
-	reasonixHome string
+	reamesAgentHome string
 	httpClient   *http.Client
 	connectMCP   MCPConnector
 	onDisconnect OnDisconnectFunc
@@ -88,13 +88,13 @@ func NewTool(opts Options) tool.Tool {
 			home = h
 		}
 	}
-	reasonixHome := ""
+	reamesAgentHome := ""
 	if opts.HomeDir != "" {
-		reasonixHome = filepath.Join(home, ".reasonix")
+		reamesAgentHome = filepath.Join(home, ".reames-agent")
 	} else if dir := config.ReasonixHomeDir(); dir != "" {
-		reasonixHome = dir
+		reamesAgentHome = dir
 	} else if home != "" {
-		reasonixHome = filepath.Join(home, ".reasonix")
+		reamesAgentHome = filepath.Join(home, ".reames-agent")
 	}
 	client := opts.HTTPClient
 	if client == nil {
@@ -107,7 +107,7 @@ func NewTool(opts Options) tool.Tool {
 	return &installSourceTool{
 		root:         root,
 		home:         home,
-		reasonixHome: reasonixHome,
+		reamesAgentHome: reamesAgentHome,
 		httpClient:   client,
 		connectMCP:   opts.ConnectMCP,
 		onDisconnect: opts.OnDisconnect,
@@ -422,19 +422,19 @@ func (t *installSourceTool) uninstallActionsForScope(name, scope string) []actio
 		}
 	}
 	if scope == "global" || scope == "" {
-		if st, err := pluginpkg.LoadState(t.reasonixHome); err == nil {
+		if st, err := pluginpkg.LoadState(t.reamesAgentHome); err == nil {
 			for _, p := range st.Plugins {
 				if p.Name != name {
 					continue
 				}
-				root := pluginpkg.ResolveRoot(t.reasonixHome, p.Root)
+				root := pluginpkg.ResolveRoot(t.reamesAgentHome, p.Root)
 				actions = append(actions, action{
 					Kind:         "plugin",
 					Action:       "remove_plugin_package",
 					Name:         p.Name,
 					Target:       root,
 					Scope:        "global",
-					ConfigPath:   pluginpkg.StatePath(t.reasonixHome),
+					ConfigPath:   pluginpkg.StatePath(t.reamesAgentHome),
 					ManifestKind: p.ManifestKind,
 					Version:      p.Version,
 					RiskLevel:    RiskMedium,
@@ -459,12 +459,12 @@ func (t *installSourceTool) resolveSkillPath(name, scope string) (string, bool) 
 	}
 	var root string
 	if scope == "global" {
-		if t.reasonixHome == "" {
+		if t.reamesAgentHome == "" {
 			return "", false
 		}
-		root = filepath.Join(t.reasonixHome, skill.SkillsDirname)
+		root = filepath.Join(t.reamesAgentHome, skill.SkillsDirname)
 	} else {
-		root = filepath.Join(t.root, ".reasonix", skill.SkillsDirname)
+		root = filepath.Join(t.root, ".reames-agent", skill.SkillsDirname)
 	}
 	flat := filepath.Join(root, name+".md")
 	if _, err := lstat(flat); err == nil {
@@ -523,7 +523,7 @@ func (t *installSourceTool) configPath(scope string) string {
 			return p
 		}
 	}
-	return filepath.Join(t.root, "reasonix.toml")
+	return filepath.Join(t.root, "reamesAgent.toml")
 }
 
 func (t *installSourceTool) normalizeScope(scope string) (string, bool) {

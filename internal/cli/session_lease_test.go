@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 // holdSessionLease simulates another runtime owning path for the duration of

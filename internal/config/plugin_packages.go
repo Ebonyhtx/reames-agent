@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/pluginpkg"
+	"reames-agent/internal/pluginpkg"
 )
 
 // mergeInstalledPluginPackages overlays enabled plugin package capabilities onto
@@ -17,11 +17,11 @@ func mergeInstalledPluginPackages(cfg *Config, root string) []string {
 	if cfg == nil {
 		return nil
 	}
-	reasonixHome := ReasonixHomeDir()
-	if strings.TrimSpace(reasonixHome) == "" {
+	reamesAgentHome := ReasonixHomeDir()
+	if strings.TrimSpace(reamesAgentHome) == "" {
 		return nil
 	}
-	installed, warnings := pluginpkg.LoadInstalled(reasonixHome)
+	installed, warnings := pluginpkg.LoadInstalled(reamesAgentHome)
 	sort.SliceStable(installed, func(i, j int) bool {
 		return installed[i].Installed.Name < installed[j].Installed.Name
 	})
@@ -70,10 +70,10 @@ func pluginPackageEnv(installed pluginpkg.InstalledPlugin, root string, env map[
 	if out == nil {
 		out = map[string]string{}
 	}
-	out["REASONIX_PLUGIN_ROOT"] = root
-	out["REASONIX_PLUGIN_NAME"] = installed.Name
+	out["REAMES_AGENT_PLUGIN_ROOT"] = root
+	out["REAMES_AGENT_PLUGIN_NAME"] = installed.Name
 	if installed.Version != "" {
-		out["REASONIX_PLUGIN_VERSION"] = installed.Version
+		out["REAMES_AGENT_PLUGIN_VERSION"] = installed.Version
 	}
 	return out
 }

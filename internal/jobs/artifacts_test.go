@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 )
 
 func TestCompletedJobPersistsOutputAndReleasesMemory(t *testing.T) {

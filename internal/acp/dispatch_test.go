@@ -9,8 +9,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"reasonix/internal/control"
-	"reasonix/internal/event"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
 )
 
 // fakeNotifier captures Notify calls and answers Request via an injectable hook,

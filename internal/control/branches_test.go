@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 func TestBranchAndSwitch(t *testing.T) {

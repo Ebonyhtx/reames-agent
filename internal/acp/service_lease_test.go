@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/permission"
-	"reasonix/internal/provider"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/permission"
+	"reames-agent/internal/provider"
 )
 
 func leaseTestFactory(dir string) *e2eFactory {

@@ -8,7 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"reasonix/internal/i18n"
+	"reames-agent/internal/i18n"
 )
 
 // wrapTranscript wraps the joined transcript to width for the viewport, keeping

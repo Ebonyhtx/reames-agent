@@ -917,9 +917,9 @@ function registryBindings(env: Env): RegistryBindings {
   return {
     DB: env.REGISTRY_DB,
     WRITE_LIMITER: env.WRITE_LIMITER,
-    ACCOUNTS_ORIGIN: env.ID_ORIGIN ?? "https://id.reasonix.io",
-    APP_ORIGIN: env.APP_ORIGIN ?? "https://reasonix.io",
-    ALLOWED_ORIGINS: env.ALLOWED_ORIGINS ?? "https://reasonix.io,https://www.reasonix.io",
+    ACCOUNTS_ORIGIN: env.ID_ORIGIN ?? "https://id.reames-agent.io",
+    APP_ORIGIN: env.APP_ORIGIN ?? "https://reames-agent.io",
+    ALLOWED_ORIGINS: env.ALLOWED_ORIGINS ?? "https://reames-agent.io,https://www.reames-agent.io",
   };
 }
 
@@ -998,7 +998,7 @@ export default {
 
     const login = loginUrl(env, request);
 
-    // Authentication moved to id.reasonix.io; these paths just bounce there.
+    // Authentication moved to id.reames-agent.io; these paths just bounce there.
     if ((path === "/login" || path === "/register") && method === "GET") return redirect(login);
     if (path === "/logout" && method === "POST") return redirect(login, await sharedLogout(request, env));
 

@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"reasonix/internal/command"
+	"reames-agent/internal/command"
 )
 
 func TestChatCommandNames(t *testing.T) {

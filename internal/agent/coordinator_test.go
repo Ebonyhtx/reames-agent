@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 	"strings"
 	"testing"
 
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 // mockProvider replays preset chunks and records the last request it received.

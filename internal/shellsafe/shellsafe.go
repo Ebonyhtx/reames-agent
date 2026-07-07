@@ -10,7 +10,7 @@ package shellsafe
 import (
 	"strings"
 
-	"reasonix/internal/shellparse"
+	"reames-agent/internal/shellparse"
 )
 
 // ReadOnlyCommands holds single-word commands whose base name alone implies a

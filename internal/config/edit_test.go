@@ -879,7 +879,7 @@ func TestSkillEnabledMutator(t *testing.T) {
 func TestPluginMutators(t *testing.T) {
 	c := Default()
 
-	if err := c.UpsertPlugin(PluginEntry{Name: "ex", Command: "reasonix-plugin-example"}); err != nil {
+	if err := c.UpsertPlugin(PluginEntry{Name: "ex", Command: "reames-agent-plugin-example"}); err != nil {
 		t.Fatalf("add stdio: %v", err)
 	}
 	if err := c.UpsertPlugin(PluginEntry{Name: "stripe", Type: "http", URL: "https://mcp.stripe.com"}); err != nil {
@@ -1035,7 +1035,7 @@ func TestSaveToRoundTrips(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path := filepath.Join(t.TempDir(), "nested", "reasonix.toml")
+	path := filepath.Join(t.TempDir(), "nested", "reamesAgent.toml")
 	if err := c.SaveTo(path); err != nil {
 		t.Fatalf("SaveTo: %v", err)
 	}
@@ -1094,7 +1094,7 @@ func TestSaveToScopesUserAndProjectFiles(t *testing.T) {
 		t.Fatalf("user config mode = %o, want 600", info.Mode().Perm())
 	}
 
-	projectPath := filepath.Join(t.TempDir(), "reasonix.toml")
+	projectPath := filepath.Join(t.TempDir(), "reamesAgent.toml")
 	if err := c.SaveTo(projectPath); err != nil {
 		t.Fatalf("SaveTo project config: %v", err)
 	}
@@ -1138,7 +1138,7 @@ api_key_env = "USER_DEEPSEEK_KEY"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(root, "reamesAgent.toml"), []byte(`
 [[providers]]
 name = "deepseek-flash"
 kind = "openai"
@@ -1187,7 +1187,7 @@ api_key_env = "GLOBAL_SHARED_KEY"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(root, "reamesAgent.toml"), []byte(`
 [[providers]]
 name = "shared"
 kind = "openai"
@@ -1236,7 +1236,7 @@ temperature = 0.4
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(root, "reamesAgent.toml"), []byte(`
 default_model = "deepseek-pro"
 
 [agent]
@@ -1265,7 +1265,7 @@ temperature = 0.8
 func TestLoadForRootIgnoresProjectAgentStepLimitsWithoutUserConfig(t *testing.T) {
 	isolateUserConfigHome(t)
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(root, "reamesAgent.toml"), []byte(`
 [agent]
 max_steps = 3
 planner_max_steps = 4
@@ -1299,7 +1299,7 @@ api_key_env = "GLOBAL_SHARED_KEY"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	projectPath := filepath.Join(root, "reasonix.toml")
+	projectPath := filepath.Join(root, "reamesAgent.toml")
 	if err := os.WriteFile(projectPath, []byte(`
 [[providers]]
 name = "shared"
@@ -1350,7 +1350,7 @@ api_key_env = "GLOBAL_KEY"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	projectPath := filepath.Join(root, "reasonix.toml")
+	projectPath := filepath.Join(root, "reamesAgent.toml")
 	if err := os.WriteFile(projectPath, []byte(`
 config_version = 2
 default_model = "project-local/project-model"
@@ -1392,7 +1392,7 @@ api_key_env = "PROJECT_KEY"
 }
 
 func TestSaveToExistingProjectPersistsTopLevelDelta(t *testing.T) {
-	projectPath := filepath.Join(t.TempDir(), "reasonix.toml")
+	projectPath := filepath.Join(t.TempDir(), "reamesAgent.toml")
 	if err := os.WriteFile(projectPath, []byte("[permissions]\nallow = [\"Bash(go test:*)\"]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1427,7 +1427,7 @@ func TestSaveToExistingProjectPersistsTopLevelDelta(t *testing.T) {
 }
 
 func TestSaveToExistingProjectRemovesPluginDelta(t *testing.T) {
-	projectPath := filepath.Join(t.TempDir(), "reasonix.toml")
+	projectPath := filepath.Join(t.TempDir(), "reamesAgent.toml")
 	cfg := Default()
 	if err := cfg.UpsertPlugin(PluginEntry{Name: "ed", Type: "http", URL: "https://mcp.example.com/mcp", Headers: map[string]string{"Authorization": "Bearer token"}}); err != nil {
 		t.Fatal(err)
@@ -1467,7 +1467,7 @@ func TestSaveForRootDoesNotWriteUserAgentSettingsIntoProjectConfig(t *testing.T)
 	if err := os.WriteFile(userPath, []byte("[agent]\ntemperature = 0.42\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	projectPath := filepath.Join(root, "reasonix.toml")
+	projectPath := filepath.Join(root, "reamesAgent.toml")
 	if err := os.WriteFile(projectPath, []byte("[permissions]\nallow = [\"Bash(go test:*)\"]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

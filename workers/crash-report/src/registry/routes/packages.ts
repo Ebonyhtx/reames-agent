@@ -33,7 +33,7 @@ packages.get("/:handle/:name", async (c) => {
 packages.post("/", writeRateLimit, requireAuth, async (c) => {
   const user = currentUser(c);
   if (!user.emailVerified) {
-    throw new ApiError(403, "email_unverified", "Verify your email at id.reasonix.io before publishing.");
+    throw new ApiError(403, "email_unverified", "Verify your email at id.reames-agent.io before publishing.");
   }
   const input = await parseBody(c, PublishSchema);
   const { packages: repo, events } = repos(c.env);

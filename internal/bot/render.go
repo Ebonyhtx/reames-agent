@@ -8,7 +8,7 @@ import (
 	"time"
 	"unicode"
 
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 )
 
 // renderSink 将 Reasonix 事件流渲染为平台消息。

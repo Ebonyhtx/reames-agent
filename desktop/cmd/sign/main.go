@@ -29,7 +29,7 @@ import (
 
 	"aead.dev/minisign"
 
-	"reasonix/desktop/internal/update"
+	"reames-agent/desktop/internal/update"
 )
 
 // platforms are the manifest keys we publish. A built artifact is matched to a key
@@ -94,7 +94,7 @@ func verifyFile(path string) error {
 }
 
 // genKey generates a fresh minisign key pair, writing the encrypted private key
-// (reasonix.key) and the public key (reasonix.pub) into dir. The password comes
+// (reamesAgent.key) and the public key (reamesAgent.pub) into dir. The password comes
 // from $MINISIGN_PASSWORD. The public key is printed — it's safe to publish; embed
 // it in internal/update/verify.go. The private key never leaves dir.
 func genKey(dir string) error {
@@ -113,8 +113,8 @@ func genKey(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	keyPath := filepath.Join(dir, "reasonix.key")
-	pubPath := filepath.Join(dir, "reasonix.pub")
+	keyPath := filepath.Join(dir, "reamesAgent.key")
+	pubPath := filepath.Join(dir, "reamesAgent.pub")
 	if err := os.WriteFile(keyPath, enc, 0o600); err != nil {
 		return err
 	}
@@ -166,12 +166,12 @@ func signFiles(files []string) error {
 // release tag used in download URLs (e.g. "desktop-v1.1.0").
 func genManifest(dir, version, tag string) error {
 	repo := os.Getenv("GITHUB_REPOSITORY")
-	if repo == "" || repo == "esengine/reasonix" {
+	if repo == "" || repo == "esengine/reamesAgent" {
 		repo = "esengine/DeepSeek-Reasonix"
 	}
 	m := update.Manifest{
 		Version:      version,
-		DownloadPage: "https://reasonix.io/#start",
+		DownloadPage: "https://reamesAgent.io/#start",
 		Platforms:    map[string]update.Asset{},
 	}
 	entries, err := os.ReadDir(dir)

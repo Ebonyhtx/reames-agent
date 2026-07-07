@@ -1,6 +1,6 @@
-# Contributing to Reasonix
+# Contributing to Reames Agent
 
-Thank you for your interest in contributing to Reasonix! This guide covers
+Thank you for your interest in contributing to Reames Agent! This guide covers
 everything you need to get started.
 
 ## Prerequisites
@@ -12,9 +12,9 @@ everything you need to get started.
 ## Getting started
 
 ```bash
-git clone https://github.com/esengine/DeepSeek-Reasonix.git
-cd DeepSeek-Reasonix
-go build ./cmd/reasonix    # builds the CLI binary
+git clone https://github.com/esengine/DeepSeek-Reames Agent.git
+cd DeepSeek-Reames Agent
+go build ./cmd/reames-agent    # builds the CLI binary
 go test ./...              # runs the full test suite
 ```
 
@@ -22,7 +22,7 @@ go test ./...              # runs the full test suite
 
 | Directory | Purpose |
 |-----------|---------|
-| `cmd/reasonix` | CLI entry point |
+| `cmd/reames-agent` | CLI entry point |
 | `internal/agent` | Agent loop, session, coordinator |
 | `internal/cli` | TUI, subcommands, setup wizard |
 | `internal/control` | Transport-agnostic controller |
@@ -73,16 +73,16 @@ desktop tab state — so the two builds never interfere:
 **CLI**
 
 ```bash
-REASONIX_HOME=/tmp/reasonix-dev go run ./cmd/reasonix
+REASONIX_HOME=/tmp/reames-agent-dev go run ./cmd/reames-agent
 # or after building:
-#   REASONIX_HOME=/tmp/reasonix-dev ./bin/reasonix
+#   REASONIX_HOME=/tmp/reames-agent-dev ./bin/reames-agent
 ```
 
 **Desktop**
 
 ```bash
 cd desktop && wails build
-REASONIX_HOME=/tmp/reasonix-dev-isolated build/bin/reasonix-desktop
+REASONIX_HOME=/tmp/reames-agent-dev-isolated build/bin/reames-agent-desktop
 ```
 
 On Windows, use `$env:REASONIX_HOME` in PowerShell or `set REASONIX_HOME=` in
@@ -96,7 +96,7 @@ data leaks in or out.
 
 ### Cache-first review gate
 
-Reasonix treats high prompt-cache hit rate as product behavior. Changes that
+Reames Agent treats high prompt-cache hit rate as product behavior. Changes that
 touch provider-visible system prompt construction, memory prefix, output styles,
 skill index behavior, default tool surfaces, tool schemas, provider request
 serialization, compaction, or MCP/tool registration need explicit cache review.

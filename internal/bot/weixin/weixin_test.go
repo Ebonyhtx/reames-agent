@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/bot"
-	"reasonix/internal/config"
+	"reames-agent/internal/bot"
+	"reames-agent/internal/config"
 )
 
 func TestStartReturnsMissingToken(t *testing.T) {

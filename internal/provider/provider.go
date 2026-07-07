@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode"
 
-	"reasonix/internal/nilutil"
+	"reames-agent/internal/nilutil"
 )
 
 // Role is the role of a message.
@@ -142,7 +142,7 @@ func SanitizeToolPairing(msgs []Message) []Message { return NormalizeMessages(ms
 // This is the wire-safe entry point for provider requests. Stored session loads
 // use NormalizeSessionMessages so they can share the assistant-turn repairs
 // without deleting standalone tool messages that must round-trip through
-// reasonix --resume.
+// reamesAgent --resume.
 //
 // A well-formed history — no unanswered calls, no orphan results, no empty tool-
 // call names, no truncated args — returns the input slice unchanged (same backing
@@ -647,7 +647,7 @@ func (e *AuthError) Error() string {
 	if e.KeySource != "" {
 		key += " from " + e.KeySource
 	}
-	return fmt.Sprintf("authentication failed for provider %q (HTTP %d): %s is invalid or expired — update it (in .env or your environment) and retry, or run `reasonix setup`",
+	return fmt.Sprintf("authentication failed for provider %q (HTTP %d): %s is invalid or expired — update it (in .env or your environment) and retry, or run `reamesAgent setup`",
 		e.Provider, e.Status, key)
 }
 

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"reasonix/internal/diff"
+	"reames-agent/internal/diff"
 )
 
 type fakeWriter struct {

@@ -5,10 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"reasonix/internal/config"
+	"reames-agent/internal/config"
 )
 
-// mcp.go holds the MCP server-management surface shared by the `reasonix mcp`
+// mcp.go holds the MCP server-management surface shared by the `reamesAgent mcp`
 // subcommand (config-only; takes effect next session) and the in-chat `/mcp add`
 // / `/mcp remove` slash commands (which hot-connect via the controller). Both
 // parse arguments through parseMCPAdd so the grammar is identical everywhere.
@@ -147,7 +147,7 @@ func tokenizeArgs(s string) []string {
 	return out
 }
 
-// mcpCommand implements `reasonix mcp <add|remove|list>`. It edits config only
+// mcpCommand implements `reamesAgent mcp <add|remove|list>`. It edits config only
 // (validate → UpsertPlugin/RemovePlugin → Save); the server connects on the next
 // session start. For a live connect inside an open chat, use `/mcp add`.
 func mcpCommand(args []string) int {
@@ -239,7 +239,7 @@ func mcpAddCLI(args []string) int {
 
 func mcpRemoveCLI(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: reasonix mcp remove <name>")
+		fmt.Fprintln(os.Stderr, "usage: reamesAgent mcp remove <name>")
 		return 2
 	}
 	name := args[0]
@@ -261,15 +261,15 @@ func mcpRemoveCLI(args []string) int {
 }
 
 func mcpUsage() {
-	fmt.Println(`Manage MCP servers (persisted to reasonix.toml).
+	fmt.Println(`Manage MCP servers (persisted to reamesAgent.toml).
 
 Usage:
-  reasonix mcp list
-  reasonix mcp add <name> <command> [args...]        stdio server
-  reasonix mcp add <name> --http <url> [--header K=V] remote (Streamable HTTP)
-  reasonix mcp add <name> --sse  <url>               remote (legacy SSE)
-  reasonix mcp import                                import MCP servers from cc-switch
-  reasonix mcp remove <name>
+  reamesAgent mcp list
+  reamesAgent mcp add <name> <command> [args...]        stdio server
+  reamesAgent mcp add <name> --http <url> [--header K=V] remote (Streamable HTTP)
+  reamesAgent mcp add <name> --sse  <url>               remote (legacy SSE)
+  reamesAgent mcp import                                import MCP servers from cc-switch
+  reamesAgent mcp remove <name>
 
 Flags for add:
   --http <url> | --sse <url>   remote transport (omit for a stdio command)
@@ -277,8 +277,8 @@ Flags for add:
   --header K=V                 set an HTTP header (repeatable, remote)
 
 Examples:
-  reasonix mcp add fs npx -y @modelcontextprotocol/server-filesystem .
-  reasonix mcp add stripe --http https://mcp.stripe.com --header "Authorization=Bearer $STRIPE_KEY"
+  reamesAgent mcp add fs npx -y @modelcontextprotocol/server-filesystem .
+  reamesAgent mcp add stripe --http https://mcp.stripe.com --header "Authorization=Bearer $STRIPE_KEY"
 
 Changes take effect on the next session; inside a running chat, use /mcp add to
 connect a server live.

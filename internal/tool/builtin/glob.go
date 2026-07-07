@@ -11,8 +11,8 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/tool"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/tool"
 )
 
 func init() { tool.RegisterBuiltin(globTool{}) }

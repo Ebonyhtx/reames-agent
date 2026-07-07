@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/event"
-	"reasonix/internal/nilutil"
-	"reasonix/internal/provider"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/tool"
+	"reames-agent/internal/event"
+	"reames-agent/internal/nilutil"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/tool"
 )
 
 // Runner carries out one task turn. Both Agent (single model) and Coordinator

@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/proc"
-	"reasonix/internal/sandbox"
+	"reames-agent/internal/proc"
+	"reames-agent/internal/sandbox"
 )
 
 // TestReapTreeKillsGroupStragglers covers #3702: a foreground command that

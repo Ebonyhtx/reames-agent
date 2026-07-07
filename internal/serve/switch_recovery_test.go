@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
 )
 
 // primarySessionFiles filters a recovery-branch glob down to primary session
@@ -35,7 +35,7 @@ func primarySessionFiles(paths []string) []string {
 // bound the just-recovered transcript back to the original file, so every
 // later save re-conflicted and derived yet another recovery branch.
 func TestSwitchModelContinuesRecoveryPathAfterSnapshotConflict(t *testing.T) {
-	t.Setenv("REASONIX_HOME", t.TempDir())
+	t.Setenv("REAMES_AGENT_HOME", t.TempDir())
 	dir := t.TempDir()
 	originalPath := filepath.Join(dir, "switch-conflict.jsonl")
 

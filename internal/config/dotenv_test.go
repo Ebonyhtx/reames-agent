@@ -20,7 +20,7 @@ func TestLoadDotEnvDoesNotImportProjectOrHomeEnv(t *testing.T) {
 
 	t.Chdir(cwd)
 	t.Setenv("HOME", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads HOME on Unix and USERPROFILE on Windows.
 
 	// Start clean so the file values are what land (Setenv auto-restores).
@@ -44,8 +44,8 @@ func TestLoadDotEnvDoesNotImportProjectOrHomeEnv(t *testing.T) {
 	}
 }
 
-// TestLoadDotEnvReadsGlobalCredentials proves `reasonix setup`'s target — the
-// reasonix-owned credentials file under Reasonix home — is loaded from any
+// TestLoadDotEnvReadsGlobalCredentials proves `reamesAgent setup`'s target — the
+// reamesAgent-owned credentials file under Reasonix home — is loaded from any
 // working directory and wins over a project ./.env on a shared key.
 func TestLoadDotEnvReadsGlobalCredentials(t *testing.T) {
 	cwd := t.TempDir()
@@ -53,7 +53,7 @@ func TestLoadDotEnvReadsGlobalCredentials(t *testing.T) {
 
 	t.Chdir(cwd)
 	t.Setenv("HOME", cfgHome)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", cfgHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(cfgHome, ".config"))
 	t.Setenv("AppData", filepath.Join(cfgHome, "AppData"))
@@ -92,7 +92,7 @@ func TestLoadForRootExpandsPluginAuthFromProjectDotEnv(t *testing.T) {
 	cfgHome := t.TempDir()
 
 	t.Setenv("HOME", cfgHome)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", cfgHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(cfgHome, ".config"))
 	t.Setenv("AppData", filepath.Join(cfgHome, "AppData"))
@@ -135,7 +135,7 @@ func TestProjectDotEnvUsesDotenvSyntax(t *testing.T) {
 	cfgHome := t.TempDir()
 
 	t.Setenv("HOME", cfgHome)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", cfgHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(cfgHome, ".config"))
 	t.Setenv("AppData", filepath.Join(cfgHome, "AppData"))
@@ -197,7 +197,7 @@ func TestDotEnvFileWarningsReportDuplicateKeysWithoutValues(t *testing.T) {
 
 func TestDotEnvFileFilteredPreservesProjectScopeRules(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(path, []byte("PLUGIN_TOKEN=project\nREASONIX_HOME=blocked\nHOME=blocked\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("PLUGIN_TOKEN=project\nREAMES_AGENT_HOME=blocked\nHOME=blocked\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	file, ok := readDotEnvFile(path)
@@ -208,8 +208,8 @@ func TestDotEnvFileFilteredPreservesProjectScopeRules(t *testing.T) {
 	if got["PLUGIN_TOKEN"] != "project" {
 		t.Fatalf("PLUGIN_TOKEN = %q", got["PLUGIN_TOKEN"])
 	}
-	if _, ok := got["REASONIX_HOME"]; ok {
-		t.Fatalf("REASONIX_HOME should be filtered: %+v", got)
+	if _, ok := got["REAMES_AGENT_HOME"]; ok {
+		t.Fatalf("REAMES_AGENT_HOME should be filtered: %+v", got)
 	}
 	if _, ok := got["HOME"]; ok {
 		t.Fatalf("HOME should be filtered: %+v", got)
@@ -222,7 +222,7 @@ func TestLoadForRootScopesProjectDotEnvPerWorkspace(t *testing.T) {
 	projectB := t.TempDir()
 
 	t.Setenv("HOME", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
@@ -277,18 +277,18 @@ func TestLoadForRootFiltersProjectDotEnvControlVars(t *testing.T) {
 	redirect := filepath.Join(project, "state")
 
 	t.Setenv("HOME", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
-	t.Setenv("REASONIX_STATE_HOME", "")
-	os.Unsetenv("REASONIX_STATE_HOME")
+	t.Setenv("REAMES_AGENT_STATE_HOME", "")
+	os.Unsetenv("REAMES_AGENT_STATE_HOME")
 
 	wantCred := UserCredentialsPath()
 	if wantCred == "" {
 		t.Skip("user credentials path unavailable")
 	}
-	if err := os.WriteFile(filepath.Join(project, ".env"), []byte("REASONIX_STATE_HOME="+redirect+"\nPLUGIN_TOKEN=project-token\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(project, ".env"), []byte("REAMES_AGENT_STATE_HOME="+redirect+"\nPLUGIN_TOKEN=project-token\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(project, ".mcp.json"), []byte(`{
@@ -298,7 +298,7 @@ func TestLoadForRootFiltersProjectDotEnvControlVars(t *testing.T) {
       "url": "https://mcp.example.test",
       "headers": {
         "Authorization": "Bearer ${PLUGIN_TOKEN}",
-        "State": "${REASONIX_STATE_HOME:-default-state}"
+        "State": "${REAMES_AGENT_STATE_HOME:-default-state}"
       }
     }
   }
@@ -320,7 +320,7 @@ func TestLoadForRootFiltersProjectDotEnvControlVars(t *testing.T) {
 	if got := UserCredentialsPath(); got != wantCred {
 		t.Fatalf("project .env redirected credentials path: %q want %q", got, wantCred)
 	}
-	if got := os.Getenv("REASONIX_STATE_HOME"); got != "" {
+	if got := os.Getenv("REAMES_AGENT_STATE_HOME"); got != "" {
 		t.Fatalf("project control var leaked into process env: %q", got)
 	}
 }
@@ -331,7 +331,7 @@ func TestLoadForRootResolvesProviderCredentialsOverInheritedEnv(t *testing.T) {
 	key := "KEY_PROVIDER_GLOBAL_PRIORITY"
 
 	t.Setenv("HOME", cfgHome)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", cfgHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(cfgHome, ".config"))
 	t.Setenv("AppData", filepath.Join(cfgHome, "AppData"))
@@ -347,7 +347,7 @@ func TestLoadForRootResolvesProviderCredentialsOverInheritedEnv(t *testing.T) {
 	if err := os.WriteFile(cred, []byte(key+"=from_credentials\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
 default_model = "custom/m"
 [[providers]]
 name = "custom"
@@ -381,7 +381,7 @@ func TestLoadForRootIgnoresProjectProviderEnvAndInheritedEnv(t *testing.T) {
 	key := "KEY_PROVIDER_PROJECT_PRIORITY"
 
 	t.Setenv("HOME", cfgHome)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", cfgHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(cfgHome, ".config"))
 	t.Setenv("AppData", filepath.Join(cfgHome, "AppData"))
@@ -390,7 +390,7 @@ func TestLoadForRootIgnoresProjectProviderEnvAndInheritedEnv(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(project, ".env"), []byte(key+"=from_project\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
 default_model = "custom/m"
 [[providers]]
 name = "custom"
@@ -423,7 +423,7 @@ func TestResolveCredentialGlobalFirstDoesNotMutateProjectEnv(t *testing.T) {
 	home := t.TempDir()
 
 	t.Setenv("HOME", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
@@ -496,7 +496,7 @@ func TestResolveCredentialSourceShowsCredentialsShadowingProjectEnv(t *testing.T
 
 	t.Chdir(cwd)
 	t.Setenv("HOME", cfgHome)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", cfgHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(cfgHome, ".config"))
 	t.Setenv("AppData", filepath.Join(cfgHome, "AppData"))
@@ -541,7 +541,7 @@ func TestResolveCredentialSourceShowsCredentialsShadowingEmptyProjectEnv(t *test
 
 	t.Chdir(cwd)
 	t.Setenv("HOME", cfgHome)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", cfgHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(cfgHome, ".config"))
 	t.Setenv("AppData", filepath.Join(cfgHome, "AppData"))
@@ -585,7 +585,7 @@ func TestResolveCredentialSourceShowsCredentialsBeforeHomeEnv(t *testing.T) {
 
 	t.Chdir(cwd)
 	t.Setenv("HOME", cfgHome)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", cfgHome)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(cfgHome, ".config"))
 	t.Setenv("AppData", filepath.Join(cfgHome, "AppData"))
@@ -623,7 +623,7 @@ func TestStoreCredentialLinesFileMode(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("KEY_FILE_MODE", "")
 	os.Unsetenv("KEY_FILE_MODE")
 
@@ -652,15 +652,15 @@ func TestUserCredentialsPathIgnoresReasonixStateHome(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
-	t.Setenv("REASONIX_HOME", filepath.Join(home, "reasonix-home"))
-	t.Setenv("REASONIX_STATE_HOME", state)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, "reamesAgent-home"))
+	t.Setenv("REAMES_AGENT_STATE_HOME", state)
 
-	want := filepath.Join(home, "reasonix-home", ".env")
+	want := filepath.Join(home, "reamesAgent-home", ".env")
 	if got := UserCredentialsPath(); got != want {
 		t.Fatalf("UserCredentialsPath() = %q, want %q", got, want)
 	}
 	if strings.HasPrefix(UserCredentialsPath(), state) {
-		t.Fatalf("credentials path must not live under REASONIX_STATE_HOME: %q", UserCredentialsPath())
+		t.Fatalf("credentials path must not live under REAMES_AGENT_STATE_HOME: %q", UserCredentialsPath())
 	}
 }
 
@@ -669,7 +669,7 @@ func TestRemoveCredentialMarksClearedAndSetRemovesMarker(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 
 	if _, err := SetCredential("KEY_REMOVE_MARKER", "old"); err != nil {
 		t.Fatalf("SetCredential old: %v", err)
@@ -700,7 +700,7 @@ func TestStoreCredentialLinesRejectsUnsafeFileLines(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 
 	_, err := StoreCredentialLines([]string{
 		"VALID_KEY=kept",
@@ -727,7 +727,7 @@ func TestStoreCredentialLinesParsesDotenvQuotes(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 
 	_, err := StoreCredentialLines([]string{`export QUOTED_KEY="value with spaces # kept"`})
 	if err != nil {
@@ -750,7 +750,7 @@ func TestSetCredentialRejectsInvalidInput(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 
 	if _, err := SetCredential("BAD-KEY", "value"); err == nil {
 		t.Fatal("SetCredential accepted invalid key")
@@ -768,15 +768,15 @@ func TestProjectConfigCannotOverrideCredentialStoreMode(t *testing.T) {
 	project := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "")
-	os.Unsetenv("REASONIX_CREDENTIALS_STORE")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "")
+	os.Unsetenv("REAMES_AGENT_CREDENTIALS_STORE")
 	if err := os.MkdirAll(filepath.Dir(UserConfigPath()), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(UserConfigPath(), []byte(`credentials_store = "file"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`credentials_store = "keyring"`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`credentials_store = "keyring"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -794,7 +794,7 @@ func TestProjectConfigCannotOverrideCredentialStoreMode(t *testing.T) {
 func TestLoadDotEnvGlobalCredentialsOverrideEnv(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))

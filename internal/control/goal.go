@@ -10,8 +10,8 @@ import (
 	"sync"
 	"unicode"
 
-	"reasonix/internal/evidence"
-	"reasonix/internal/store"
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/store"
 )
 
 const (

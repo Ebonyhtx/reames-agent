@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/store"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/store"
 )
 
 var ErrSessionLeaseHeld = errors.New("session lease held by another runtime")

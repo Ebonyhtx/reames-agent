@@ -1,5 +1,5 @@
-const R2_BASE = "https://dl.reasonix.io";
-const GITHUB_RELEASES_API = "https://api.github.com/repos/esengine/DeepSeek-Reasonix/releases?per_page=30";
+const R2_BASE = "https://dl.reames-agent.io";
+const GITHUB_RELEASES_API = "https://api.github.com/repos/esengine/DeepSeek-Reames Agent/releases?per_page=30";
 
 type ReleaseChannel = "stable" | "canary";
 
@@ -23,7 +23,7 @@ function gatewayHeaders(source: string): HeadersInit {
   return {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "public, max-age=60",
-    "x-reasonix-release-source": source,
+    "x-reames-agent-release-source": source,
   };
 }
 
@@ -41,7 +41,7 @@ async function fetchManifestText(url: string, source: string): Promise<Response 
     const res = await fetch(url, {
       headers: {
         accept: "application/json",
-        "user-agent": "reasonix-release-gateway",
+        "user-agent": "reames-agent-release-gateway",
       },
     });
     if (!res.ok) return null;
@@ -58,7 +58,7 @@ async function fetchLatestDesktopManifestFromGitHub(): Promise<Response | null> 
     const list = await fetch(GITHUB_RELEASES_API, {
       headers: {
         accept: "application/vnd.github+json",
-        "user-agent": "reasonix-release-gateway",
+        "user-agent": "reames-agent-release-gateway",
       },
     });
     if (!list.ok) return null;

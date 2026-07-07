@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 // ContractEntry is the provider-visible contract for a tool schema snapshot.

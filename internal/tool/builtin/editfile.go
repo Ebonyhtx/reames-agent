@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"reasonix/internal/tool"
+	"reames-agent/internal/tool"
 )
 
 func init() { tool.RegisterBuiltin(editFile{}) }

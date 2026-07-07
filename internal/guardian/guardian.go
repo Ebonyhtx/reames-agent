@@ -10,11 +10,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/event"
-	"reasonix/internal/nilutil"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/event"
+	"reames-agent/internal/nilutil"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 // PolicyPrompt returns the guardian safety policy as a string. The policy is

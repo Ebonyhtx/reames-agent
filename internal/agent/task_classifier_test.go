@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 // TestHeuristicClassifier_IsTask 测试启发式分类器

@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/frontmatter"
+	"reames-agent/internal/frontmatter"
 )
 
 // OutputStyle is one selectable persona. Body is appended to the system prompt
@@ -61,10 +61,10 @@ var builtins = []OutputStyle{
 
 // Dirs returns the output-style search directories in load order (later wins),
 // mirroring command/skill discovery: home convention dirs, then project ones.
-// Home convention dirs are skipped when REASONIX_HOME is set (isolated runtime).
+// Home convention dirs are skipped when REAMES_AGENT_HOME is set (isolated runtime).
 func Dirs() []string {
 	var dirs []string
-	if os.Getenv("REASONIX_HOME") == "" {
+	if os.Getenv("REAMES_AGENT_HOME") == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			for i := len(conventionDirs) - 1; i >= 0; i-- {
 				dirs = append(dirs, filepath.Join(home, conventionDirs[i], "output-styles"))
@@ -79,7 +79,7 @@ func Dirs() []string {
 
 // conventionDirs mirrors config.ConventionDirs (kept local to avoid an import
 // cycle; config imports nothing from here, but this package stays dependency-light).
-var conventionDirs = []string{".reasonix", ".agents", ".agent", ".claude"}
+var conventionDirs = []string{".reames-agent", ".agents", ".agent", ".claude"}
 
 // List returns every available style — built-ins plus the markdown files under
 // dirs — deduped by lowercased name, with custom files overriding built-ins.

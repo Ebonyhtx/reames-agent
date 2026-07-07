@@ -27,19 +27,19 @@
 !/build/linux
 /build/linux/*
 !/build/linux/nfpm.yaml
-!/build/linux/reasonix.desktop
+!/build/linux/reames-agent.desktop
 !/build/linux/icons
 !/build/linux/icons/**
 
 # Go test binaries
 *.test
 
-# Local config symlinks for `wails dev` (point at the repo-root reasonix.toml/.env
+# Local config symlinks for `wails dev` (point at the repo-root reames-agent.toml/.env
 # so the desktop app resolves the same config/keys the CLI does). Never commit.
-/reasonix.toml
+/reames-agent.toml
 /.env
 
-# `go build` binary produced in-tree (module reasonix/desktop → "desktop")
+# `go build` binary produced in-tree (module reames-agent/desktop → "desktop")
 /desktop
 # Wails dependency-change cache
 /frontend/package.json.md5

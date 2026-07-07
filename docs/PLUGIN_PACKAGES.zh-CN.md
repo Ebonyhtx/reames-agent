@@ -1,11 +1,11 @@
-# Reasonix 插件包
+# Reames Agent 插件包
 
-Reasonix 插件包把 skills、hooks 和 MCP servers 组织成一个可安装单元。
+Reames Agent 插件包把 skills、hooks 和 MCP servers 组织成一个可安装单元。
 
 ## CLI 模式
 
-在终端里使用 `reasonix plugin` 安装和管理插件包。插件包当前按全局范围安装，
-写入 Reasonix home 目录。
+在终端里使用 `reames-agent plugin` 安装和管理插件包。插件包当前按全局范围安装，
+写入 Reames Agent home 目录。
 
 ### 通过 CLI 安装
 
@@ -15,31 +15,31 @@ Reasonix 插件包把 skills、hooks 和 MCP servers 组织成一个可安装单
   `https://github.com/obra/superpowers`。
 - GitHub 分支或子目录 URL，例如
   `https://github.com/owner/repo/tree/main/path/to/plugin`。
-- 本地目录，目录内需要包含 `reasonix-plugin.json`、
+- 本地目录，目录内需要包含 `reames-agent-plugin.json`、
   `.codex-plugin/plugin.json` 或 `.claude-plugin/plugin.json`。
 
 只预览安装计划，不写文件：
 
 ```bash
-reasonix plugin install git:github.com/obra/superpowers --dry-run
+reames-agent plugin install git:github.com/obra/superpowers --dry-run
 ```
 
 确认计划后安装：
 
 ```bash
-reasonix plugin install git:github.com/obra/superpowers --yes
+reames-agent plugin install git:github.com/obra/superpowers --yes
 ```
 
 指定安装名称，或覆盖已安装的同名插件：
 
 ```bash
-reasonix plugin install git:github.com/obra/superpowers --name superpowers --replace --yes
+reames-agent plugin install git:github.com/obra/superpowers --name superpowers --replace --yes
 ```
 
 以开发模式使用本地目录：
 
 ```bash
-reasonix plugin install /path/to/plugin --link --replace --yes
+reames-agent plugin install /path/to/plugin --link --replace --yes
 ```
 
 CLI 安装参数：
@@ -49,18 +49,18 @@ CLI 安装参数：
 - `--replace` 允许当前来源替换已安装的同名插件。
 - `--name <name>` 或 `--name=<name>` 覆盖插件 manifest 里的名称，
   作为本次安装名称。
-- `--link` 链接本地插件目录，而不是复制到 Reasonix 的插件存储目录。
+- `--link` 链接本地插件目录，而不是复制到 Reames Agent 的插件存储目录。
   移动或删除该目录会导致这个链接插件失效。
 
-如果运行 `reasonix plugin install <source>` 时既没有 `--dry-run`，
+如果运行 `reames-agent plugin install <source>` 时既没有 `--dry-run`，
 也没有 `--yes`，CLI 会拒绝写文件，并提示使用其中一个参数重新运行。
 安装和移除命令会输出结构化 JSON，来源于桌面端同一套 install-source 后端。
 
 插件状态和内容写入：
 
 ```text
-~/.reasonix/plugin-packages.json
-~/.reasonix/plugins/<name>/
+~/.reames-agent/plugin-packages.json
+~/.reames-agent/plugins/<name>/
 ```
 
 ### 通过 CLI 管理
@@ -68,13 +68,13 @@ CLI 安装参数：
 列出已安装插件：
 
 ```bash
-reasonix plugin list
+reames-agent plugin list
 ```
 
 查看某个插件的元数据、根目录、来源以及导出的能力数量：
 
 ```bash
-reasonix plugin show superpowers
+reames-agent plugin show superpowers
 ```
 
 如果能读取到能力明细，`show` 也会输出具体清单：
@@ -86,20 +86,20 @@ reasonix plugin show superpowers
 检查 manifest 和 skill roots 是否可读：
 
 ```bash
-reasonix plugin doctor superpowers
+reames-agent plugin doctor superpowers
 ```
 
 在不卸载的情况下启用或禁用插件：
 
 ```bash
-reasonix plugin disable superpowers
-reasonix plugin enable superpowers
+reames-agent plugin disable superpowers
+reames-agent plugin enable superpowers
 ```
 
 移除插件：
 
 ```bash
-reasonix plugin remove superpowers --yes
+reames-agent plugin remove superpowers --yes
 ```
 
 `remove` 也可以写成 `uninstall`。它需要 `--yes`，
@@ -108,7 +108,7 @@ reasonix plugin remove superpowers --yes
 
 ### 在 CLI 中使用已安装插件
 
-已安装插件不会打开一个独立聊天界面。插件启用后，Reasonix 会把它的能力加载到普通交互会话里：
+已安装插件不会打开一个独立聊天界面。插件启用后，Reames Agent 会把它的能力加载到普通交互会话里：
 
 - 在交互会话里运行 `/plugins` 可以列出已安装插件包。
   运行 `/plugins show <name>` 可以在不离开聊天的情况下查看该插件导出的
@@ -118,9 +118,9 @@ reasonix plugin remove superpowers --yes
 - **Hooks** 会在配置的生命周期事件里自动运行，例如 `SessionStart`、
   `UserPromptSubmit`、`PreToolUse` 或 `PostToolUse`。
 - **MCP servers** 会进入正常 MCP/工具流程。用户只需要描述任务，
-  Reasonix 会在相关时调用插件提供的工具。
+  Reames Agent 会在相关时调用插件提供的工具。
 
-如果是在另一个终端里安装、启用、禁用或更新插件，而当前已有 `reasonix` 会话正在运行，
+如果是在另一个终端里安装、启用、禁用或更新插件，而当前已有 `reames-agent` 会话正在运行，
 建议开启新会话，或重新打开 `/skills` 确认当前会话能看到预期技能。
 
 ## 桌面端设置
@@ -178,7 +178,7 @@ reasonix plugin remove superpowers --yes
 
 ## 原生 Manifest
 
-Reasonix 原生插件在根目录声明 `reasonix-plugin.json`：
+Reames Agent 原生插件在根目录声明 `reames-agent-plugin.json`：
 
 ```json
 {
@@ -202,26 +202,26 @@ Reasonix 原生插件在根目录声明 `reasonix-plugin.json`：
 }
 ```
 
-相对路径都按插件根目录解析。Reasonix 安装插件时不会执行第三方安装脚本。
+相对路径都按插件根目录解析。Reames Agent 安装插件时不会执行第三方安装脚本。
 
 ## Codex 与 Claude 兼容
 
-Reasonix 也会读取 `.codex-plugin/plugin.json` 和 `.claude-plugin/plugin.json`。
-Reasonix 尚未映射的 Claude 插件能力（`commands/`、`agents/`、`hooks/hooks.json`、
+Reames Agent 也会读取 `.codex-plugin/plugin.json` 和 `.claude-plugin/plugin.json`。
+Reames Agent 尚未映射的 Claude 插件能力（`commands/`、`agents/`、`hooks/hooks.json`、
 `.mcp.json`）会以安装警告的形式提示，而不是被静默丢弃；多插件的
 `marketplace.json` 索引暂不支持——请逐个安装插件目录。
-对于 Superpowers 和 Claude 风格 skill 包，Reasonix 会映射：
+对于 Superpowers 和 Claude 风格 skill 包，Reames Agent 会映射：
 
-- `skills` 到 Reasonix skill root。Claude 清单若未声明 `skills` 字段，会回退到
+- `skills` 到 Reames Agent skill root。Claude 清单若未声明 `skills` 字段，会回退到
   约定目录 `skills/`（或 `.claude/skills/`），与 Claude 自身的自动发现一致。
-- 如果存在 `hooks/session-start-codex`，映射为 Reasonix `SessionStart` hook。
+- 如果存在 `hooks/session-start-codex`，映射为 Reames Agent `SessionStart` hook。
 - 插件根目录的 `CLAUDE.md` 会映射为内置的 `SessionStart` 上下文 hook。
-  Reasonix 会直接读取该文件，不通过 shell 命令。
-- `.claude/settings.json` 里的 command hooks 会按同名事件映射到 Reasonix hooks。
-  Claude 的 `matcher` 字段会映射到 Reasonix `match`；hook 命令以插件根目录作为
+  Reames Agent 会直接读取该文件，不通过 shell 命令。
+- `.claude/settings.json` 里的 command hooks 会按同名事件映射到 Reames Agent hooks。
+  Claude 的 `matcher` 字段会映射到 Reames Agent `match`；hook 命令以插件根目录作为
   `cwd` 执行；Claude `timeout` 按秒解析。
 
-不支持的 Claude hook item type 会跳过并产生 warning。Reasonix 不会执行第三方安装脚本，
+不支持的 Claude hook item type 会跳过并产生 warning。Reames Agent 不会执行第三方安装脚本，
 也不会实现 marketplace 专用安装协议。
 
 插件 hook 会收到这些环境变量：

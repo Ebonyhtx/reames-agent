@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/control"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
 )
 
 // deferredRebuildRetryInterval is how often the retry loop probes a held

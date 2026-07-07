@@ -9,8 +9,8 @@ import "sync"
 // Cross-process writers still race. Every runtime in-process editor takes this
 // lock around its load→mutate→save cycle: bot mapping/pairing persistence,
 // desktop settings and MCP writers, serve effort switches, controller skill
-// toggles, and the CLI TUI / `reasonix config` write paths. One writer stays
-// unlocked on purpose: the single-threaded `reasonix setup` wizard (an
+// toggles, and the CLI TUI / `reamesAgent config` write paths. One writer stays
+// unlocked on purpose: the single-threaded `reamesAgent setup` wizard (an
 // interactive whole-file write with no concurrent editors in that process).
 // Desktop's read-only config loads (tray/view/bot-runtime paths) never write:
 // they apply legacy migrations in memory only, and the migrated form reaches

@@ -1,4 +1,4 @@
-// Anti-spam gate. Identity is verified upstream (id.reasonix.io); this layer
+// Anti-spam gate. Identity is verified upstream (id.reames-agent.io); this layer
 // decides whether a *verified* member may create content right now, using trust
 // levels rather than per-post content scanning — so it stays cheap and the cost
 // sits at the identity/first-post gate, not on every message.

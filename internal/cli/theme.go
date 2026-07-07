@@ -12,8 +12,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"reasonix/internal/config"
-	"reasonix/internal/i18n"
+	"reames-agent/internal/config"
+	"reames-agent/internal/i18n"
 )
 
 type cliColor struct {
@@ -107,7 +107,7 @@ func configureCLITheme(mode string) {
 }
 
 func configureCLIThemeWithStyle(mode, style string) {
-	if env := strings.TrimSpace(os.Getenv("REASONIX_THEME")); env != "" {
+	if env := strings.TrimSpace(os.Getenv("REAMES_AGENT_THEME")); env != "" {
 		if st, ok := cliThemeStyleByName(env); ok {
 			mode = st.mode
 			style = st.name
@@ -115,7 +115,7 @@ func configureCLIThemeWithStyle(mode, style string) {
 			mode = env
 		}
 	}
-	if env := strings.TrimSpace(os.Getenv("REASONIX_THEME_STYLE")); env != "" {
+	if env := strings.TrimSpace(os.Getenv("REAMES_AGENT_THEME_STYLE")); env != "" {
 		style = env
 	}
 	activeCLITheme = resolveCLIThemeWithStyle(mode, style)

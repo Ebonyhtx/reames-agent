@@ -18,7 +18,7 @@ import { loadLayoutSize, saveLayoutSize } from "../lib/layoutPreferences";
 
 import { applySetState } from "./setState";
 
-const SIDEBAR_COLLAPSED_KEY = "reasonix.sidebar.collapsed";
+const SIDEBAR_COLLAPSED_KEY = "reames-agent.sidebar.collapsed";
 const SIDEBAR_DEFAULT_WIDTH = 264;
 export const SIDEBAR_MIN_WIDTH = 264;
 export const CREATION_SIDEBAR_MIN_WIDTH = 236;

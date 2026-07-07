@@ -10,7 +10,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 // TodoItem mirrors the todo_write item shape the host needs for step matching.

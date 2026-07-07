@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/store"
-	"reasonix/internal/tool"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/store"
+	"reames-agent/internal/tool"
 )
 
 type SubagentStatus string
@@ -90,7 +90,7 @@ func (r *SubagentRun) Release() {
 }
 
 // EphemeralSubagentRun is a non-persisted run for callers without an owning
-// parent session — e.g. headless `reasonix run`, which never mints a session
+// parent session — e.g. headless `reamesAgent run`, which never mints a session
 // path. Its empty Ref makes the store's MarkRunning/SaveCompleted/SaveFailed
 // methods no-op and keeps FormatSubagentResult from emitting a transcript
 // reference, so the sub-agent behaves exactly as it did before persisted

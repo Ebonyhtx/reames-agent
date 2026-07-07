@@ -12,7 +12,7 @@ name: Release npm
 #
 # A manual workflow_dispatch can publish either an opt-in canary from the current
 # ref or an approved stable/next version when tag creation is restricted. Canary
-# publishes to the `canary` dist-tag (npm i reasonix@canary) and never moves
+# publishes to the `canary` dist-tag (npm i reames-agent@canary) and never moves
 # `next`/`latest`. build.mjs decides the dist-tag: a `-canary.` build is `canary`,
 # any other prerelease is `next`, and a stable version is `latest` (#5822 — the
 # old "promote latest by hand" rule left it pinned at 0.53.2 and downgraded
@@ -102,7 +102,7 @@ jobs:
             *)          tag=latest ;;
           esac
           for attempt in 1 2 3 4 5 6; do
-            got="$(npm view reasonix dist-tags."$tag" 2>/dev/null || true)"
+            got="$(npm view reames-agent dist-tags."$tag" 2>/dev/null || true)"
             if [ "$got" = "$version" ]; then
               echo "dist-tag $tag -> $got"
               exit 0

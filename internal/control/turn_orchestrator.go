@@ -6,11 +6,11 @@ import (
 	"errors"
 	"strings"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/autoresearch"
-	"reasonix/internal/event"
-	"reasonix/internal/evidence"
-	"reasonix/internal/jobs"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/autoresearch"
+	"reames-agent/internal/event"
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/jobs"
 )
 
 // turnOrchestrator owns foreground turn execution while Controller keeps the

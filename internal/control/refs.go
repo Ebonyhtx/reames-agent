@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/fileref"
-	"reasonix/internal/proc"
+	"reames-agent/internal/fileref"
+	"reames-agent/internal/proc"
 )
 
 // maxFileRefBytes caps how much of an @-referenced file is injected into a
@@ -43,7 +43,7 @@ type refKind int
 const (
 	refResource refKind = iota // an MCP resource: @<server>:<uri>
 	refFile                    // a local file or directory: @<path>
-	refImage                   // a local image attachment: @.reasonix/attachments/<file>
+	refImage                   // a local image attachment: @.reames-agent/attachments/<file>
 )
 
 // ref is a resolved @reference found in a submitted line.
@@ -72,7 +72,7 @@ type ExternalFolderRefEntry struct {
 var refTokenRe = regexp.MustCompile(`@([^\s]+)`)
 var pathLocationSuffixRe = regexp.MustCompile(`:\d+(?::\d+)?:?$`)
 
-const externalFolderRefPrefix = "__reasonix_external_folder"
+const externalFolderRefPrefix = "__reamesAgent_external_folder"
 
 // parseRefTokens extracts the deduped, punctuation-trimmed tokens following '@'
 // in a line. Pure: classification (server? file?) happens in classifyRef.
@@ -111,7 +111,7 @@ func classifyRef(token string, known map[string]bool, exists func(string) bool) 
 }
 
 func isAttachmentRef(token string) bool {
-	return strings.HasPrefix(filepath.ToSlash(token), ".reasonix/attachments/")
+	return strings.HasPrefix(filepath.ToSlash(token), ".reames-agent/attachments/")
 }
 
 func isImageAttachmentRef(token string) bool {

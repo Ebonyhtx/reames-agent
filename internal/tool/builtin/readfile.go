@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/text/transform"
 
-	fileenc "reasonix/internal/fileutil/encoding"
-	"reasonix/internal/tool"
+	fileenc "reames-agent/internal/fileutil/encoding"
+	"reames-agent/internal/tool"
 )
 
 const (

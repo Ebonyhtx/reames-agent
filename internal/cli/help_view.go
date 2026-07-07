@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/command"
-	"reasonix/internal/i18n"
-	"reasonix/internal/plugin"
-	"reasonix/internal/skill"
+	"reames-agent/internal/command"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/plugin"
+	"reames-agent/internal/skill"
 )
 
 const helpMaxDynamicItems = 8

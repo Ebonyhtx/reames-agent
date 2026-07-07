@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/netclient"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/tool"
+	"reames-agent/internal/netclient"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/tool"
 )
 
 // Workspace builds a built-in tool set bound to a working directory, so several

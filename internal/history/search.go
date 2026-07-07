@@ -9,10 +9,10 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/provider"
-	"reasonix/internal/retrieval"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/retrieval"
+	"reames-agent/internal/store"
 )
 
 // Kind identifies the part of a saved message indexed for retrieval.

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"sync"
 
-	"reasonix/internal/agent"
+	"reames-agent/internal/agent"
 )
 
 // SessionLeaseKeeper owns at most one session lease on behalf of a frontend
-// that binds session files for writing (the CLI chat/run commands, `reasonix
+// that binds session files for writing (the CLI chat/run commands, `reamesAgent
 // serve`, one ACP session). Desktop tabs keep their own per-tab lease
 // management; this keeper is the equivalent for the single-session surfaces:
 // it follows the active session path across resumes, forks, and fresh-session

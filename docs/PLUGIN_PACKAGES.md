@@ -1,12 +1,12 @@
-# Reasonix Plugin Packages
+# Reames Agent Plugin Packages
 
-Reasonix plugin packages bundle skills, hooks, and MCP servers behind one
+Reames Agent plugin packages bundle skills, hooks, and MCP servers behind one
 installable unit.
 
 ## CLI Mode
 
-Use `reasonix plugin` when installing or managing plugin packages from a
-terminal. Plugin packages are installed globally under the Reasonix home
+Use `reames-agent plugin` when installing or managing plugin packages from a
+terminal. Plugin packages are installed globally under the Reames Agent home
 directory.
 
 ### Install From CLI
@@ -17,31 +17,31 @@ directory.
   `https://github.com/obra/superpowers`.
 - A GitHub branch or subdirectory URL, such as
   `https://github.com/owner/repo/tree/main/path/to/plugin`.
-- A local directory that contains `reasonix-plugin.json`,
+- A local directory that contains `reames-agent-plugin.json`,
   `.codex-plugin/plugin.json`, or `.claude-plugin/plugin.json`.
 
 Preview the install plan without writing files:
 
 ```bash
-reasonix plugin install git:github.com/obra/superpowers --dry-run
+reames-agent plugin install git:github.com/obra/superpowers --dry-run
 ```
 
 Install a plugin after reviewing the plan:
 
 ```bash
-reasonix plugin install git:github.com/obra/superpowers --yes
+reames-agent plugin install git:github.com/obra/superpowers --yes
 ```
 
 Install with an explicit name or replace an installed plugin with the same name:
 
 ```bash
-reasonix plugin install git:github.com/obra/superpowers --name superpowers --replace --yes
+reames-agent plugin install git:github.com/obra/superpowers --name superpowers --replace --yes
 ```
 
 Use a local directory in developer mode:
 
 ```bash
-reasonix plugin install /path/to/plugin --link --replace --yes
+reames-agent plugin install /path/to/plugin --link --replace --yes
 ```
 
 CLI install flags:
@@ -52,10 +52,10 @@ CLI install flags:
   name.
 - `--name <name>` or `--name=<name>` overrides the name from the plugin
   manifest for this install.
-- `--link` links a local plugin directory instead of copying it into Reasonix's
+- `--link` links a local plugin directory instead of copying it into Reames Agent's
   plugin storage. Moving or deleting that directory breaks the linked plugin.
 
-Running `reasonix plugin install <source>` without `--dry-run` or `--yes`
+Running `reames-agent plugin install <source>` without `--dry-run` or `--yes`
 refuses to write files and prints a reminder to rerun with one of those flags.
 Install and remove commands print the structured JSON response from the same
 install-source backend used by the desktop UI.
@@ -63,8 +63,8 @@ install-source backend used by the desktop UI.
 Installed plugin state is stored in:
 
 ```text
-~/.reasonix/plugin-packages.json
-~/.reasonix/plugins/<name>/
+~/.reames-agent/plugin-packages.json
+~/.reames-agent/plugins/<name>/
 ```
 
 ### Manage From CLI
@@ -72,13 +72,13 @@ Installed plugin state is stored in:
 List installed plugins:
 
 ```bash
-reasonix plugin list
+reames-agent plugin list
 ```
 
 Show one plugin's metadata, root, source, and exported capability counts:
 
 ```bash
-reasonix plugin show superpowers
+reames-agent plugin show superpowers
 ```
 
 `show` also prints the concrete capability inventory when available:
@@ -90,20 +90,20 @@ reasonix plugin show superpowers
 Check that the manifest and skill roots are readable:
 
 ```bash
-reasonix plugin doctor superpowers
+reames-agent plugin doctor superpowers
 ```
 
 Enable or disable a plugin without uninstalling it:
 
 ```bash
-reasonix plugin disable superpowers
-reasonix plugin enable superpowers
+reames-agent plugin disable superpowers
+reames-agent plugin enable superpowers
 ```
 
 Remove a plugin:
 
 ```bash
-reasonix plugin remove superpowers --yes
+reames-agent plugin remove superpowers --yes
 ```
 
 `remove` also accepts `uninstall` as an alias. It requires `--yes` because it
@@ -113,7 +113,7 @@ external source directory is left in place.
 ### Use Installed Plugins From CLI
 
 Installed plugins do not open a separate chat surface. When a plugin is enabled,
-Reasonix loads its capabilities into normal interactive sessions:
+Reames Agent loads its capabilities into normal interactive sessions:
 
 - Run `/plugins` inside an interactive session to list installed plugin
   packages. Run `/plugins show <name>` to inspect a plugin's exported skills,
@@ -123,10 +123,10 @@ Reasonix loads its capabilities into normal interactive sessions:
 - **Hooks** run automatically at their configured lifecycle events, such as
   `SessionStart`, `UserPromptSubmit`, `PreToolUse`, or `PostToolUse`.
 - **MCP servers** join the normal MCP/tool flow. Ask for the task you want done;
-  Reasonix can call the plugin's tools when they are relevant.
+  Reames Agent can call the plugin's tools when they are relevant.
 
 After installing, enabling, disabling, or updating a plugin from a separate
-terminal while a session is already running, start a new `reasonix` session or
+terminal while a session is already running, start a new `reames-agent` session or
 reopen `/skills` to verify the current session sees the expected skills.
 
 ## Desktop Settings
@@ -157,7 +157,7 @@ Installer options:
   installed plugin with the same name. Leave it off when duplicate-name installs
   should fail instead of replacing existing content.
 - **Developer mode: link source folder** appears for **Local folder** installs.
-  It links the selected directory instead of copying it into Reasonix's plugin
+  It links the selected directory instead of copying it into Reames Agent's plugin
   storage. Use it while developing or debugging a plugin. Moving or deleting the
   selected directory will break the linked plugin.
 
@@ -195,7 +195,7 @@ The desktop settings page uses the same runtime model as the CLI:
 
 ## Native Manifest
 
-Reasonix plugins can declare `reasonix-plugin.json` at the plugin root:
+Reames Agent plugins can declare `reames-agent-plugin.json` at the plugin root:
 
 ```json
 {
@@ -219,31 +219,31 @@ Reasonix plugins can declare `reasonix-plugin.json` at the plugin root:
 }
 ```
 
-Relative paths are resolved inside the plugin root. Reasonix does not run
+Relative paths are resolved inside the plugin root. Reames Agent does not run
 third-party install scripts during plugin installation.
 
 ## Codex & Claude Compatibility
 
-Reasonix also reads Codex plugin manifests at `.codex-plugin/plugin.json` and
+Reames Agent also reads Codex plugin manifests at `.codex-plugin/plugin.json` and
 Claude Marketplace manifests at `.claude-plugin/plugin.json`. Claude plugin
-capabilities Reasonix does not map yet (`commands/`, `agents/`,
+capabilities Reames Agent does not map yet (`commands/`, `agents/`,
 `hooks/hooks.json`, `.mcp.json`) surface as install warnings instead of being
 silently dropped; multi-plugin `marketplace.json` indexes are not supported —
 install each plugin directory individually. For packages such
-as Superpowers and Claude-style skill packs, Reasonix maps:
+as Superpowers and Claude-style skill packs, Reames Agent maps:
 
-- `skills` to Reasonix skill roots. A Claude manifest that declares no
+- `skills` to Reames Agent skill roots. A Claude manifest that declares no
   `skills` field falls back to the conventional `skills/` (or `.claude/skills/`)
   directory, matching Claude's own auto-discovery.
-- `hooks/session-start-codex` to the Reasonix `SessionStart` hook when present.
+- `hooks/session-start-codex` to the Reames Agent `SessionStart` hook when present.
 - A plugin-root `CLAUDE.md` file to a built-in `SessionStart` context hook. The
-  file is read directly by Reasonix, without spawning a shell command.
-- `.claude/settings.json` command hooks to Reasonix hook events when the event
-  names match. Claude's `matcher` field maps to Reasonix `match`; hook commands
+  file is read directly by Reames Agent, without spawning a shell command.
+- `.claude/settings.json` command hooks to Reames Agent hook events when the event
+  names match. Claude's `matcher` field maps to Reames Agent `match`; hook commands
   run as shell commands with the plugin root as `cwd`; Claude `timeout` values
   are interpreted as seconds.
 
-Unsupported Claude hook item types are skipped with a warning. Reasonix does not
+Unsupported Claude hook item types are skipped with a warning. Reames Agent does not
 run third-party install scripts or implement marketplace-specific install
 protocols.
 

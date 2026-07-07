@@ -19,21 +19,21 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/agent/testutil"
-	"reasonix/internal/config"
-	"reasonix/internal/event"
-	"reasonix/internal/memory"
-	"reasonix/internal/netclient"
-	"reasonix/internal/plugin"
-	"reasonix/internal/provider"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/tool"
-	"reasonix/internal/tool/builtin"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/agent/testutil"
+	"reames-agent/internal/config"
+	"reames-agent/internal/event"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/netclient"
+	"reames-agent/internal/plugin"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/tool"
+	"reames-agent/internal/tool/builtin"
 
-	// Blank import registers the provider kind the same way cmd/reasonix's main
+	// Blank import registers the provider kind the same way cmd/reamesAgent's main
 	// does; importing builtin above registers the built-in tools.
-	_ "reasonix/internal/provider/openai"
+	_ "reames-agent/internal/provider/openai"
 )
 
 func TestAgentKeepPolicyFromConfig(t *testing.T) {
@@ -56,7 +56,7 @@ func TestBuildFoldsProjectMemoryIntoSystemPrompt(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -67,7 +67,7 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 	writeFile(t, dir, "REASONIX.md", "Project rule: always run go vet before committing.")
 
@@ -101,7 +101,7 @@ func TestBuildRunsCleanupPendingReconciler(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -112,7 +112,7 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 	sessionDir := filepath.Join(t.TempDir(), "sessions")
 	called := false
@@ -140,7 +140,7 @@ func TestBuildRegistersUsableHistoryAndMemoryRetrievalTools(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -405,7 +405,7 @@ func TestBuildSubagentSkillFailedContinuationPersistsTranscript(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -463,7 +463,7 @@ func TestBuildSubagentStoreHonorsSessionDirOverride(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -510,7 +510,7 @@ func TestBuildSubagentSkillUsesLiveReasoningLanguage(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -553,7 +553,7 @@ func TestBuildUsesConfiguredLanguageForResponsePreference(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 language = "en"
 
@@ -592,7 +592,7 @@ func TestBuildSubagentSkillGetsForegroundOnlyBash(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -758,7 +758,7 @@ func subagentRefFromHistory(t *testing.T, msgs []provider.Message) string {
 }
 
 // TestBuildHeadlessRunRunsTaskSubagentWithoutSessionPath reproduces headless
-// `reasonix run`: a controller built via Build with NO SetSessionPath (exactly
+// `reamesAgent run`: a controller built via Build with NO SetSessionPath (exactly
 // what internal/cli.runAgent does) must still be able to run a `task` sub-agent.
 // Before the ephemeral fallback this failed with "parent session is required".
 func TestBuildHeadlessRunRunsTaskSubagentWithoutSessionPath(t *testing.T) {
@@ -769,7 +769,7 @@ func TestBuildHeadlessRunRunsTaskSubagentWithoutSessionPath(t *testing.T) {
 	registerHeadlessTaskTestProvider()
 	prov := &headlessTaskTestProvider{}
 	setHeadlessTaskTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -963,7 +963,7 @@ func TestBuildHonorsSessionDirOverride(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [[providers]]
@@ -971,7 +971,7 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 
 	sessionDir := filepath.Join(t.TempDir(), "desktop-workspace-sessions")
@@ -995,7 +995,7 @@ func TestBuildDiscoversSkills(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1006,9 +1006,9 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
-	writeFile(t, dir, ".reasonix/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
+	writeFile(t, dir, ".reames-agent/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
 
 	ctrl, err := Build(context.Background(), Options{})
 	if err != nil {
@@ -1043,7 +1043,7 @@ func TestBuildTokenFullMatchesDefaultRequestPrefix(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1054,7 +1054,7 @@ name = "test-model"
 kind = "boot-token-profile-test"
 model = "x"
 `)
-	writeFile(t, dir, ".reasonix/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
+	writeFile(t, dir, ".reames-agent/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
 
 	defaultReq := firstTokenProfileRequest(t, "")
 	fullReq := firstTokenProfileRequest(t, TokenModeFull)
@@ -1085,7 +1085,7 @@ func TestBuildInjectsEnvironmentBlockByDefaultAndEconomy(t *testing.T) {
 			isolateConfigHome(t)
 			dir := robustTempDir(t)
 			t.Chdir(dir)
-			writeFile(t, dir, "reasonix.toml", `
+			writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1113,7 +1113,7 @@ func TestBuildSkipsEnvironmentBlockWhenDisabled(t *testing.T) {
 	isolateConfigHome(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [environment]
@@ -1148,7 +1148,7 @@ func TestBuildDoesNotExecuteWorkspaceEnvironmentOverride(t *testing.T) {
 	if err := os.WriteFile(toolPath, []byte(body), 0o755); err != nil {
 		t.Fatalf("write fake tool: %v", err)
 	}
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [environment.tools]
@@ -1184,7 +1184,7 @@ func TestBootToolContractMatchesProviderVisibleSurface(t *testing.T) {
 			isolateConfigHome(t)
 			dir := robustTempDir(t)
 			t.Chdir(dir)
-			writeFile(t, dir, "reasonix.toml", `
+			writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1259,7 +1259,7 @@ func TestToolContractDocCoversDefaultBootSurfaces(t *testing.T) {
 	isolateConfigHome(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1387,7 +1387,7 @@ func TestBuildTokenEconomyStartsWithLeanToolSurface(t *testing.T) {
 	registerBootTokenProfileTestProvider()
 	prov := testutil.NewMock("token-economy", testutil.Turn{Text: "done"})
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1400,9 +1400,9 @@ model = "x"
 
 [[plugins]]
 name = "mockmcp"
-command = "reasonix-missing-mockmcp"
+command = "reamesAgent-missing-mockmcp"
 `)
-	writeFile(t, dir, ".reasonix/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
+	writeFile(t, dir, ".reames-agent/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
 
 	ctrl, err := Build(context.Background(), Options{Sink: event.Discard, TokenMode: TokenModeEconomy})
 	if err != nil {
@@ -1485,7 +1485,7 @@ func TestBuildTokenEconomyConnectsWebFetchOnDemand(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1530,7 +1530,7 @@ func TestBuildTokenEconomyPlanModeCanConnectWebFetch(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1582,7 +1582,7 @@ func TestBuildTokenEconomyPlanModeCanConnectReadOnlyTask(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1653,7 +1653,7 @@ func TestBuildTokenEconomyPlanModeCanConnectReadOnlySkill(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1664,7 +1664,7 @@ name = "test-model"
 kind = "boot-token-profile-test"
 model = "x"
 `)
-	writeFile(t, dir, ".reasonix/skills/readonlydig/SKILL.md", `---
+	writeFile(t, dir, ".reames-agent/skills/readonlydig/SKILL.md", `---
 description: read-only dig
 runAs: subagent
 allowed-tools: read_file, bash, write_file, connect_tool_source, read_only_skill
@@ -1738,7 +1738,7 @@ func TestBuildTokenEconomyPlanModeCanConnectAllowedMCPSource(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", fmt.Sprintf(`
+	writeFile(t, dir, "reamesAgent.toml", fmt.Sprintf(`
 default_model = "test-model"
 
 [agent]
@@ -1799,7 +1799,7 @@ func TestBuildTokenEconomyPlanModeCanConnectTrustedReadOnlyMCPSource(t *testing.
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", fmt.Sprintf(`
+	writeFile(t, dir, "reamesAgent.toml", fmt.Sprintf(`
 default_model = "test-model"
 
 [agent]
@@ -1896,7 +1896,7 @@ func TestBuildTokenEconomyPlanModeBlocksSourcesWithPolicy(t *testing.T) {
 				testutil.Turn{Text: "done"},
 			)
 			setBootTokenProfileTestProvider(t, prov)
-			writeFile(t, dir, "reasonix.toml", `
+			writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1909,7 +1909,7 @@ model = "x"
 
 [[plugins]]
 name = "mockmcp"
-command = "reasonix-missing-mockmcp"
+command = "reamesAgent-missing-mockmcp"
 `)
 
 			ctrl, err := Build(context.Background(), Options{Sink: event.Discard, TokenMode: TokenModeEconomy})
@@ -1958,7 +1958,7 @@ func TestBuildWarnsIgnoredPlanModeAllowedTools(t *testing.T) {
 	registerBootTokenProfileTestProvider()
 	prov := testutil.NewMock("plan-mode-allowed-tools", testutil.Turn{Text: "done"})
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2006,7 +2006,7 @@ func TestBuildWarnsIgnoredPlanModeReadOnlyCommands(t *testing.T) {
 	registerBootTokenProfileTestProvider()
 	prov := testutil.NewMock("plan-mode-read-only-commands", testutil.Turn{Text: "done"})
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2057,7 +2057,7 @@ func TestBuildTokenEconomyWebFetchConnectorHonorsDisabledBuiltin(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [tools]
@@ -2111,7 +2111,7 @@ func TestBuildTokenEconomyConnectsSkillsOnDemand(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2122,7 +2122,7 @@ name = "test-model"
 kind = "boot-token-profile-test"
 model = "x"
 `)
-	writeFile(t, dir, ".reasonix/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
+	writeFile(t, dir, ".reames-agent/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
 
 	ctrl, err := Build(context.Background(), Options{Sink: event.Discard, TokenMode: TokenModeEconomy})
 	if err != nil {
@@ -2180,7 +2180,7 @@ func TestBuildOmitsDisabledSkillsFromPromptAndRuntimeList(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2194,9 +2194,9 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
-	writeFile(t, dir, ".reasonix/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
+	writeFile(t, dir, ".reames-agent/skills/projskill.md", "---\ndescription: a project skill\n---\nplaybook")
 
 	ctrl, err := Build(context.Background(), Options{})
 	if err != nil {
@@ -2231,9 +2231,9 @@ func TestBuildOmitsExcludedSkillRootsFromPromptAndRuntimeList(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Chdir(dir)
 	excluded := filepath.Join(home, ".agents", "skills")
-	writeFile(t, home, ".reasonix/skills/keep.md", "---\ndescription: keep\n---\nplaybook")
+	writeFile(t, home, ".reames-agent/skills/keep.md", "---\ndescription: keep\n---\nplaybook")
 	writeFile(t, home, ".agents/skills/noisy.md", "---\ndescription: noisy\n---\nplaybook")
-	writeFile(t, dir, "reasonix.toml", fmt.Sprintf(`
+	writeFile(t, dir, "reamesAgent.toml", fmt.Sprintf(`
 default_model = "test-model"
 
 [agent]
@@ -2247,7 +2247,7 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `, excluded))
 
 	ctrl, err := Build(context.Background(), Options{})
@@ -2280,7 +2280,7 @@ func TestBuildWithoutMemoryLeavesPromptUnchanged(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2291,7 +2291,7 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 
 	ctrl, err := Build(context.Background(), Options{})
@@ -2326,7 +2326,7 @@ func TestBuildAddsCurrentWorkspaceToSystemPrompt(t *testing.T) {
 	projectA := robustTempDir(t)
 	projectB := robustTempDir(t)
 	for _, dir := range []string{projectA, projectB} {
-		writeFile(t, dir, "reasonix.toml", `
+		writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2337,7 +2337,7 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 	}
 
@@ -2389,7 +2389,7 @@ func TestCurrentWorkspacePromptLineEscapesControlCharacters(t *testing.T) {
 func TestBuildLanguagePolicyIsAppended(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2400,7 +2400,7 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 
 	ctrl, err := Build(context.Background(), Options{})
@@ -2418,7 +2418,7 @@ api_key_env = "REASONIX_TEST_KEY_UNSET"
 func TestBuildAppendsUserDecisionPolicyToCustomSystemPrompt(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2429,7 +2429,7 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 
 	ctrl, err := Build(context.Background(), Options{})
@@ -2505,11 +2505,11 @@ func TestRememberPermissionRuleUsesWorkspaceRoot(t *testing.T) {
 	cwd := robustTempDir(t)
 	workspace := robustTempDir(t)
 	t.Chdir(cwd)
-	writeFile(t, cwd, "reasonix.toml", `
+	writeFile(t, cwd, "reamesAgent.toml", `
 [permissions]
 allow = ["Bash(cwd*)"]
 `)
-	writeFile(t, workspace, "reasonix.toml", `
+	writeFile(t, workspace, "reamesAgent.toml", `
 [permissions]
 allow = ["Bash(workspace*)"]
 `)
@@ -2517,11 +2517,11 @@ allow = ["Bash(workspace*)"]
 	const rule = "Bash(go test ./...)"
 	rememberPermissionRule(workspace, rule)
 
-	cwdCfg := config.LoadForEdit(filepath.Join(cwd, "reasonix.toml"))
+	cwdCfg := config.LoadForEdit(filepath.Join(cwd, "reamesAgent.toml"))
 	if hasPermissionRule(cwdCfg.Permissions.Allow, rule) {
 		t.Fatalf("remembered rule was written to cwd config: %v", cwdCfg.Permissions.Allow)
 	}
-	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reasonix.toml"))
+	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
 	if !hasPermissionRule(workspaceCfg.Permissions.Allow, rule) {
 		t.Fatalf("remembered rule missing from workspace config: %v", workspaceCfg.Permissions.Allow)
 	}
@@ -2543,7 +2543,7 @@ allow = ["Bash(user)"]
 
 	const rule = "Edit(src/app.go)"
 	res := rememberPermissionRule(workspace, rule)
-	if !res.Saved || res.Path != filepath.Join(workspace, "reasonix.toml") {
+	if !res.Saved || res.Path != filepath.Join(workspace, "reamesAgent.toml") {
 		t.Fatalf("remember result = %+v, want saved to workspace config", res)
 	}
 
@@ -2551,7 +2551,7 @@ allow = ["Bash(user)"]
 	if hasPermissionRule(userCfg.Permissions.Allow, rule) {
 		t.Fatalf("workspace rule was written to user config: %v", userCfg.Permissions.Allow)
 	}
-	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reasonix.toml"))
+	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
 	if !hasPermissionRule(workspaceCfg.Permissions.Allow, rule) {
 		t.Fatalf("workspace rule missing from project config: %v", workspaceCfg.Permissions.Allow)
 	}
@@ -2582,14 +2582,14 @@ allow = ["Bash(user*)"]
 	if !hasPermissionRule(userCfg.Permissions.Allow, rule) {
 		t.Fatalf("empty root should remember into SourcePath config: %v", userCfg.Permissions.Allow)
 	}
-	if _, err := os.Stat(filepath.Join(cwd, "reasonix.toml")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(cwd, "reamesAgent.toml")); !os.IsNotExist(err) {
 		t.Fatalf("empty root should not create cwd config when SourcePath exists, err=%v", err)
 	}
 }
 
 func TestRememberPermissionRuleSkipsRuleCoveredByExistingAllow(t *testing.T) {
 	workspace := robustTempDir(t)
-	writeFile(t, workspace, "reasonix.toml", `
+	writeFile(t, workspace, "reamesAgent.toml", `
 [permissions]
 allow = ["Bash(go test:*)"]
 `)
@@ -2598,7 +2598,7 @@ allow = ["Bash(go test:*)"]
 	if res.Saved || res.CoveredBy != "Bash(go test:*)" {
 		t.Fatalf("remember result = %+v, want already covered", res)
 	}
-	cfg := config.LoadForEdit(filepath.Join(workspace, "reasonix.toml"))
+	cfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
 	if len(cfg.Permissions.Allow) != 1 || cfg.Permissions.Allow[0] != "Bash(go test:*)" {
 		t.Fatalf("allow rules = %v, want only existing prefix", cfg.Permissions.Allow)
 	}
@@ -2606,7 +2606,7 @@ allow = ["Bash(go test:*)"]
 
 func TestRememberPermissionRulePrunesNarrowRulesWhenSavingBroaderRule(t *testing.T) {
 	workspace := robustTempDir(t)
-	writeFile(t, workspace, "reasonix.toml", `
+	writeFile(t, workspace, "reamesAgent.toml", `
 [permissions]
 allow = ["Bash(go test ./...)", "Bash(go build ./...)"]
 `)
@@ -2615,7 +2615,7 @@ allow = ["Bash(go test ./...)", "Bash(go build ./...)"]
 	if !res.Saved || res.CoveredBy != "" {
 		t.Fatalf("remember result = %+v, want saved broader rule", res)
 	}
-	cfg := config.LoadForEdit(filepath.Join(workspace, "reasonix.toml"))
+	cfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
 	if hasPermissionRule(cfg.Permissions.Allow, "Bash(go test ./...)") {
 		t.Fatalf("narrow go test rule should be pruned: %v", cfg.Permissions.Allow)
 	}
@@ -2634,25 +2634,25 @@ func TestRememberPlanModeReadOnlyCommandUsesWorkspaceRoot(t *testing.T) {
 	cwd := robustTempDir(t)
 	workspace := robustTempDir(t)
 	t.Chdir(cwd)
-	writeFile(t, cwd, "reasonix.toml", `
+	writeFile(t, cwd, "reamesAgent.toml", `
 [agent]
 plan_mode_read_only_commands = ["cwd query"]
 `)
-	writeFile(t, workspace, "reasonix.toml", `
+	writeFile(t, workspace, "reamesAgent.toml", `
 [agent]
 plan_mode_read_only_commands = ["workspace query"]
 `)
 
 	res := rememberPlanModeReadOnlyCommand(workspace, "gh issue view")
-	if !res.Saved || res.Path != filepath.Join(workspace, "reasonix.toml") {
+	if !res.Saved || res.Path != filepath.Join(workspace, "reamesAgent.toml") {
 		t.Fatalf("remember result = %+v, want saved to workspace config", res)
 	}
 
-	cwdCfg := config.LoadForEdit(filepath.Join(cwd, "reasonix.toml"))
+	cwdCfg := config.LoadForEdit(filepath.Join(cwd, "reamesAgent.toml"))
 	if hasPlanModeReadOnlyCommand(cwdCfg.Agent.PlanModeReadOnlyCommands, "gh issue view") {
 		t.Fatalf("remembered command was written to cwd config: %v", cwdCfg.Agent.PlanModeReadOnlyCommands)
 	}
-	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reasonix.toml"))
+	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
 	if !hasPlanModeReadOnlyCommand(workspaceCfg.Agent.PlanModeReadOnlyCommands, "gh issue view") {
 		t.Fatalf("remembered command missing from workspace config: %v", workspaceCfg.Agent.PlanModeReadOnlyCommands)
 	}
@@ -2660,7 +2660,7 @@ plan_mode_read_only_commands = ["workspace query"]
 
 func TestRememberPlanModeReadOnlyCommandSkipsCoveredPrefix(t *testing.T) {
 	workspace := robustTempDir(t)
-	writeFile(t, workspace, "reasonix.toml", `
+	writeFile(t, workspace, "reamesAgent.toml", `
 [agent]
 plan_mode_read_only_commands = ["gh issue view"]
 `)
@@ -2669,7 +2669,7 @@ plan_mode_read_only_commands = ["gh issue view"]
 	if res.Saved || res.CoveredBy != "gh issue view" {
 		t.Fatalf("remember result = %+v, want already covered", res)
 	}
-	cfg := config.LoadForEdit(filepath.Join(workspace, "reasonix.toml"))
+	cfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
 	if len(cfg.Agent.PlanModeReadOnlyCommands) != 1 || cfg.Agent.PlanModeReadOnlyCommands[0] != "gh issue view" {
 		t.Fatalf("plan-mode read-only commands = %v, want only existing prefix", cfg.Agent.PlanModeReadOnlyCommands)
 	}
@@ -2694,7 +2694,7 @@ func hasPlanModeReadOnlyCommand(commands []string, want string) bool {
 }
 
 // TestBuildMigratesLegacyConfigEndToEnd drives the real boot path: a v0.x
-// ~/.reasonix/config.json with no v1+ config present must be imported during
+// ~/.reames-agent/config.json with no v1+ config present must be imported during
 // Build — config written, key pinned into the env, and the user told via a notice.
 func TestBuildMigratesLegacyConfigEndToEnd(t *testing.T) {
 	home := robustTempDir(t)
@@ -2702,17 +2702,17 @@ func TestBuildMigratesLegacyConfigEndToEnd(t *testing.T) {
 	t.Setenv("USERPROFILE", home)                               // os.UserHomeDir on Windows
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config")) // os.UserConfigDir on Linux
 	t.Setenv("AppData", filepath.Join(home, "AppData"))         // os.UserConfigDir on Windows
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("DEEPSEEK_API_KEY", "") // track for cleanup; migration os.Setenv's it live
 
 	proj := robustTempDir(t)
 	t.Chdir(proj)
 	// Project config merges over the migrated user config without dropping the
 	// migrated plugins.
-	writeFile(t, proj, "reasonix.toml", "")
-	writeFile(t, filepath.Join(home, ".reasonix"), "config.json",
+	writeFile(t, proj, "reamesAgent.toml", "")
+	writeFile(t, filepath.Join(home, ".reames-agent"), "config.json",
 		`{"apiKey":"sk-e2e","lang":"zh","mcpServers":{"fs":{"command":"npx","args":["-y","server-fs"]}}}`)
-	writeFile(t, filepath.Join(home, ".reasonix", "sessions"), "chat-1.events.jsonl",
+	writeFile(t, filepath.Join(home, ".reames-agent", "sessions"), "chat-1.events.jsonl",
 		`{"type":"user.message","id":1,"ts":"t","turn":0,"text":"hello from v0.x"}`+"\n"+
 			`{"type":"model.final","id":2,"ts":"t","turn":0,"content":"hi","toolCalls":[],"usage":{},"costUsd":0}`+"\n")
 
@@ -2782,7 +2782,7 @@ func TestBuildMigratesLegacySessionsFromConfigSessionDir(t *testing.T) {
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 
 	proj := robustTempDir(t)
-	writeFile(t, proj, "reasonix.toml", "")
+	writeFile(t, proj, "reamesAgent.toml", "")
 
 	legacyConfig := config.LegacyUserConfigPath()
 	if legacyConfig == "" {
@@ -2838,16 +2838,16 @@ func TestBuildSkipsLegacySessionMigrationWhenIsolated(t *testing.T) {
 	}
 	home := robustTempDir(t)
 	xdg := filepath.Join(home, "xdg-config")
-	reasonixHome := filepath.Join(home, "rx-home")
+	reamesAgentHome := filepath.Join(home, "rx-home")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", xdg)
-	t.Setenv("REASONIX_HOME", reasonixHome)
+	t.Setenv("REAMES_AGENT_HOME", reamesAgentHome)
 
 	proj := robustTempDir(t)
-	writeFile(t, proj, "reasonix.toml", "[codegraph]\nenabled = false\n")
+	writeFile(t, proj, "reamesAgent.toml", "[codegraph]\nenabled = false\n")
 
-	legacyRoot := filepath.Join(xdg, "reasonix")
+	legacyRoot := filepath.Join(xdg, "reames-agent")
 	writeFile(t, filepath.Join(legacyRoot, "sessions"), "xdg-flat.events.jsonl",
 		`{"type":"user.message","id":1,"ts":"t","turn":0,"text":"hello from xdg"}`+"\n"+
 			`{"type":"model.final","id":2,"ts":"t","turn":0,"content":"hi from xdg","toolCalls":[],"usage":{},"costUsd":0}`+"\n")
@@ -2867,11 +2867,11 @@ func TestBuildSkipsLegacySessionMigrationWhenIsolated(t *testing.T) {
 	defer ctrl.Close()
 
 	if _, err := os.Stat(filepath.Join(config.SessionDir(), "xdg-flat.jsonl")); !os.IsNotExist(err) {
-		t.Fatal("legacy XDG flat session was imported but must not be when REASONIX_HOME is set")
+		t.Fatal("legacy XDG flat session was imported but must not be when REAMES_AGENT_HOME is set")
 	}
 	projectPath := filepath.Join(config.MemoryUserDir(), "projects", slug, "sessions", "project-chat.jsonl")
 	if _, err := os.Stat(projectPath); !os.IsNotExist(err) {
-		t.Fatal("legacy project session was imported but must not be when REASONIX_HOME is set")
+		t.Fatal("legacy project session was imported but must not be when REAMES_AGENT_HOME is set")
 	}
 }
 
@@ -2886,7 +2886,7 @@ func isolateConfigHome(t *testing.T) string {
 	dir := robustTempDir(t)
 	t.Setenv("HOME", dir)
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	return dir
 }
 
@@ -3047,7 +3047,7 @@ func TestBuildMigratesLegacyEagerTierToBackground(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -3058,11 +3058,11 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 
 [[plugins]]
 name = "legacy-eager"
-command = "reasonix-missing-legacy-eager-mcp"
+command = "reamesAgent-missing-legacy-eager-mcp"
 tier = "eager"
 `)
 
@@ -3078,7 +3078,7 @@ tier = "eager"
 	if len(failures) != 1 || failures[0].Name != "legacy-eager" {
 		t.Fatalf("failures = %+v, want background startup failure for migrated legacy eager plugin", failures)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "reasonix.toml"))
+	raw, err := os.ReadFile(filepath.Join(dir, "reamesAgent.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3092,7 +3092,7 @@ func TestBuildMigratesLegacyLazyTierToBackground(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -3103,11 +3103,11 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 
 [[plugins]]
 name = "legacy-lazy"
-command = "reasonix-missing-legacy-lazy-mcp"
+command = "reamesAgent-missing-legacy-lazy-mcp"
 tier = "lazy"
 `)
 
@@ -3123,7 +3123,7 @@ tier = "lazy"
 	if len(failures) != 1 || failures[0].Name != "legacy-lazy" {
 		t.Fatalf("failures = %+v, want background startup failure for migrated legacy lazy plugin", failures)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "reasonix.toml"))
+	raw, err := os.ReadFile(filepath.Join(dir, "reamesAgent.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3142,7 +3142,7 @@ func TestBuildDefaultsToNearestGitRoot(t *testing.T) {
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, root, "reasonix.toml", `
+	writeFile(t, root, "reamesAgent.toml", `
 default_model = "root-model"
 
 [agent]
@@ -3153,7 +3153,7 @@ name = "root-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 	t.Chdir(subdir)
 
@@ -3178,7 +3178,7 @@ func TestBuildMigratesLegacyEagerBeforeStatsDemotion(t *testing.T) {
 		}
 	}
 
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -3189,11 +3189,11 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 
 [[plugins]]
 name = "slowserver"
-command = "reasonix-missing-slow-mcp-binary"
+command = "reamesAgent-missing-slow-mcp-binary"
 tier = "eager"
 `)
 

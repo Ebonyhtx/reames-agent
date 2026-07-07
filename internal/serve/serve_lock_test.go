@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/control"
+	"reames-agent/internal/control"
 )
 
 // lockProbeController wraps a real controller but intercepts the two blocking

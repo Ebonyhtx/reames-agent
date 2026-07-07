@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 func TestBranchMetaRoundTripAndList(t *testing.T) {

@@ -14,19 +14,19 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/checkpoint"
-	"reasonix/internal/command"
-	"reasonix/internal/event"
-	"reasonix/internal/guardian"
-	"reasonix/internal/hook"
-	"reasonix/internal/i18n"
-	"reasonix/internal/jobs"
-	"reasonix/internal/permission"
-	"reasonix/internal/plugin"
-	"reasonix/internal/provider"
-	"reasonix/internal/skill"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/checkpoint"
+	"reames-agent/internal/command"
+	"reames-agent/internal/event"
+	"reames-agent/internal/guardian"
+	"reames-agent/internal/hook"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/permission"
+	"reames-agent/internal/plugin"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/skill"
+	"reames-agent/internal/tool"
 )
 
 type typedNilControllerSink struct{}
@@ -37,7 +37,7 @@ func isolateControlConfigHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
@@ -518,25 +518,25 @@ func TestResumeRestoresRunningAutoResearchGoalFromSidecar(t *testing.T) {
 	}
 	path := filepath.Join(root, "session.jsonl")
 	taskID := "investigate-runtime-resume"
-	if err := os.MkdirAll(filepath.Join(root, ".reasonix", "autoresearch", taskID, "state"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".reames-agent", "autoresearch", taskID, "state"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, ".reasonix", "autoresearch", taskID, "logs"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".reames-agent", "autoresearch", taskID, "logs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".reasonix", "autoresearch", taskID, "state", "task_spec.json"), []byte(`{"id":"investigate-runtime-resume","goal":"investigate runtime resume","status":"running","created_at":"2026-06-30T00:00:00Z","updated_at":"2026-06-30T00:00:00Z","success_criteria":[{"id":"criterion-1","description":"resume keeps AutoResearch active","required":true}]}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".reames-agent", "autoresearch", taskID, "state", "task_spec.json"), []byte(`{"id":"investigate-runtime-resume","goal":"investigate runtime resume","status":"running","created_at":"2026-06-30T00:00:00Z","updated_at":"2026-06-30T00:00:00Z","success_criteria":[{"id":"criterion-1","description":"resume keeps AutoResearch active","required":true}]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".reasonix", "autoresearch", taskID, "state", "progress.json"), []byte(`{"task_id":"investigate-runtime-resume","iteration":2,"current_direction":"verify resume","stale_count":1,"pivot_count":0,"updated_at":"2026-06-30T00:00:00Z"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".reames-agent", "autoresearch", taskID, "state", "progress.json"), []byte(`{"task_id":"investigate-runtime-resume","iteration":2,"current_direction":"verify resume","stale_count":1,"pivot_count":0,"updated_at":"2026-06-30T00:00:00Z"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".reasonix", "autoresearch", taskID, "state", "directions_tried.json"), []byte(`{"task_id":"investigate-runtime-resume","directions":[]}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".reames-agent", "autoresearch", taskID, "state", "directions_tried.json"), []byte(`{"task_id":"investigate-runtime-resume","directions":[]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".reasonix", "autoresearch", taskID, "state", "findings.jsonl"), nil, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".reames-agent", "autoresearch", taskID, "state", "findings.jsonl"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".reasonix", "autoresearch", taskID, "logs", "heartbeat.jsonl"), nil, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".reames-agent", "autoresearch", taskID, "logs", "heartbeat.jsonl"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(goalStatePath(path), []byte(`{"goal":"investigate runtime resume","status":"running","researchMode":1,"autoResearchTaskID":"investigate-runtime-resume"}`), 0o644); err != nil {
@@ -2219,7 +2219,7 @@ func TestRemoveMCPServerRemovesUnconnectedLazyPlaceholder(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData", "Roaming"))
 	t.Chdir(dir)
-	if err := os.WriteFile("reasonix.toml", []byte(`
+	if err := os.WriteFile("reamesAgent.toml", []byte(`
 [[plugins]]
 name = "mock"
 command = "mock-mcp"
@@ -2722,7 +2722,7 @@ func TestApprovalPersistentBashPrefixRememberRule(t *testing.T) {
 		}),
 		OnRemember: func(rule string) RememberResult {
 			remembered = rule
-			return RememberResult{Rule: rule, Path: "reasonix.toml", Saved: true}
+			return RememberResult{Rule: rule, Path: "reamesAgent.toml", Saved: true}
 		},
 	})
 	go func() {
@@ -2736,7 +2736,7 @@ func TestApprovalPersistentBashPrefixRememberRule(t *testing.T) {
 	if remembered != "Bash(go test:*)" {
 		t.Fatalf("remembered rule = %q, want Bash(go test:*)", remembered)
 	}
-	if len(notices) != 1 || !strings.Contains(notices[0], "Bash(go test:*)") || !strings.Contains(notices[0], "reasonix.toml") {
+	if len(notices) != 1 || !strings.Contains(notices[0], "Bash(go test:*)") || !strings.Contains(notices[0], "reamesAgent.toml") {
 		t.Fatalf("notices = %v, want saved rule notice", notices)
 	}
 }
@@ -2760,7 +2760,7 @@ func TestPlanModeReadOnlyTrustApprovalPersistsMCPTrust(t *testing.T) {
 		}),
 		OnRememberMCPReadOnlyTrust: func(serverName, rawToolName string) MCPReadOnlyTrustResult {
 			rememberedServer, rememberedTool = serverName, rawToolName
-			return MCPReadOnlyTrustResult{Server: serverName, Tool: rawToolName, Path: "reasonix.toml", Saved: true}
+			return MCPReadOnlyTrustResult{Server: serverName, Tool: rawToolName, Path: "reamesAgent.toml", Saved: true}
 		},
 	})
 
@@ -2817,7 +2817,7 @@ func TestPlanModeReadOnlyTrustApprovalPersistsBashCommandTrust(t *testing.T) {
 		}),
 		OnRememberPlanModeReadOnlyCommand: func(prefix string) PlanModeReadOnlyCommandTrustResult {
 			rememberedPrefix = prefix
-			return PlanModeReadOnlyCommandTrustResult{Prefix: prefix, Path: "reasonix.toml", Saved: true}
+			return PlanModeReadOnlyCommandTrustResult{Prefix: prefix, Path: "reamesAgent.toml", Saved: true}
 		},
 	})
 
@@ -3510,7 +3510,7 @@ func TestReloadCommandsFromFilesystem(t *testing.T) {
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 
 	wsRoot := t.TempDir()
-	cmdDir := filepath.Join(wsRoot, ".reasonix", "commands")
+	cmdDir := filepath.Join(wsRoot, ".reames-agent", "commands")
 	writeCmdFile(t, cmdDir, "review", "Review code", "Review $1")
 	writeCmdFile(t, cmdDir, "test", "Run tests", "Test $1")
 
@@ -3608,7 +3608,7 @@ func TestReloadCommandsDeleteFile(t *testing.T) {
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 
 	wsRoot := t.TempDir()
-	cmdDir := filepath.Join(wsRoot, ".reasonix", "commands")
+	cmdDir := filepath.Join(wsRoot, ".reames-agent", "commands")
 	writeCmdFile(t, cmdDir, "alpha", "Alpha cmd", "Alpha $1")
 	writeCmdFile(t, cmdDir, "beta", "Beta cmd", "Beta $1")
 
@@ -3663,7 +3663,7 @@ func TestReloadCommandsMalformedFile(t *testing.T) {
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 
 	wsRoot := t.TempDir()
-	cmdDir := filepath.Join(wsRoot, ".reasonix", "commands")
+	cmdDir := filepath.Join(wsRoot, ".reames-agent", "commands")
 	writeCmdFile(t, cmdDir, "good", "Good cmd", "Good $1")
 
 	// Write a malformed file (no valid frontmatter)
@@ -3705,8 +3705,8 @@ func TestReloadCommandsMalformedFile(t *testing.T) {
 
 // TestReloadCommandsSameNameAcrossDirs verifies that when the same command
 // name exists in multiple convention directories, the later-scanned directory
-// (higher priority) wins. ConventionDirs = [".reasonix", ".agents", ".agent",
-// ".claude"], scanned in reverse, so .reasonix is highest priority.
+// (higher priority) wins. ConventionDirs = [".reames-agent", ".agents", ".agent",
+// ".claude"], scanned in reverse, so .reamesAgent is highest priority.
 func TestReloadCommandsSameNameAcrossDirs(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -3720,9 +3720,9 @@ func TestReloadCommandsSameNameAcrossDirs(t *testing.T) {
 	claudeDir := filepath.Join(wsRoot, ".claude", "commands")
 	writeCmdFile(t, claudeDir, "greet", "Claude greet", "Hello from Claude: $1")
 
-	// Higher priority: .reasonix/commands
-	reasonixDir := filepath.Join(wsRoot, ".reasonix", "commands")
-	writeCmdFile(t, reasonixDir, "greet", "Reasonix greet", "Hello from Reasonix: $1")
+	// Higher priority: .reames-agent/commands
+	reamesAgentDir := filepath.Join(wsRoot, ".reames-agent", "commands")
+	writeCmdFile(t, reamesAgentDir, "greet", "Reasonix greet", "Hello from Reasonix: $1")
 
 	reg := tool.NewRegistry()
 	c := New(Options{
@@ -3747,13 +3747,13 @@ func TestReloadCommandsSameNameAcrossDirs(t *testing.T) {
 		t.Fatalf("expected exactly 1 'greet' command, got %d", count)
 	}
 
-	// The winning version should be from .reasonix (highest priority)
+	// The winning version should be from .reamesAgent (highest priority)
 	sent, ok := c.CustomCommand("/greet world")
 	if !ok {
 		t.Fatal("/greet should be found")
 	}
 	if !strings.Contains(sent, "Hello from Reasonix") {
-		t.Errorf("expected .reasonix version to win, got render: %q", sent)
+		t.Errorf("expected .reamesAgent version to win, got render: %q", sent)
 	}
 }
 
@@ -3768,7 +3768,7 @@ func TestReloadCommandsEmptySet(t *testing.T) {
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 
 	wsRoot := t.TempDir()
-	cmdDir := filepath.Join(wsRoot, ".reasonix", "commands")
+	cmdDir := filepath.Join(wsRoot, ".reames-agent", "commands")
 	writeCmdFile(t, cmdDir, "temp", "Temp cmd", "Temp $1")
 
 	sk := skill.Skill{
@@ -3831,7 +3831,7 @@ func TestReloadCommandsDesktopManagementNotice(t *testing.T) {
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 
 	wsRoot := t.TempDir()
-	cmdDir := filepath.Join(wsRoot, ".reasonix", "commands")
+	cmdDir := filepath.Join(wsRoot, ".reames-agent", "commands")
 	writeCmdFile(t, cmdDir, "hello", "Greet", "Hello $1")
 	writeCmdFile(t, cmdDir, "review", "Review code", "Review $1")
 

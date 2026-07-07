@@ -19,20 +19,20 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/billing"
-	"reasonix/internal/boot"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/jobs"
-	"reasonix/internal/memory"
-	"reasonix/internal/plugin"
-	"reasonix/internal/pluginpkg"
-	"reasonix/internal/provider"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/store"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/billing"
+	"reames-agent/internal/boot"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/plugin"
+	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/store"
+	"reames-agent/internal/tool"
 )
 
 func desktopMCPHTTPServer(t *testing.T) *httptest.Server {
@@ -103,11 +103,11 @@ func isolateDesktopUserDirs(t *testing.T) string {
 		}
 	}
 	t.Setenv("HOME", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", xdg)
-	t.Setenv("REASONIX_STATE_HOME", filepath.Join(home, "state"))
-	t.Setenv("REASONIX_CACHE_HOME", filepath.Join(home, "cache"))
+	t.Setenv("REAMES_AGENT_STATE_HOME", filepath.Join(home, "state"))
+	t.Setenv("REAMES_AGENT_CACHE_HOME", filepath.Join(home, "cache"))
 	t.Setenv("AppData", appData)
 	return home
 }
@@ -673,7 +673,7 @@ func TestSettingsUsesUserDesktopPreferencesNotProjectConfig(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	project := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
 [desktop]
 language = "zh"
 layout_style = "workbench"
@@ -783,11 +783,11 @@ func BenchmarkDesktopSettingsPayloads(b *testing.B) {
 		}
 	}
 	b.Setenv("HOME", home)
-	b.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	b.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	b.Setenv("USERPROFILE", home)
 	b.Setenv("XDG_CONFIG_HOME", xdg)
-	b.Setenv("REASONIX_STATE_HOME", filepath.Join(home, "state"))
-	b.Setenv("REASONIX_CACHE_HOME", filepath.Join(home, "cache"))
+	b.Setenv("REAMES_AGENT_STATE_HOME", filepath.Join(home, "state"))
+	b.Setenv("REAMES_AGENT_CACHE_HOME", filepath.Join(home, "cache"))
 	b.Setenv("AppData", appData)
 	b.Setenv("SHARED_PROVIDER_KEY", "sk-test")
 
@@ -922,7 +922,7 @@ func TestSettingsSeedsMissingUserConfigFromLegacyProjectConfig(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	project := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
 default_model = "legacy-provider/legacy-model"
 
 [desktop]
@@ -2802,7 +2802,7 @@ base_url = "https://api.deepseek.com"
 model = "deepseek-v4-flash"
 api_key_env = "DEEPSEEK_API_KEY"
 `
-	if err := os.WriteFile(filepath.Join(projectRoot, "reasonix.toml"), []byte(projectConfig), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectRoot, "reamesAgent.toml"), []byte(projectConfig), 0o644); err != nil {
 		t.Fatalf("write project config: %v", err)
 	}
 
@@ -3605,7 +3605,7 @@ api_key_env = "OWNER_MODEL_KEY"
 supported_efforts = ["max"]
 default_effort = "max"
 `
-	if err := os.WriteFile(filepath.Join(projectA, "reasonix.toml"), []byte(ownerConfig), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectA, "reamesAgent.toml"), []byte(ownerConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	staleConfig := `default_model = "stale/stale-model"
@@ -3617,7 +3617,7 @@ model = "stale-model"
 api_key_env = "STALE_MODEL_KEY"
 reasoning_protocol = "none"
 `
-	if err := os.WriteFile(filepath.Join(projectB, "reasonix.toml"), []byte(staleConfig), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectB, "reamesAgent.toml"), []byte(staleConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3886,13 +3886,13 @@ func TestSaveProviderPersistsReasoningProtocol(t *testing.T) {
 
 func TestDeleteProviderMigratesConfigAndOpenTabs(t *testing.T) {
 	isolateDesktopUserDirs(t)
-	setDesktopTestCredential(t, "REASONIX_TEST_KEY", "sk-test")
+	setDesktopTestCredential(t, "REAMES_AGENT_TEST_KEY", "sk-test")
 
 	cfg := config.Default()
 	cfg.DefaultModel = "prov-a/model-a2"
 	cfg.Providers = []config.ProviderEntry{
-		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", Models: []string{"model-a1", "model-a2"}, APIKeyEnv: "REASONIX_TEST_KEY"},
-		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REASONIX_TEST_KEY"},
+		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", Models: []string{"model-a1", "model-a2"}, APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
+		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
 	}
 	cfg.Agent.PlannerModel = "prov-a"
 	cfg.Desktop.ProviderAccess = []string{"prov-a", "prov-b"}
@@ -3953,13 +3953,13 @@ func assertTabBuildSuperseded(t *testing.T, app *App, tab *WorkspaceTab, generat
 
 func TestDeleteProviderSupersedesInFlightStartupBuild(t *testing.T) {
 	isolateDesktopUserDirs(t)
-	setDesktopTestCredential(t, "REASONIX_TEST_KEY", "sk-test")
+	setDesktopTestCredential(t, "REAMES_AGENT_TEST_KEY", "sk-test")
 
 	cfg := config.Default()
 	cfg.DefaultModel = "prov-b/model-b1"
 	cfg.Providers = []config.ProviderEntry{
-		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", APIKeyEnv: "REASONIX_TEST_KEY"},
-		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REASONIX_TEST_KEY"},
+		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
+		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
 	}
 	cfg.Desktop.ProviderAccess = []string{"prov-a", "prov-b"}
 	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
@@ -3992,13 +3992,13 @@ func TestDeleteProviderSupersedesInFlightStartupBuild(t *testing.T) {
 
 func TestRemoveBuiltInProviderAccessSupersedesInFlightStartupBuild(t *testing.T) {
 	isolateDesktopUserDirs(t)
-	setDesktopTestCredential(t, "REASONIX_TEST_KEY", "sk-test")
+	setDesktopTestCredential(t, "REAMES_AGENT_TEST_KEY", "sk-test")
 
 	cfg := config.Default()
 	cfg.DefaultModel = "prov-b/model-b1"
 	cfg.Providers = []config.ProviderEntry{
-		{Name: "deepseek", Kind: "openai", BaseURL: "https://api.deepseek.com", Model: "deepseek-chat", APIKeyEnv: "REASONIX_TEST_KEY"},
-		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REASONIX_TEST_KEY"},
+		{Name: "deepseek", Kind: "openai", BaseURL: "https://api.deepseek.com", Model: "deepseek-chat", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
+		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
 	}
 	cfg.Desktop.ProviderAccess = []string{"deepseek", "prov-b"}
 	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
@@ -4160,13 +4160,13 @@ func TestClearActiveSessionRuntimeReleasesResourcesWhenTabReplaced(t *testing.T)
 
 func TestDeleteProviderRejectsRunningAffectedTab(t *testing.T) {
 	isolateDesktopUserDirs(t)
-	setDesktopTestCredential(t, "REASONIX_TEST_KEY", "sk-test")
+	setDesktopTestCredential(t, "REAMES_AGENT_TEST_KEY", "sk-test")
 
 	cfg := config.Default()
 	cfg.DefaultModel = "prov-a/model-a1"
 	cfg.Providers = []config.ProviderEntry{
-		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", APIKeyEnv: "REASONIX_TEST_KEY"},
-		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REASONIX_TEST_KEY"},
+		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
+		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
 	}
 	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
 		t.Fatalf("save config: %v", err)
@@ -4194,13 +4194,13 @@ func TestDeleteProviderRejectsRunningAffectedTab(t *testing.T) {
 
 func TestDeleteProviderRejectsAffectedBackgroundJobs(t *testing.T) {
 	isolateDesktopUserDirs(t)
-	setDesktopTestCredential(t, "REASONIX_TEST_KEY", "sk-test")
+	setDesktopTestCredential(t, "REAMES_AGENT_TEST_KEY", "sk-test")
 
 	cfg := config.Default()
 	cfg.DefaultModel = "prov-a/model-a1"
 	cfg.Providers = []config.ProviderEntry{
-		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", APIKeyEnv: "REASONIX_TEST_KEY"},
-		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REASONIX_TEST_KEY"},
+		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
+		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
 	}
 	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
 		t.Fatalf("save config: %v", err)
@@ -4232,13 +4232,13 @@ func TestDeleteProviderRejectsAffectedBackgroundJobs(t *testing.T) {
 
 func TestDeleteProviderRejectsUnaffectedBackgroundJobsBeforeSavingConfig(t *testing.T) {
 	isolateDesktopUserDirs(t)
-	setDesktopTestCredential(t, "REASONIX_TEST_KEY", "sk-test")
+	setDesktopTestCredential(t, "REAMES_AGENT_TEST_KEY", "sk-test")
 
 	cfg := config.Default()
 	cfg.DefaultModel = "prov-b/model-b1"
 	cfg.Providers = []config.ProviderEntry{
-		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", APIKeyEnv: "REASONIX_TEST_KEY"},
-		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REASONIX_TEST_KEY"},
+		{Name: "prov-a", Kind: "openai", BaseURL: "https://a.example.com", Model: "model-a1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
+		{Name: "prov-b", Kind: "openai", BaseURL: "https://b.example.com", Model: "model-b1", APIKeyEnv: "REAMES_AGENT_TEST_KEY"},
 	}
 	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
 		t.Fatalf("save config: %v", err)
@@ -6256,7 +6256,7 @@ func TestSubmitToTabHistoryDisplaysRawInputAfterMemoryCompose(t *testing.T) {
 
 	app := NewApp()
 	app.setTestCtrl(ctrl, "deepseek/test")
-	ctrl.QueueMemory(`Saved memory "reasonix-contributions": contribution count updated`)
+	ctrl.QueueMemory(`Saved memory "reamesAgent-contributions": contribution count updated`)
 
 	const prompt = "不要，删了"
 	app.SubmitToTab("test", prompt)
@@ -6285,7 +6285,7 @@ func TestForkCreatesActiveTabWithoutSwitchingSourceController(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	workspace := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(workspace, "reasonix.toml"), []byte(""), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workspace, "reamesAgent.toml"), []byte(""), 0o644); err != nil {
 		t.Fatalf("write workspace config: %v", err)
 	}
 	dir := config.SessionDir()
@@ -6379,7 +6379,7 @@ func TestCapabilitiesShowsDefaultMCPAsAutomaticIdleNotDisabled(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "playwright"
 command = "npx"
@@ -6410,8 +6410,8 @@ args = ["-y", "@playwright/mcp"]
 
 func TestCapabilitiesIncludesInstalledPlugins(t *testing.T) {
 	home := isolateDesktopUserDirs(t)
-	reasonixHome := filepath.Join(home, ".reasonix")
-	root := filepath.Join(reasonixHome, "plugins", "superpowers")
+	reamesAgentHome := filepath.Join(home, ".reames-agent")
+	root := filepath.Join(reamesAgentHome, "plugins", "superpowers")
 	if err := os.MkdirAll(filepath.Join(root, "skills"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -6432,7 +6432,7 @@ func TestCapabilitiesIncludesInstalledPlugins(t *testing.T) {
 }`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := pluginpkg.Upsert(reasonixHome, pluginpkg.InstalledPlugin{
+	if err := pluginpkg.Upsert(reamesAgentHome, pluginpkg.InstalledPlugin{
 		Name:         "superpowers",
 		Root:         "plugins/superpowers",
 		Version:      "6.1.0",
@@ -6464,7 +6464,7 @@ func TestDesktopSharedHostBackgroundMCPAutoConnectsOnBoot(t *testing.T) {
 
 	srv := desktopMCPHTTPServer(t)
 	defer srv.Close()
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(fmt.Sprintf(`
 [[plugins]]
 name = "h"
 type = "http"
@@ -6520,7 +6520,7 @@ func TestMCPServersMatchesCapabilitiesServerProjection(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "playwright"
 command = "npx"
@@ -6542,7 +6542,7 @@ func TestConfiguredMCPWithFormerBuiltInNameIsUserServer(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "time"
 command = "custom-time"
@@ -6593,7 +6593,7 @@ func TestSetMCPServerEnabledSharedHostPreservesSiblingTabs(t *testing.T) {
 
 	srv := desktopMCPHTTPServer(t)
 	defer srv.Close()
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(fmt.Sprintf(`
 [[plugins]]
 name = "h"
 type = "http"
@@ -6690,7 +6690,7 @@ func TestEditAndRemoveConfiguredMCPWithBuiltInName(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "time"
 command = "custom-time"
@@ -6736,10 +6736,10 @@ func TestRemoveMCPServerClearsRecordedStartupFailure(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "broken"
-command = "reasonix-missing-mcp-binary"
+command = "reamesAgent-missing-mcp-binary"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -6749,7 +6749,7 @@ command = "reasonix-missing-mcp-binary"
 	defer app.activeCtrl().Close()
 	recordMCPFailure(app.activeCtrl(), config.PluginEntry{
 		Name:    "broken",
-		Command: "reasonix-missing-mcp-binary",
+		Command: "reamesAgent-missing-mcp-binary",
 	}, errors.New("connect: missing binary"))
 
 	view := app.Capabilities()
@@ -6822,7 +6822,7 @@ func TestUpdateMCPServerEditsProjectMCPJSONEntry(t *testing.T) {
 	if err := app.UpdateMCPServer("codegraph", MCPServerInput{
 		Name:      "codegraph",
 		Transport: "stdio",
-		Command:   "reasonix-missing-mcp-binary",
+		Command:   "reamesAgent-missing-mcp-binary",
 		Args:      []string{"serve", "--mcp"},
 		Env:       map[string]string{"CODEGRAPH_LOG": "debug"},
 	}); err != nil {
@@ -6844,7 +6844,7 @@ func TestUpdateMCPServerEditsProjectMCPJSONEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := doc.MCPServers["codegraph"]
-	if got.Command != "reasonix-missing-mcp-binary" || !reflect.DeepEqual(got.Args, []string{"serve", "--mcp"}) || got.Env["CODEGRAPH_LOG"] != "debug" {
+	if got.Command != "reamesAgent-missing-mcp-binary" || !reflect.DeepEqual(got.Args, []string{"serve", "--mcp"}) || got.Env["CODEGRAPH_LOG"] != "debug" {
 		t.Fatalf(".mcp.json codegraph = %+v, want updated command/args/env", got)
 	}
 	if _, ok := findPluginEntry(config.LoadForEdit(config.UserConfigPath()).Plugins, "codegraph"); ok {
@@ -6856,7 +6856,7 @@ func TestTrustMCPServerToolPersistsTrustedReadOnlyTools(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "github"
 command = "npx"
@@ -7008,7 +7008,7 @@ func TestCapabilitiesMarksBackgroundRemoteMCPAuthPossible(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "dida"
 type = "http"
@@ -7038,7 +7038,7 @@ func TestCapabilitiesDoesNotMarkRemoteMCPWithAuthHeaderPossible(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "stripe"
 type = "http"
@@ -7069,7 +7069,7 @@ func TestCapabilitiesMarksAuthFailureRequired(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "figma"
 type = "http"
@@ -7101,7 +7101,7 @@ func TestClearMCPServerAuthenticationClearsConfigAndFailure(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "figma"
 type = "http"
@@ -7161,7 +7161,7 @@ func TestUpdateMCPServerMigratesLegacyTierToBackground(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "playwright"
 command = "npx"
@@ -7209,7 +7209,7 @@ tier = "lazy"
 	if userPlugin.Tier != "" {
 		t.Fatalf("user plugin tier = %q, want migrated empty", userPlugin.Tier)
 	}
-	projectCfg := config.LoadForEdit(filepath.Join(dir, "reasonix.toml"))
+	projectCfg := config.LoadForEdit(filepath.Join(dir, "reamesAgent.toml"))
 	if _, ok := findPluginEntry(projectCfg.Plugins, "playwright"); ok {
 		t.Fatalf("project plugin should be removed after desktop migration: %+v", projectCfg.Plugins)
 	}
@@ -7232,7 +7232,7 @@ func TestUpdateMCPServerSplitsPastedCommandLine(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := t.TempDir()
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "playwright"
 command = "npx"
@@ -7270,7 +7270,7 @@ func TestUpdateMCPServerRecordsReconnectFailure(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "broken"
 command = "npx"
@@ -7286,7 +7286,7 @@ tier = "background"
 	if err := app.UpdateMCPServer("broken", MCPServerInput{
 		Name:      "broken",
 		Transport: "stdio",
-		Command:   "reasonix-missing-mcp-binary",
+		Command:   "reamesAgent-missing-mcp-binary",
 	}); err != nil {
 		t.Fatalf("UpdateMCPServer should persist config even when reconnect fails: %v", err)
 	}
@@ -7294,7 +7294,7 @@ tier = "background"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cfg.Plugins[0].Command; got != "reasonix-missing-mcp-binary" {
+	if got := cfg.Plugins[0].Command; got != "reamesAgent-missing-mcp-binary" {
 		t.Fatalf("updated command = %q, want missing binary", got)
 	}
 	if got := cfg.Plugins[0].Tier; got != "" {
@@ -7309,7 +7309,7 @@ tier = "background"
 			if s.Status != "failed" {
 				t.Fatalf("server status = %q, want failed; server = %+v", s.Status, s)
 			}
-			if s.Command != "reasonix-missing-mcp-binary" || s.Tier != "background" {
+			if s.Command != "reamesAgent-missing-mcp-binary" || s.Tier != "background" {
 				t.Fatalf("server config not refreshed after failed reconnect: %+v", s)
 			}
 			return
@@ -7322,7 +7322,7 @@ func TestReconnectMCPServerClearsInitializingPlaceholderAndRecordsFailure(t *tes
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "codegraph"
 `), 0o644); err != nil {
@@ -7378,10 +7378,10 @@ func TestSetMCPServerTierRecordsConnectFailure(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "broken"
-command = "reasonix-missing-mcp-binary"
+command = "reamesAgent-missing-mcp-binary"
 tier = "lazy"
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -7413,7 +7413,7 @@ tier = "lazy"
 	if userPlugin.Tier != "" {
 		t.Fatalf("user plugin tier = %q, want migrated empty", userPlugin.Tier)
 	}
-	projectCfg := config.LoadForEdit(filepath.Join(dir, "reasonix.toml"))
+	projectCfg := config.LoadForEdit(filepath.Join(dir, "reamesAgent.toml"))
 	if _, ok := findPluginEntry(projectCfg.Plugins, "broken"); ok {
 		t.Fatalf("project plugin should be removed after desktop migration: %+v", projectCfg.Plugins)
 	}
@@ -7445,7 +7445,7 @@ func TestSetMCPServerTierRejectsBackgroundJobsBeforeSavingConfig(t *testing.T) {
 	if err := os.WriteFile(config.UserConfigPath(), []byte(`
 [[plugins]]
 name = "broken"
-command = "reasonix-missing-mcp-binary"
+command = "reamesAgent-missing-mcp-binary"
 tier = "lazy"
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -7471,10 +7471,10 @@ func TestCapabilitiesMigratesFailedMCPConfiguredTierAfterRestart(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "broken"
-command = "reasonix-missing-mcp-binary"
+command = "reamesAgent-missing-mcp-binary"
 tier = "eager"
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -7485,7 +7485,7 @@ tier = "eager"
 	defer app.activeCtrl().Close()
 	recordMCPFailure(app.activeCtrl(), config.PluginEntry{
 		Name:    "broken",
-		Command: "reasonix-missing-mcp-binary",
+		Command: "reamesAgent-missing-mcp-binary",
 		Tier:    "eager",
 	}, errors.New("connect: missing binary"))
 

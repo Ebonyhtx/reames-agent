@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/sandbox"
+	"reames-agent/internal/sandbox"
 )
 
 func TestGrepTimeoutClamp(t *testing.T) {

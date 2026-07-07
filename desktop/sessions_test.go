@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/jobs"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/store"
 )
 
 func occupyReadFileWithTimeoutSlots(t *testing.T) func() {

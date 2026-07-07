@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/i18n"
-	"reasonix/internal/provider"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/provider"
 )
 
 func TestExplainError(t *testing.T) {

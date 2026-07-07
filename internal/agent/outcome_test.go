@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 // TestFailedCallsSurfaceError guards the bug where a failed tool call (an unknown

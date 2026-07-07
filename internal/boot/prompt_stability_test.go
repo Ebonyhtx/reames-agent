@@ -20,7 +20,7 @@ func TestBuildComposesByteStableSystemPrompt(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -31,7 +31,7 @@ name = "test-model"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "x"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 	writeFile(t, dir, "REASONIX.md", "Project rule: keep the prompt prefix stable.")
 

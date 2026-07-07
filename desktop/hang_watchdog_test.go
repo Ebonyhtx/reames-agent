@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/config"
+	"reames-agent/internal/config"
 )
 
 func TestHangAgeBucket(t *testing.T) {

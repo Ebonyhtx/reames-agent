@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"reasonix/internal/config"
+	"reames-agent/internal/config"
 )
 
 type Task struct {

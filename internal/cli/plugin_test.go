@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"reasonix/internal/pluginpkg"
+	"reames-agent/internal/pluginpkg"
 )
 
 func TestPluginInstallReturnsFailureExitForFailedJSON(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REAMES_AGENT_HOME", home)
 
 	source := filepath.Join(t.TempDir(), "superpowers")
 	writePluginTestFile(t, filepath.Join(source, pluginpkg.CodexManifest), `{

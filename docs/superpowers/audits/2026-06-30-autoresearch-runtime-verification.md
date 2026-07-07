@@ -9,7 +9,7 @@ frontend visibility, and focused end-to-end verification.
 
 AutoResearch has moved from a prompt convention to a host-managed runtime for
 the implemented scope. The host now creates and resumes task state under
-`.reasonix/autoresearch/<task-id>/`, injects a runtime summary into active goal
+`.reames-agent/autoresearch/<task-id>/`, injects a runtime summary into active goal
 turns, records heartbeats and stale progress, records accepted evidence from
 structured assistant evidence blocks, gates completion through default required
 criteria, and exposes desktop/frontend status APIs with compact tab metadata.
@@ -24,7 +24,7 @@ TypeScript tests, and the running Wails app was smoke-tested through `./dev`.
 | Requirement | Evidence | Status |
 | --- | --- | --- |
 | Host creates task id and directory layout | `internal/autoresearch.Store.CreateTask`; `TestCreateTaskCreatesHostOwnedLayoutAndInitialState` | Verified |
-| State files are host-owned JSON/JSONL under `.reasonix/autoresearch/<task-id>/` | `task_spec.json`, `progress.json`, `directions_tried.json`, `findings.jsonl`, `iteration_log.jsonl`, `heartbeat.jsonl`; store tests and `./dev` smoke task directory | Verified |
+| State files are host-owned JSON/JSONL under `.reames-agent/autoresearch/<task-id>/` | `task_spec.json`, `progress.json`, `directions_tried.json`, `findings.jsonl`, `iteration_log.jsonl`, `heartbeat.jsonl`; store tests and `./dev` smoke task directory | Verified |
 | Schema validation rejects missing required fields | `ValidateTask`; `TestValidateTaskReportsSchemaErrors` | Verified |
 | JSONL append rejects invalid entries | `AppendFinding`; `TestAppendFindingRejectsInvalidEntry` | Verified |
 | Accepted findings satisfy readiness | `Readiness`; `TestAppendFindingRecordsAcceptedEvidenceForReadiness`, `TestRecordEvidenceLinksFindingToCriterionAndSatisfiesReadiness` | Verified |
@@ -32,7 +32,7 @@ TypeScript tests, and the running Wails app was smoke-tested through `./dev`.
 | Controller computes stale/pivot instead of relying on prompt | `recordAutoResearchTurnProgress`; `TestResearchGoalTurnUpdatesAutoResearchStaleProgress` | Verified |
 | Per-task concurrent writes are serialized | `Store.lockTask`; `TestConcurrentDirectionWritesAreSerializedPerTask` | Verified |
 | `/goal --research` creates task and persists `AutoResearchTaskID` | `SetGoalWithResearchMode`; `TestResearchGoalCreatesHostManagedAutoResearchTask` | Verified |
-| Explicit `.reasonix/autoresearch/<task-id>/` resumes existing task | `ResumeFromGoalText`; `TestResumeFromGoalTextLoadsExplicitTaskPath` | Verified |
+| Explicit `.reames-agent/autoresearch/<task-id>/` resumes existing task | `ResumeFromGoalText`; `TestResumeFromGoalTextLoadsExplicitTaskPath` | Verified |
 | Missing explicit task path blocks instead of silently creating a new task | `ensureAutoResearchTask`; `TestResearchGoalMissingExplicitTaskBlocksInsteadOfCreatingNewTask` | Verified |
 | Cold resume restores running AutoResearch task id | `goalMachine.restoreRunningFromState`; `TestResumeRestoresRunningAutoResearchGoalFromSidecar` | Verified |
 | Compose injects host-generated `<autoresearch-runtime>` | `Controller.Compose`; `TestResearchGoalCreatesHostManagedAutoResearchTask`, resume test | Verified |
@@ -55,9 +55,9 @@ TypeScript tests, and the running Wails app was smoke-tested through `./dev`.
 ## Commands Run
 
 ```bash
-GOCACHE=/private/tmp/reasonix-go-build-cache go test ./internal/autoresearch ./internal/control -count=1
-GOCACHE=/private/tmp/reasonix-go-build-cache go test . -run 'TestAutoResearch|TestMetaReportsGoalStatus' -count=1
-GOCACHE=/private/tmp/reasonix-go-build-cache go test . -count=1
+GOCACHE=/private/tmp/reames-agent-go-build-cache go test ./internal/autoresearch ./internal/control -count=1
+GOCACHE=/private/tmp/reames-agent-go-build-cache go test . -run 'TestAutoResearch|TestMetaReportsGoalStatus' -count=1
+GOCACHE=/private/tmp/reames-agent-go-build-cache go test . -count=1
 ./node_modules/.bin/tsc --noEmit -p tsconfig.test.json
 ./node_modules/.bin/tsx src/__tests__/statusbar-workspace.test.tsx
 pnpm test
@@ -71,12 +71,12 @@ under `/var/folders`.
 
 - `./dev` started successfully.
 - Wails devserver: `http://127.0.0.1:34193`.
-- External browser loaded the page with title `Reasonix`.
+- External browser loaded the page with title `Reames Agent`.
 - Browser console had no error/warn entries.
 - Submitted `/goal --research e2e verify autoresearch ui smoke test`.
 - The transcript rendered `autoresearch task created:
   20260630-065721-e2e-verify-autoresearch-ui-smoke-test`.
-- Host state files were created under `.reasonix/autoresearch/...`.
+- Host state files were created under `.reames-agent/autoresearch/...`.
 - Cancelling the smoke goal wrote heartbeat warning `context canceled`.
 - Known Wails dev terminal noise remains: `runtime:ready -> Unknown message from
   front end: runtime:ready`.

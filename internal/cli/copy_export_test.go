@@ -9,10 +9,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
 )
 
 func newTestChatTUIWithMessages(t *testing.T, workspaceRoot string, msgs ...provider.Message) chatTUI {
@@ -133,7 +133,7 @@ func TestSlashExportFiltersInternalAndReferencedContext(t *testing.T) {
 	}
 	got := string(data)
 	for _, want := range []string{
-		"# reasonix session",
+		"# reamesAgent session",
 		"## User",
 		"please explain @auth_private.go",
 		"## Assistant",

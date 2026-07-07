@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/guardian"
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/guardian"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 // /clear must not leave the event log behind: it is the authoritative

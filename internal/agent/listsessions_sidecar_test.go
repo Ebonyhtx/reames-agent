@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 func writeSessionFile(t *testing.T, path string, msgs []provider.Message) {

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"reasonix/internal/config"
+	"reames-agent/internal/config"
 )
 
 // The desktop is a GUI app: launched from Finder or `open`, it starts with the
@@ -19,7 +19,7 @@ import (
 // workspaceStatePath is where the last working folder is remembered (under the
 // user config dir, shared with the rest of Reasonix's state).
 func workspaceStatePath() string {
-	dir := config.MemoryUserDir() // …/reasonix
+	dir := config.MemoryUserDir() // …/reamesAgent
 	if dir == "" {
 		return ""
 	}
@@ -175,7 +175,7 @@ func cwdWritable() bool {
 	if err != nil {
 		return false
 	}
-	f, err := os.CreateTemp(cwd, ".reasonix-wtest-*")
+	f, err := os.CreateTemp(cwd, ".reamesAgent-wtest-*")
 	if err != nil {
 		return false
 	}

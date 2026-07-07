@@ -24,9 +24,9 @@ import (
 	"github.com/minio/selfupdate"
 	"golang.org/x/mod/semver"
 
-	"reasonix/desktop/internal/update"
-	"reasonix/internal/config"
-	"reasonix/internal/netclient"
+	"reames-agent/desktop/internal/update"
+	"reames-agent/internal/config"
+	"reames-agent/internal/netclient"
 )
 
 // updater.go is the transport-free core of the desktop auto-updater: manifest
@@ -41,14 +41,14 @@ import (
 // avoids GitHub's repository-wide /releases/latest shortcut so the app is not
 // coupled to GitHub's homepage badge semantics.
 const (
-	r2Base             = "https://dl.reasonix.io"
-	releaseGatewayBase = "https://crash.reasonix.io/v1/desktop/releases"
-	downloadPageURL    = "https://reasonix.io/#start"
+	r2Base             = "https://dl.reamesAgent.io"
+	releaseGatewayBase = "https://crash.reamesAgent.io/v1/desktop/releases"
+	downloadPageURL    = "https://reamesAgent.io/#start"
 	httpTimeout        = 15 * time.Second
 )
 
 // githubManifestFallback is the stable channel's last-resort manifest source.
-// dl.reasonix.io and crash.reasonix.io share one Cloudflare zone, so bot
+// dl.reamesAgent.io and crash.reamesAgent.io share one Cloudflare zone, so bot
 // protection that 403s a user's egress IP takes out both first-party endpoints
 // at once (#6005); GitHub is separate infrastructure. Stable desktop releases
 // own the repo-wide latest badge and publish latest.json directly, while
@@ -591,7 +591,7 @@ func extractBinary(targz []byte, name string) ([]byte, error) {
 // applyLinux replaces the running binary with the one inside the downloaded
 // tar.gz; the caller relaunches afterwards.
 func applyLinux(targz []byte) error {
-	bin, err := extractBinary(targz, "reasonix-desktop")
+	bin, err := extractBinary(targz, "reamesAgent-desktop")
 	if err != nil {
 		return err
 	}

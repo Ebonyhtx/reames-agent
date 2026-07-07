@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/netclient"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/tool"
+	"reames-agent/internal/netclient"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/tool"
 )
 
 // ConfineBash returns the bash built-in bound to an OS-sandbox spec, overriding
@@ -124,7 +124,7 @@ func confine(roots []string, target string) error {
 		}
 	}
 	return fmt.Errorf("path %q is outside the writable roots (writes are confined to %s); "+
-		"write inside the workspace or a configured allow_write root, or widen [sandbox] workspace_root / allow_write in reasonix.toml",
+		"write inside the workspace or a configured allow_write root, or widen [sandbox] workspace_root / allow_write in reamesAgent.toml",
 		target, strings.Join(roots, ", "))
 }
 

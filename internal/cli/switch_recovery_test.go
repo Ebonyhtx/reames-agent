@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
 )
 
 // divergedSessionController builds a controller whose in-memory transcript has

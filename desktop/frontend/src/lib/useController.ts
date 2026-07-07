@@ -1145,7 +1145,7 @@ function settingSwitchNoticeText(
   if (lower.includes("finish or cancel") && lower.includes(`before changing ${setting}`)) {
     return t(keys.busy);
   }
-  if (lower.includes("already open in another reasonix window") || lower.includes("session lease held")) {
+  if (lower.includes("already open in another reames-agent window") || lower.includes("session lease held")) {
     return t(keys.leaseHeld);
   }
   if (lower.includes("workspace is still starting")) {

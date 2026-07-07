@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/bot"
-	"reasonix/internal/bot/feishu"
-	"reasonix/internal/bot/weixin"
-	"reasonix/internal/botruntime"
-	"reasonix/internal/config"
+	"reames-agent/internal/bot"
+	"reames-agent/internal/bot/feishu"
+	"reames-agent/internal/bot/weixin"
+	"reames-agent/internal/botruntime"
+	"reames-agent/internal/config"
 )
 
 type BotConnectionCredentialView struct {

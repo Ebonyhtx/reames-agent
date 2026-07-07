@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 func TestSubagentStoreContinueLoadsSavedTranscript(t *testing.T) {

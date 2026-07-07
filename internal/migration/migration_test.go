@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/config"
-	"reasonix/internal/event"
+	"reames-agent/internal/config"
+	"reames-agent/internal/event"
 )
 
 const legacyMessageLog = `{"role":"user","content":"hello from v0.x"}
@@ -21,9 +21,9 @@ func migrationRescueHome(t *testing.T) string {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
-	t.Setenv("REASONIX_HOME", "")
-	t.Setenv("REASONIX_STATE_HOME", filepath.Join(home, "new-state"))
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_HOME", "")
+	t.Setenv("REAMES_AGENT_STATE_HOME", filepath.Join(home, "new-state"))
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Chdir(t.TempDir())
 	return home
 }
@@ -31,14 +31,14 @@ func migrationRescueHome(t *testing.T) string {
 func isolateMigrationHome(t *testing.T) string {
 	t.Helper()
 	home := migrationRescueHome(t)
-	t.Setenv("REASONIX_HOME", filepath.Join(home, "new-reasonix"))
-	t.Setenv("REASONIX_STATE_HOME", "")
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, "new-reamesAgent"))
+	t.Setenv("REAMES_AGENT_STATE_HOME", "")
 	return home
 }
 
 func TestRunLegacyRescueImportsSessionsAndEmitsProgress(t *testing.T) {
 	home := migrationRescueHome(t)
-	legacyDir := filepath.Join(home, ".reasonix", "sessions")
+	legacyDir := filepath.Join(home, ".reames-agent", "sessions")
 	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestRunLegacyRescueImportsSessionsAndEmitsProgress(t *testing.T) {
 
 func TestRunLegacyRescueImportsMemory(t *testing.T) {
 	home := migrationRescueHome(t)
-	legacyRoot := filepath.Join(home, ".reasonix")
+	legacyRoot := filepath.Join(home, ".reames-agent")
 	if err := os.MkdirAll(filepath.Join(legacyRoot, "memory", "global"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestRunLegacyRescueNoopStillShowsProgress(t *testing.T) {
 
 func TestRunLegacyRescueSkipsImplicitSourcesWhenIsolated(t *testing.T) {
 	home := isolateMigrationHome(t)
-	legacyRoot := filepath.Join(home, ".reasonix")
+	legacyRoot := filepath.Join(home, ".reames-agent")
 	if err := os.MkdirAll(filepath.Join(legacyRoot, "sessions"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestRunLegacyRescueSkipsImplicitSourcesWhenIsolated(t *testing.T) {
 		t.Fatalf("isolated rescue imported legacy memory, stat err=%v", err)
 	}
 	joined := strings.Join(notices, "\n")
-	if !strings.Contains(joined, "REASONIX_HOME is set; implicit legacy migration is skipped") {
+	if !strings.Contains(joined, "REAMES_AGENT_HOME is set; implicit legacy migration is skipped") {
 		t.Fatalf("missing isolated skip notice in:\n%s", joined)
 	}
 }
@@ -244,10 +244,10 @@ func TestMigrateLegacySessionSourcesSkipsCurrentProjectTree(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
-	t.Setenv("REASONIX_HOME", "")
-	t.Setenv("REASONIX_STATE_HOME", "")
-	if !samePath(config.MemoryUserDir(), filepath.Join(home, ".reasonix")) {
-		t.Skip("current Reasonix home is not ~/.reasonix on this platform")
+	t.Setenv("REAMES_AGENT_HOME", "")
+	t.Setenv("REAMES_AGENT_STATE_HOME", "")
+	if !samePath(config.MemoryUserDir(), filepath.Join(home, ".reames-agent")) {
+		t.Skip("current Reasonix home is not ~/.reamesAgent on this platform")
 	}
 
 	projectSessions := filepath.Join(config.MemoryUserDir(), "projects", "current-project", "sessions")

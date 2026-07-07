@@ -20,15 +20,15 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/boot"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/jobs"
-	"reasonix/internal/nilutil"
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/boot"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/nilutil"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 //go:embed index.html

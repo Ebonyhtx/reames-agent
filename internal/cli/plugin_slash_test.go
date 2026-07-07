@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/pluginpkg"
+	"reames-agent/internal/pluginpkg"
 )
 
 func TestPluginsSlashShowsInstalledPluginDetails(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REAMES_AGENT_HOME", home)
 	root := filepath.Join(home, "plugins", "superpowers")
 	writePluginTestFile(t, filepath.Join(root, pluginpkg.CodexManifest), `{
 	  "name": "superpowers",

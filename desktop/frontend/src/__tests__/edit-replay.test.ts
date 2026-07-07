@@ -24,8 +24,8 @@ eq(
 );
 
 eq(
-  replaySubmitText("hidden session context\nvisible prompt @.reasonix/attachments/a.png", "visible prompt @[a.png](.reasonix/attachments/a.png)", "updated prompt @[a.png](.reasonix/attachments/a.png)", "updated prompt @.reasonix/attachments/a.png"),
-  "hidden session context\nupdated prompt @.reasonix/attachments/a.png",
+  replaySubmitText("hidden session context\nvisible prompt @.reames-agent/attachments/a.png", "visible prompt @[a.png](.reames-agent/attachments/a.png)", "updated prompt @[a.png](.reames-agent/attachments/a.png)", "updated prompt @.reames-agent/attachments/a.png"),
+  "hidden session context\nupdated prompt @.reames-agent/attachments/a.png",
   "edited visible text preserves submit-only prefix and raw attachment refs",
 );
 

@@ -3,12 +3,12 @@ package planmode_test
 import (
 	"testing"
 
-	"reasonix/internal/planmode"
-	"reasonix/internal/tool"
+	"reames-agent/internal/planmode"
+	"reames-agent/internal/tool"
 
 	// Blank import so the built-in tools self-register via their init()s and
 	// tool.Builtins() returns the real compile-time roster.
-	_ "reasonix/internal/tool/builtin"
+	_ "reames-agent/internal/tool/builtin"
 )
 
 // TestEveryBuiltinHasExplicitPlanModeStance is the forcing function against

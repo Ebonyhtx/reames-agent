@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/config"
-	"reasonix/internal/control"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 )
 
 // ── Data model ──────────────────────────────────────────────────────────────

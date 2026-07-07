@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"reasonix/internal/memory"
+	"reames-agent/internal/memory"
 )
 
 // TestMemoryWriteReflectsInSnapshot verifies that a memory write lands on disk

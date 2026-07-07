@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/config"
-	"reasonix/internal/control"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 )
 
 func TestEnsureBlankTabInheritsActiveTabLocalSettings(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	workspace := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(workspace, "reasonix.toml"),
+	if err := os.WriteFile(filepath.Join(workspace, "reamesAgent.toml"),
 		[]byte(""), 0o644); err != nil {
 		t.Fatalf("write workspace config: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestEnsureBlankTabInheritsActiveTabLocalSettings(t *testing.T) {
 func TestEnsureBlankTabUsesGlobalSessionDefaultsForModelAndToolApproval(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	workspace := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(workspace, "reasonix.toml"),
+	if err := os.WriteFile(filepath.Join(workspace, "reamesAgent.toml"),
 		[]byte(""), 0o644); err != nil {
 		t.Fatalf("write workspace config: %v", err)
 	}

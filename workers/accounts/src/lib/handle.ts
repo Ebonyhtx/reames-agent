@@ -5,7 +5,7 @@ const RESERVED = new Set([
   "admin", "administrator", "root", "system", "support", "help", "about", "api",
   "auth", "login", "logout", "register", "signup", "signin", "reset", "verify",
   "forgot", "account", "settings", "me", "u", "user", "users", "profile",
-  "reasonix", "www", "mail", "no-reply", "noreply", "null", "undefined", "anonymous",
+  "reames-agent", "www", "mail", "no-reply", "noreply", "null", "undefined", "anonymous",
 ]);
 
 // Lowercase, collapse runs of disallowed characters to single underscores, and

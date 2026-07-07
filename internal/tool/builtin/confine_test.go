@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/config"
-	"reasonix/internal/sandbox"
+	"reames-agent/internal/config"
+	"reames-agent/internal/sandbox"
 )
 
 func TestWithin(t *testing.T) {
@@ -146,7 +146,7 @@ func TestBashSandboxConfinement(t *testing.T) {
 	if err != nil {
 		t.Skipf("no home dir: %v", err)
 	}
-	work, err := os.MkdirTemp(home, ".reasonix-bashsb-*")
+	work, err := os.MkdirTemp(home, ".reamesAgent-bashsb-*")
 	if err != nil {
 		t.Skipf("cannot create work dir under home: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestBashSandboxConfinement(t *testing.T) {
 	if _, err := b.Execute(context.Background(), inArgs); err != nil {
 		t.Fatalf("bash write inside root failed: %v", err)
 	}
-	outPath := filepath.Join(home, ".reasonix-bashsb-escape.txt")
+	outPath := filepath.Join(home, ".reamesAgent-bashsb-escape.txt")
 	t.Cleanup(func() { os.Remove(outPath) })
 	outCommand := "echo nope > " + outPath
 	if runtime.GOOS == "windows" {

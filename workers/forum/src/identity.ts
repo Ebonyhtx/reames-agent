@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import type { AppEnv, Bindings, Member } from "./env";
 
-// The id.reasonix.io session cookie is scoped to `.reasonix.io`, so the browser
+// The id.reames-agent.io session cookie is scoped to `.reames-agent.io`, so the browser
 // sends it here too; we hand it back as a Bearer token to resolve the identity.
 const SHARED_COOKIE = "rxid";
 

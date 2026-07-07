@@ -58,7 +58,7 @@ func isProjectDotEnvControlKey(key string) bool {
 		return true
 	}
 	upper := strings.ToUpper(key)
-	if strings.HasPrefix(upper, "REASONIX_") {
+	if strings.HasPrefix(upper, "REAMES_AGENT_") {
 		return true
 	}
 	switch upper {

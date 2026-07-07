@@ -14,12 +14,12 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/config"
-	"reasonix/internal/event"
-	"reasonix/internal/i18n"
-	"reasonix/internal/notify"
-	"reasonix/internal/provider"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/config"
+	"reames-agent/internal/event"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/notify"
+	"reames-agent/internal/provider"
 )
 
 func TestChdirTo(t *testing.T) {
@@ -198,7 +198,7 @@ func isolateCLIConfigHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
@@ -209,7 +209,7 @@ func isolateCLIConfigHome(t *testing.T) string {
 func TestMCPMigrationWaitsForCLIWorkspace(t *testing.T) {
 	isolateCLIConfigHome(t)
 	cwd := mustGetwd(t)
-	if err := os.WriteFile(filepath.Join(cwd, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(cwd, "reamesAgent.toml"), []byte(`
 [[plugins]]
 name = "cwd-project"
 command = "cwd-project-bin"
@@ -254,7 +254,7 @@ func TestMetadataCommandsDoNotProbeTerminalTheme(t *testing.T) {
 			t.Fatalf("version rc = %d, want 0", rc)
 		}
 	})
-	if !strings.Contains(out, "reasonix test-version") {
+	if !strings.Contains(out, "reamesAgent test-version") {
 		t.Fatalf("version output = %q", out)
 	}
 
@@ -266,7 +266,7 @@ func TestMetadataCommandsDoNotProbeTerminalTheme(t *testing.T) {
 	if !strings.Contains(out, "Usage:") && !strings.Contains(out, "用法：") {
 		t.Fatalf("help output missing usage:\n%s", out)
 	}
-	if !strings.Contains(out, "reasonix run  [--model NAME] [--max-steps N] [-c|--continue] [--resume PATH] [--copy] <task>") {
+	if !strings.Contains(out, "reamesAgent run  [--model NAME] [--max-steps N] [-c|--continue] [--resume PATH] [--copy] <task>") {
 		t.Fatalf("help output missing run resume flags:\n%s", out)
 	}
 }
@@ -330,7 +330,7 @@ func TestRunNoArgsNonInteractivePrintsUsage(t *testing.T) {
 			t.Fatalf("Run(nil) rc = %d, want 0", rc)
 		}
 	})
-	if !strings.Contains(out, "reasonix —") || !strings.Contains(out, "reasonix run") {
+	if !strings.Contains(out, "reamesAgent —") || !strings.Contains(out, "reamesAgent run") {
 		t.Fatalf("non-interactive no-arg Run should print usage, got:\n%s", out)
 	}
 }
@@ -391,7 +391,7 @@ func TestRunKeepsChatAndCodeCompatibilityAliases(t *testing.T) {
 
 func TestRunMigratesLegacyConfigBeforeConfigOnlyCommands(t *testing.T) {
 	isolateCLIConfigHome(t)
-	legacyPath := filepath.Join(filepath.Dir(config.UserConfigPath()), "reasonix.toml")
+	legacyPath := filepath.Join(filepath.Dir(config.UserConfigPath()), "reamesAgent.toml")
 	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +452,7 @@ func TestRunAppliesUserConfigUpgradesOnStartup(t *testing.T) {
 
 func TestRunMetadataCommandsDoNotMigrateLegacyConfig(t *testing.T) {
 	isolateCLIConfigHome(t)
-	legacyPath := filepath.Join(filepath.Dir(config.UserConfigPath()), "reasonix.toml")
+	legacyPath := filepath.Join(filepath.Dir(config.UserConfigPath()), "reamesAgent.toml")
 	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +465,7 @@ func TestRunMetadataCommandsDoNotMigrateLegacyConfig(t *testing.T) {
 			t.Fatalf("version rc = %d, want 0", rc)
 		}
 	})
-	if !strings.Contains(out, "reasonix test-version") {
+	if !strings.Contains(out, "reamesAgent test-version") {
 		t.Fatalf("version output = %q", out)
 	}
 	if _, err := os.Stat(config.UserConfigPath()); !os.IsNotExist(err) {
@@ -507,8 +507,8 @@ func TestConfigAutoPlanLocalIsRejected(t *testing.T) {
 	if !strings.Contains(errOut, "--local is not supported") {
 		t.Fatalf("config auto-plan --local stderr = %q", errOut)
 	}
-	if _, err := os.Stat("reasonix.toml"); !os.IsNotExist(err) {
-		t.Fatalf("reasonix.toml should not be written, stat err=%v", err)
+	if _, err := os.Stat("reamesAgent.toml"); !os.IsNotExist(err) {
+		t.Fatalf("reamesAgent.toml should not be written, stat err=%v", err)
 	}
 
 	cfg, err := config.Load()
@@ -579,8 +579,8 @@ func TestConfigMemoryV5LocalIsRejected(t *testing.T) {
 	if !strings.Contains(errOut, "--local is not supported") {
 		t.Fatalf("config memory-v5 --local stderr = %q", errOut)
 	}
-	if _, err := os.Stat("reasonix.toml"); !os.IsNotExist(err) {
-		t.Fatalf("reasonix.toml should not be written, stat err=%v", err)
+	if _, err := os.Stat("reamesAgent.toml"); !os.IsNotExist(err) {
+		t.Fatalf("reamesAgent.toml should not be written, stat err=%v", err)
 	}
 }
 
@@ -594,7 +594,7 @@ func TestConfigAutoPlanIgnoresProjectConfig(t *testing.T) {
 	if err := userCfg.SaveTo(config.UserConfigPath()); err != nil {
 		t.Fatalf("write user config: %v", err)
 	}
-	if err := os.WriteFile("reasonix.toml", []byte("[agent]\nauto_plan = \"on\"\n"), 0o644); err != nil {
+	if err := os.WriteFile("reamesAgent.toml", []byte("[agent]\nauto_plan = \"on\"\n"), 0o644); err != nil {
 		t.Fatalf("write project config: %v", err)
 	}
 
@@ -612,7 +612,7 @@ func TestConfigAutoPlanIgnoresProjectConfig(t *testing.T) {
 	if err := userCfg.SaveTo(config.UserConfigPath()); err != nil {
 		t.Fatalf("rewrite user config: %v", err)
 	}
-	if err := os.WriteFile("reasonix.toml", []byte("[agent]\nauto_plan = \"off\"\n"), 0o644); err != nil {
+	if err := os.WriteFile("reamesAgent.toml", []byte("[agent]\nauto_plan = \"off\"\n"), 0o644); err != nil {
 		t.Fatalf("rewrite project config: %v", err)
 	}
 	cfg, err = config.Load()
@@ -659,7 +659,7 @@ func TestConfigReasoningLanguageLocalCreatesMinimalProjectOverride(t *testing.T)
 		t.Fatalf("config reasoning-language --local output = %q", out)
 	}
 
-	body, err := os.ReadFile("reasonix.toml")
+	body, err := os.ReadFile("reamesAgent.toml")
 	if err != nil {
 		t.Fatalf("read project config: %v", err)
 	}
@@ -976,10 +976,10 @@ func TestFetchOrFallback(t *testing.T) {
 	})
 
 	t.Run("no key set returns static list (offline first-run)", func(t *testing.T) {
-		t.Setenv("REASONIX_FETCH_TEST_KEY", "")
+		t.Setenv("REAMES_AGENT_FETCH_TEST_KEY", "")
 		probe := config.ProviderEntry{
 			BaseURL:   "http://127.0.0.1:1", // unreachable, no listener
-			APIKeyEnv: "REASONIX_FETCH_TEST_KEY",
+			APIKeyEnv: "REAMES_AGENT_FETCH_TEST_KEY",
 			Models:    []string{"preset-a"},
 		}
 		got := fetchOrFallback(&probe, "Test")
@@ -1302,7 +1302,7 @@ func TestPromptCustomProviderManualPreservesExplicitKeyEnv(t *testing.T) {
 
 // TestFilterStaleCustomEntries covers the wizard's auto-cleanup of legacy
 // "custom" / "anthropic" magic-name entries that previous versions wrote
-// into reasonix.toml. These collide with the wizard's own menu items, so
+// into reamesAgent.toml. These collide with the wizard's own menu items, so
 // they're dropped from the providers list before grouping — but the caller
 // still gets them back in the dropped slice to surface a warning.
 func TestFilterStaleCustomEntries(t *testing.T) {
@@ -1350,7 +1350,7 @@ func TestFilterStaleCustomEntries(t *testing.T) {
 }
 
 func TestWithBuiltinFamiliesDoesNotAddMissingMimo(t *testing.T) {
-	// The user's case: a reasonix.toml that defines only deepseek providers.
+	// The user's case: a reamesAgent.toml that defines only deepseek providers.
 	cfg := []config.ProviderEntry{
 		{Name: "deepseek-flash", Kind: "openai", BaseURL: "https://api.deepseek.com"},
 		{Name: "deepseek-pro", Kind: "openai", BaseURL: "https://api.deepseek.com"},
@@ -1391,7 +1391,7 @@ func TestWithBuiltinFamiliesForLanguageUsesDeepSeekPricing(t *testing.T) {
 
 // TestWithBuiltinFamiliesRestoresSiblingEntries covers the re-run scenario:
 // a user previously selected only deepseek-v4-flash (saved as deepseek-flash
-// with a single model). Re-running `reasonix setup` must still surface the
+// with a single model). Re-running `reamesAgent setup` must still surface the
 // sibling deepseek-pro entry so the user can pick deepseek-v4-pro too,
 // rather than only showing the previously selected model.
 func TestWithBuiltinFamiliesRestoresSiblingEntries(t *testing.T) {
@@ -1439,7 +1439,7 @@ func groupByFamilyKeys(ps []config.ProviderEntry, key string) []int {
 }
 
 func TestWriteDefaultConfigOmitsLegacyInternalMCPSections(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "reasonix.toml")
+	path := filepath.Join(t.TempDir(), "reamesAgent.toml")
 	if rc := writeDefaultConfig(path); rc != 0 {
 		t.Fatalf("writeDefaultConfig rc = %d", rc)
 	}

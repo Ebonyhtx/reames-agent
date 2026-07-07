@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/event"
-	"reasonix/internal/jobs"
-	"reasonix/internal/sandbox"
+	"reames-agent/internal/event"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/sandbox"
 )
 
 // A foreground bash command keeps the Windows sandbox's short lock wait so a

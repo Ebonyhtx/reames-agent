@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
 )
 
 func testAppWithOrderedTabs(t *testing.T, active string, ids ...string) *App {

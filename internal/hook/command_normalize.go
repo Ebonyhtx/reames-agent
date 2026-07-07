@@ -3,7 +3,7 @@ package hook
 import (
 	"strings"
 
-	"reasonix/internal/shellparse"
+	"reames-agent/internal/shellparse"
 )
 
 // NormalizeCommand repairs a narrow class of copied JSON-escaped node -e hooks.

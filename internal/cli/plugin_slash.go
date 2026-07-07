@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/config"
-	"reasonix/internal/pluginpkg"
+	"reames-agent/internal/config"
+	"reames-agent/internal/pluginpkg"
 )
 
 func pluginArgNames() []string {

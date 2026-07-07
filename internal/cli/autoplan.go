@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/config"
+	"reames-agent/internal/config"
 )
 
 func (m *chatTUI) runAutoPlanCommand(input string) {

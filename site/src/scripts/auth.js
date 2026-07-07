@@ -1,6 +1,6 @@
-// Client for the reasonix-accounts API (id.reasonix.io). Cookie-based session,
+// Client for the reames-agent-accounts API (id.reames-agent.io). Cookie-based session,
 // so every call sends credentials; the API base is build-time configurable.
-const API = (import.meta.env.PUBLIC_ACCOUNTS_API || "https://id.reasonix.io").replace(/\/$/, "");
+const API = (import.meta.env.PUBLIC_ACCOUNTS_API || "https://id.reames-agent.io").replace(/\/$/, "");
 
 async function api(path, { method = "GET", body } = {}) {
   const res = await fetch(API + path, {
@@ -35,14 +35,14 @@ const qp = new URLSearchParams(location.search);
 const withBase = (p) => (import.meta.env.BASE_URL.replace(/\/$/, "") + p) || p;
 
 // A `next` is honoured only if it's a same-origin path or an absolute https URL
-// under reasonix.io, so a subdomain (e.g. crash.reasonix.io) can return here
+// under reames-agent.io, so a subdomain (e.g. crash.reames-agent.io) can return here
 // after sign-in without opening a redirect to an arbitrary host.
 function safeNext(next) {
   if (!next) return null;
   if (next.startsWith("/")) return next;
   try {
     const u = new URL(next);
-    if (u.protocol === "https:" && (u.host === "reasonix.io" || u.host.endsWith(".reasonix.io"))) return next;
+    if (u.protocol === "https:" && (u.host === "reames-agent.io" || u.host.endsWith(".reames-agent.io"))) return next;
   } catch {}
   return null;
 }

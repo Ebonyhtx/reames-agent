@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"reasonix/internal/sandbox"
+	"reames-agent/internal/sandbox"
 )
 
 // The Windows bash sandbox relaunches os.Executable() with
@@ -15,7 +15,7 @@ func TestWindowsSandboxHelperRouteRecognized(t *testing.T) {
 	// argv[2:] is empty, so the helper rejects it with a usage error — the
 	// point here is only that the route matched (ok == true) and the process
 	// would exit instead of booting the GUI.
-	code, ok := runWindowsSandboxHelperIfRequested([]string{"reasonix-desktop", sandbox.WindowsHelperCommand})
+	code, ok := runWindowsSandboxHelperIfRequested([]string{"reamesAgent-desktop", sandbox.WindowsHelperCommand})
 	if !ok {
 		t.Fatal("helper subcommand not routed; sandboxed commands would boot a second GUI instance")
 	}
@@ -26,9 +26,9 @@ func TestWindowsSandboxHelperRouteRecognized(t *testing.T) {
 
 func TestWindowsSandboxHelperRouteIgnoresNormalLaunch(t *testing.T) {
 	for _, argv := range [][]string{
-		{"reasonix-desktop"},
-		{"reasonix-desktop", "--some-flag"},
-		{"reasonix-desktop", "not-the-helper", sandbox.WindowsHelperCommand},
+		{"reamesAgent-desktop"},
+		{"reamesAgent-desktop", "--some-flag"},
+		{"reamesAgent-desktop", "not-the-helper", sandbox.WindowsHelperCommand},
 	} {
 		if _, ok := runWindowsSandboxHelperIfRequested(argv); ok {
 			t.Fatalf("argv %v should not be treated as a helper launch", argv)

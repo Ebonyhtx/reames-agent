@@ -17,12 +17,12 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
-	"reasonix/internal/i18n"
-	"reasonix/internal/jobs"
-	"reasonix/internal/proc"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/shellparse"
-	"reasonix/internal/tool"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/proc"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/shellparse"
+	"reames-agent/internal/tool"
 )
 
 const (
@@ -517,7 +517,7 @@ func defaultBashShellPATH(ctx context.Context) string {
 	if shell == "" {
 		return ""
 	}
-	const marker = "__REASONIX_BASH_PATH__="
+	const marker = "__REAMES_AGENT_BASH_PATH__="
 	script := "printf '\\n" + marker + "%s\\n' \"$PATH\""
 	for _, args := range [][]string{
 		{"-l", "-i", "-c", script},

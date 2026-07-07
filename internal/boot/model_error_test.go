@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 
-	_ "reasonix/internal/provider/openai"
-	_ "reasonix/internal/tool/builtin"
+	_ "reames-agent/internal/provider/openai"
+	_ "reames-agent/internal/tool/builtin"
 )
 
 // TestBuildUnknownModelErrorIsActionable: a default_model that doesn't resolve
@@ -18,7 +18,7 @@ import (
 func TestBuildUnknownModelErrorIsActionable(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "legacy-missing"
 
 [[providers]]
@@ -26,7 +26,7 @@ name = "deepseek-flash"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "deepseek-v4-flash"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 
 	_, err := Build(context.Background(), Options{Sink: event.Discard})
@@ -44,7 +44,7 @@ api_key_env = "REASONIX_TEST_KEY_UNSET"
 func TestBuildMigratesLegacyBareMimoModelOverride(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "deepseek-flash"
 
 [[providers]]
@@ -52,7 +52,7 @@ name = "deepseek-flash"
 kind = "openai"
 base_url = "https://example.invalid"
 model = "deepseek-v4-flash"
-api_key_env = "REASONIX_TEST_KEY_UNSET"
+api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 `)
 
 	ctrl, err := Build(context.Background(), Options{Sink: event.Discard, Model: "mimo-v2.5-pro"})
@@ -69,10 +69,10 @@ api_key_env = "REASONIX_TEST_KEY_UNSET"
 // builds fine (RequireKey is false so the UI stays reachable) but must emit a
 // notice naming the env var, instead of silently showing a dead/empty model.
 func TestBuildNoticesMissingAPIKey(t *testing.T) {
-	const keyEnv = "REASONIX_MISSING_KEY_FOR_TEST"
+	const keyEnv = "REAMES_AGENT_MISSING_KEY_FOR_TEST"
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "x"
 
 [[providers]]
@@ -108,11 +108,11 @@ api_key_env = "`+keyEnv+`"
 }
 
 func TestBuildDoesNotNoticeMissingAPIKeyForNoAuthLoopback(t *testing.T) {
-	const keyEnv = "REASONIX_LOCAL_GATEWAY_KEY_FOR_TEST"
+	const keyEnv = "REAMES_AGENT_LOCAL_GATEWAY_KEY_FOR_TEST"
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 	t.Setenv(keyEnv, "")
-	writeFile(t, dir, "reasonix.toml", `
+	writeFile(t, dir, "reamesAgent.toml", `
 default_model = "local/model-a"
 
 [[providers]]

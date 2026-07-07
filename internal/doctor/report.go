@@ -12,11 +12,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/config"
-	"reasonix/internal/netclient"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/config"
+	"reames-agent/internal/netclient"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/store"
 )
 
 type Options struct {
@@ -118,11 +118,11 @@ func Collect(opts Options) Report {
 	}
 	cwd, _ := os.Getwd()
 	sourcePath := config.SourcePath()
-	// Settings UIs and `reasonix config` edit the user-level config, but a
-	// project reasonix.toml outranks it. Users who toggle the sandbox off in
+	// Settings UIs and `reamesAgent config` edit the user-level config, but a
+	// project reamesAgent.toml outranks it. Users who toggle the sandbox off in
 	// Settings while the project file pins [sandbox] read the no-op as "bash is
 	// broken" (#5961, #6046) — surface the layering explicitly.
-	if sourcePath != "" && filepath.Base(sourcePath) == "reasonix.toml" {
+	if sourcePath != "" && filepath.Base(sourcePath) == "reamesAgent.toml" {
 		if raw, err := os.ReadFile(sourcePath); err == nil && tomlHasSandboxTable(raw) {
 			warnings = append(warnings, "project "+redactHome(sourcePath)+" sets [sandbox]; it overrides user-level Settings -> Sandbox for this workspace — edit the project file to change sandbox behavior here")
 		}
@@ -204,7 +204,7 @@ func Collect(opts Options) Report {
 
 func RenderText(r Report) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "reasonix %s doctor\n", r.Version)
+	fmt.Fprintf(&b, "reamesAgent %s doctor\n", r.Version)
 	fmt.Fprintf(&b, "  system       %s/%s\n", r.OS, r.Arch)
 	if r.CWD != "" {
 		fmt.Fprintf(&b, "  cwd          %s\n", r.CWD)

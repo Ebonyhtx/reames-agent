@@ -29,30 +29,30 @@ import (
 	"sync/atomic"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/autoresearch"
-	"reasonix/internal/billing"
-	"reasonix/internal/checkpoint"
-	"reasonix/internal/command"
-	"reasonix/internal/config"
-	"reasonix/internal/diff"
-	"reasonix/internal/event"
-	"reasonix/internal/evidence"
-	"reasonix/internal/guardian"
-	"reasonix/internal/hook"
-	"reasonix/internal/i18n"
-	"reasonix/internal/jobs"
-	"reasonix/internal/memory"
-	"reasonix/internal/memorycompiler"
-	"reasonix/internal/nilutil"
-	"reasonix/internal/permission"
-	"reasonix/internal/plugin"
-	"reasonix/internal/proc"
-	"reasonix/internal/provider"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/skill"
-	"reasonix/internal/store"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/autoresearch"
+	"reames-agent/internal/billing"
+	"reames-agent/internal/checkpoint"
+	"reames-agent/internal/command"
+	"reames-agent/internal/config"
+	"reames-agent/internal/diff"
+	"reames-agent/internal/event"
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/guardian"
+	"reames-agent/internal/hook"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/memorycompiler"
+	"reames-agent/internal/nilutil"
+	"reames-agent/internal/permission"
+	"reames-agent/internal/plugin"
+	"reames-agent/internal/proc"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/skill"
+	"reames-agent/internal/store"
+	"reames-agent/internal/tool"
 )
 
 // ErrTurnRunning reports that a caller tried to start a second foreground turn
@@ -133,7 +133,7 @@ type Controller struct {
 	// tool registry the executor reads each turn, and the session-scoped context a
 	// hot-added stdio server binds its subprocess to — behind its own lock, off
 	// c.mu. The Controller keeps the config-facing orchestration (persisting
-	// reasonix.toml on add/remove, building specs from entries). See mcp.go.
+	// reamesAgent.toml on add/remove, building specs from entries). See mcp.go.
 	mcp mcpManager
 
 	// goals owns the active goal's FSM (status, intercepts, idle/turn counters)
@@ -1348,7 +1348,7 @@ func (c *Controller) notice(text string) {
 }
 
 // Run executes a turn synchronously, returning the agent's error. Used by the
-// headless `reasonix run` path, where the Sink renders to stdout and the caller
+// headless `reamesAgent run` path, where the Sink renders to stdout and the caller
 // just needs the exit status — no TurnDone event, no cancel bookkeeping.
 func (c *Controller) Run(ctx context.Context, input string) error {
 	c.maybeSessionStart(ctx)
@@ -3670,7 +3670,7 @@ func (c *Controller) AddMCPServer(e config.PluginEntry) (int, error) {
 
 // ConnectMCPServer connects an MCP server entry for this session without writing
 // it to config. Desktop owns config placement so it can keep user-level settings
-// out of project reasonix.toml while preserving the CLI AddMCPServer semantics.
+// out of project reamesAgent.toml while preserving the CLI AddMCPServer semantics.
 func (c *Controller) ConnectMCPServer(e config.PluginEntry) (int, error) {
 	return c.connectMCPServer(e)
 }
@@ -4725,7 +4725,7 @@ func hasFile(dir, name string) bool {
 func listSourceDirs(root string, maxDepth int) []string {
 	skip := map[string]bool{
 		".git": true, ".github": true, "node_modules": true,
-		"vendor": true, ".reasonix": true, "desktop": true,
+		"vendor": true, ".reames-agent": true, "desktop": true,
 		"dist": true, "build": true, ".cache": true, "bin": true,
 	}
 	var dirs []string

@@ -7,13 +7,13 @@ export function renderAccount(user: User): string {
     ? `<div class="notice err">Your account is awaiting approval. An admin needs to grant you access before the diagnostic reports dashboard becomes visible.</div>`
     : `<div class="notice ok">You have <b>${esc(user.role)}</b> access. <a href="/stats">Open the dashboard →</a></div>`;
   return page(
-    "Reasonix · Account",
+    "Reames Agent · Account",
     "account",
     `<h1>Account</h1><p class="sub">${esc(user.email)} · joined ${esc(user.created_at.slice(0, 10))}</p>
 ${status}
 <div class="card" style="max-width:480px;margin-top:24px"><h2>Identity</h2>
-<p class="sub">Your email and password are managed by your Reasonix account.</p>
-<a class="btn" href="https://reasonix.io/account/">Manage your account →</a></div>`,
+<p class="sub">Your email and password are managed by your Reames Agent account.</p>
+<a class="btn" href="https://reames-agent.io/account/">Manage your account →</a></div>`,
     userNav(user),
   );
 }

@@ -16,12 +16,12 @@ import (
 	"strings"
 	"sync"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/frontmatter"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/frontmatter"
 )
 
 const (
-	NativeManifest = "reasonix-plugin.json"
+	NativeManifest = "reamesAgent-plugin.json"
 	CodexManifest  = ".codex-plugin/plugin.json"
 	ClaudeManifest = ".claude-plugin/plugin.json"
 	StateFilename  = "plugin-packages.json"
@@ -126,21 +126,21 @@ type InstalledPackage struct {
 
 func IsValidName(name string) bool { return validName.MatchString(strings.TrimSpace(name)) }
 
-func StatePath(reasonixHome string) string {
-	return filepath.Join(reasonixHome, StateFilename)
+func StatePath(reamesAgentHome string) string {
+	return filepath.Join(reamesAgentHome, StateFilename)
 }
 
-func PluginsDir(reasonixHome string) string {
-	return filepath.Join(reasonixHome, "plugins")
+func PluginsDir(reamesAgentHome string) string {
+	return filepath.Join(reamesAgentHome, "plugins")
 }
 
-func InstallRoot(reasonixHome, name string) string {
-	return filepath.Join(PluginsDir(reasonixHome), name)
+func InstallRoot(reamesAgentHome, name string) string {
+	return filepath.Join(PluginsDir(reamesAgentHome), name)
 }
 
-func LoadState(reasonixHome string) (State, error) {
+func LoadState(reamesAgentHome string) (State, error) {
 	var st State
-	b, err := os.ReadFile(StatePath(reasonixHome))
+	b, err := os.ReadFile(StatePath(reamesAgentHome))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return State{Version: 1}, nil
@@ -157,7 +157,7 @@ func LoadState(reasonixHome string) (State, error) {
 	return st, nil
 }
 
-func SaveState(reasonixHome string, st State) error {
+func SaveState(reamesAgentHome string, st State) error {
 	if st.Version == 0 {
 		st.Version = 1
 	}
@@ -167,7 +167,7 @@ func SaveState(reasonixHome string, st State) error {
 		return err
 	}
 	b = append(b, '\n')
-	return fileutil.AtomicWriteFile(StatePath(reasonixHome), b, 0o644)
+	return fileutil.AtomicWriteFile(StatePath(reamesAgentHome), b, 0o644)
 }
 
 // stateMu serialises the read-modify-write of the state file within this
@@ -177,30 +177,30 @@ func SaveState(reasonixHome string, st State) error {
 // not a cross-process lock — concurrent Reasonix processes can still race.
 var stateMu sync.Mutex
 
-func Upsert(reasonixHome string, p InstalledPlugin) error {
+func Upsert(reamesAgentHome string, p InstalledPlugin) error {
 	if !IsValidName(p.Name) {
 		return fmt.Errorf("invalid plugin name %q", p.Name)
 	}
 	stateMu.Lock()
 	defer stateMu.Unlock()
-	st, err := LoadState(reasonixHome)
+	st, err := LoadState(reamesAgentHome)
 	if err != nil {
 		return err
 	}
 	for i := range st.Plugins {
 		if st.Plugins[i].Name == p.Name {
 			st.Plugins[i] = p
-			return SaveState(reasonixHome, st)
+			return SaveState(reamesAgentHome, st)
 		}
 	}
 	st.Plugins = append(st.Plugins, p)
-	return SaveState(reasonixHome, st)
+	return SaveState(reamesAgentHome, st)
 }
 
-func Remove(reasonixHome, name string) (InstalledPlugin, bool, error) {
+func Remove(reamesAgentHome, name string) (InstalledPlugin, bool, error) {
 	stateMu.Lock()
 	defer stateMu.Unlock()
-	st, err := LoadState(reasonixHome)
+	st, err := LoadState(reamesAgentHome)
 	if err != nil {
 		return InstalledPlugin{}, false, err
 	}
@@ -209,29 +209,29 @@ func Remove(reasonixHome, name string) (InstalledPlugin, bool, error) {
 			continue
 		}
 		st.Plugins = append(st.Plugins[:i], st.Plugins[i+1:]...)
-		return p, true, SaveState(reasonixHome, st)
+		return p, true, SaveState(reamesAgentHome, st)
 	}
 	return InstalledPlugin{}, false, nil
 }
 
-func SetEnabled(reasonixHome, name string, enabled bool) error {
+func SetEnabled(reamesAgentHome, name string, enabled bool) error {
 	stateMu.Lock()
 	defer stateMu.Unlock()
-	st, err := LoadState(reasonixHome)
+	st, err := LoadState(reamesAgentHome)
 	if err != nil {
 		return err
 	}
 	for i := range st.Plugins {
 		if st.Plugins[i].Name == name {
 			st.Plugins[i].Enabled = enabled
-			return SaveState(reasonixHome, st)
+			return SaveState(reamesAgentHome, st)
 		}
 	}
 	return fmt.Errorf("plugin %q is not installed", name)
 }
 
-func LoadInstalled(reasonixHome string) ([]InstalledPackage, []string) {
-	st, err := LoadState(reasonixHome)
+func LoadInstalled(reamesAgentHome string) ([]InstalledPackage, []string) {
+	st, err := LoadState(reamesAgentHome)
 	if err != nil {
 		return nil, []string{err.Error()}
 	}
@@ -241,7 +241,7 @@ func LoadInstalled(reasonixHome string) ([]InstalledPackage, []string) {
 		if !installed.Enabled {
 			continue
 		}
-		root := ResolveRoot(reasonixHome, installed.Root)
+		root := ResolveRoot(reamesAgentHome, installed.Root)
 		pkg, pkgWarnings, err := ParseDir(root)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("%s: %v", installed.Name, err))
@@ -253,15 +253,15 @@ func LoadInstalled(reasonixHome string) ([]InstalledPackage, []string) {
 	return out, warnings
 }
 
-func ResolveRoot(reasonixHome, root string) string {
+func ResolveRoot(reamesAgentHome, root string) string {
 	if filepath.IsAbs(root) {
 		return filepath.Clean(root)
 	}
-	return filepath.Join(reasonixHome, filepath.Clean(root))
+	return filepath.Join(reamesAgentHome, filepath.Clean(root))
 }
 
-func RelativeRoot(reasonixHome, root string) string {
-	if rel, err := filepath.Rel(reasonixHome, root); err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
+func RelativeRoot(reamesAgentHome, root string) string {
+	if rel, err := filepath.Rel(reamesAgentHome, root); err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
 		return filepath.ToSlash(rel)
 	}
 	return filepath.Clean(root)
@@ -316,7 +316,7 @@ func parseNative(path, root string) (Package, []string, error) {
 	if err := validateManifest(root, &manifest); err != nil {
 		return Package{}, warnings, err
 	}
-	return Package{Root: root, ManifestKind: "reasonix", Manifest: manifest}, warnings, nil
+	return Package{Root: root, ManifestKind: "reames-agent", Manifest: manifest}, warnings, nil
 }
 
 func parseCodex(path, root string) (Package, []string, error) {
@@ -428,7 +428,7 @@ func dirContainsSkill(dir string) bool {
 
 func ManifestPath(kind string) string {
 	switch kind {
-	case "reasonix":
+	case "reames-agent":
 		return NativeManifest
 	case "codex":
 		return CodexManifest

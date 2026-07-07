@@ -11,7 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/atotto/clipboard"
 
-	"reasonix/internal/control"
+	"reames-agent/internal/control"
 )
 
 // This file holds the chat TUI's paste & image-attachment input layer: folding

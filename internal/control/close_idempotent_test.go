@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"reasonix/internal/hook"
+	"reames-agent/internal/hook"
 )
 
 // TestCloseIsIdempotent guards the desktop tab-lifecycle contract: rebind,

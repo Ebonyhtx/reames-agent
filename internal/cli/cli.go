@@ -1,4 +1,4 @@
-// Package cli implements reasonix's command-line entry: subcommand routing, flag
+// Package cli implements reamesAgent's command-line entry: subcommand routing, flag
 // parsing, assembly from config, and exit codes. The core is config-driven —
 // providers and tools are resolved from configuration, not hardcoded.
 package cli
@@ -22,17 +22,17 @@ import (
 	"syscall"
 	"unicode/utf16"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/boot"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/i18n"
-	"reasonix/internal/notify"
-	"reasonix/internal/provider"
-	"reasonix/internal/provider/openai"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/serve"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/boot"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/notify"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/provider/openai"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/serve"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -104,7 +104,7 @@ func Run(args []string, version string) int {
 	case "init":
 		// Project memory (AGENTS.md) is model-generated in-session — `/init` runs
 		// the codebase analysis. This CLI entry just points there (and to `setup`
-		// for config), so `reasonix init` isn't a dead end.
+		// for config), so `reamesAgent init` isn't a dead end.
 		configureCLIThemeFromConfigNoProbe()
 		return initHint()
 	case "acp":
@@ -129,7 +129,7 @@ func Run(args []string, version string) int {
 		configureCLIThemeFromConfigNoProbe()
 		return upgradeCommand(rest, version)
 	case "version", "--version", "-v":
-		fmt.Println("reasonix", version)
+		fmt.Println("reames-agent", version)
 		return 0
 	case "help", "--help", "-h":
 		usage()
@@ -562,7 +562,7 @@ func runServe(args []string) int {
 
 	srv := serve.New(ctrl, bc, serveCfg)
 	srv.SetSessionLeases(leases)
-	fmt.Printf("reasonix serve — %s on http://%s\n", ctrl.Label(), *addr)
+	fmt.Printf("reamesAgent serve — %s on http://%s\n", ctrl.Label(), *addr)
 	if srv.AuthMode() == "token" {
 		fmt.Printf("  auth: token\n")
 		fmt.Printf("  share: http://%s/?token=%s\n", *addr, srv.AuthToken())
@@ -595,7 +595,7 @@ func runServe(args []string) int {
 // prompt loop that keeps conversation context across turns. Exit with
 // 'exit'/'quit' or Ctrl-D.
 func chatREPL(args []string) int {
-	fs := flag.NewFlagSet("reasonix", flag.ContinueOnError)
+	fs := flag.NewFlagSet("reames-agent", flag.ContinueOnError)
 	model := fs.String("model", "", "provider name (default: config default_model)")
 	maxSteps := fs.Int("max-steps", 0, "max tool-call rounds (0 = use config/default)")
 	cont := fs.Bool("continue", false, "resume the most recent saved session")
@@ -850,29 +850,29 @@ type setupTargets struct {
 }
 
 // defaultConfigTarget is the user-global config file, falling back to a
-// project-local reasonix.toml only when the user config dir can't be resolved.
+// project-local reamesAgent.toml only when the user config dir can't be resolved.
 func defaultConfigTarget() string {
 	if p := config.UserConfigPath(); p != "" {
 		return p
 	}
-	return "reasonix.toml"
+	return "reamesAgent.toml"
 }
 
-// defaultEnvTarget is the display target for the reasonix-owned global
+// defaultEnvTarget is the display target for the reamesAgent-owned global
 // Reasonix global .env.
 func defaultEnvTarget() string {
 	return config.CredentialsTargetDescription()
 }
 
-// resolveSetupTargets picks where `reasonix setup` writes. Keys always go to the
-// global env. The config goes to the user-global dir by default, to ./reasonix.toml
+// resolveSetupTargets picks where `reamesAgent setup` writes. Keys always go to the
+// global env. The config goes to the user-global dir by default, to ./reamesAgent.toml
 // under --local, or to an explicit path argument when given.
 func resolveSetupTargets(args []string) setupTargets {
 	t := setupTargets{config: defaultConfigTarget(), env: defaultEnvTarget()}
 	for _, a := range args {
 		switch a {
 		case "--local", "-l":
-			t.config = "reasonix.toml"
+			t.config = "reamesAgent.toml"
 		default:
 			t.config = a
 		}
@@ -888,8 +888,8 @@ func displayPath(p string) string {
 	return p
 }
 
-// setupConfig runs the configuration wizard (the `reasonix setup` command),
-// writing config.toml to the user-global dir (or ./reasonix.toml under --local)
+// setupConfig runs the configuration wizard (the `reamesAgent setup` command),
+// writing config.toml to the user-global dir (or ./reamesAgent.toml under --local)
 // and API keys to Reasonix's global .env — never a project's own .env.
 // Project memory is a separate concern — the in-session `/init` skill generates
 // AGENTS.md (see initHint).
@@ -913,7 +913,7 @@ func setupConfig(args []string) int {
 	if isInteractive() {
 		rc := interactiveSetup(t.config, t.env)
 		if rc == 0 {
-			fmt.Printf(i18n.M.TryHintFmt+"\n", bold("reasonix"))
+			fmt.Printf(i18n.M.TryHintFmt+"\n", bold("reames-agent"))
 		}
 		return rc
 	}
@@ -936,10 +936,10 @@ func writeDefaultConfig(path string) int {
 	return 0
 }
 
-// initHint handles `reasonix init`. Unlike a config scaffold, project memory is
+// initHint handles `reamesAgent init`. Unlike a config scaffold, project memory is
 // model-generated by analyzing the codebase, so it lives as the in-session
 // `/init` skill rather than a CLI command. This entry just points the user there
-// (and to `reasonix setup` for config) so the verb isn't a dead end.
+// (and to `reamesAgent setup` for config) so the verb isn't a dead end.
 func initHint() int {
 	fmt.Println(i18n.M.InitHint)
 	return 0
@@ -972,7 +972,7 @@ func interactiveSetup(configPath, envPath string) int {
 	// in their language before any substantive prompt.
 	fmt.Println()
 	fmt.Print(boxed([]string{
-		accent("◆") + " " + fmt.Sprintf(i18n.M.WelcomeTitleFmt, bold("reasonix")),
+		accent("◆") + " " + fmt.Sprintf(i18n.M.WelcomeTitleFmt, bold("reames-agent")),
 		"",
 		dim(i18n.M.NoConfigYet),
 	}))
@@ -1329,12 +1329,12 @@ func containsString(xs []string, v string) bool {
 
 // filterStaleCustomEntries drops the wizard's own magic-name entries
 // (Name="custom" with Kind="openai" or Name="anthropic" with Kind="anthropic")
-// that older versions of the wizard wrote into reasonix.toml. They collide
+// that older versions of the wizard wrote into reamesAgent.toml. They collide
 // with the wizard's "custom" / "anthropic" menu items on re-run, showing up
 // as duplicate broken entries. The new wizard writes host-derived slugs
 // (e.g. "custom-token-sensenova-cn") so a hit on the magic name is
 // unambiguously stale. The returned slice is the dropped set so the caller
-// can warn the user to clean up reasonix.toml by hand.
+// can warn the user to clean up reamesAgent.toml by hand.
 func filterStaleCustomEntries(providers []config.ProviderEntry) (kept, dropped []config.ProviderEntry) {
 	for _, p := range providers {
 		if p.Name == "custom" && p.Kind == "openai" {
@@ -1355,9 +1355,9 @@ func filterStaleCustomEntries(providers []config.ProviderEntry) (kept, dropped [
 // "custom-token-sensenova-cn" or "anthropic-api-anthropic-com". We can't
 // reuse the wizard's menu-item labels ("custom" / "anthropic") because
 // those would collide with the menu item itself and end up rendered as
-// duplicate provider entries on subsequent re-runs of `reasonix setup`.
+// duplicate provider entries on subsequent re-runs of `reamesAgent setup`.
 // The host-based slug also gives users a meaningful name to grep for in
-// reasonix.toml. Falls back to a short sha1 of the raw URL when the URL
+// reamesAgent.toml. Falls back to a short sha1 of the raw URL when the URL
 // doesn't parse, so even malformed input still produces a unique name.
 func providerSlug(kind, baseURL string) string {
 	var host string
@@ -1418,7 +1418,7 @@ func fnv1a32Hex(s string) string {
 }
 
 // providerFamily is a wizard-only grouping of provider SKUs by vendor; it does
-// not exist in config because users editing reasonix.toml deal with SKU names
+// not exist in config because users editing reamesAgent.toml deal with SKU names
 // directly.
 type providerFamily struct {
 	key  string
@@ -1803,7 +1803,7 @@ func isTTY(f *os.File) bool {
 
 // appendEnv merges KEY=value lines into a .env file. Existing assignments of
 // any key that's about to be written are dropped first, then the new values
-// are appended — so re-running `reasonix setup` with a corrected key replaces the
+// are appended — so re-running `reamesAgent setup` with a corrected key replaces the
 // stale one instead of stacking duplicates. The new values are also
 // pinned into the current process env so a chat session started right after
 // init picks up the fresh keys without a restart.
@@ -1995,7 +1995,7 @@ func configMemoryV5Command(args []string) int {
 
 func configReasoningLanguageCommand(args []string) int {
 	fs := flag.NewFlagSet("config reasoning-language", flag.ContinueOnError)
-	local := fs.Bool("local", false, "write ./reasonix.toml instead of the user config")
+	local := fs.Bool("local", false, "write ./reamesAgent.toml instead of the user config")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -2020,7 +2020,7 @@ func configReasoningLanguageCommand(args []string) int {
 	}
 	path := config.UserConfigPath()
 	if *local {
-		path = "reasonix.toml"
+		path = "reamesAgent.toml"
 	}
 	if path == "" {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "cannot resolve config path")
@@ -2043,7 +2043,7 @@ func configReasoningLanguageCommand(args []string) int {
 	if !*local {
 		// Non-local writes target the user config; serialize the
 		// load-modify-save against other in-process user-config editors.
-		// --local writes ./reasonix.toml and needs no user-config lock.
+		// --local writes ./reamesAgent.toml and needs no user-config lock.
 		unlock := config.LockUserConfigEdits()
 		defer unlock()
 	}
@@ -2062,26 +2062,26 @@ func configReasoningLanguageCommand(args []string) int {
 
 func configUsage() {
 	fmt.Print(`Usage:
-  reasonix config auto-plan [off|on]
-  reasonix config memory-v5 [off|observe|compact|on|status]
-  reasonix config reasoning-language [--local] [auto|zh|en]
+  reamesAgent config auto-plan [off|on]
+  reamesAgent config memory-v5 [off|observe|compact|on|status]
+  reamesAgent config reasoning-language [--local] [auto|zh|en]
 `)
 }
 
 func configAutoPlanUsage() {
 	fmt.Print(`Usage:
-  reasonix config auto-plan [off|on]
+  reamesAgent config auto-plan [off|on]
 `)
 }
 
 func configMemoryV5Usage() {
 	fmt.Print(`Usage:
-  reasonix config memory-v5 [off|observe|compact|on|status]
+  reamesAgent config memory-v5 [off|observe|compact|on|status]
 `)
 }
 
 func configReasoningLanguageUsage() {
 	fmt.Print(`Usage:
-  reasonix config reasoning-language [--local] [auto|zh|en]
+  reamesAgent config reasoning-language [--local] [auto|zh|en]
 `)
 }

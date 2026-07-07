@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/event"
-	"reasonix/internal/tool"
+	"reames-agent/internal/event"
+	"reames-agent/internal/tool"
 )
 
 // protocolVersion is the MCP revision Reasonix advertises during initialize.
@@ -54,7 +54,7 @@ type Spec struct {
 	// model-visible mcp__server__tool names.
 	ToolTimeouts map[string]time.Duration
 	// Dir, when set, is the working directory of a stdio subprocess. Empty means
-	// inherit reasonix's cwd (the default for user-configured plugins). It exists
+	// inherit reamesAgent's cwd (the default for user-configured plugins). It exists
 	// for cwd-aware servers like CodeGraph, which detect the project from the
 	// directory they are launched in — they must be pinned to the project root.
 	Dir string
@@ -1077,7 +1077,7 @@ func (c *Client) initializeSession(ctx context.Context, recordCapabilities bool)
 	res, err := c.call(ctx, "initialize", map[string]any{
 		"protocolVersion": protocolVersion,
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "reasonix", "version": "dev"},
+		"clientInfo":      map[string]any{"name": "reames-agent", "version": "dev"},
 	})
 	if err != nil {
 		return err

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"hash/fnv"
 
-	"reasonix/internal/config"
-	"reasonix/internal/memory"
-	"reasonix/internal/memorycompiler"
+	"reames-agent/internal/config"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/memorycompiler"
 )
 
 const (

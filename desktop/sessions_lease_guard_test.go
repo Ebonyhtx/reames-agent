@@ -11,9 +11,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 )
 
 // simulateForeignSessionLeaseHolder holds path's lease the way another process

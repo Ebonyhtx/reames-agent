@@ -59,7 +59,7 @@ func main() {
 
 	mode := flag.String("mode", "suite", "suite | diff (diff = generate tests for the PR diff and grade with the repo's tests)")
 	suite := flag.String("suite", "benchmarks/e2e", "suite root (contains tasks/<id>/)")
-	bin := flag.String("bin", "reasonix", "path to the reasonix binary")
+	bin := flag.String("bin", "reames-agent", "path to the reamesAgent binary")
 	model := flag.String("model", "", "provider/model name (default: config default)")
 	outMD := flag.String("out", "", "write the markdown report here (default: stdout)")
 	outJSON := flag.String("json", "", "write the JSON report here (optional)")

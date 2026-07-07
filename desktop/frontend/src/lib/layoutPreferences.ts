@@ -14,19 +14,19 @@ type LayoutPreferences = {
   sizes?: Partial<Record<LayoutSizeKey, number>>;
 };
 
-const STORAGE_KEY = "reasonix.layoutPreferences.v1";
+const STORAGE_KEY = "reames-agent.layoutPreferences.v1";
 
 const LEGACY_SIZE_KEYS: Record<LayoutSizeKey, string[]> = {
-  sidebarWidth: ["reasonix.sidebar.width"],
+  sidebarWidth: ["reames-agent.sidebar.width"],
   sidebarWidthGraphite: [],
   rightDockWidth: [],
   rightDockTreeWidth: [],
   rightDockPreviewWidth: [],
   workspaceFileTreePanelWidth: [],
-  workspaceTreeWidth: ["reasonix.workspaceTree.width"],
-  composerHeight: ["reasonix.composerHeight"],
-  drawerWidth: ["reasonix.drawer.width"],
-  settingsDrawerWidth: ["reasonix.settingsDrawer.width"],
+  workspaceTreeWidth: ["reames-agent.workspaceTree.width"],
+  composerHeight: ["reames-agent.composerHeight"],
+  drawerWidth: ["reames-agent.drawer.width"],
+  settingsDrawerWidth: ["reames-agent.settingsDrawer.width"],
 };
 
 type ClampSize = (value: number) => number;

@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
 
-const pkg = `@reasonix/cli-${process.platform}-${process.arch}`;
-const exe = `reasonix${process.platform === "win32" ? ".exe" : ""}`;
+const pkg = `@reames-agent/cli-${process.platform}-${process.arch}`;
+const exe = `reames-agent${process.platform === "win32" ? ".exe" : ""}`;
 
 let binary;
 try {
   binary = require.resolve(`${pkg}/bin/${exe}`);
 } catch {
   console.error(
-    `reasonix: no prebuilt binary for ${process.platform}-${process.arch}.\n` +
+    `reames-agent: no prebuilt binary for ${process.platform}-${process.arch}.\n` +
       `Install the matching optional package (${pkg}), or build from source:\n` +
-      `  https://github.com/esengine/DeepSeek-Reasonix`,
+      `  https://github.com/esengine/DeepSeek-Reames Agent`,
   );
   process.exit(1);
 }

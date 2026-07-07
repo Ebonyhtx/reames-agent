@@ -9,10 +9,10 @@ import (
 	"sync"
 	"testing"
 
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
-	"reasonix/internal/provider/openai"
-	"reasonix/internal/tool"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/provider/openai"
+	"reames-agent/internal/tool"
 )
 
 type recordSink struct {

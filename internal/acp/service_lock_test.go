@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/control"
+	"reames-agent/internal/control"
 )
 
 type snapshotLockProbeController struct {

@@ -13,7 +13,7 @@ import (
 func redirectCache(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("REASONIX_CACHE_HOME", dir)
+	t.Setenv("REAMES_AGENT_CACHE_HOME", dir)
 	return dir
 }
 

@@ -1,4 +1,4 @@
-/* Reasonix Community — self-hosted fonts + the reasonix.io token values, so the
+/* Reasonix Community — self-hosted fonts + the reames-agent.io token values, so the
    forum shares the site's visual language without depending on its marketing CSS. */
 @import "@fontsource-variable/outfit";
 @import "@fontsource-variable/jetbrains-mono";
@@ -37,7 +37,7 @@ a { color: inherit; text-decoration: none; }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
 [hidden] { display: none !important; }
 
-/* bilingual toggle — mirrors the main site (shared reasonix-lang choice) */
+/* bilingual toggle — mirrors the main site (shared reames-agent-lang choice) */
 body[data-lang="en"] .l-zh { display: none !important; }
 body[data-lang="zh"] .l-en { display: none !important; }
 .lang-switch { display: inline-flex; gap: 2px; padding: 3px; background: var(--bg-soft); border-radius: 999px; }

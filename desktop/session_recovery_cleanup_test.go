@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 func saveSnapshotTurns(t *testing.T, path string, turns int) *agent.Session {

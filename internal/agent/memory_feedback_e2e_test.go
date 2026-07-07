@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"reasonix/internal/agent/testutil"
-	"reasonix/internal/event"
-	"reasonix/internal/memorycompiler"
+	"reames-agent/internal/agent/testutil"
+	"reames-agent/internal/event"
+	"reames-agent/internal/memorycompiler"
 )
 
 // readCompilerStrategies decodes the persisted Memory v5 strategy counters so

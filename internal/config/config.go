@@ -1,5 +1,5 @@
 // Package config loads Reasonix's runtime configuration from TOML. Resolution order:
-// flag > project ./reasonix.toml > user config.toml (in the OS user-config dir) > built-in defaults.
+// flag > project ./reamesAgent.toml > user config.toml (in the OS user-config dir) > built-in defaults.
 // User-global runtime controls, such as agent step limits, are documented exceptions.
 // Secrets come from the environment via api_key_env and are never stored in
 // config files.
@@ -15,9 +15,9 @@ import (
 	"runtime"
 	"strings"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/netclient"
-	"reasonix/internal/provider"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/netclient"
+	"reames-agent/internal/provider"
 )
 
 var validSkillName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
@@ -41,7 +41,7 @@ func SkillNameKey(name string) string {
 type Config struct {
 	ConfigVersion    int                 `toml:"config_version"`
 	DefaultModel     string              `toml:"default_model"`
-	Language         string              `toml:"language"` // ui/model language tag (e.g. "zh"); empty = auto-detect from $LANG / $REASONIX_LANG
+	Language         string              `toml:"language"` // ui/model language tag (e.g. "zh"); empty = auto-detect from $LANG / $REAMES_AGENT_LANG
 	CredentialsStore string              `toml:"credentials_store"`
 	UI               UIConfig            `toml:"ui"`
 	Desktop          DesktopConfig       `toml:"desktop"`
@@ -645,7 +645,7 @@ type ServeConfig struct {
 	// cryptographically random token is generated at startup and printed.
 	Token string `toml:"token"`
 	// PasswordHash is a bcrypt hash of the password for auth_mode = "password".
-	// Generate one with: reasonix serve --hash-password --password '...'
+	// Generate one with: reamesAgent serve --hash-password --password '...'
 	PasswordHash string `toml:"password_hash"`
 	// BehindProxy indicates the server sits behind a trusted reverse proxy
 	// (nginx, Caddy, Cloudflare, etc.) that sets X-Forwarded-For and
@@ -736,7 +736,7 @@ func (c *Config) NetworkProxyMode() string {
 
 // SkillsConfig configures skill discovery. Paths adds extra "custom"-scope skill
 // roots — each a directory of SKILL.md / <name>.md playbooks — scanned between
-// the project roots (.reasonix/.agents/.agent/.claude under the workspace) and
+// the project roots (.reames-agent/.agents/.agent/.claude under the workspace) and
 // the global roots. ExcludedPaths hides matching discovery roots without deleting
 // folders. ~, relative paths, and ${VAR} expansion are supported. DisabledSkills
 // hides named skills from the agent prompt, slash invocation, and skill tools
@@ -969,7 +969,7 @@ type AgentConfig struct {
 	MaxSubagentDepth    int               `toml:"max_subagent_depth"`
 	// OutputStyle selects a persona/tone block folded into the system prompt at
 	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
-	// .reasonix/output-styles/<name>.md). Empty = the unmodified prompt.
+	// .reames-agent/output-styles/<name>.md). Empty = the unmodified prompt.
 	OutputStyle string `toml:"output_style"`
 	// AutoPlan controls whether interactive turns that look multi-step start in
 	// plan mode automatically: "off" keeps plan mode manual, "on" enables the
@@ -1390,7 +1390,7 @@ type PermissionsConfig struct {
 // static Headers. String fields support ${VAR} / ${VAR:-default} expansion so
 // secrets (bearer tokens, keys) come from the environment, not the file. The
 // fields mirror Claude Code's mcpServers spec, so entries can come from either
-// reasonix.toml's [[plugins]] or a project-root .mcp.json (see loadMCPJSON).
+// reamesAgent.toml's [[plugins]] or a project-root .mcp.json (see loadMCPJSON).
 type PluginEntry struct {
 	Name    string            `toml:"name"`
 	Type    string            `toml:"type"` // "stdio" (default) | "http" | "sse"
@@ -1513,8 +1513,8 @@ func Default() *Config {
 			CompactForceRatio:   0.9,
 			MaxSubagentDepth:    2,
 		},
-		// Mode "ask" with no rules keeps `reasonix run` autonomous (no TTY → ask
-		// resolves to allow) while `reasonix` prompts before writers. Users add
+		// Mode "ask" with no rules keeps `reamesAgent run` autonomous (no TTY → ask
+		// resolves to allow) while `reamesAgent` prompts before writers. Users add
 		// deny/allow rules to harden or quiet specific tools.
 		Permissions: PermissionsConfig{Mode: "ask"},
 		// Sandbox uses platform defaults: macOS/Linux jail bash by default;
@@ -1535,7 +1535,7 @@ func Default() *Config {
 			QueueCap:           20,
 			QueueDrop:          "summarize",
 			IgnoreSelfMessages: true,
-			Control:            BotControlConfig{Addr: "127.0.0.1:37913", TokenEnv: "REASONIX_BOT_CONTROL_TOKEN"},
+			Control:            BotControlConfig{Addr: "127.0.0.1:37913", TokenEnv: "REAMES_AGENT_BOT_CONTROL_TOKEN"},
 			Pairing:            BotPairingConfig{Enabled: true, RequestTTLMinutes: 60, MaxPendingPerPlatform: 3},
 			Allowlist:          BotAllowlist{Enabled: true},
 			QQ:                 QQBotConfig{AppSecretEnv: "QQ_BOT_APP_SECRET"},

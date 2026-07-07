@@ -1,13 +1,13 @@
 {
-  "name": "reasonix-forum",
+  "name": "reames-agent-forum",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "db:apply:local": "wrangler d1 execute reasonix-forum --local --file=schema.sql",
-    "db:apply:remote": "wrangler d1 execute reasonix-forum --remote --file=schema.sql"
+    "db:apply:local": "wrangler d1 execute reames-agent-forum --local --file=schema.sql",
+    "db:apply:remote": "wrangler d1 execute reames-agent-forum --remote --file=schema.sql"
   },
   "dependencies": {
     "hono": "^4.6.14",

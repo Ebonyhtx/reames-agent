@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/store"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/store"
 )
 
 // BranchMeta is the small sidecar record that turns flat session files into a

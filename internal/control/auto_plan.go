@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/nilutil"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/nilutil"
 )
 
 const (

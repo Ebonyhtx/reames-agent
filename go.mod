@@ -1,4 +1,4 @@
-module reasonix
+module reames-agent
 
 go 1.25.0
 

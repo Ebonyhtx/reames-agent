@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 )
 
 // AskTool lets the model put a structured multiple-choice question (or a few) to

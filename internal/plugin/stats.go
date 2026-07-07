@@ -18,7 +18,7 @@ import (
 	"sort"
 	"time"
 
-	"reasonix/internal/config"
+	"reames-agent/internal/config"
 )
 
 const (

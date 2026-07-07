@@ -15,10 +15,10 @@ func TestLockUserConfigEditsSerializesRMW(t *testing.T) {
 	// Point the user config at a temp home: SaveTo renders bot connections only
 	// for user-scope paths (project configs save incrementally without them).
 	home := t.TempDir()
-	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REAMES_AGENT_HOME", home)
 	path := UserConfigPath()
 	if path == "" {
-		t.Fatal("UserConfigPath is empty with REASONIX_HOME set")
+		t.Fatal("UserConfigPath is empty with REAMES_AGENT_HOME set")
 	}
 
 	const writers = 8
@@ -59,10 +59,10 @@ func TestLockUserConfigEditsSerializesRMW(t *testing.T) {
 // update lost".
 func TestConcurrentBotAndSettingsWritersKeepBothFields(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REAMES_AGENT_HOME", home)
 	path := UserConfigPath()
 	if path == "" {
-		t.Fatal("UserConfigPath is empty with REASONIX_HOME set")
+		t.Fatal("UserConfigPath is empty with REAMES_AGENT_HOME set")
 	}
 
 	const rounds = 40

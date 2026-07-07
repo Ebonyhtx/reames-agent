@@ -32,8 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"reasonix/internal/netclient"
-	"reasonix/internal/provider"
+	"reames-agent/internal/netclient"
+	"reames-agent/internal/provider"
 )
 
 // defaultStreamIdleTimeout caps how long a started SSE stream may go without any

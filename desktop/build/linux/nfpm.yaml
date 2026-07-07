@@ -7,7 +7,7 @@
 # $DEB_VERSION and $DEB_ARCH are exported by desktop-build.sh. DEB_VERSION is the tag
 # minus a leading "v" and any prerelease suffix (a strict X.Y.Z that dpkg accepts);
 # DEB_ARCH is the Go arch name, which already matches Debian's (amd64, arm64).
-name: "reasonix-desktop"
+name: "reames-agent-desktop"
 arch: "${DEB_ARCH}"
 platform: "linux"
 version: "${DEB_VERSION}"
@@ -15,9 +15,9 @@ section: "utils"
 priority: "optional"
 maintainer: "esengine <esengine@users.noreply.github.com>"
 description: |
-  Reasonix desktop — a Wails shell around the Go kernel.
-vendor: "Reasonix Contributors"
-homepage: "https://github.com/esengine/DeepSeek-Reasonix"
+  Reames Agent desktop — a Wails shell around the Go kernel.
+vendor: "Reames Agent Contributors"
+homepage: "https://github.com/esengine/DeepSeek-Reames Agent"
 license: "MIT"
 # Runtime libraries the WebKitGTK 4.1 build links against (-tags webkit2_41); apt
 # pulls them in on install. These package names ship from Ubuntu 22.04 / Debian 12 on.
@@ -25,53 +25,53 @@ depends:
   - libgtk-3-0
   - libwebkit2gtk-4.1-0
 contents:
-  - src: ./build/bin/reasonix-desktop
-    dst: /usr/bin/reasonix-desktop
+  - src: ./build/bin/reames-agent-desktop
+    dst: /usr/bin/reames-agent-desktop
     file_info:
       mode: 0755
-  - src: ./build/linux/reasonix.desktop
-    dst: /usr/share/applications/reasonix.desktop
+  - src: ./build/linux/reames-agent.desktop
+    dst: /usr/share/applications/reames-agent.desktop
     file_info:
       mode: 0644
   # appicon.png is 1024x1024 — not a standard hicolor size dir, so install it under
-  # the size-agnostic pixmaps path that the .desktop's `Icon=reasonix-desktop` finds.
+  # the size-agnostic pixmaps path that the .desktop's `Icon=reames-agent-desktop` finds.
   - src: ./build/appicon.png
-    dst: /usr/share/pixmaps/reasonix-desktop.png
+    dst: /usr/share/pixmaps/reames-agent-desktop.png
     file_info:
       mode: 0644
-  - src: ./build/linux/icons/hicolor/16x16/apps/reasonix-desktop.png
-    dst: /usr/share/icons/hicolor/16x16/apps/reasonix-desktop.png
+  - src: ./build/linux/icons/hicolor/16x16/apps/reames-agent-desktop.png
+    dst: /usr/share/icons/hicolor/16x16/apps/reames-agent-desktop.png
     file_info:
       mode: 0644
-  - src: ./build/linux/icons/hicolor/24x24/apps/reasonix-desktop.png
-    dst: /usr/share/icons/hicolor/24x24/apps/reasonix-desktop.png
+  - src: ./build/linux/icons/hicolor/24x24/apps/reames-agent-desktop.png
+    dst: /usr/share/icons/hicolor/24x24/apps/reames-agent-desktop.png
     file_info:
       mode: 0644
-  - src: ./build/linux/icons/hicolor/32x32/apps/reasonix-desktop.png
-    dst: /usr/share/icons/hicolor/32x32/apps/reasonix-desktop.png
+  - src: ./build/linux/icons/hicolor/32x32/apps/reames-agent-desktop.png
+    dst: /usr/share/icons/hicolor/32x32/apps/reames-agent-desktop.png
     file_info:
       mode: 0644
-  - src: ./build/linux/icons/hicolor/48x48/apps/reasonix-desktop.png
-    dst: /usr/share/icons/hicolor/48x48/apps/reasonix-desktop.png
+  - src: ./build/linux/icons/hicolor/48x48/apps/reames-agent-desktop.png
+    dst: /usr/share/icons/hicolor/48x48/apps/reames-agent-desktop.png
     file_info:
       mode: 0644
-  - src: ./build/linux/icons/hicolor/64x64/apps/reasonix-desktop.png
-    dst: /usr/share/icons/hicolor/64x64/apps/reasonix-desktop.png
+  - src: ./build/linux/icons/hicolor/64x64/apps/reames-agent-desktop.png
+    dst: /usr/share/icons/hicolor/64x64/apps/reames-agent-desktop.png
     file_info:
       mode: 0644
-  - src: ./build/linux/icons/hicolor/128x128/apps/reasonix-desktop.png
-    dst: /usr/share/icons/hicolor/128x128/apps/reasonix-desktop.png
+  - src: ./build/linux/icons/hicolor/128x128/apps/reames-agent-desktop.png
+    dst: /usr/share/icons/hicolor/128x128/apps/reames-agent-desktop.png
     file_info:
       mode: 0644
-  - src: ./build/linux/icons/hicolor/256x256/apps/reasonix-desktop.png
-    dst: /usr/share/icons/hicolor/256x256/apps/reasonix-desktop.png
+  - src: ./build/linux/icons/hicolor/256x256/apps/reames-agent-desktop.png
+    dst: /usr/share/icons/hicolor/256x256/apps/reames-agent-desktop.png
     file_info:
       mode: 0644
-  - src: ./build/linux/icons/hicolor/512x512/apps/reasonix-desktop.png
-    dst: /usr/share/icons/hicolor/512x512/apps/reasonix-desktop.png
+  - src: ./build/linux/icons/hicolor/512x512/apps/reames-agent-desktop.png
+    dst: /usr/share/icons/hicolor/512x512/apps/reames-agent-desktop.png
     file_info:
       mode: 0644
-  - src: ./build/linux/icons/hicolor/scalable/apps/reasonix-desktop.svg
-    dst: /usr/share/icons/hicolor/scalable/apps/reasonix-desktop.svg
+  - src: ./build/linux/icons/hicolor/scalable/apps/reames-agent-desktop.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/reames-agent-desktop.svg
     file_info:
       mode: 0644

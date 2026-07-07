@@ -1,5 +1,5 @@
 -- Apply once:
--- wrangler d1 execute reasonix-crash --remote --file=migrate-metric-users.sql
+-- wrangler d1 execute reames-agent-crash --remote --file=migrate-metric-users.sql
 
 CREATE TABLE IF NOT EXISTS metric_users (
   date TEXT NOT NULL,

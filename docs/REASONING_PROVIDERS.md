@@ -1,6 +1,6 @@
 # Reasoning controls by provider
 
-Reasonix exposes a single `/effort` knob (and the per-provider `effort` /
+Reames Agent exposes a single `/effort` knob (and the per-provider `effort` /
 `thinking` config fields), but OpenAI-compatible backends disagree on *how*
 chain-of-thought is requested on the wire. The `openai` provider adapts the
 request shape per backend; this table is the reference for which protocol each
@@ -52,6 +52,6 @@ If a model keeps thinking when you asked it not to (or vice versa):
    `openai` kind cannot drive its thinking mode — that needs a dedicated
    provider kind.
 
-Distinguishing "provider ignores the field" from a Reasonix bug starts here:
-the request shape Reasonix emits is fixed per the table, so a mismatch between
-the table and observed behaviour is the provider's, not Reasonix's.
+Distinguishing "provider ignores the field" from a Reames Agent bug starts here:
+the request shape Reames Agent emits is fixed per the table, so a mismatch between
+the table and observed behaviour is the provider's, not Reames Agent's.

@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/tool"
+	"reames-agent/internal/tool"
 )
 
 // Built-in skills ship with Reasonix and back the dedicated subagent tools

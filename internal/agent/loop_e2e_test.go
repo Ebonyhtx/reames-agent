@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/agent/testutil"
-	"reasonix/internal/event"
-	"reasonix/internal/memorycompiler"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent/testutil"
+	"reames-agent/internal/event"
+	"reames-agent/internal/memorycompiler"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 func echoRegistry() *tool.Registry {

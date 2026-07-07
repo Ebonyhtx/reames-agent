@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/config"
-	"reasonix/internal/event"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/config"
+	"reames-agent/internal/event"
 )
 
 // SessionImport records one legacy session source that contributed sessions.
@@ -82,7 +82,7 @@ func RunLegacyRescue(sink event.Sink) Result {
 	}
 	result := Result{}
 	if config.IsolatedHomeDir() != "" {
-		emit(event.LevelInfo, "migration rescue: REASONIX_HOME is set; implicit legacy migration is skipped")
+		emit(event.LevelInfo, "migration rescue: REAMES_AGENT_HOME is set; implicit legacy migration is skipped")
 		emit(event.LevelInfo, result.Summary())
 		return result
 	}
@@ -217,7 +217,7 @@ func migrateLegacyMemorySources(sink event.Sink, verbose bool) memoryMigrationRe
 		sources = append(sources, legacyMemorySource{root: root, label: label})
 	}
 	if home, herr := os.UserHomeDir(); herr == nil {
-		addRoot(filepath.Join(home, ".reasonix"), "~/.reasonix")
+		addRoot(filepath.Join(home, ".reames-agent"), "~/.reames-agent")
 	}
 	for _, legacyConfig := range config.LegacyUserConfigPaths() {
 		addRoot(filepath.Dir(legacyConfig), filepath.Dir(legacyConfig))
@@ -410,9 +410,9 @@ func migrateLegacySessionSources(sink event.Sink, verbose bool) sessionMigration
 		}
 	}
 	if home, herr := os.UserHomeDir(); herr == nil {
-		reasonixHome := filepath.Join(home, ".reasonix")
-		addFlatSource(filepath.Join(reasonixHome, "sessions"), "~/.reasonix/sessions", agent.MigrateLegacySessions)
-		addProjectSources(reasonixHome)
+		reamesAgentHome := filepath.Join(home, ".reames-agent")
+		addFlatSource(filepath.Join(reamesAgentHome, "sessions"), "~/.reames-agent/sessions", agent.MigrateLegacySessions)
+		addProjectSources(reamesAgentHome)
 	}
 	for _, legacyConfig := range config.LegacyUserConfigPaths() {
 		legacyDir := filepath.Join(filepath.Dir(legacyConfig), "sessions")
@@ -515,8 +515,8 @@ func explicitLegacySessionSources(root string) ([]explicitSessionSource, error) 
 	}
 	candidates := []string{
 		filepath.Join(root, "sessions"),
-		filepath.Join(root, ".reasonix", "sessions"),
-		filepath.Join(root, "reasonix", "sessions"),
+		filepath.Join(root, ".reames-agent", "sessions"),
+		filepath.Join(root, "reames-agent", "sessions"),
 	}
 	var out []explicitSessionSource
 	seen := map[string]bool{}

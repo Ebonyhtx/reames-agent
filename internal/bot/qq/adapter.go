@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/bot"
-	"reasonix/internal/config"
+	"reames-agent/internal/bot"
+	"reames-agent/internal/config"
 )
 
 // New 创建 QQ Bot 适配器。

@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/control"
-	"reasonix/internal/permission"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
+	"reames-agent/internal/permission"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 // These tests drive the full real stack — acp.Serve → control.Controller →

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 // forkRecoveryBranch builds a real conflict-recovery branch: a diverged disk

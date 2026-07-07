@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"reasonix/internal/shellparse"
+	"reames-agent/internal/shellparse"
 )
 
 type diffOpts struct {
@@ -148,7 +148,7 @@ func ratio(n, d int) float64 {
 // attempt's generated tests but keeping the provider config the workflow wrote.
 func resetTree(repo string) {
 	_ = exec.Command("git", "-C", repo, "checkout", "--", ".").Run()
-	_ = exec.Command("git", "-C", repo, "clean", "-fd", "-e", "reasonix.toml").Run()
+	_ = exec.Command("git", "-C", repo, "clean", "-fd", "-e", "reamesAgent.toml").Run()
 }
 
 func goBuildAll(repo string) (bool, string) {
@@ -401,11 +401,11 @@ func parseCoverProfile(repo, path string) map[string][]coverBlock {
 	return out
 }
 
-// repoRelFromModulePath turns "reasonix/internal/agent/foo.go" into
+// repoRelFromModulePath turns "reames-agent/internal/agent/foo.go" into
 // "internal/agent/foo.go" by dropping the first path element (the module root).
 func repoRelFromModulePath(p string) string {
 	// Strip the full module prefix; a generic first-segment cut mis-strips a multi-segment module path.
-	prefix := "reasonix/"
+	prefix := "reames-agent/"
 	if strings.HasPrefix(p, prefix) {
 		return p[len(prefix):]
 	}

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const windowsUpdateHelperFileName = "reasonix-update-helper.exe"
+const windowsUpdateHelperFileName = "reamesAgent-update-helper.exe"
 
 // installerCommand runs the NSIS updater, forcing $INSTDIR to dir via /D= so the
 // update overwrites the current install in place. NSIS requires /D= to be the
@@ -54,7 +54,7 @@ func prepareWindowsUpdateHelper(installDir string) (string, error) {
 		return "", err
 	}
 	cleanupWindowsUpdateHelpers(dir)
-	dst := filepath.Join(dir, "reasonix-update-helper-"+time.Now().UTC().Format("20060102150405.000000000")+".exe")
+	dst := filepath.Join(dir, "reamesAgent-update-helper-"+time.Now().UTC().Format("20060102150405.000000000")+".exe")
 	if err := os.WriteFile(dst, data, 0o700); err != nil {
 		return "", err
 	}
@@ -62,7 +62,7 @@ func prepareWindowsUpdateHelper(installDir string) (string, error) {
 }
 
 func cleanupWindowsUpdateHelpers(dir string) {
-	matches, err := filepath.Glob(filepath.Join(dir, "reasonix-update-helper-*.exe"))
+	matches, err := filepath.Glob(filepath.Join(dir, "reamesAgent-update-helper-*.exe"))
 	if err != nil {
 		return
 	}

@@ -1,15 +1,15 @@
-// Command reasonix is a config- and plugin-driven coding agent CLI.
+// Command reamesAgent is a config- and plugin-driven coding agent CLI.
 package main
 
 import (
 	"os"
 
-	"reasonix/internal/cli"
+	"reames-agent/internal/cli"
 
 	// Blank imports wire compile-time built-ins into their registries.
-	_ "reasonix/internal/provider/anthropic"
-	_ "reasonix/internal/provider/openai"
-	_ "reasonix/internal/tool/builtin"
+	_ "reames-agent/internal/provider/anthropic"
+	_ "reames-agent/internal/provider/openai"
+	_ "reames-agent/internal/tool/builtin"
 )
 
 // version is injected at build time via -ldflags "-X main.version=...".

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/tool"
+	"reames-agent/internal/tool"
 )
 
 func TestCanonicalizeSchemaStable(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 // TestStreamStallTimesOut covers issue #3374: a half-open connection (a proxy

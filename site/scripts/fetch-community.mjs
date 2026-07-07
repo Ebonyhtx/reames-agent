@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const repo = 'esengine/DeepSeek-Reasonix';
 const api = `https://api.github.com/repos/${repo}`;
-const headers = { 'User-Agent': 'reasonix-site', Accept: 'application/vnd.github+json' };
+const headers = { 'User-Agent': 'reames-agent-site', Accept: 'application/vnd.github+json' };
 if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 
 const fallback = JSON.parse(await readFile('src/data/contributors.json', 'utf8'));

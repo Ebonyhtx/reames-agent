@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/event"
-	"reasonix/internal/i18n"
-	"reasonix/internal/permission"
+	"reames-agent/internal/event"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/permission"
 )
 
 // approvalManager owns the approval/ask prompt bookkeeping and the runtime
@@ -71,7 +71,7 @@ func newApprovalManager(policy permission.Policy, mode string, timeout time.Dura
 	}
 }
 
-// NewHeadlessPermissionGate builds the non-interactive gate used by `reasonix run`
+// NewHeadlessPermissionGate builds the non-interactive gate used by `reamesAgent run`
 // and sub-agents. It preserves headless autonomy for ordinary Ask decisions, but
 // refuses tools whose contract requires a fresh human approval.
 func NewHeadlessPermissionGate(policy permission.Policy) *freshHumanHeadlessGate {

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/config"
-	"reasonix/internal/skill"
+	"reames-agent/internal/config"
+	"reames-agent/internal/skill"
 )
 
 func TestBuildReviewTask(t *testing.T) {

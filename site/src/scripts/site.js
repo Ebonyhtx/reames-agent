@@ -96,7 +96,7 @@
   });
 
   /* language switch */
-  const LANG_KEY = "reasonix-lang";
+  const LANG_KEY = "reames-agent-lang";
   const langBtns = Array.from(document.querySelectorAll(".lang-switch button"));
   const setLang = (l) => {
     document.body.dataset.lang = l;
@@ -154,14 +154,14 @@
     "Reasonix-linux-amd64.deb",
     "Reasonix-linux-amd64.tar.gz",
   ];
-  fetch("https://dl.reasonix.io/latest/latest.json", { cache: "no-cache" })
+  fetch("https://dl.reames-agent.io/latest/latest.json", { cache: "no-cache" })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
       const rawVersion = String((d && d.version) || "");
       const versionMatch = rawVersion.match(/^v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$/);
       if (!versionMatch) return;
       const v = versionMatch[1];
-      const desktopBase = "https://dl.reasonix.io/desktop-v" + v;
+      const desktopBase = "https://dl.reames-agent.io/desktop-v" + v;
       document.querySelectorAll(".rxv").forEach((e) => { e.textContent = v; });
       desktopAssets.forEach((asset) => {
         document.querySelectorAll('[data-desktop-asset="' + asset + '"]').forEach((a) => {

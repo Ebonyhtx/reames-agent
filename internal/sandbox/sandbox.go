@@ -25,7 +25,7 @@ import (
 // WindowsHelperCommand is an internal CLI subcommand used only by the Windows
 // sandbox wrapper. It is intentionally obscure so it does not collide with
 // public commands.
-const WindowsHelperCommand = "__reasonix_windows_sandbox"
+const WindowsHelperCommand = "__reamesAgent_windows_sandbox"
 
 // helperDispatchRegistered records that this binary's entry point routes
 // WindowsHelperCommand to RunWindowsSandboxHelper. The Windows wrapper
@@ -43,7 +43,7 @@ var helperDispatchRegistered atomic.Bool
 // this; on Windows, enforce mode fails closed without it.
 func RegisterHelperDispatch() { helperDispatchRegistered.Store(true) }
 
-const windowsSandboxFailureMarkerPrefix = "__reasonix_windows_sandbox_failure__:"
+const windowsSandboxFailureMarkerPrefix = "__reamesAgent_windows_sandbox_failure__:"
 
 // WindowsSandboxFailureMarker returns the helper-only marker printed when the
 // native Windows sandbox backend fails before starting the child command.

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"os"
 
-	"reasonix/internal/store"
+	"reames-agent/internal/store"
 
 	"golang.org/x/sys/unix"
 )

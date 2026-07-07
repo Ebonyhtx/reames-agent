@@ -192,7 +192,7 @@ console.log("\ncomposer session draft");
     scope: "project",
     workspaceRoot: "/repo",
     topicId: "topic-a",
-    sessionPath: "/repo/.reasonix/sessions/topic-a.jsonl",
+    sessionPath: "/repo/.reames-agent/sessions/topic-a.jsonl",
   }, "tab-a");
   eq(withPath, withoutPath, "topic draft key stays stable when session path appears");
 }
@@ -293,7 +293,7 @@ console.log("\ncomposer session draft");
   });
   await rerender({ sessionKey: "session:project:/repo:topic-b:session-b" });
   await act(async () => {
-    savePastedFile.resolve("/tmp/reasonix/draft.txt");
+    savePastedFile.resolve("/tmp/reames-agent/draft.txt");
     await flushTimers();
   });
   eq(contextItemCount(), 0, "async attachment does not land in the switched-to session");

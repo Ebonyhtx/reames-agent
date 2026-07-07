@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 // TestBuildRequest covers the protocol conversion: system lift, tool_use /

@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/bot"
-	"reasonix/internal/bot/feishu"
-	"reasonix/internal/bot/qq"
-	"reasonix/internal/bot/weixin"
-	"reasonix/internal/config"
+	"reames-agent/internal/bot"
+	"reames-agent/internal/bot/feishu"
+	"reames-agent/internal/bot/qq"
+	"reames-agent/internal/bot/weixin"
+	"reames-agent/internal/config"
 )
 
 // EnabledPlatforms resolves the requested channel list against the saved config.

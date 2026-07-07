@@ -1,5 +1,5 @@
 -- Device authorization grants (RFC 8628-style) for CLI/desktop sign-in.
--- Apply: wrangler d1 migrations apply reasonix-accounts --local   (or --remote)
+-- Apply: wrangler d1 migrations apply reames-agent-accounts --local   (or --remote)
 
 CREATE TABLE IF NOT EXISTS device_grants (
   device_code_hash TEXT    PRIMARY KEY,             -- sha256(pepper:device_code); the raw code lives only on the client

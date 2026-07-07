@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"reasonix/internal/doctor"
+	"reames-agent/internal/doctor"
 )
 
 func doctorCommand(args []string, version string) int {
@@ -41,10 +41,10 @@ func doctorSessionCommand(args []string, version string) int {
 		arg := args[i]
 		switch arg {
 		case "-h", "--help":
-			fmt.Fprintln(os.Stdout, "usage: reasonix doctor session <branch-id-or-path> [--zip] [--out PATH]")
+			fmt.Fprintln(os.Stdout, "usage: reamesAgent doctor session <branch-id-or-path> [--zip] [--out PATH]")
 			fmt.Fprintln(os.Stdout, "")
 			fmt.Fprintln(os.Stdout, "Bundles the session transcript, persistence sidecars, conflict diagnostics,")
-			fmt.Fprintln(os.Stdout, "and the recovery parent chain into a zip for support. Unlike `reasonix doctor`,")
+			fmt.Fprintln(os.Stdout, "and the recovery parent chain into a zip for support. Unlike `reamesAgent doctor`,")
 			fmt.Fprintln(os.Stdout, "bundled transcripts are NOT redacted; share only with a trusted support channel.")
 			return 0
 		case "--zip":
@@ -72,14 +72,14 @@ func doctorSessionCommand(args []string, version string) int {
 				return 2
 			}
 			if ref != "" {
-				fmt.Fprintln(os.Stderr, "usage: reasonix doctor session <branch-id-or-path> [--zip] [--out PATH]")
+				fmt.Fprintln(os.Stderr, "usage: reamesAgent doctor session <branch-id-or-path> [--zip] [--out PATH]")
 				return 2
 			}
 			ref = arg
 		}
 	}
 	if ref == "" {
-		fmt.Fprintln(os.Stderr, "usage: reasonix doctor session <branch-id-or-path> [--zip] [--out PATH]")
+		fmt.Fprintln(os.Stderr, "usage: reamesAgent doctor session <branch-id-or-path> [--zip] [--out PATH]")
 		return 2
 	}
 	result, err := doctor.WriteSessionBundle(doctor.SessionBundleOptions{

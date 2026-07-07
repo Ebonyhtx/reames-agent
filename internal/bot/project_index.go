@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/agent"
+	"reames-agent/internal/agent"
 )
 
 const (

@@ -8,13 +8,13 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/boot"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/boot"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
+	"reames-agent/internal/tool"
 )
 
 func TestHistoryMessagesIncludeAssistantReasoning(t *testing.T) {

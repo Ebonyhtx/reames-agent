@@ -12,8 +12,8 @@ export interface Env {
   METRICS_LIMITER: RateLimiter;
   WRITE_LIMITER?: RateLimiter;
   ADMIN_EMAILS?: string;
-  // Shared identity service (id.reasonix.io) and the site that hosts its login
-  // page (reasonix.io). Overridable for local dev.
+  // Shared identity service (id.reames-agent.io) and the site that hosts its login
+  // page (reames-agent.io). Overridable for local dev.
   ID_ORIGIN?: string;
   APP_ORIGIN?: string;
   // Browsers allowed to call the registry API with credentials (comma-separated).

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/bot"
-	"reasonix/internal/botruntime"
-	"reasonix/internal/config"
+	"reames-agent/internal/bot"
+	"reames-agent/internal/botruntime"
+	"reames-agent/internal/config"
 )
 
 func TestDesktopBotRuntimePlanStartsSavedConnections(t *testing.T) {
@@ -148,7 +148,7 @@ func TestDesktopBotRuntimeConfigUsesUserBotSettings(t *testing.T) {
 	}
 
 	project := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
 [bot]
 enabled = false
 `), 0o644); err != nil {
@@ -277,7 +277,7 @@ func TestDesktopBotRuntimeMigratesLegacyProjectBotSettings(t *testing.T) {
 	}
 
 	project := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
 [bot]
 enabled = true
 
@@ -335,7 +335,7 @@ func TestDesktopBotRuntimePersistsLegacyProjectBotWhenUserConfigMissing(t *testi
 	isolateDesktopUserDirs(t)
 
 	project := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
 [desktop]
 theme = "dark"
 
@@ -393,7 +393,7 @@ func TestDesktopSettingsBotMigrationPersistsOnlyBotBeforeFirstEdit(t *testing.T)
 	isolateDesktopUserDirs(t)
 
 	project := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
 [desktop]
 theme = "dark"
 close_behavior = "quit"
@@ -451,7 +451,7 @@ func TestDesktopBotRuntimeMigrationDoesNotOverwriteUserBotSettings(t *testing.T)
 	}
 
 	project := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
 [bot]
 enabled = true
 

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/config"
-	"reasonix/internal/control"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 )
 
 func TestHeartbeatConfigPathUsesReasonixUserStateDir(t *testing.T) {

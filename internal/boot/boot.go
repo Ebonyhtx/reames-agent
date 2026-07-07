@@ -21,33 +21,33 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/command"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/environment"
-	"reasonix/internal/event"
-	"reasonix/internal/guardian"
-	"reasonix/internal/history"
-	"reasonix/internal/hook"
-	"reasonix/internal/installsource"
-	"reasonix/internal/instruction"
-	"reasonix/internal/jobs"
-	"reasonix/internal/lsp"
-	"reasonix/internal/memory"
-	"reasonix/internal/memorycompiler"
-	"reasonix/internal/migration"
-	"reasonix/internal/netclient"
-	"reasonix/internal/outputstyle"
-	"reasonix/internal/permission"
-	"reasonix/internal/planmode"
-	"reasonix/internal/plugin"
-	"reasonix/internal/provider"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/skill"
-	"reasonix/internal/tool"
-	"reasonix/internal/tool/builtin"
-	"reasonix/internal/tool/sessiontool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/command"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/environment"
+	"reames-agent/internal/event"
+	"reames-agent/internal/guardian"
+	"reames-agent/internal/history"
+	"reames-agent/internal/hook"
+	"reames-agent/internal/installsource"
+	"reames-agent/internal/instruction"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/lsp"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/memorycompiler"
+	"reames-agent/internal/migration"
+	"reames-agent/internal/netclient"
+	"reames-agent/internal/outputstyle"
+	"reames-agent/internal/permission"
+	"reames-agent/internal/planmode"
+	"reames-agent/internal/plugin"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/skill"
+	"reames-agent/internal/tool"
+	"reames-agent/internal/tool/builtin"
+	"reames-agent/internal/tool/sessiontool"
 )
 
 // ErrUnknownModel is returned by Build when the configured model can't be
@@ -98,7 +98,7 @@ type Options struct {
 	WorkspaceRoot string
 	// ExtraPlugins are session-scoped MCP servers supplied by a host transport
 	// (for example ACP session/new). They are connected eagerly for this
-	// controller but are not persisted to reasonix.toml.
+	// controller but are not persisted to reamesAgent.toml.
 	ExtraPlugins []plugin.Spec
 	// TokenMode selects how much optional context/tool surface this session exposes
 	// at boot. Empty/full preserves the normal capability surface. "economy" keeps
@@ -156,7 +156,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	keepPolicy := agentKeepPolicy(cfg.Agent.Keep)
 	entry, ok := cfg.ResolveModel(modelName)
 	if !ok {
-		return nil, fmt.Errorf("%w %q (configured: %s); note: defining [[providers]] replaces the built-in presets, so add a [[providers]] entry for it or use a configured name, or run `reasonix setup` to reconfigure", ErrUnknownModel, modelName, providerNames(cfg))
+		return nil, fmt.Errorf("%w %q (configured: %s); note: defining [[providers]] replaces the built-in presets, so add a [[providers]] entry for it or use a configured name, or run `reamesAgent setup` to reconfigure", ErrUnknownModel, modelName, providerNames(cfg))
 	}
 	modelRef := entry.Name + "/" + entry.Model
 	if opts.EffortOverride != nil {
@@ -196,7 +196,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		})
 	}
 	if migErr != nil {
-		sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "config migration from ~/.reasonix failed: " + migErr.Error()})
+		sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "config migration from ~/.reamesAgent failed: " + migErr.Error()})
 	} else if migrated != nil {
 		sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: migrated.Notice()})
 	}
@@ -537,7 +537,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	}
 
 	// Permission policy gates every tool call. The headless gate (no Approver)
-	// resolves ordinary "ask" decisions to allow — preserving `reasonix run`
+	// resolves ordinary "ask" decisions to allow — preserving `reamesAgent run`
 	// autonomy — while deny rules and fresh-human approval tools hard-block.
 	// Interactive frontends (chat, desktop) swap in an interactive gate later via
 	// Controller.EnableInteractiveApproval.
@@ -747,7 +747,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		parentSession := agent.ParentSession(sctx)
 		var run *agent.SubagentRun
 		if subagentStore == nil || parentSession == "" {
-			// Headless runs (e.g. `reasonix run`) have no persistent session to
+			// Headless runs (e.g. `reamesAgent run`) have no persistent session to
 			// own a transcript. Run the skill sub-agent ephemerally, as before
 			// persisted transcripts existed, instead of failing. Continuation needs
 			// a persisted owner, so it errors here.
@@ -816,7 +816,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		}
 		return &event.Profile{Model: model, Effort: effort}
 	}
-	// Custom slash commands (.reasonix/commands + user dir). Best-effort: a malformed
+	// Custom slash commands (.reames-agent/commands + user dir). Best-effort: a malformed
 	// file is skipped, and a load error never blocks the session.
 	cmds, _ := command.Load(config.CommandDirsForRoot(root)...)
 	addSlashCommandTool := func(includeSkills bool) {
@@ -1031,7 +1031,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		MaxSubagentDepth:                   maxSubagentDepth,
 		MemoryCompiler:                     memCompiler,
 		MemoryCompilerVerbosity:            cfg.MemoryCompilerVerbosity(),
-		UseMemoryCompilerLLMClassification: strings.TrimSpace(os.Getenv("REASONIX_MEMORY_COMPILER_LLM_CLASSIFICATION")) == "true",
+		UseMemoryCompilerLLMClassification: strings.TrimSpace(os.Getenv("REAMES_AGENT_MEMORY_COMPILER_LLM_CLASSIFICATION")) == "true",
 	}, sink)
 
 	var runner agent.Runner = executor
@@ -1183,11 +1183,11 @@ func rememberPermissionRule(workspaceRoot, rule string) control.RememberResult {
 func rememberPermissionConfigPath(workspaceRoot string) string {
 	workspaceRoot = strings.TrimSpace(workspaceRoot)
 	if workspaceRoot != "" {
-		return filepath.Join(workspaceRoot, "reasonix.toml")
+		return filepath.Join(workspaceRoot, "reamesAgent.toml")
 	}
 	path := config.SourcePath()
 	if path == "" {
-		path = "reasonix.toml" // match Config.Save() fallback
+		path = "reamesAgent.toml" // match Config.Save() fallback
 	}
 	return path
 }

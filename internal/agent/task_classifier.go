@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 // TaskClassifier 判断用户输入是否为任务（需要执行动作）或聊天（对话性质）

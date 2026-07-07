@@ -4,7 +4,7 @@ import (
 	"errors"
 	"os"
 
-	"reasonix/internal/store"
+	"reames-agent/internal/store"
 )
 
 // SessionRemovalGuard holds a session's save lock and lease lock for the

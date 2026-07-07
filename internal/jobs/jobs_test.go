@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 )
 
 type recordingSink struct {

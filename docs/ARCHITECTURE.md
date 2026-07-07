@@ -1,6 +1,6 @@
 # Reames Agent — 架构文档
 
-> Reames Agent 是基于 Hermes Agent v0.16.0 的定制分支，深度融合了 TencentDB 记忆系统设计理念和 Reasonix 的缓存/压缩机制，专门适配 DeepSeek 大模型。
+> Reames Agent 是基于 Hermes Agent v0.16.0 的定制分支，深度融合了 TencentDB 记忆系统设计理念和 Reames Agent 的缓存/压缩机制，专门适配 DeepSeek 大模型。
 
 ---
 

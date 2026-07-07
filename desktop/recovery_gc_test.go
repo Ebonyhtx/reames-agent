@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/provider"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/provider"
 )
 
 // forkCoveredRecoveryBranch builds the reclaimable shape in dir: a conflict

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/sandbox"
+	"reames-agent/internal/sandbox"
 )
 
 // stateRootFor builds a fake Reasonix state root with the two guarded session
@@ -131,7 +131,7 @@ func TestSessionDataGuardZeroValueUnconfined(t *testing.T) {
 	if err := g.Check("/anywhere/sessions/x.jsonl"); err != nil {
 		t.Errorf("zero-value guard should be unconfined, got %v", err)
 	}
-	if hint := g.CommandHint("", "rm -rf ~/.reasonix/sessions"); hint != "" {
+	if hint := g.CommandHint("", "rm -rf ~/.reames-agent/sessions"); hint != "" {
 		t.Errorf("zero-value guard hint = %q, want empty", hint)
 	}
 }
@@ -232,15 +232,15 @@ func TestSessionDataGuardCommandHintEnvVarForm(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	state := filepath.Join(home, ".reasonix")
+	state := filepath.Join(home, ".reames-agent")
 	if err := os.MkdirAll(filepath.Join(state, "sessions"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	g := NewSessionDataGuard(state, nil)
 
 	for _, cmd := range []string{
-		`python3 -c "open('$HOME/.reasonix/sessions/x.jsonl','w')"`,
-		"rm ${HOME}/.reasonix/projects/slug/sessions/y.jsonl",
+		`python3 -c "open('$HOME/.reames-agent/sessions/x.jsonl','w')"`,
+		"rm ${HOME}/.reames-agent/projects/slug/sessions/y.jsonl",
 	} {
 		if hint := g.CommandHint("", cmd); hint == "" {
 			t.Errorf("CommandHint(%q) = empty, want warning for env-var path form", cmd)

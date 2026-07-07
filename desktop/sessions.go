@@ -12,11 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/fileutil"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/store"
 )
 
 // sessions.go holds the desktop-only session-management state that the shared

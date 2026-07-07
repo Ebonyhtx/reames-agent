@@ -10,16 +10,16 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/acp"
-	"reasonix/internal/boot"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/i18n"
-	"reasonix/internal/netclient"
-	"reasonix/internal/provider"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/tool"
-	"reasonix/internal/tool/builtin"
+	"reames-agent/internal/acp"
+	"reames-agent/internal/boot"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/netclient"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/tool"
+	"reames-agent/internal/tool/builtin"
 )
 
 // acpCommand runs Reasonix as an Agent Client Protocol agent: a stdio JSON-RPC
@@ -41,7 +41,7 @@ func acpCommand(args []string, version string) int {
 	defer stop()
 
 	factory := &acpFactory{model: *model}
-	info := acp.AgentInfo{Name: "reasonix", Version: version}
+	info := acp.AgentInfo{Name: "reames-agent", Version: version}
 	if err := acp.Serve(ctx, os.Stdin, os.Stdout, factory, info); err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 1

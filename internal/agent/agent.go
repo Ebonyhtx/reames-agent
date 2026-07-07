@@ -13,19 +13,19 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
-	"reasonix/internal/diff"
-	"reasonix/internal/event"
-	"reasonix/internal/evidence"
-	"reasonix/internal/instruction"
-	"reasonix/internal/jobs"
-	"reasonix/internal/memory"
-	"reasonix/internal/memorycompiler"
-	"reasonix/internal/nilutil"
-	"reasonix/internal/planmode"
-	"reasonix/internal/provider"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/shellparse"
-	"reasonix/internal/tool"
+	"reames-agent/internal/diff"
+	"reames-agent/internal/event"
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/instruction"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/memorycompiler"
+	"reames-agent/internal/nilutil"
+	"reames-agent/internal/planmode"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/shellparse"
+	"reames-agent/internal/tool"
 )
 
 // maxToolOutputBytes caps a single tool result before it goes into the model's
@@ -695,7 +695,7 @@ func (a *Agent) Session() *Session {
 }
 
 // SetSession replaces the agent's conversation wholesale. Used by
-// `reasonix --resume` to load a saved JSONL transcript before the first turn,
+// `reamesAgent --resume` to load a saved JSONL transcript before the first turn,
 // so the model picks up exactly where it left off. Callers serialise it against a
 // running turn (it only fires while idle); sessMu guards the pointer swap itself.
 func (a *Agent) SetSession(s *Session) {

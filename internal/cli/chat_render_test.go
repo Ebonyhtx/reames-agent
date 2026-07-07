@@ -6,7 +6,7 @@ import (
 
 	"charm.land/bubbles/v2/textarea"
 
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 )
 
 // newTestChatTUI builds a chatTUI with just the pieces the streaming/commit and

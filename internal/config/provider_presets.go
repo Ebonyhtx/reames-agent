@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 // ProviderPreset is a curated, editable provider starter template. Presets are

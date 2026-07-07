@@ -309,7 +309,7 @@ console.log("\ncomposer goal toggle");
 {
   const dom = installDom();
   mockApp({
-    SavePastedFile: async () => ".reasonix/attachments/notes.txt",
+    SavePastedFile: async () => ".reames-agent/attachments/notes.txt",
   });
   const { root } = await renderComposer();
 
@@ -386,7 +386,7 @@ console.log("\ncomposer goal toggle");
   mockApp({
     AttachDropped: async () => ({
       kind: "attachment",
-      path: ".reasonix/attachments/report.pdf",
+      path: ".reames-agent/attachments/report.pdf",
     }),
   });
   const { root } = await renderComposer();
@@ -420,7 +420,7 @@ console.log("\ncomposer goal toggle");
   mockApp({
     AttachDropped: async () => ({
       kind: "workspace",
-      path: "__reasonix_external_folder/mock/Folder-With-Spaces",
+      path: "__reames-agent_external_folder/mock/Folder-With-Spaces",
       isDir: true,
       displayPath: "/Users/example/Folder With Spaces",
     }),
@@ -445,7 +445,7 @@ console.log("\ncomposer goal toggle");
   });
 
   eq(calls.send.join(","), "inspect @/Users/example/Folder With Spaces/", "external folder display text uses the real folder path");
-  eq(calls.submit.join(","), "inspect @__reasonix_external_folder/mock/Folder-With-Spaces/", "external folder submit text uses the session ref token");
+  eq(calls.submit.join(","), "inspect @__reames-agent_external_folder/mock/Folder-With-Spaces/", "external folder submit text uses the session ref token");
 
   await act(async () => {
     root.unmount();
@@ -454,7 +454,7 @@ console.log("\ncomposer goal toggle");
 }
 
 {
-  const externalToken = "__reasonix_external_folder/mock/Folder-With-Spaces/src/outside.txt";
+  const externalToken = "__reames-agent_external_folder/mock/Folder-With-Spaces/src/outside.txt";
   const externalDisplayPath = "/Users/example/Folder With Spaces/src/outside.txt";
   const picked = composerPickFileEntry("ask @outside", "outside", "", {
     name: "src/outside.txt",

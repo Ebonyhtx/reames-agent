@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/eventwire"
-	"reasonix/internal/jobs"
-	"reasonix/internal/provider"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/eventwire"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/provider"
 )
 
 // fakeRunner stands in for an agent.Runner: it records the composed input and

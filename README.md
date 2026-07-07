@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.svg" alt="Reasonix" width="640"/>
+  <img src="docs/logo.svg" alt="Reames Agent" width="640"/>
 </p>
 
 <p align="center">
@@ -11,25 +11,25 @@
   &nbsp;·&nbsp;
   <a href="./docs/SPEC.md">Spec</a>
   &nbsp;·&nbsp;
-  <a href="https://esengine.github.io/DeepSeek-Reasonix/">Website</a>
+  <a href="https://esengine.github.io/DeepSeek-Reames Agent/">Website</a>
   &nbsp;·&nbsp;
   <strong><a href="https://discord.gg/XF78rEME2D">Discord</a></strong>
 </p>
 
 > [!IMPORTANT]
-> **Reasonix 1.0 is a ground-up rewrite in Go** — this branch (`main-v2`) is the new default and where development happens now.
-> The earlier `0.x` TypeScript releases are **legacy**, living on the [`v1`](https://github.com/esengine/DeepSeek-Reasonix/tree/v1) branch (maintenance only).
-> See the **[migration guide](./docs/MIGRATING.md)**. `npm i -g reasonix` stays the install command — `1.0.0`+ delivers the Go binary, `0.x` is the legacy TS build.
+> **Reames Agent 1.0 is a ground-up rewrite in Go** — this branch (`main-v2`) is the new default and where development happens now.
+> The earlier `0.x` TypeScript releases are **legacy**, living on the [`v1`](https://github.com/esengine/DeepSeek-Reames Agent/tree/v1) branch (maintenance only).
+> See the **[migration guide](./docs/MIGRATING.md)**. `npm i -g reames-agent` stays the install command — `1.0.0`+ delivers the Go binary, `0.x` is the legacy TS build.
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/reasonix"><img src="https://img.shields.io/npm/v/reasonix.svg?style=flat-square&color=cb3837&labelColor=161b22&logo=npm&logoColor=white" alt="npm version"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/esengine/DeepSeek-Reasonix/ci.yml?style=flat-square&label=ci&labelColor=161b22&logo=githubactions&logoColor=white" alt="CI"/></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/npm/l/reasonix.svg?style=flat-square&color=8b949e&labelColor=161b22" alt="license"/></a>
-  <a href="https://www.npmjs.com/package/reasonix"><img src="https://img.shields.io/npm/dm/reasonix.svg?style=flat-square&color=3fb950&labelColor=161b22&label=downloads" alt="downloads"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/stargazers"><img src="https://img.shields.io/github/stars/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=dbab09&labelColor=161b22&logo=github&logoColor=white" alt="GitHub stars"/></a>
-  <a href="https://atomgit.com/esengine/DeepSeek-Reasonix"><img src="https://atomgit.com/esengine/DeepSeek-Reasonix/star/badge.svg" alt="AtomGit stars"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors"><img src="https://img.shields.io/github/contributors/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=bc8cff&labelColor=161b22&logo=github&logoColor=white" alt="contributors"/></a>
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/discussions"><img src="https://img.shields.io/github/discussions/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=58a6ff&labelColor=161b22&logo=github&logoColor=white" alt="Discussions"/></a>
+  <a href="https://www.npmjs.com/package/reames-agent"><img src="https://img.shields.io/npm/v/reames-agent.svg?style=flat-square&color=cb3837&labelColor=161b22&logo=npm&logoColor=white" alt="npm version"/></a>
+  <a href="https://github.com/esengine/DeepSeek-Reames Agent/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/esengine/DeepSeek-Reames Agent/ci.yml?style=flat-square&label=ci&labelColor=161b22&logo=githubactions&logoColor=white" alt="CI"/></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/npm/l/reames-agent.svg?style=flat-square&color=8b949e&labelColor=161b22" alt="license"/></a>
+  <a href="https://www.npmjs.com/package/reames-agent"><img src="https://img.shields.io/npm/dm/reames-agent.svg?style=flat-square&color=3fb950&labelColor=161b22&label=downloads" alt="downloads"/></a>
+  <a href="https://github.com/esengine/DeepSeek-Reames Agent/stargazers"><img src="https://img.shields.io/github/stars/esengine/DeepSeek-Reames Agent.svg?style=flat-square&color=dbab09&labelColor=161b22&logo=github&logoColor=white" alt="GitHub stars"/></a>
+  <a href="https://atomgit.com/esengine/DeepSeek-Reames Agent"><img src="https://atomgit.com/esengine/DeepSeek-Reames Agent/star/badge.svg" alt="AtomGit stars"/></a>
+  <a href="https://github.com/esengine/DeepSeek-Reames Agent/graphs/contributors"><img src="https://img.shields.io/github/contributors/esengine/DeepSeek-Reames Agent.svg?style=flat-square&color=bc8cff&labelColor=161b22&logo=github&logoColor=white" alt="contributors"/></a>
+  <a href="https://github.com/esengine/DeepSeek-Reames Agent/discussions"><img src="https://img.shields.io/github/discussions/esengine/DeepSeek-Reames Agent.svg?style=flat-square&color=58a6ff&labelColor=161b22&logo=github&logoColor=white" alt="Discussions"/></a>
   <a href="https://discord.gg/XF78rEME2D"><img src="https://img.shields.io/badge/discord-join-5865F2.svg?style=flat-square&labelColor=161b22&logo=discord&logoColor=white" alt="Discord"/></a>
 </p>
 
@@ -48,7 +48,7 @@
 ## Features
 
 - **Config-driven.** Providers, the agent, enabled tools, and plugins are all
-  declared in `reasonix.toml`. No hardcoded models.
+  declared in `reames-agent.toml`. No hardcoded models.
 - **Multi-model & composable.** DeepSeek ships as a preset; any
   OpenAI-compatible endpoint is a config entry, not new code. Optionally run
   two models together (executor + planner) in separate, cache-stable sessions.
@@ -63,12 +63,12 @@
 ## Install
 
 ```sh
-npm i -g reasonix                  # any OS; pulls the prebuilt native binary
-brew install esengine/reasonix/reasonix   # macOS
+npm i -g reames-agent                  # any OS; pulls the prebuilt native binary
+brew install esengine/reames-agent/reames-agent   # macOS
 ```
 
 Prebuilt archives (`darwin|linux|windows × amd64|arm64`) and `SHA256SUMS` are on
-every [GitHub release](https://github.com/esengine/DeepSeek-Reasonix/releases).
+every [GitHub release](https://github.com/esengine/DeepSeek-Reames Agent/releases).
 
 ### Code signing
 
@@ -79,24 +79,24 @@ Windows builds are code-signed with a free certificate provided by the
 ### Build from source
 
 ```sh
-make build      # -> bin/reasonix(.exe)
+make build      # -> bin/reames-agent(.exe)
 make cross      # -> dist/ (darwin|linux|windows × amd64|arm64)
 ```
 
 ## Quick start
 
 ```sh
-reasonix setup                      # config wizard → ./reasonix.toml
-export DEEPSEEK_API_KEY=sk-...      # or let setup save it to Reasonix home .env
-reasonix                            # then run /init to generate AGENTS.md (project memory)
-reasonix run "implement the TODOs in main.go"
-reasonix run --model deepseek-pro "add unit tests for this function"
-echo "explain this code" | reasonix run
+reames-agent setup                      # config wizard → ./reames-agent.toml
+export DEEPSEEK_API_KEY=sk-...      # or let setup save it to Reames Agent home .env
+reames-agent                            # then run /init to generate AGENTS.md (project memory)
+reames-agent run "implement the TODOs in main.go"
+reames-agent run --model deepseek-pro "add unit tests for this function"
+echo "explain this code" | reames-agent run
 ```
 
 ## Configuration
 
-A minimal `reasonix.toml` — one provider and a default model — is enough to start:
+A minimal `reames-agent.toml` — one provider and a default model — is enough to start:
 
 ```toml
 default_model = "deepseek-flash"
@@ -109,16 +109,16 @@ model       = "deepseek-v4-flash"
 api_key_env = "DEEPSEEK_API_KEY"
 ```
 
-Resolution order is **flag > `./reasonix.toml` > the user config file >
-built-in defaults**; starting with **Reasonix v1.8.1**, the user file lives at
-`~/.reasonix/config.toml` on macOS/Linux and
-`%AppData%\reasonix\config.toml` on Windows. See
+Resolution order is **flag > `./reames-agent.toml` > the user config file >
+built-in defaults**; starting with **Reames Agent v1.8.1**, the user file lives at
+`~/.reames-agent/config.toml` on macOS/Linux and
+`%AppData%\reames-agent\config.toml` on Windows. See
 **[Configuration paths](./docs/CONFIG_PATHS.md)** for migration details and the
 full `config.toml` / `.env` structure. Provider entries name secrets with
-`api_key_env`; the secret values themselves live in Reasonix's global
-`<Reasonix home>/.env`, shared by CLI and desktop. Project `.env` files are not
+`api_key_env`; the secret values themselves live in Reames Agent's global
+`<Reames Agent home>/.env`, shared by CLI and desktop. Project `.env` files are not
 provider-key runtime fallbacks, but still feed workspace-scoped, non-provider
-`${VAR}` expansion for MCP/plugin settings without importing Reasonix control
+`${VAR}` expansion for MCP/plugin settings without importing Reames Agent control
 variables. Permissions, the sandbox, plugins (MCP), slash
 commands, `@` references, and two-model setup are all in the
 **[Guide](./docs/GUIDE.md)**.
@@ -144,11 +144,11 @@ commands, `@` references, and two-model setup are all in the
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=esengine%2FDeepSeek-Reasonix&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=esengine%2FDeepSeek-Reames Agent&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=esengine/DeepSeek-Reasonix&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=esengine/DeepSeek-Reasonix&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=esengine/DeepSeek-Reasonix&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=esengine/DeepSeek-Reames Agent&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=esengine/DeepSeek-Reames Agent&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=esengine/DeepSeek-Reames Agent&type=date&legend=top-left" />
  </picture>
 </a>
 
@@ -156,7 +156,7 @@ commands, `@` references, and two-model setup are all in the
 
 ## Support
 
-If Reasonix has been useful and you'd like to say thanks, you can. It stays a coffee, not a contract — donations don't buy feature priority or change how issues get triaged.
+If Reames Agent has been useful and you'd like to say thanks, you can. It stays a coffee, not a contract — donations don't buy feature priority or change how issues get triaged.
 
 - **International** — PayPal: [paypal.me/yuhuahui](https://paypal.me/yuhuahui)
 - **国内** — 微信支付（扫码）
@@ -169,10 +169,10 @@ If Reasonix has been useful and you'd like to say thanks, you can. It stays a co
 
 ## Acknowledgments
 
-A small list of folks whose work has shaped Reasonix the most — measured
+A small list of folks whose work has shaped Reames Agent the most — measured
 by both commit count and code volume. **Listed alphabetically, no ordering
 of importance.** The full contributor graph is on
-[GitHub](https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors).
+[GitHub](https://github.com/esengine/DeepSeek-Reames Agent/graphs/contributors).
 
 - [**ctharvey**](https://github.com/ctharvey)
 - [**dimasd-angga**](https://github.com/dimasd-angga) (Dimas D. Angga)
@@ -189,8 +189,8 @@ for designing the project logo, and to
 [AIGC Link](https://xhslink.com/m/80ngts127cA) for promoting the project on XiaoHongShu.
 
 <p align="center">
-  <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=esengine/DeepSeek-Reasonix&max=100&columns=12" alt="Contributors to esengine/DeepSeek-Reasonix" width="860"/>
+  <a href="https://github.com/esengine/DeepSeek-Reames Agent/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=esengine/DeepSeek-Reames Agent&max=100&columns=12" alt="Contributors to esengine/DeepSeek-Reames Agent" width="860"/>
   </a>
 </p>
 
@@ -201,5 +201,5 @@ for designing the project logo, and to
 <p align="center">
   <sub>MIT — see <a href="./LICENSE">LICENSE</a></sub>
   <br/>
-  <sub>Built by the community at <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors">esengine/DeepSeek-Reasonix</a></sub>
+  <sub>Built by the community at <a href="https://github.com/esengine/DeepSeek-Reames Agent/graphs/contributors">esengine/DeepSeek-Reames Agent</a></sub>
 </p>

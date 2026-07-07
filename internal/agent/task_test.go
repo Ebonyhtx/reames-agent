@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/event"
-	"reasonix/internal/jobs"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/event"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 func testTaskContext() context.Context {
@@ -331,7 +331,7 @@ func TestTaskToolRequiresTranscriptStore(t *testing.T) {
 	}
 }
 
-// TestTaskToolRunsEphemerallyWithoutParentSession mirrors headless `reasonix run`:
+// TestTaskToolRunsEphemerallyWithoutParentSession mirrors headless `reamesAgent run`:
 // the store is wired but the context carries no parent session, so the sub-agent
 // must run without persistence and return its plain answer (no transcript ref).
 func TestTaskToolRunsEphemerallyWithoutParentSession(t *testing.T) {

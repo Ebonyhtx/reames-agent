@@ -1,7 +1,7 @@
 # Changelog
 
-All notable changes to the Go line (Reasonix 1.0+) are recorded here. The legacy
-`0.x` TypeScript history lives on the [`v1`](https://github.com/esengine/DeepSeek-Reasonix/tree/v1)
+All notable changes to the Go line (Reames Agent 1.0+) are recorded here. The legacy
+`0.x` TypeScript history lives on the [`v1`](https://github.com/esengine/DeepSeek-Reames Agent/tree/v1)
 branch.
 
 ## Unreleased
@@ -10,7 +10,7 @@ branch.
 
 - Agent runtime defaults now leave both executor and dedicated planner tool-call
   rounds unlimited (`max_steps = 0`, `planner_max_steps = 0`). Step limits now
-  come from the user/global config only; project `reasonix.toml` does not
+  come from the user/global config only; project `reames-agent.toml` does not
   override them.
 
 ## [1.0.0] — 2026-06-03
@@ -22,7 +22,7 @@ TypeScript line; a new codebase that becomes the default (`main-v2`).
 
 - **Go kernel**: a single static binary (CGO-free), cross-compiled for
   darwin/linux/windows on amd64 + arm64. Distributed via npm (the package wraps
-  the native binary), Homebrew (`esengine/reasonix` tap), and release archives;
+  the native binary), Homebrew (`esengine/reames-agent` tap), and release archives;
   no Node runtime needed to run it.
 - **Agent core**: the loop, built-in tools (read/write/edit/multi_edit/glob/grep/
   ls/bash/web_fetch/todo_write), permission gate, sandboxed bash, and the
@@ -34,12 +34,12 @@ TypeScript line; a new codebase that becomes the default (`main-v2`).
   `[[plugins]]` and a Claude-Code `.mcp.json`.
 - **Code intelligence via CodeGraph**: a tree-sitter symbol/call graph
   (`codegraph_*` tools) replaces embedding semantic search — no embedding service
-  or API cost. Fetched into a local cache on first use (or `reasonix codegraph
+  or API cost. Fetched into a local cache on first use (or `reames-agent codegraph
   install`) and indexed in the background, so installs and startup stay fast.
 - **Plan mode** with evidence-backed step sign-off (`complete_step`).
 - **Memory**: `REASONIX.md` hierarchy + auto-memory, folded into the cache-stable
   prefix.
-- **ACP** (`reasonix acp`) and an HTTP/SSE server frontend; desktop app (Wails).
+- **ACP** (`reames-agent acp`) and an HTTP/SSE server frontend; desktop app (Wails).
 
 ### Fixed
 
@@ -57,4 +57,4 @@ TypeScript line; a new codebase that becomes the default (`main-v2`).
   support for the fetched runtime is unverified — install `codegraph` on PATH if
   the auto-fetch doesn't resolve there.
 
-[1.0.0]: https://github.com/esengine/DeepSeek-Reasonix/releases/tag/v1.0.0
+[1.0.0]: https://github.com/esengine/DeepSeek-Reames Agent/releases/tag/v1.0.0

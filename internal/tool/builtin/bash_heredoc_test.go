@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/sandbox"
+	"reames-agent/internal/sandbox"
 )
 
 func TestBashHereDocIssue5624CommandsReturnPromptly(t *testing.T) {

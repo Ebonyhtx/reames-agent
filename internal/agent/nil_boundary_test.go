@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"reasonix/internal/event"
-	"reasonix/internal/tool"
+	"reames-agent/internal/event"
+	"reames-agent/internal/tool"
 )
 
 type typedNilAgentSink struct{}

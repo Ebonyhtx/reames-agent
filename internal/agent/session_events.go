@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 const (

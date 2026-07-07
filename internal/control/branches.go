@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"reasonix/internal/agent"
+	"reames-agent/internal/agent"
 )
 
 // ParseBranchTarget parses the arguments after "/branch". A leading positive

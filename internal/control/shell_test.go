@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/event"
-	"reasonix/internal/i18n"
-	"reasonix/internal/sandbox"
+	"reames-agent/internal/event"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/sandbox"
 )
 
 // collectSink returns a Sink that collects events and a channel that receives

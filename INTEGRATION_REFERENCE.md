@@ -11,7 +11,7 @@
 |------|------|------|
 | 记忆系统 | `agent/reames_memory.py` | L0-L3 四层记忆，可独立提取 |
 | 缓存优化 | `agent/deepseek_cache.py` | `ensure_cache_stable` + `CacheStats` |
-| 状态栏 | `agent/status_bar.py` | Reasonix 风格信息栏 |
+| 状态栏 | `agent/status_bar.py` | Reames Agent 风格信息栏 |
 | 压缩器 | `agent/context_compressor.py` | cache_first 模式 |
 | 安装脚本 | `install.ps1` | Windows 一键安装参考 |
 

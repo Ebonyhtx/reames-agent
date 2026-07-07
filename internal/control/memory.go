@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"reasonix/internal/memory"
+	"reames-agent/internal/memory"
 )
 
 // memoryManager owns the session's loaded memory snapshot, the queue of pending

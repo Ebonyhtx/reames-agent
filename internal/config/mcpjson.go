@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/mcpdiag"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/mcpdiag"
 )
 
 // mcpJSONFile is the project-root file Claude Code calls .mcp.json. Reasonix reads
@@ -88,7 +88,7 @@ func specsToEntries(specs map[string]mcpServerSpec, skip map[string]bool) []Plug
 	return entries
 }
 
-// legacyConfigPath is the v0.x (TypeScript line) config file, ~/.reasonix/config.json.
+// legacyConfigPath is the v0.x (TypeScript line) config file, ~/.reames-agent/config.json.
 func legacyConfigPath() string {
 	if IsolatedHomeDir() != "" {
 		return ""
@@ -97,10 +97,10 @@ func legacyConfigPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".reasonix", "config.json")
+	return filepath.Join(home, ".reames-agent", "config.json")
 }
 
-// loadLegacyMCP reads the v0.x ~/.reasonix/config.json and returns its enabled
+// loadLegacyMCP reads the v0.x ~/.reames-agent/config.json and returns its enabled
 // MCP servers as PluginEntry values — both the canonical mcpServers map and the
 // older `mcp` string list (mcpServers wins on a name collision, matching v0.x;
 // servers listed in mcpDisabled are skipped) — so upgrading from v0.x keeps MCP
@@ -210,7 +210,7 @@ func pluginEntryFromMCPSpec(name string, s mcpServerSpec) PluginEntry {
 }
 
 // mergeMCPJSON appends servers from .mcp.json that the TOML config did not
-// already declare. reasonix.toml's [[plugins]] win on a name collision: it is the
+// already declare. reamesAgent.toml's [[plugins]] win on a name collision: it is the
 // Reasonix-specific, more explicit of the two, so it overrides the shared,
 // checked-in .mcp.json rather than the other way round.
 func (c *Config) mergeMCPJSON(entries []PluginEntry) {

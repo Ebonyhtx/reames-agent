@@ -3,8 +3,8 @@ package control
 import (
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/event"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/event"
 )
 
 func TestParsePlanTodos(t *testing.T) {

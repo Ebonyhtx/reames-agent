@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"reasonix/internal/config"
-	"reasonix/internal/installsource"
-	"reasonix/internal/pluginpkg"
+	"reames-agent/internal/config"
+	"reames-agent/internal/installsource"
+	"reames-agent/internal/pluginpkg"
 )
 
 func pluginCommand(args []string) int {
@@ -45,13 +45,13 @@ func pluginCommand(args []string) int {
 
 func pluginUsage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  reasonix plugin install <source> [--yes] [--dry-run] [--link] [--replace]
-  reasonix plugin list
-  reasonix plugin show <name>
-  reasonix plugin enable <name>
-  reasonix plugin disable <name>
-  reasonix plugin remove <name>
-  reasonix plugin doctor <name>`)
+  reamesAgent plugin install <source> [--yes] [--dry-run] [--link] [--replace]
+  reamesAgent plugin list
+  reamesAgent plugin show <name>
+  reamesAgent plugin enable <name>
+  reamesAgent plugin disable <name>
+  reamesAgent plugin remove <name>
+  reamesAgent plugin doctor <name>`)
 }
 
 func pluginInstallCommand(args []string) int {

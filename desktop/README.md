@@ -1,6 +1,6 @@
-# Reasonix Desktop (Wails shell)
+# Reames Agent Desktop (Wails shell)
 
-A native desktop window around the Reasonix Go kernel. The same
+A native desktop window around the Reames Agent Go kernel. The same
 transport-agnostic `control.Controller` that backs the chat TUI and the HTTP/SSE
 server is bound **directly** to a React webview — Go methods in, typed events
 out, no HTTP hop.
@@ -25,11 +25,11 @@ out, no HTTP hop.
 
 ## Why a nested module
 
-`desktop/` is its own Go module (`module reasonix/desktop`, `replace reasonix =>
+`desktop/` is its own Go module (`module reames-agent/desktop`, `replace reames-agent =>
 ../`). That keeps the CGO + WebKit desktop build entirely separate from the CLI's
 `CGO_ENABLED=0` single-static-binary guarantee: the parent module's `go build /
 vet / test ./...` skip this directory, while the import path stays under
-`reasonix/` so it can still import the `reasonix/internal/*` kernel.
+`reames-agent/` so it can still import the `reames-agent/internal/*` kernel.
 
 ## Prerequisites
 
@@ -96,7 +96,7 @@ component code and the CSS positioning contract:
 
 ```sh
 cd desktop
-wails build          # → build/bin/Reasonix(.app/.exe)
+wails build          # → build/bin/Reames Agent(.app/.exe)
 ```
 
 **Linux on WebKitGTK 4.1 only** (Fedora 40+, Ubuntu 24.04+, Arch — no
@@ -131,7 +131,7 @@ git tag desktop-v1.1.0 && git push origin desktop-v1.1.0
 ```
 
 The app checks `latest.json` on startup (R2 first, then the
-`crash.reasonix.io` desktop release gateway) and shows an update banner when a
+`crash.reames-agent.io` desktop release gateway) and shows an update banner when a
 newer version is published; **Settings → Software update** has a manual check.
 The gateway resolves only the desktop `desktop-v*` release line and never uses
 GitHub's repository-wide `/releases/latest` shortcut, so updater behavior does
@@ -149,11 +149,11 @@ not depend on homepage badge semantics. Self-update behavior by platform:
 There are no Apple/Windows code-signing certificates yet, so a downloaded build
 trips the OS gatekeepers on first run:
 
-- **macOS** — open `Reasonix-darwin-universal.dmg` and drag Reasonix into
+- **macOS** — open `Reames Agent-darwin-universal.dmg` and drag Reames Agent into
   Applications. Gatekeeper may then report the app "is damaged" or is from an
   unidentified developer; clear the quarantine attribute and open it:
   ```sh
-  xattr -dr com.apple.quarantine /Applications/Reasonix.app
+  xattr -dr com.apple.quarantine /Applications/Reames Agent.app
   ```
 - **Windows** — SmartScreen shows "Windows protected your PC". Click *More info →
   Run anyway*.
@@ -168,7 +168,7 @@ signature sits next to each artifact in the release; verify with the
 [minisign](https://jedisct1.github.io/minisign/) CLI:
 
 ```sh
-minisign -Vm Reasonix-darwin-arm64.zip \
+minisign -Vm Reames Agent-darwin-arm64.zip \
   -P RWSw66n0RsoSr6Zhh6qt5YO95YkpCayTOCMFVDNUQSjJYwxoYngNVBSq
 ```
 
@@ -215,7 +215,7 @@ handled here, and what to reach for if a target misbehaves:
   - **Wayland + NVIDIA**: On KDE Plasma Wayland with NVIDIA GPUs, WebKitGTK can
     crash at startup (`Error 71: Protocol error`) due to an upstream WebKit
     explicit-sync bug (WebKit #280210, #317089, NVIDIA/egl-wayland #179).
-    Reasonix automatically sets `__NV_DISABLE_EXPLICIT_SYNC=1` when it detects
+    Reames Agent automatically sets `__NV_DISABLE_EXPLICIT_SYNC=1` when it detects
     Wayland + NVIDIA GPU. To opt out, set `__NV_DISABLE_EXPLICIT_SYNC=0`.
     Alternative fallbacks: `WEBKIT_DISABLE_DMABUF_RENDERER=1` (poor performance)
     or `GDK_BACKEND=x11` (forces XWayland).
@@ -256,7 +256,7 @@ desktop/
 
 ## Telemetry
 
-The desktop app sends one anonymous ping per launch to `crash.reasonix.io`:
+The desktop app sends one anonymous ping per launch to `crash.reames-agent.io`:
 a random install id (generated locally, tied to nothing), app version, OS,
 arch, and OS version. It exists solely to count active installs. It never
 includes conversations, API keys, file contents, or paths.
@@ -278,6 +278,6 @@ IR-overhead bucket, memory-reference count, constraint/risk/step counts, and
 memory-graph size buckets. It never uploads memory text, tool outputs, prompts,
 file paths, IDs, keys, base URLs, or file contents. The Memory v5 runtime itself
 is controlled from Settings > General > "Memory v5" and shares the user/global
-`agent.memory_compiler.enabled` setting with the CLI/TUI and `reasonix serve`;
+`agent.memory_compiler.enabled` setting with the CLI/TUI and `reames-agent serve`;
 CLI users can also run `/memory-v5 off|observe|compact|on|status` in a session
-or `reasonix config memory-v5 off|observe|compact|on|status` from a shell.
+or `reames-agent config memory-v5 off|observe|compact|on|status` from a shell.

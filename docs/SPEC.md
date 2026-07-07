@@ -1,6 +1,6 @@
-# Reasonix Engineering Spec
+# Reames Agent Engineering Spec
 
-> Reasonix is a coding agent: a thin harness driving multiple models, with **all
+> Reames Agent is a coding agent: a thin harness driving multiple models, with **all
 > capabilities supplied by configuration and plugins**. This document is the
 > contract — code follows it. Change the contract first, then the code.
 
@@ -26,14 +26,14 @@ README is bilingual (`README.md` English + `README.zh-CN.md`).
 ## 2. Layout
 
 ```
-reasonix/
-├── go.mod / go.sum          # module reasonix; require BurntSushi/toml
+reames-agent/
+├── go.mod / go.sum          # module reames-agent; require BurntSushi/toml
 ├── Makefile                 # build / cross / vet / fmt / test
 ├── README.md / README.zh-CN.md
-├── reasonix.example.toml         # sample config
+├── reames-agent.example.toml         # sample config
 ├── docs/SPEC.md             # this file
-├── cmd/reasonix/main.go          # entry; blank-imports built-in providers/tools
-├── cmd/reasonix-plugin-example/  # reference MCP stdio plugin (a runnable example)
+├── cmd/reames-agent/main.go          # entry; blank-imports built-in providers/tools
+├── cmd/reames-agent-plugin-example/  # reference MCP stdio plugin (a runnable example)
 └── internal/
     ├── cli/                 # subcommand routing, flags, assembly, exit codes
     ├── config/              # TOML loading (flag > project > user > defaults)
@@ -42,7 +42,7 @@ reasonix/
     ├── tool/                # Tool interface + Registry
     │   └── builtin/         # read_file/write_file/edit_file/move_file/bash/ls/glob/grep
     ├── permission/          # per-call Policy: allow/ask/deny rules → Decision
-    ├── command/             # custom slash commands loaded from .reasonix/commands/*.md
+    ├── command/             # custom slash commands loaded from .reames-agent/commands/*.md
     ├── plugin/              # stdio JSON-RPC (MCP) client; adapts remote tools
     └── agent/               # Session + harness loop
 ```
@@ -151,7 +151,7 @@ interface (`call` / `notify` / `close`) abstracts that, so the MCP-level logic
 - `prompts/list` + `prompts/get` surface as `/mcp__<server>__<prompt>` slash
   commands; `resources/list` + `resources/read` are referenced as
   `@<server>:<uri>` in chat. `/mcp` shows connected servers and their counts.
-- `cmd/reasonix-plugin-example` is a runnable reference stdio server (`echo`,
+- `cmd/reames-agent-plugin-example` is a runnable reference stdio server (`echo`,
   `wordcount`), driven by an end-to-end test that builds the real binary.
 
 ### 3.4 Agent (`internal/agent`)
@@ -184,7 +184,7 @@ prefix cache-stable:
 
 ### 3.6 Context management (compaction)
 
-Long tasks eventually fill the model's context window. Reasonix manages this with
+Long tasks eventually fill the model's context window. Reames Agent manages this with
 **low-frequency compaction** that respects the cache-first design:
 
 - Each provider declares its `context_window` (tokens). Context maintenance is
@@ -207,7 +207,7 @@ Long tasks eventually fill the model's context window. Reasonix manages this wit
   result so the recent tail never begins with an orphan tool message whose
   `tool_calls` were summarized away.
 - The dropped originals are archived under the user config dir
-  (`reasonix/archive/<timestamp>.jsonl`; see §5 for its per-OS location), one
+  (`reames-agent/archive/<timestamp>.jsonl`; see §5 for its per-OS location), one
   message per line, so the full history stays traceable.
 - The read-only `history` tool gives the agent on-demand BM25 retrieval over
   saved session JSONL files. `scope="project"` searches the current controller's
@@ -298,7 +298,7 @@ func (p Policy) Decide(toolName string, readOnly bool, args json.RawMessage) Dec
   grant is path-scoped when a path is available, stored as `Edit(<path>)` so all
   built-in file-mutating tools share it. A
   non-interactive run
-  (`reasonix run`, a sub-agent, anything with no TTY / no approver) cannot prompt, so
+  (`reames-agent run`, a sub-agent, anything with no TTY / no approver) cannot prompt, so
   it resolves `Ask` to **allow** — preserving autonomous behaviour. A `Deny` is a
   hard block in *every* mode: the tool never executes and the model receives a
   "blocked" result it can adapt to (the same shape as a plan-mode refusal).
@@ -377,7 +377,7 @@ func (p Policy) Decide(toolName string, readOnly bool, args json.RawMessage) Dec
   implementation work automatically add an AutoResearch protocol to the same
   transient active-goal user block. AutoResearch is a Goal strategy, not a
   standalone global skill: it writes project-local state under
-  `.reasonix/autoresearch/YYYYMMDD-HHMMSS-slug/` and keeps dynamic run state out
+  `.reames-agent/autoresearch/YYYYMMDD-HHMMSS-slug/` and keeps dynamic run state out
   of `REASONIX.md`, `AGENTS.md`, project memory, tool schemas, and the
   cache-stable system prompt. `/goal --research <objective>` forces that
   strategy; `/goal --simple <objective>` forces lightweight Goal. Outside goal
@@ -397,8 +397,8 @@ func (p Policy) Decide(toolName string, readOnly bool, args json.RawMessage) Dec
 | YOLO approval / `yolo` | Approval prompts auto-allowed unless denied | Waits for user | Waits for user unless session-granted | Waits for user |
 | Approved-plan execution window | Approved plan's tool calls auto-allowed unless denied | Future plans still wait | Waits for user unless session-granted | Waits for user |
 
-Out of the box (`mode = "ask"`, no rules) `reasonix run` behaves exactly as before
-(writers resolve `Ask`→allow with no TTY), while `reasonix` now prompts before
+Out of the box (`mode = "ask"`, no rules) `reames-agent run` behaves exactly as before
+(writers resolve `Ask`→allow with no TTY), while `reames-agent` now prompts before
 each writer/bash call. `deny` rules harden both modes.
 
 ### 3.8 Slash commands (`internal/command`)
@@ -410,8 +410,8 @@ The chat TUI accepts `/command` input. Three kinds share one dispatch:
   saving the previous transcript for resume/history. `/clear` requires
   confirmation, then discards the current context without saving it; it does not
   delete project memory.
-- **Custom commands** are Markdown files under `.reasonix/commands/` (project) and
-  the user config dir, e.g. `~/.reasonix/commands/` on macOS/Linux; the project dir overrides the user dir on a
+- **Custom commands** are Markdown files under `.reames-agent/commands/` (project) and
+  the user config dir, e.g. `~/.reames-agent/commands/` on macOS/Linux; the project dir overrides the user dir on a
   name clash. A file `review.md` becomes `/review`; a subdirectory namespaces it
   (`git/commit.md` → `/git:commit`). Invoking one renders its body and sends the
   result as the next user turn.
@@ -426,7 +426,7 @@ Review the staged diff. Focus on $ARGUMENTS, list bugs with file:line.
 ```
 
 - Frontmatter is an optional `---`-fenced block of simple `key: value` lines;
-  `description` and `argument-hint` are recognised (no YAML dependency — Reasonix
+  `description` and `argument-hint` are recognised (no YAML dependency — Reames Agent
   stays lean). The remainder is the body template.
 - Substitution in the body: `$ARGUMENTS` (all args, space-joined), `$1`…`$N`
   (positional, empty when absent), `$$` (a literal `$`). Arguments are the
@@ -506,21 +506,21 @@ type Chunk struct {
 
 ## 5. Configuration (TOML)
 
-Resolution order: **flag > project `./reasonix.toml` > the user config file
-> built-in defaults**. Starting with **Reasonix v1.8.1**, the user config lives
-at `~/.reasonix/config.toml` on macOS/Linux and
-`%AppData%\reasonix\config.toml` on Windows. See
+Resolution order: **flag > project `./reames-agent.toml` > the user config file
+> built-in defaults**. Starting with **Reames Agent v1.8.1**, the user config lives
+at `~/.reames-agent/config.toml` on macOS/Linux and
+`%AppData%\reames-agent\config.toml` on Windows. See
 [Configuration paths](./CONFIG_PATHS.md) for migration and related data paths.
 Fields marked user/global only, including agent step limits, are not overridden
-by project `reasonix.toml`.
+by project `reames-agent.toml`.
 Provider entries name secrets with `api_key_env`; saved key values live in
-Reasonix's global `<Reasonix home>/.env`, shared by CLI and desktop. Project
+Reames Agent's global `<Reames Agent home>/.env`, shared by CLI and desktop. Project
 `.env`, home `.env`, inherited shell environment variables, legacy credentials,
 and the OS keyring are not provider-key runtime fallbacks. Project `.env` still
 feeds workspace-scoped, non-provider `${VAR}` expansion for MCP/plugin settings
-without importing provider keys or Reasonix control variables. Step-limit
+without importing provider keys or Reames Agent control variables. Step-limit
 preferences belong in the user config.
-Project `reasonix.toml` does not override `agent.max_steps` or
+Project `reames-agent.toml` does not override `agent.max_steps` or
 `agent.planner_max_steps`, and it does not override the user-level Memory v5
 compiler switch.
 
@@ -533,11 +533,11 @@ default_model = "deepseek"   # provider name (→ its default model) or "provide
 # cursor_shape = "underline"        # CLI/TUI textarea cursor: underline|block|bar
 
 [agent]
-system_prompt = "You are Reasonix, a coding agent..."  # or system_prompt_file = "..."
+system_prompt = "You are Reames Agent, a coding agent..."  # or system_prompt_file = "..."
 max_steps         = 0    # user/global only; executor tool-call rounds; 0 = no limit
 planner_max_steps = 0    # user/global only; planner read-only tool-call rounds; 0 = no limit
 temperature       = 0.0
-memory_compiler = { enabled = true, verbosity = "observe" }   # user/global only; observe|compact; CLI: reasonix config memory-v5 off|observe|compact|on|status
+memory_compiler = { enabled = true, verbosity = "observe" }   # user/global only; observe|compact; CLI: reames-agent config memory-v5 off|observe|compact|on|status
 reasoning_language = "auto"       # visible reasoning text: auto|zh|en
 # plan_mode_allowed_tools = ["custom_reader"]   # extra read-only declarations for custom tools;
 #                                                # cannot unlock known blocked tools or unsafe bash
@@ -596,12 +596,12 @@ ask   = []                                 # force a prompt even if otherwise al
 [serve]
 auth_mode = "none"             # none|token|password; use auth before binding beyond localhost
 # token = ""                   # optional fixed token; empty token mode generates one at startup
-# password_hash = ""           # bcrypt hash generated with reasonix serve --hash-password --password '...'
+# password_hash = ""           # bcrypt hash generated with reames-agent serve --hash-password --password '...'
 # behind_proxy = false         # trust X-Forwarded-* only behind a trusted reverse proxy
 
 [[plugins]]
 name    = "example"            # type defaults to "stdio"
-command = "reasonix-plugin-example"
+command = "reames-agent-plugin-example"
 args    = []
 # env   = { FOO = "bar" }
 # call_timeout_seconds = 600            # per-server MCP call timeout; 0 = global/default cap
@@ -615,14 +615,14 @@ args    = []
 # headers = { Authorization = "Bearer ${STRIPE_KEY}" }   # ${VAR} / ${VAR:-default} expanded
 ```
 
-`reasonix setup` writes this default config so the CLI is usable out of the box.
+`reames-agent setup` writes this default config so the CLI is usable out of the box.
 
 `[ui].cursor_shape` is normalized to `underline`, `block`, or `bar`; empty or
 unknown values fall back to `underline`. It applies to the Bubble Tea CLI/TUI
 textarea only, while desktop and browser inputs keep their platform-native
 cursor behavior.
 
-`[serve]` controls the HTTP browser frontend used by `reasonix serve`. The
+`[serve]` controls the HTTP browser frontend used by `reames-agent serve`. The
 default `auth_mode = "none"` is intended for the loopback default
 `127.0.0.1:8787`; deployments reachable from another machine must use `token` or
 `password`. Password mode requires either a startup `--password` or a stored
@@ -633,9 +633,9 @@ headers.
 MCP servers may also be declared in a project-root `.mcp.json` using Claude
 Code's exact `mcpServers` schema (`command`/`args`/`env`, `type`/`url`/`headers`,
 `${VAR}` expansion). It is read after the TOML files and merged into
-`[[plugins]]`; on a name collision `reasonix.toml` wins (it is the more explicit,
-Reasonix-specific source). This lets a server already configured for Claude work in
-Reasonix unchanged.
+`[[plugins]]`; on a name collision `reames-agent.toml` wins (it is the more explicit,
+Reames Agent-specific source). This lets a server already configured for Claude work in
+Reames Agent unchanged.
 
 ```json
 { "mcpServers": {
@@ -646,7 +646,7 @@ Reasonix unchanged.
 
 `[sandbox]` is the *enforcement* layer beneath permissions (which are *policy*).
 Phase 0 confines the file-writing built-ins (`write_file`, `edit_file`,
-`multi_edit`, `move_file`) to `workspace_root` (default cwd), the Reasonix user
+`multi_edit`, `move_file`) to `workspace_root` (default cwd), the Reames Agent user
 config dir, plus `allow_write`: a write whose target — resolved to an absolute,
 symlink-free path so a symlinked dir or `..` cannot tunnel out — falls outside
 every root is refused, and the error is fed back to the model. Confinement is on
@@ -660,7 +660,7 @@ Linux, and a native helper on Windows): each command is allowed to write only
 the same roots plus platform-specific command temp/cache roots, denied reads
 under `forbid_read`, and allowed to reach the network only when
 `network = true`.
-The native Windows helper uses Reasonix's bundled Windows sandbox backend:
+The native Windows helper uses Reames Agent's bundled Windows sandbox backend:
 AppContainer for read-only commands and a low-integrity token for writable
 commands, with temporary ACL grants for
 writable roots and tool executables, a per-command temp root instead of mutating
@@ -702,7 +702,7 @@ behavior. The escape-prompt and broader OS support are Phase 1's remainder (§9)
 
 ## 8. Distribution
 
-- Build: `CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o reasonix ./cmd/reasonix`
+- Build: `CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o reames-agent ./cmd/reames-agent`
 - Cross matrix: `darwin|linux|windows` × `amd64|arm64`.
 - Version injected via ldflags (`git describe --tags --always`).
 - Install: prebuilt binary / `go install` / future `brew tap`.
@@ -715,7 +715,7 @@ behavior. The escape-prompt and broader OS support are Phase 1's remainder (§9)
   when available** (see §5).
   Remaining: (a)
   the escape-prompt — detect sandbox-unavailable or sandbox-denied failures and
-  offer an explicit, permission-gated unconfined rerun (in `reasonix run`, the
+  offer an explicit, permission-gated unconfined rerun (in `reames-agent run`, the
   command just fails and the model adapts), which completes the "allow inside the
   box, prompt at its edge" model; (b) an optional elevated Windows backend with a
   dedicated sandbox user for enterprise hardening. Shells out to OS tooling so
@@ -729,4 +729,4 @@ behavior. The escape-prompt and broader OS support are Phase 1's remainder (§9)
 - An Anthropic-native provider `kind` (native prompt-cache control), proving the
   registry generalises beyond one wire format.
 - "Always allow" persistence writing learned rules back to project config; a
-  per-session permission override flag for `reasonix run`.
+  per-session permission override flag for `reames-agent run`.

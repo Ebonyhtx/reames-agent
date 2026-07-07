@@ -353,7 +353,7 @@ func TestNormalizeType(t *testing.T) {
 
 // TestStoreForSlug ensures the project path becomes one filesystem-safe segment.
 func TestStoreForSlug(t *testing.T) {
-	s := StoreFor("/home/me/.reasonix", "/Users/me/proj")
+	s := StoreFor("/home/me/.reames-agent", "/Users/me/proj")
 	if strings.Count(filepath.Base(filepath.Dir(s.Dir)), "/") != 0 {
 		t.Fatalf("slug should have no separators: %s", s.Dir)
 	}
@@ -503,7 +503,7 @@ func TestStoreSaveRemovesStaleCopyWhenScopeChanges(t *testing.T) {
 
 // TestStoreForInitializesGlobalDir ensures StoreFor sets GlobalDir alongside Dir.
 func TestStoreForInitializesGlobalDir(t *testing.T) {
-	s := StoreFor("/home/me/.reasonix", "/Users/me/proj")
+	s := StoreFor("/home/me/.reames-agent", "/Users/me/proj")
 	if s.GlobalDir == "" {
 		t.Fatal("StoreFor should set GlobalDir")
 	}

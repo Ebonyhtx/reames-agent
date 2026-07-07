@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/store"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/store"
 )
 
 func TestSessionLeaseKeeperRebindMovesLease(t *testing.T) {

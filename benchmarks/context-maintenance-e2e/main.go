@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/event"
-	"reasonix/internal/provider"
-	_ "reasonix/internal/provider/openai"
-	"reasonix/internal/tool"
-	"reasonix/internal/tool/builtin"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/event"
+	"reames-agent/internal/provider"
+	_ "reames-agent/internal/provider/openai"
+	"reames-agent/internal/tool"
+	"reames-agent/internal/tool/builtin"
 )
 
 const (

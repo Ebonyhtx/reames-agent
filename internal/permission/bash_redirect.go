@@ -1,6 +1,6 @@
 package permission
 
-import "reasonix/internal/shellsafe"
+import "reames-agent/internal/shellsafe"
 
 func normalizeBashSafeRedirectsForMatch(subject string) (string, bool) {
 	return shellsafe.NormalizeBashSafeRedirectsForMatch(subject)

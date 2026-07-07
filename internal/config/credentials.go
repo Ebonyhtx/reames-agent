@@ -11,7 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/joho/godotenv"
 
-	"reasonix/internal/fileutil"
+	"reames-agent/internal/fileutil"
 )
 
 const (
@@ -19,8 +19,8 @@ const (
 	CredentialsStoreKeyring = "keyring"
 	CredentialsStoreFile    = "file"
 
-	credentialsKeyringService = "reasonix"
-	credentialClearedPrefix   = "# reasonix-cleared "
+	credentialsKeyringService = "reames-agent"
+	credentialClearedPrefix   = "# reamesAgent-cleared "
 )
 
 const (
@@ -117,7 +117,7 @@ func normalizeCredentialsStore(mode string) string {
 }
 
 func credentialsStoreMode() string {
-	if mode := strings.TrimSpace(os.Getenv("REASONIX_CREDENTIALS_STORE")); mode != "" {
+	if mode := strings.TrimSpace(os.Getenv("REAMES_AGENT_CREDENTIALS_STORE")); mode != "" {
 		return normalizeCredentialsStore(mode)
 	}
 	var partial struct {
@@ -133,9 +133,9 @@ func credentialEnvNamesForRoot(root string) []string {
 	root = resolveRoot(root)
 	cfg := Default()
 
-	projectTOML := "reasonix.toml"
+	projectTOML := "reamesAgent.toml"
 	if root != "." {
-		projectTOML = filepath.Join(root, "reasonix.toml")
+		projectTOML = filepath.Join(root, "reamesAgent.toml")
 	}
 	if uc := userConfigLoadPath(); uc != "" {
 		_ = mergeFile(cfg, uc)

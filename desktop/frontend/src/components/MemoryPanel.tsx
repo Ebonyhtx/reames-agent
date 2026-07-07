@@ -202,7 +202,7 @@ function suggestionStamp(value?: string): string {
   return date.toLocaleString();
 }
 
-const AUTO_MEMORY_SUGGESTIONS_KEY = "reasonix.memory.autoSuggestions";
+const AUTO_MEMORY_SUGGESTIONS_KEY = "reames-agent.memory.autoSuggestions";
 
 function readAutoSuggestionsPreference(): boolean {
   if (typeof window === "undefined") return false;

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/winsandbox"
+	"reames-agent/internal/winsandbox"
 )
 
 func TestWindowsCommandWrapsWithHelper(t *testing.T) {
@@ -73,7 +73,7 @@ func TestConvertWindowsSandboxSpec(t *testing.T) {
 		Network:         true,
 	}
 	got := convertWindowsSandboxSpec(spec, true)
-	if !got.Writable || !got.Network || got.TempPrefix != "reasonix-sandbox-" {
+	if !got.Writable || !got.Network || got.TempPrefix != "reamesAgent-sandbox-" {
 		t.Fatalf("converted flags = %+v", got)
 	}
 	if len(got.WritableRoots) != 1 || got.WritableRoots[0] != spec.WriteRoots[0] {

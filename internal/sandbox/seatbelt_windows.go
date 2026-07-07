@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"reasonix/internal/winsandbox"
+	"reames-agent/internal/winsandbox"
 )
 
 type windowsSandboxPayload struct {
@@ -91,7 +91,7 @@ func decodeWindowsSandboxPayload(s string) (windowsSandboxPayload, error) {
 // CommandArgs on native Windows.
 func RunWindowsSandboxHelper(args []string, stdin *os.File, stdout *os.File, stderr *os.File) int {
 	if len(args) < 3 || args[1] != "--" {
-		fmt.Fprintln(stderr, "usage: reasonix "+WindowsHelperCommand+" <payload> -- <command> [args...]")
+		fmt.Fprintln(stderr, "usage: reamesAgent "+WindowsHelperCommand+" <payload> -- <command> [args...]")
 		return 2
 	}
 	payload, err := decodeWindowsSandboxPayload(args[0])
@@ -122,7 +122,7 @@ func convertWindowsSandboxSpec(spec Spec, writable bool) winsandbox.Spec {
 		ForbidReadRoots: append([]string(nil), spec.ForbidReadRoots...),
 		Network:         spec.Network,
 		Writable:        writable,
-		TempPrefix:      "reasonix-sandbox-",
+		TempPrefix:      "reamesAgent-sandbox-",
 		LockWait:        spec.WindowsLockWait,
 	}
 }

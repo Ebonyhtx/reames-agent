@@ -21,22 +21,22 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/command"
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/hook"
-	"reasonix/internal/i18n"
-	"reasonix/internal/memory"
-	"reasonix/internal/migration"
-	"reasonix/internal/outputstyle"
-	"reasonix/internal/permission"
-	"reasonix/internal/plugin"
-	"reasonix/internal/provider"
-	"reasonix/internal/sandbox"
-	"reasonix/internal/skill"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/command"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/hook"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/migration"
+	"reames-agent/internal/outputstyle"
+	"reames-agent/internal/permission"
+	"reames-agent/internal/plugin"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/sandbox"
+	"reames-agent/internal/skill"
+	"reames-agent/internal/tool"
 )
 
 // chatTUI is a bubbletea Model that normally owns the terminal with an
@@ -56,7 +56,7 @@ type chatTUI struct {
 	// mouseCaptureOff releases mouse ownership back to the terminal (View() sets
 	// tea.MouseModeNone instead of MouseModeCellMotion) so its native
 	// click-drag selection and right-click context menu work again. Toggled by
-	// "/mouse" or REASONIX_DISABLE_MOUSE at startup; trades away in-app
+	// "/mouse" or REAMES_AGENT_DISABLE_MOUSE at startup; trades away in-app
 	// drag-select, the transcript scrollbar, and wheel-scroll while it's on,
 	// since the terminal no longer forwards those events to Reasonix.
 	mouseCaptureOff bool
@@ -269,7 +269,7 @@ type chatTUI struct {
 	// (/mcp) from it.
 	host *plugin.Host
 
-	// commands are custom slash commands loaded from .reasonix/commands; each renders
+	// commands are custom slash commands loaded from .reames-agent/commands; each renders
 	// its template with the typed args and sends the result as a turn.
 	commands []command.Command
 
@@ -553,7 +553,7 @@ func transcriptContentWidth(termW int, nativeScrollback bool) int {
 // menu and click-drag selection matter more than the scrollbar and
 // wheel-scroll) without having to type "/mouse" each session.
 func mouseCaptureOffByDefault() bool {
-	v := strings.TrimSpace(os.Getenv("REASONIX_DISABLE_MOUSE"))
+	v := strings.TrimSpace(os.Getenv("REAMES_AGENT_DISABLE_MOUSE"))
 	return v != "" && v != "0"
 }
 
@@ -3803,7 +3803,7 @@ func (m *chatTUI) runExportCommand(input string) {
 	}
 
 	var b strings.Builder
-	b.WriteString("# reasonix session\n\n")
+	b.WriteString("# reamesAgent session\n\n")
 	lastRole := provider.Role("")
 	exportedMessages := 0
 	for _, msg := range msgs {
@@ -4070,7 +4070,7 @@ func replaySectionsFor(history []provider.Message, width int, renderer *mdRender
 // at the top of the session.
 func renderTUIBanner(label, missing string, width int) string {
 	var b strings.Builder
-	b.WriteString(accent("◆") + " " + bold("reasonix") + "  " + dim("· "+label) + "\n")
+	b.WriteString(accent("◆") + " " + bold("reames-agent") + "  " + dim("· "+label) + "\n")
 	b.WriteString(dim("  "+i18n.M.ChatTip) + "\n")
 	if missing != "" {
 		b.WriteString(wrapForViewport("  ! "+missing, width, activeCLITheme.warn) + "\n")
@@ -4101,7 +4101,7 @@ func renderUserBubble(line string, width int, planMode bool) string {
 	return "  " + accent(prefix+line)
 }
 
-var cliImageRefRe = regexp.MustCompile(`(?:^|\s)@\.reasonix/attachments/clipboard-\d{8}-\d{6}\.\d+(?:-(?:\d{6}|[a-f0-9]{8}))?\.(?:png|jpg|jpeg|gif|webp)`)
+var cliImageRefRe = regexp.MustCompile(`(?:^|\s)@\.reames-agent/attachments/clipboard-\d{8}-\d{6}\.\d+(?:-(?:\d{6}|[a-f0-9]{8}))?\.(?:png|jpg|jpeg|gif|webp)`)
 
 func displayLineForImageRefs(line string) string {
 	idx := 0

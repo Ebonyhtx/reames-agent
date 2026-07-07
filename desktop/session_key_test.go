@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/agent"
+	"reames-agent/internal/agent"
 )
 
 // The lease registry folds session paths through agent.CanonicalSessionPath

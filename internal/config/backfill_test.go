@@ -7,7 +7,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 func hasModel(c *Config, model string) *ProviderEntry {
@@ -510,7 +510,7 @@ func TestApplyDeepSeekOfficialDefaultPricingKeepsCustomPrice(t *testing.T) {
 }
 
 func TestResetOfficialProviderPricingOnUpgradeRunsOnce(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "reasonix.toml")
+	path := filepath.Join(t.TempDir(), "reamesAgent.toml")
 	c := &Config{
 		ConfigVersion: 2,
 		Providers: []ProviderEntry{

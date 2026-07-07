@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"reasonix/internal/config"
-	"reasonix/internal/installsource"
-	"reasonix/internal/pluginpkg"
+	"reames-agent/internal/config"
+	"reames-agent/internal/installsource"
+	"reames-agent/internal/pluginpkg"
 )
 
 type PluginView struct {

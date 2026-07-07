@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 func TestSessionRemovalGuardBlocksWhileLeaseHeld(t *testing.T) {

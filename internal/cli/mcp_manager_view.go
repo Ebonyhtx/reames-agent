@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/mcpdiag"
+	"reames-agent/internal/mcpdiag"
 )
 
 func (m chatTUI) renderMCPManager() string {

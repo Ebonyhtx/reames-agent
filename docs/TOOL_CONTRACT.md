@@ -2,7 +2,7 @@
 
 <a href="./TOOL_CONTRACT.zh-CN.md">简体中文</a>
 
-This document records the provider-visible contract for Reasonix compile-time built-in tools. It is generated from the same canonical schema path used by the runtime registry.
+This document records the provider-visible contract for Reames Agent compile-time built-in tools. It is generated from the same canonical schema path used by the runtime registry.
 
 | Tool | Read-only | Description |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ The test checks that every registered built-in tool has a documented name, read-
 
 ## Default Full Boot Surface
 
-In a default full-token boot, Reasonix sends the built-in tools above plus the
+In a default full-token boot, Reames Agent sends the built-in tools above plus the
 session, memory, skill, subagent, LSP, install, and slash-command tools below:
 
 `ask`, `explore`, `forget`, `history`, `install_skill`, `install_source`,
@@ -53,7 +53,7 @@ flags and canonical schemas.
 
 ## Token Economy Boot Surface
 
-In token economy mode, Reasonix starts with the core coding/session/memory tools
+In token economy mode, Reames Agent starts with the core coding/session/memory tools
 and the connector used to enable optional sources on demand:
 
 `ask`, `connect_tool_source`, `forget`, `history`, `list_sessions`, `memory`,

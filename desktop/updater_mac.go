@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const macBundleID = "com.wails.reasonix-desktop"
+const macBundleID = "com.wails.reamesAgent-desktop"
 
 func applyMac(zipPath string) error {
 	if !macSelfUpdateAllowed() {
@@ -20,7 +20,7 @@ func applyMac(zipPath string) error {
 	if err != nil {
 		return err
 	}
-	staging, err := os.MkdirTemp("", "reasonix-mac-update-*")
+	staging, err := os.MkdirTemp("", "reamesAgent-mac-update-*")
 	if err != nil {
 		return err
 	}
@@ -40,12 +40,12 @@ func applyMac(zipPath string) error {
 	if err := verifyMacApp(nextApp); err != nil {
 		return err
 	}
-	script := filepath.Join(staging, "install-reasonix-update.sh")
+	script := filepath.Join(staging, "install-reamesAgent-update.sh")
 	body := fmt.Sprintf(`#!/bin/sh
 set -eu
 old_app=%q
 new_app=%q
-backup_app="$old_app.reasonix-update-backup"
+backup_app="$old_app.reamesAgent-update-backup"
 sleep 1
 rm -rf "$backup_app"
 if ! mv "$old_app" "$backup_app"; then

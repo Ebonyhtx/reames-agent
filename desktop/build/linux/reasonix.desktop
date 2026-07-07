@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Reasonix
-Comment=Reasonix desktop — a Wails shell around the Go kernel
-Exec=reasonix-desktop
-Icon=reasonix-desktop
+Name=Reames Agent
+Comment=Reames Agent desktop — a Wails shell around the Go kernel
+Exec=reames-agent-desktop
+Icon=reames-agent-desktop
 Categories=Development;Utility;
 Terminal=false
-StartupWMClass=reasonix-desktop
+StartupWMClass=reames-agent-desktop

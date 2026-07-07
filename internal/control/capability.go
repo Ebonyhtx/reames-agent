@@ -3,8 +3,8 @@ package control
 import (
 	"strings"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/capability"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/capability"
 )
 
 func (c *Controller) withCapabilityRoute(composed, routeInput string) string {

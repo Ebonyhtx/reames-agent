@@ -34,11 +34,11 @@ function layout(heading: string, intro: string, ctaLabel: string, ctaUrl: string
 
 export function verifyEmail(link: string): Omit<EmailMessage, "to"> {
   return {
-    subject: "Confirm your Reasonix email",
-    text: `Welcome to Reasonix! Confirm your email to activate your account:\n\n${link}\n\nThis link expires in 24 hours. If you didn't sign up, ignore this email.`,
+    subject: "Confirm your Reames Agent email",
+    text: `Welcome to Reames Agent! Confirm your email to activate your account:\n\n${link}\n\nThis link expires in 24 hours. If you didn't sign up, ignore this email.`,
     html: layout(
       "Confirm your email",
-      "Welcome to Reasonix! Confirm your email address to activate your account. This link expires in 24 hours.",
+      "Welcome to Reames Agent! Confirm your email address to activate your account. This link expires in 24 hours.",
       "Confirm email",
       link,
       `Or paste this link: ${link}`,
@@ -48,11 +48,11 @@ export function verifyEmail(link: string): Omit<EmailMessage, "to"> {
 
 export function resetEmail(link: string): Omit<EmailMessage, "to"> {
   return {
-    subject: "Reset your Reasonix password",
-    text: `Someone requested a password reset for your Reasonix account. Set a new password here:\n\n${link}\n\nThis link expires in 1 hour. If it wasn't you, you can safely ignore this email.`,
+    subject: "Reset your Reames Agent password",
+    text: `Someone requested a password reset for your Reames Agent account. Set a new password here:\n\n${link}\n\nThis link expires in 1 hour. If it wasn't you, you can safely ignore this email.`,
     html: layout(
       "Reset your password",
-      "Someone requested a password reset for your Reasonix account. This link expires in 1 hour. If it wasn't you, ignore this email.",
+      "Someone requested a password reset for your Reames Agent account. This link expires in 1 hour. If it wasn't you, ignore this email.",
       "Reset password",
       link,
       `Or paste this link: ${link}`,
@@ -62,7 +62,7 @@ export function resetEmail(link: string): Omit<EmailMessage, "to"> {
 
 export function accountExistsEmail(loginUrl: string, resetUrl: string): Omit<EmailMessage, "to"> {
   return {
-    subject: "You already have a Reasonix account",
+    subject: "You already have a Reames Agent account",
     text: `Someone tried to register with this email, but an account already exists.\n\nSign in: ${loginUrl}\nForgot your password? ${resetUrl}\n\nIf this wasn't you, no action is needed.`,
     html: layout(
       "You already have an account",

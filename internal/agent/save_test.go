@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 // touch sets a file's mtime to t. Used by the listing-order test so it
@@ -20,12 +20,12 @@ func touch(path string, t time.Time) error {
 	return os.Chtimes(path, t, t)
 }
 
-// TestSaveLoadRoundTrip is the contract `reasonix --resume` depends on: a
+// TestSaveLoadRoundTrip is the contract `reamesAgent --resume` depends on: a
 // session written to disk reloads byte-for-byte, including tool calls and
 // reasoning content (which the model wants to keep across resumes for cache
 // hits on thinking-mode providers).
 func TestSaveLoadRoundTrip(t *testing.T) {
-	s := NewSession("you are reasonix")
+	s := NewSession("you are reamesAgent")
 	s.Add(provider.Message{Role: provider.RoleUser, Content: "find the bug"})
 	s.Add(provider.Message{
 		Role:             provider.RoleAssistant,
@@ -1765,7 +1765,7 @@ func TestReconcileOverlongRenameStillReparentsWhenSidecarMigrationFails(t *testi
 
 // TestListSessionsOrdersByMTime makes sure the picker shows the most
 // recently used conversation first — that's what users reach for when they
-// hit `reasonix --continue`.
+// hit `reamesAgent --continue`.
 func TestListSessionsOrdersByMTime(t *testing.T) {
 	dir := t.TempDir()
 	// Write two sessions with explicit mtimes so the order is deterministic.

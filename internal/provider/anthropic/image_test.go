@@ -3,7 +3,7 @@ package anthropic
 import (
 	"testing"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 func TestBuildRequestEmbedsImageBlockForVisionModel(t *testing.T) {

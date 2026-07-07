@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/event"
-	"reasonix/internal/jobs"
+	"reames-agent/internal/event"
+	"reames-agent/internal/jobs"
 )
 
 // End-to-end through the actual tools: a background bash job runs under a manager

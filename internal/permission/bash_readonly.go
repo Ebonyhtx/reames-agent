@@ -3,8 +3,8 @@ package permission
 import (
 	"strings"
 
-	"reasonix/internal/shellparse"
-	"reasonix/internal/shellsafe"
+	"reames-agent/internal/shellparse"
+	"reames-agent/internal/shellsafe"
 )
 
 // isReadOnlyBashSubject returns true when a bash command is a known read-only

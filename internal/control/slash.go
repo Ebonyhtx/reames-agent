@@ -7,13 +7,13 @@ import (
 	"strconv"
 	"strings"
 
-	"reasonix/internal/config"
-	"reasonix/internal/hook"
-	"reasonix/internal/i18n"
-	"reasonix/internal/memorycompiler"
-	"reasonix/internal/migration"
-	"reasonix/internal/pluginpkg"
-	"reasonix/internal/skill"
+	"reames-agent/internal/config"
+	"reames-agent/internal/hook"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/memorycompiler"
+	"reames-agent/internal/migration"
+	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/skill"
 )
 
 // SlashItem is one slash-completion suggestion. Insert is the token text placed

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 	"strings"
 	"testing"
 
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 // fakeProvider returns a fixed reply and records the messages it was asked to

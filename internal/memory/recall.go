@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/retrieval"
-	"reasonix/internal/tool"
+	"reames-agent/internal/retrieval"
+	"reames-agent/internal/tool"
 )
 
 const (

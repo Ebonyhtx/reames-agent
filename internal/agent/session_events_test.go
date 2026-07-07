@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 func sessionWithTurns(t *testing.T, path string, turns int) *Session {

@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/config"
-	"reasonix/internal/skill"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/config"
+	"reames-agent/internal/skill"
+	"reames-agent/internal/tool"
 )
 
 func TestSubagentModelRefUsesConfiguredDefault(t *testing.T) {

@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/event"
-	"reasonix/internal/nilutil"
+	"reames-agent/internal/event"
+	"reames-agent/internal/nilutil"
 )
 
 var renamePath = os.Rename
@@ -191,7 +191,7 @@ func NewManager(sink event.Sink, opts ...Option) *Manager {
 		sink = event.Discard
 	}
 	root, cancel := context.WithCancel(context.Background())
-	tempRoot, _ := os.MkdirTemp("", "reasonix-jobs-*")
+	tempRoot, _ := os.MkdirTemp("", "reamesAgent-jobs-*")
 	m := &Manager{
 		sink:          sink,
 		root:          root,

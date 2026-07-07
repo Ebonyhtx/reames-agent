@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/config"
-	"reasonix/internal/i18n"
+	"reames-agent/internal/config"
+	"reames-agent/internal/i18n"
 )
 
 // runProviderCommand handles "/provider": with no argument it lists the configured

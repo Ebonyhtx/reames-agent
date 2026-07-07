@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"reasonix/internal/hook"
+	"reames-agent/internal/hook"
 )
 
 type HookConfigView struct {

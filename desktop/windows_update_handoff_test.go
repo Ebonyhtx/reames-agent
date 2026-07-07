@@ -22,13 +22,13 @@ func TestWindowsUpdateHandoffArgsCarryParentInstallAndRelaunch(t *testing.T) {
 		4242,
 		`C:\Users\Jane Doe\AppData\Local\Reasonix\updates\Reasonix-windows-amd64-installer.exe`,
 		`D:\Tools\Reasonix App`,
-		`D:\Tools\Reasonix App\reasonix-desktop.exe`,
+		`D:\Tools\Reasonix App\reamesAgent-desktop.exe`,
 	)
 	want := []string{
 		"--parent-pid", "4242",
 		"--installer", `C:\Users\Jane Doe\AppData\Local\Reasonix\updates\Reasonix-windows-amd64-installer.exe`,
 		"--install-dir", `D:\Tools\Reasonix App`,
-		"--relaunch", `D:\Tools\Reasonix App\reasonix-desktop.exe`,
+		"--relaunch", `D:\Tools\Reasonix App\reamesAgent-desktop.exe`,
 	}
 	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("args = %#v, want %#v", got, want)
@@ -42,19 +42,19 @@ func TestWindowsInstallerScriptWaitsBeforeCopyingExecutable(t *testing.T) {
 	}
 	script := string(data)
 	for _, want := range []string{
-		`!define REASONIX_UPDATE_HELPER "reasonix-update-helper.exe"`,
-		"Function reasonix.waitForExecutableUnlock",
+		`!define REAMES_AGENT_UPDATE_HELPER "reamesAgent-update-helper.exe"`,
+		"Function reamesAgent.waitForExecutableUnlock",
 		`FileOpen $1 "$INSTDIR\${PRODUCT_EXECUTABLE}" a`,
 		"SetErrorLevel 1618",
-		"Call reasonix.waitForExecutableUnlock",
-		`File "/oname=${REASONIX_UPDATE_HELPER}" "${REASONIX_UPDATE_HELPER}"`,
-		`Delete "$INSTDIR\${REASONIX_UPDATE_HELPER}"`,
+		"Call reamesAgent.waitForExecutableUnlock",
+		`File "/oname=${REAMES_AGENT_UPDATE_HELPER}" "${REAMES_AGENT_UPDATE_HELPER}"`,
+		`Delete "$INSTDIR\${REAMES_AGENT_UPDATE_HELPER}"`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("project.nsi missing %q", want)
 		}
 	}
-	wait := strings.Index(script, "Call reasonix.waitForExecutableUnlock")
+	wait := strings.Index(script, "Call reamesAgent.waitForExecutableUnlock")
 	copyFiles := strings.Index(script, "!insertmacro wails.files")
 	if wait < 0 || copyFiles < 0 || wait > copyFiles {
 		t.Fatalf("installer must wait for the running exe to unlock before wails.files (wait=%d copy=%d)", wait, copyFiles)
@@ -68,7 +68,7 @@ func TestDesktopBuildScriptCompilesAndPackagesWindowsUpdateHelper(t *testing.T) 
 	}
 	script := string(data)
 	for _, want := range []string{
-		`UPDATE_HELPER="reasonix-update-helper.exe"`,
+		`UPDATE_HELPER="reamesAgent-update-helper.exe"`,
 		`GOOS=windows GOARCH="$arch" go build`,
 		`./cmd/update-helper`,
 		`build/windows/installer/$UPDATE_HELPER`,

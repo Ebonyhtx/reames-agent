@@ -833,7 +833,7 @@ const mockProviderPresetTemplates: MockProviderPresetTemplate[] = [
   mockPreset("stepfun", "StepFun", "StepFun coding-plan OpenAI-compatible endpoint.", "STEPFUN_API_KEY", mockProviderTemplate({ name: "stepfun", kind: "openai", baseUrl: "https://api.stepfun.com/step_plan/v1", models: mockStepFunModels, default: "step-3.7-flash", apiKeyEnv: "STEPFUN_API_KEY", supportedEfforts: ["low", "medium", "high"], defaultEffort: "medium" })),
   mockPreset("stepfun-anthropic", "StepFun Anthropic", "StepFun coding-plan Anthropic-compatible endpoint.", "STEPFUN_API_KEY", mockProviderTemplate({ name: "stepfun-anthropic", kind: "anthropic", baseUrl: "https://api.stepfun.com/step_plan", models: mockStepFunModels, default: "step-3.7-flash", apiKeyEnv: "STEPFUN_API_KEY", thinking: "adaptive", supportedEfforts: ["low", "medium", "high"], defaultEffort: "medium" })),
   mockPreset("novita", "NovitaAI", "NovitaAI OpenAI-compatible multi-model gateway.", "NOVITA_API_KEY", mockProviderTemplate({ name: "novita", kind: "openai", baseUrl: "https://api.novita.ai/openai/v1", models: mockNovitaModels, default: "zai-org/glm-5.2", apiKeyEnv: "NOVITA_API_KEY" })),
-  mockPreset("gmi", "GMI Cloud", "GMI Cloud direct multi-model OpenAI-compatible gateway.", "GMI_API_KEY", mockProviderTemplate({ name: "gmi", kind: "openai", baseUrl: "https://api.gmi-serving.com/v1", models: mockGMIModels, default: "zai-org/GLM-5.2-FP8", apiKeyEnv: "GMI_API_KEY", headers: { "User-Agent": "Reasonix" } })),
+  mockPreset("gmi", "GMI Cloud", "GMI Cloud direct multi-model OpenAI-compatible gateway.", "GMI_API_KEY", mockProviderTemplate({ name: "gmi", kind: "openai", baseUrl: "https://api.gmi-serving.com/v1", models: mockGMIModels, default: "zai-org/GLM-5.2-FP8", apiKeyEnv: "GMI_API_KEY", headers: { "User-Agent": "Reames Agent" } })),
   mockPreset("vercel-ai-gateway", "Vercel AI Gateway", "Vercel AI Gateway via Anthropic-compatible Messages API.", "AI_GATEWAY_API_KEY", mockProviderTemplate({ name: "vercel-ai-gateway", kind: "anthropic", baseUrl: "https://ai-gateway.vercel.sh", models: mockVercelModels, visionModels: ["anthropic/claude-sonnet-4.6", "anthropic/claude-opus-4.8", "openai/gpt-5.4", "openai/gpt-5.4-pro", "moonshotai/kimi-k2.7-code"], default: "anthropic/claude-sonnet-4.6", apiKeyEnv: "AI_GATEWAY_API_KEY", authHeader: true, contextWindow: 1000000 })),
   mockPreset("huggingface", "HuggingFace Router", "HuggingFace Inference Router OpenAI-compatible endpoint.", "HF_TOKEN", mockProviderTemplate({ name: "huggingface", kind: "openai", baseUrl: "https://router.huggingface.co/v1", models: ["zai-org/GLM-5.2", "deepseek-ai/DeepSeek-V3.2", "Qwen/Qwen3.5-72B-Instruct"], default: "zai-org/GLM-5.2", apiKeyEnv: "HF_TOKEN" })),
   mockPreset("nvidia", "NVIDIA NIM", "NVIDIA NIM OpenAI-compatible accelerated inference endpoint.", "NVIDIA_API_KEY", mockProviderTemplate({ name: "nvidia", kind: "openai", baseUrl: "https://integrate.api.nvidia.com/v1", models: ["nvidia/nemotron-3-nano-30b-a3b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3-ultra-550b-a55b", "deepseek-ai/deepseek-v4-pro", "qwen/qwen3.5-397b-a17b"], default: "nvidia/nemotron-3-nano-30b-a3b", apiKeyEnv: "NVIDIA_API_KEY" })),
@@ -888,9 +888,9 @@ function makeMockApp(): AppBindings {
   let cancelled = false;
   let pendingAskPreview = false;
   let pendingApprovalPreview = false;
-  const globalWorkspaceRoot = "~/Library/Application Support/reasonix/global-workspace";
+  const globalWorkspaceRoot = "~/Library/Application Support/reames-agent/global-workspace";
   let cwd = freshMock ? globalWorkspaceRoot : "~/projects/joyquant-db"; // mutable so PickWorkspace is visible in dev
-  let workspaces = freshMock ? [] : ["~/projects/joyquant-db", "~/projects/joyquant-sys", "~/projects/reasonix", "~/projects/blade"];
+  let workspaces = freshMock ? [] : ["~/projects/joyquant-db", "~/projects/joyquant-sys", "~/projects/reames-agent", "~/projects/blade"];
   let mockEffort = "auto";
   let mockDesktopZoomFactor = 1.0;
   const day = 86_400_000;
@@ -949,7 +949,7 @@ function makeMockApp(): AppBindings {
     { name: "init", description: "Scaffold a REASONIX.md for this repo", scope: "builtin", runAs: "inline", enabled: true },
   ];
   let capSkillRoots: SkillRootView[] = [
-    { dir: "~/projects/reasonix/.reasonix/skills", scope: "project", priority: 1, status: "missing", configured: false, removable: true, skills: 0 },
+    { dir: "~/projects/reames-agent/.reames-agent/skills", scope: "project", priority: 1, status: "missing", configured: false, removable: true, skills: 0 },
     {
       dir: "~/my-skills",
       scope: "custom",
@@ -961,7 +961,7 @@ function makeMockApp(): AppBindings {
       skillItems: [{ name: "review", description: "Review the staged diff", scope: "custom", runAs: "inline" }],
     },
     {
-      dir: "~/.reasonix/skills",
+      dir: "~/.reames-agent/skills",
       scope: "global",
       priority: 6,
       status: "ok",
@@ -1071,7 +1071,7 @@ function makeMockApp(): AppBindings {
       noProxy: "",
       proxy: { type: "socks5", server: "127.0.0.1", port: 7890, username: "", password: "" },
     },
-    agent: { temperature: 0.2, maxSteps: 0, plannerMaxSteps: 0, maxSubagentDepth: 2, systemPrompt: "You are Reasonix, a coding agent.", coldResumePrune: true, reasoningLanguage: "auto" },
+    agent: { temperature: 0.2, maxSteps: 0, plannerMaxSteps: 0, maxSubagentDepth: 2, systemPrompt: "You are Reames Agent, a coding agent.", coldResumePrune: true, reasoningLanguage: "auto" },
     bot: {
       enabled: !freshMock,
       model: "",
@@ -1219,7 +1219,7 @@ function makeMockApp(): AppBindings {
     telemetry: true,
     metrics: true,
     memoryCompilerEnabled: true,
-    configPath: "~/projects/reasonix/reasonix.toml",
+    configPath: "~/projects/reames-agent/reames-agent.toml",
     providerKinds: ["openai", "anthropic"],
     autoApproveTools: false,
     bypass: false,
@@ -1228,7 +1228,7 @@ function makeMockApp(): AppBindings {
   const hookSettings: Record<string, HooksSettingsView> = {
     global: {
       scope: "global",
-      path: "~/.reasonix/settings.json",
+      path: "~/.reames-agent/settings.json",
       projectRoot: "",
       trusted: true,
       events: hookEvents,
@@ -1238,7 +1238,7 @@ function makeMockApp(): AppBindings {
     },
     project: {
       scope: "project",
-      path: "./.reasonix/settings.json",
+      path: "./.reames-agent/settings.json",
       projectRoot: "/mock/project",
       trusted: false,
       events: hookEvents,
@@ -1249,7 +1249,7 @@ function makeMockApp(): AppBindings {
     provider.apiKeyEnv === "DEEPSEEK_API_KEY" ? { ...provider, keySet: !freshMock } : provider,
   );
   if (freshMock) {
-    settings.configPath = "~/.config/reasonix/config.toml";
+    settings.configPath = "~/.config/reames-agent/config.toml";
   }
   const mockNow = Date.now();
   const mockProjectTree: ProjectNode[] = freshMock ? [] : [
@@ -1419,12 +1419,12 @@ function makeMockApp(): AppBindings {
           {
             role: "user",
             content: [
-              "[[reasonix-im]]",
+              "[[reames-agent-im]]",
               "provider=lark",
               "label=Feishu / Lark",
               "sender=ou_mock_user_001",
               "chat=p2p 会话",
-              "[[/reasonix-im]]",
+              "[[/reames-agent-im]]",
               "你可以做什么",
             ].join("\n"),
           },
@@ -1438,12 +1438,12 @@ function makeMockApp(): AppBindings {
           {
             role: "user",
             content: [
-              "[[reasonix-im]]",
+              "[[reames-agent-im]]",
               "provider=weixin",
               "label=微信",
               "sender=wxid_mock_user_001",
               "chat=单聊",
-              "[[/reasonix-im]]",
+              "[[/reames-agent-im]]",
               "帮我整理一下今天要做的事",
             ].join("\n"),
           },
@@ -1911,9 +1911,9 @@ function makeMockApp(): AppBindings {
           tool: {
             id: parentId,
             name: "explore",
-            args: JSON.stringify({ task: "在 Reasonix 前端中检查工具调用图标和嵌套调用展示" }),
+            args: JSON.stringify({ task: "在 Reames Agent 前端中检查工具调用图标和嵌套调用展示" }),
             readOnly: true,
-            profile: { model: "mock-reasonix", effort: "high" },
+            profile: { model: "mock-reames-agent", effort: "high" },
           },
         });
         for (let i = 1; i <= 30; i += 1) {
@@ -2303,7 +2303,7 @@ function makeMockApp(): AppBindings {
     async PickWorkspace() {
       // Browser dev has no native dialog; simulate picking a folder and re-root so
       // the topbar folder chip visibly changes.
-      return mockSwitchWorkspace(cwd.endsWith("another-project") ? "~/projects/reasonix" : "~/projects/another-project");
+      return mockSwitchWorkspace(cwd.endsWith("another-project") ? "~/projects/reames-agent" : "~/projects/another-project");
     },
     async SwitchWorkspace(path: string) {
       return mockSwitchWorkspace(path);
@@ -2404,7 +2404,7 @@ function makeMockApp(): AppBindings {
             findingCount: 1,
             openCriteria: [],
             blocker: "",
-            taskPath: "/tmp/mock/.reasonix/autoresearch/mock-autoresearch",
+            taskPath: "/tmp/mock/.reames-agent/autoresearch/mock-autoresearch",
             nextRequiredAction: "continue with the next evidence-producing step",
           };
         },
@@ -2422,7 +2422,7 @@ function makeMockApp(): AppBindings {
             findingCount: 1,
             openCriteria: [],
             blocker: "",
-            taskPath: "/tmp/mock/.reasonix/autoresearch/mock-autoresearch",
+            taskPath: "/tmp/mock/.reames-agent/autoresearch/mock-autoresearch",
             nextRequiredAction: "continue with the next evidence-producing step",
           };
         },
@@ -2440,7 +2440,7 @@ function makeMockApp(): AppBindings {
             findingCount: 1,
             openCriteria: [],
             blocker: "",
-            taskPath: "/tmp/mock/.reasonix/autoresearch/mock-autoresearch",
+            taskPath: "/tmp/mock/.reames-agent/autoresearch/mock-autoresearch",
             nextRequiredAction: "continue with the next evidence-producing step",
           }];
         },
@@ -2511,8 +2511,8 @@ function makeMockApp(): AppBindings {
         version: "dev",
         description: "Mock plugin",
         source,
-        root: `~/.reasonix/plugins/${name}`,
-        manifestKind: "reasonix",
+        root: `~/.reames-agent/plugins/${name}`,
+        manifestKind: "reames-agent",
         enabled: true,
         skills: 1,
         hooks: 0,
@@ -2766,8 +2766,8 @@ function makeMockApp(): AppBindings {
     },
     async ReadFile(rel: string) {
       const samples: Record<string, string> = {
-        "README.md": "# Reasonix\n\nBrowser-dev workspace preview.\n\n- Chat in the center\n- Browse files on the right\n- Keep sessions on the left\n",
-        "go.mod": "module reasonix\n\ngo 1.23\n",
+        "README.md": "# Reames Agent\n\nBrowser-dev workspace preview.\n\n- Chat in the center\n- Browse files on the right\n- Keep sessions on the left\n",
+        "go.mod": "module reames-agent\n\ngo 1.23\n",
         "desktop/file.go": "package desktop\n\nfunc main() {\n\tprintln(\"workspace preview\")\n}\n",
         "internal/event.go": "package internal\n\n// mock file used by the browser dev seam\n",
       };
@@ -2824,17 +2824,17 @@ function makeMockApp(): AppBindings {
       console.info("mock RevealPath", path);
     },
     async SavePastedImage(dataUrl: string) {
-      const path = `.reasonix/attachments/mock-${mockAttachmentDataURLs.size + 1}.png`;
+      const path = `.reames-agent/attachments/mock-${mockAttachmentDataURLs.size + 1}.png`;
       mockAttachmentDataURLs.set(path, dataUrl);
       return path;
     },
     async SaveClipboardImage() {
-      const path = `.reasonix/attachments/mock-clipboard-${mockAttachmentDataURLs.size + 1}.png`;
+      const path = `.reames-agent/attachments/mock-clipboard-${mockAttachmentDataURLs.size + 1}.png`;
       mockAttachmentDataURLs.set(path, mockPreviewImageDataURL);
       return path;
     },
     async SavePastedFile(name: string, dataUrl: string) {
-      const path = `.reasonix/attachments/mock-${name}`;
+      const path = `.reames-agent/attachments/mock-${name}`;
       mockAttachmentDataURLs.set(path, dataUrl);
       return path;
     },
@@ -2861,9 +2861,9 @@ function makeMockApp(): AppBindings {
       const hasExt = /\.\w{1,6}$/i.test(name);
       if (!hasExt) {
         const tokenName = name.replace(/[^\w.-]+/g, "-") || "folder";
-        return { kind: "workspace" as const, path: `__reasonix_external_folder/mock/${tokenName}`, isDir: true, displayPath: path };
+        return { kind: "workspace" as const, path: `__reames-agent_external_folder/mock/${tokenName}`, isDir: true, displayPath: path };
       }
-      const attachmentPath = `.reasonix/attachments/mock-${name}`;
+      const attachmentPath = `.reames-agent/attachments/mock-${name}`;
       mockAttachmentDataURLs.set(attachmentPath, mockPreviewImageDataURL);
       return { kind: "attachment" as const, path: attachmentPath };
     },
@@ -2909,16 +2909,16 @@ function makeMockApp(): AppBindings {
     async Memory() {
       return {
         available: true,
-        storeDir: "~/.config/reasonix/projects/-mock/memory",
-        storeGlobalDir: "~/.config/reasonix/memory/global",
+        storeDir: "~/.config/reames-agent/projects/-mock/memory",
+        storeGlobalDir: "~/.config/reames-agent/memory/global",
         docs: [
           {
             path: "REASONIX.md",
             scope: "project",
-            body: "# Reasonix project memory\n\nMock doc shown in the browser dev seam.\n\n## Notes\n\n- prefers concise replies",
+            body: "# Reames Agent project memory\n\nMock doc shown in the browser dev seam.\n\n## Notes\n\n- prefers concise replies",
           },
           {
-            path: "~/.config/reasonix/REASONIX.md",
+            path: "~/.config/reames-agent/REASONIX.md",
             scope: "user",
             body: t("mock.memoryBody"),
           },
@@ -2937,12 +2937,12 @@ function makeMockApp(): AppBindings {
             description: "Superseded planning note",
             type: "project",
             body: "This plan was archived after the implementation changed.",
-            path: "~/.config/reasonix/projects/-mock/memory/.archive/20260612-021500.000-old-plan.md",
+            path: "~/.config/reames-agent/projects/-mock/memory/.archive/20260612-021500.000-old-plan.md",
             archivedAt: "2026-06-12T02:15:00Z",
           },
         ],
         scopes: [
-          { scope: "user", path: "~/.config/reasonix/REASONIX.md" },
+          { scope: "user", path: "~/.config/reames-agent/REASONIX.md" },
           { scope: "project", path: "REASONIX.md" },
           { scope: "local", path: "REASONIX.local.md" },
         ],
@@ -2964,11 +2964,11 @@ function makeMockApp(): AppBindings {
         ],
         skills: [
           {
-            id: "skill-reasonix-pr-followup",
-            name: "reasonix-pr-followup",
-            description: "Review or update a Reasonix GitHub PR, address feedback, verify, and publish safely.",
+            id: "skill-reames-agent-pr-followup",
+            name: "reames-agent-pr-followup",
+            description: "Review or update a Reames Agent GitHub PR, address feedback, verify, and publish safely.",
             scope: "project",
-            body: "# Reasonix PR Followup\n\nUse this skill for repeated Reasonix PR work.\n\n## Workflow\n\n1. Confirm branch and PR state.\n2. Inspect the diff.\n3. Fix actionable feedback.\n4. Verify and update the PR.\n",
+            body: "# Reames Agent PR Followup\n\nUse this skill for repeated Reames Agent PR work.\n\n## Workflow\n\n1. Confirm branch and PR state.\n2. Inspect the diff.\n3. Fix actionable feedback.\n4. Verify and update the PR.\n",
             reason: "recent history repeatedly touched PR workflows",
             evidence: ["mock-pr-session: 提交到pr，并更新内容", "mock-review-session: 解决该pr下机器人提出来的问题"],
           },
@@ -2984,7 +2984,7 @@ function makeMockApp(): AppBindings {
     },
     async AcceptSkillSuggestion(suggestion: SkillSuggestion) {
       emit({ kind: "notice", level: "info", text: `created suggested skill → ${suggestion.name}` });
-      return `.reasonix/skills/${suggestion.name}/SKILL.md`;
+      return `.reames-agent/skills/${suggestion.name}/SKILL.md`;
     },
     async MemorySuggestionsForTab(_tabID: string) {
       return this.MemorySuggestions();
@@ -3238,7 +3238,7 @@ function makeMockApp(): AppBindings {
             provider: normalizedProvider,
             domain: normalizedDomain,
             installId: `mock-${normalizedProvider}-${normalizedDomain}`,
-            url: "https://example.com/reasonix-bot-qr",
+            url: "https://example.com/reames-agent-bot-qr",
             deviceCode: "MOCKDEVICE",
             userCode: normalizedProvider === "weixin" ? "" : "MOCK-CODE",
             interval: 3,
@@ -3391,7 +3391,7 @@ function makeMockApp(): AppBindings {
       emitUpdater({ phase: "verifying", received: total, total });
       await delay(500);
       emitUpdater({ phase: "downloaded", received: total, total });
-      return { version: "v1.1.0", channel: "stable", path: "/tmp/reasonix-update", size: total, sha256: "mock" };
+      return { version: "v1.1.0", channel: "stable", path: "/tmp/reames-agent-update", size: total, sha256: "mock" };
     },
     async InstallUpdate() {
       const total = 12_345_678;
@@ -3406,7 +3406,7 @@ function makeMockApp(): AppBindings {
     },
     async OpenDownloadPage() {
       if (typeof window !== "undefined") {
-        window.open("https://reasonix.io/#start", "_blank", "noopener");
+        window.open("https://reames-agent.io/#start", "_blank", "noopener");
       }
     },
     // Dev seam: drives the overlay flow in the browser until ConnectKey sets the

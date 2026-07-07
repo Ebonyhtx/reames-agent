@@ -10,7 +10,7 @@ import (
 
 	"aead.dev/minisign"
 
-	"reasonix/desktop/internal/update"
+	"reames-agent/desktop/internal/update"
 )
 
 // TestSignFiles signs a file with a throwaway key pair (injected via env, exactly
@@ -69,7 +69,7 @@ func TestGenManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("GITHUB_REPOSITORY", "esengine/reasonix")
+	t.Setenv("GITHUB_REPOSITORY", "esengine/reamesAgent")
 
 	if err := genManifest(dir, "v1.2.0", "desktop-v1.2.0"); err != nil {
 		t.Fatalf("genManifest: %v", err)
@@ -85,7 +85,7 @@ func TestGenManifest(t *testing.T) {
 	if m.Version != "v1.2.0" {
 		t.Fatalf("version = %q, want v1.2.0", m.Version)
 	}
-	if m.DownloadPage != "https://reasonix.io/#start" {
+	if m.DownloadPage != "https://reamesAgent.io/#start" {
 		t.Fatalf("download_page = %q, want official install page", m.DownloadPage)
 	}
 	if len(m.Platforms) != 5 {

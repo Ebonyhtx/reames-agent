@@ -34,7 +34,7 @@ async function fetchAccountUser(c: Context<AppEnv>): Promise<RegistryUser | null
 // the account round-trip.
 export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   const user = await fetchAccountUser(c).catch(() => null);
-  if (!user) throw new ApiError(401, "unauthorized", "Sign in at id.reasonix.io to publish.");
+  if (!user) throw new ApiError(401, "unauthorized", "Sign in at id.reames-agent.io to publish.");
   c.set("user", user);
   await next();
 };
@@ -42,7 +42,7 @@ export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
 // Gate for moderation routes: a resolved account with the admin role.
 export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
   const user = await fetchAccountUser(c).catch(() => null);
-  if (!user) throw new ApiError(401, "unauthorized", "Sign in at id.reasonix.io.");
+  if (!user) throw new ApiError(401, "unauthorized", "Sign in at id.reames-agent.io.");
   if (user.role !== "admin") throw new ApiError(403, "forbidden", "Admins only.");
   c.set("user", user);
   await next();

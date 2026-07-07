@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/event"
-	"reasonix/internal/evidence"
-	"reasonix/internal/hook"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/event"
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/hook"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 func TestTurnOrchestratorRunsForegroundUnit(t *testing.T) {

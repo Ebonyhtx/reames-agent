@@ -20,7 +20,7 @@ import (
 	"time"
 	"unsafe"
 
-	"reasonix/internal/proc"
+	"reames-agent/internal/proc"
 
 	"golang.org/x/sys/windows"
 )

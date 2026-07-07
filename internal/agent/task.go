@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"strings"
 
-	"reasonix/internal/event"
-	"reasonix/internal/jobs"
-	"reasonix/internal/planmode"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/event"
+	"reames-agent/internal/jobs"
+	"reames-agent/internal/planmode"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 // DefaultTaskSystemPrompt steers a sub-agent toward focused, terse delivery —
@@ -525,7 +525,7 @@ func (t *TaskTool) prepareTranscriptRun(subReg *tool.Registry, modelRef, effortR
 	if t.transcripts == nil {
 		return nil, fmt.Errorf("subagent transcript store is required")
 	}
-	// Headless runs (e.g. `reasonix run`) never mint a session path, so there is
+	// Headless runs (e.g. `reamesAgent run`) never mint a session path, so there is
 	// no parent session to own a transcript. Run the sub-agent ephemerally —
 	// exactly as before persisted transcripts existed — instead of failing the
 	// call. Continuation/fork need a persisted owner, so they error here.

@@ -3,9 +3,9 @@ package main
 import (
 	"testing"
 
-	"reasonix/internal/config"
-	"reasonix/internal/event"
-	"reasonix/internal/notify"
+	"reames-agent/internal/config"
+	"reames-agent/internal/event"
+	"reames-agent/internal/notify"
 )
 
 type desktopRecordSink struct {

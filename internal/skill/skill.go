@@ -4,7 +4,7 @@
 // a tool result, a "subagent" skill runs in an isolated child loop and returns
 // only its final answer. Project scope wins over global; only names+descriptions
 // enter the cache-stable system-prompt index (see index.go) — bodies load on
-// demand. Discovery scans several conventions (.reasonix / .agents / .agent /
+// demand. Discovery scans several conventions (.reamesAgent / .agents / .agent /
 // .claude under the project root and the home dir — see config.ConventionDirs) so
 // skills authored for other agent tools migrate in unchanged. Directory skills
 // use <name>/SKILL.md; flat <name>.md files from Claude roots are loaded only
@@ -20,8 +20,8 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/config"
-	"reasonix/internal/frontmatter"
+	"reames-agent/internal/config"
+	"reames-agent/internal/frontmatter"
 )
 
 // Scope records where a skill was loaded from. Higher-priority scopes win on a
@@ -80,7 +80,7 @@ func IsValidName(name string) bool { return config.IsValidSkillName(name) }
 // Options configure a Store. ProjectRoot "" reads only the global + custom
 // scopes. HomeDir "" resolves to the OS home dir (tests point it at a tmpdir).
 // ReasonixHomeDir overrides the canonical Reasonix home; empty uses
-// config.ReasonixHomeDir(), or HomeDir/.reasonix when HomeDir is explicitly set.
+// config.ReasonixHomeDir(), or HomeDir/.reamesAgent when HomeDir is explicitly set.
 type Options struct {
 	HomeDir         string
 	ReasonixHomeDir string
@@ -99,7 +99,7 @@ type Options struct {
 // Store resolves skills across the configured roots.
 type Store struct {
 	homeDir         string
-	reasonixHomeDir string
+	reamesAgentHomeDir string
 	projectRoot     string
 	customPaths     []string
 	excludedPaths   map[string]bool
@@ -118,12 +118,12 @@ func New(opts Options) *Store {
 			home = h
 		}
 	}
-	reasonixHome := opts.ReasonixHomeDir
-	if reasonixHome == "" {
+	reamesAgentHome := opts.ReasonixHomeDir
+	if reamesAgentHome == "" {
 		if opts.HomeDir != "" {
-			reasonixHome = filepath.Join(home, ".reasonix")
+			reamesAgentHome = filepath.Join(home, ".reames-agent")
 		} else {
-			reasonixHome = config.ReasonixHomeDir()
+			reamesAgentHome = config.ReasonixHomeDir()
 		}
 	}
 	root := opts.ProjectRoot
@@ -149,7 +149,7 @@ func New(opts Options) *Store {
 	}
 	return &Store{
 		homeDir:         home,
-		reasonixHomeDir: reasonixHome,
+		reamesAgentHomeDir: reamesAgentHome,
 		projectRoot:     root,
 		customPaths:     custom,
 		excludedPaths:   excluded,
@@ -187,7 +187,7 @@ type discoveryRoot struct {
 }
 
 // roots returns the discovery directories, highest priority first: the
-// convention dirs (config.ConventionDirs: .reasonix / .agents / .agent / .claude)
+// convention dirs (config.ConventionDirs: .reamesAgent / .agents / .agent / .claude)
 // under the project root → custom paths → the Reasonix home skills dir → other
 // home-dir convention dirs. A later root never overrides an earlier one.
 func (s *Store) roots() []discoveryRoot {
@@ -205,13 +205,13 @@ func (s *Store) roots() []discoveryRoot {
 	for _, d := range s.customPaths {
 		dirs = append(dirs, de{d, ScopeCustom, false})
 	}
-	if s.reasonixHomeDir != "" {
-		dirs = append(dirs, de{filepath.Join(s.reasonixHomeDir, SkillsDirname), ScopeGlobal, false})
+	if s.reamesAgentHomeDir != "" {
+		dirs = append(dirs, de{filepath.Join(s.reamesAgentHomeDir, SkillsDirname), ScopeGlobal, false})
 	}
 	if config.IsolatedHomeDir() == "" {
 		for _, c := range config.ConventionDirs {
 			dir := filepath.Join(s.homeDir, c, SkillsDirname)
-			if s.reasonixHomeDir != "" && config.CanonicalSkillPath(filepath.Dir(dir)) == config.CanonicalSkillPath(s.reasonixHomeDir) {
+			if s.reamesAgentHomeDir != "" && config.CanonicalSkillPath(filepath.Dir(dir)) == config.CanonicalSkillPath(s.reamesAgentHomeDir) {
 				continue
 			}
 			dirs = append(dirs, de{dir, ScopeGlobal, c == ".claude"})
@@ -595,7 +595,7 @@ func (s *Store) CreateWithContent(name string, scope Scope, content string) (str
 		if s.projectRoot == "" {
 			return "", fmt.Errorf("project scope requires a workspace — run from a project directory, or use global scope")
 		}
-		root = filepath.Join(s.projectRoot, ".reasonix", SkillsDirname)
+		root = filepath.Join(s.projectRoot, ".reames-agent", SkillsDirname)
 	default:
 		root = s.globalSkillsRoot()
 	}
@@ -626,10 +626,10 @@ func (s *Store) CreateWithContent(name string, scope Scope, content string) (str
 }
 
 func (s *Store) globalSkillsRoot() string {
-	if s.reasonixHomeDir != "" {
-		return filepath.Join(s.reasonixHomeDir, SkillsDirname)
+	if s.reamesAgentHomeDir != "" {
+		return filepath.Join(s.reamesAgentHomeDir, SkillsDirname)
 	}
-	return filepath.Join(s.homeDir, ".reasonix", SkillsDirname)
+	return filepath.Join(s.homeDir, ".reames-agent", SkillsDirname)
 }
 
 // loadBodyWithReferences appends a directory-layout skill's sibling

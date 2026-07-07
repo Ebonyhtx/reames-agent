@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/bot"
-	"reasonix/internal/botruntime"
-	"reasonix/internal/config"
+	"reames-agent/internal/bot"
+	"reames-agent/internal/botruntime"
+	"reames-agent/internal/config"
 )
 
 type BotRuntimeStatusView struct {

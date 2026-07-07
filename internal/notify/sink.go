@@ -1,8 +1,8 @@
 package notify
 
 import (
-	"reasonix/internal/config"
-	"reasonix/internal/event"
+	"reames-agent/internal/config"
+	"reames-agent/internal/event"
 )
 
 // Message is the user-visible payload sent to the platform notifier.

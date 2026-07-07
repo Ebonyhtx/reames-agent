@@ -2,9 +2,9 @@
 
 ## Context
 
-Reasonix already has Goal mode and AutoResearch instructions. When a goal looks
+Reames Agent already has Goal mode and AutoResearch instructions. When a goal looks
 long-running, `activeGoalBlock` injects an AutoResearch protocol that asks the
-model to create `.reasonix/autoresearch/<task-id>/` and maintain files such as
+model to create `.reames-agent/autoresearch/<task-id>/` and maintain files such as
 `task_spec.json`, `progress.json`, `findings.jsonl`, `directions_tried.json`, and
 `heartbeat.jsonl`.
 
@@ -32,7 +32,7 @@ a host-managed runtime.
   turns.
 - No parallel writable sub-agent redesign in this feature.
 - No network, publish, payment, credential, or destructive-operation bypass.
-  Existing Reasonix gates still apply.
+  Existing Reames Agent gates still apply.
 
 ## Proposed Architecture
 
@@ -50,7 +50,7 @@ internal/autoresearch/
 The package is responsible for all filesystem state under:
 
 ```text
-.reasonix/autoresearch/<task-id>/
+.reames-agent/autoresearch/<task-id>/
   state/
     task_spec.json
     progress.json
@@ -162,7 +162,7 @@ When Goal mode starts:
 
 1. If research mode is off, behavior is unchanged.
 2. If AutoResearch is on, the controller creates a task unless the goal contains
-   an explicit `.reasonix/autoresearch/<task-id>/` path.
+   an explicit `.reames-agent/autoresearch/<task-id>/` path.
 3. If an explicit task path exists, the controller loads and validates that task.
 4. The active goal state stores `AutoResearchTaskID`.
 
@@ -208,7 +208,7 @@ criteria and required next actions.
 
 AutoResearch resume has two paths:
 
-- Explicit: a goal or prompt includes `.reasonix/autoresearch/<task-id>/`.
+- Explicit: a goal or prompt includes `.reames-agent/autoresearch/<task-id>/`.
 - Session-sidecar: the persisted Goal state contains `AutoResearchTaskID`.
 
 On resume, the host validates the task. If state is corrupt, it blocks execution
@@ -243,7 +243,7 @@ The status payload should include:
 - open success criteria
 - blocker
 
-`AutoResearchOpenTask` opens `.reasonix/autoresearch/<task-id>/` in the
+`AutoResearchOpenTask` opens `.reames-agent/autoresearch/<task-id>/` in the
 workspace panel or OS file browser, matching existing workspace reveal behavior.
 
 ## Deferred Desktop UI Design
@@ -325,7 +325,7 @@ Findings list:
 
 Controls:
 
-- Resume: starts or continues `/goal --research .reasonix/autoresearch/<task-id>/`
+- Resume: starts or continues `/goal --research .reames-agent/autoresearch/<task-id>/`
   for the active tab when not running.
 - Pause: clears active Goal continuation without deleting task state.
 - Open Folder: reveals the task directory.
@@ -439,7 +439,7 @@ Controller tests:
 - active goal block includes host-generated summary
 - every turn appends heartbeat
 - `[goal:complete]` is intercepted when readiness fails
-- explicit `.reasonix/autoresearch/<task-id>/` resumes existing state
+- explicit `.reames-agent/autoresearch/<task-id>/` resumes existing state
 
 Desktop/API tests:
 
@@ -473,5 +473,5 @@ active goal prompt changes only when AutoResearch is active. Cache impact is
 therefore low for ordinary sessions and medium for AutoResearch sessions because
 the injected runtime summary changes each turn.
 
-No existing `.reasonix/autoresearch` task should be deleted or rewritten without
+No existing `.reames-agent/autoresearch` task should be deleted or rewritten without
 validation and explicit migration logic.

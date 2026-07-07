@@ -9,10 +9,10 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"reasonix/internal/control"
-	"reasonix/internal/event"
-	"reasonix/internal/permission"
-	"reasonix/internal/provider"
+	"reames-agent/internal/control"
+	"reames-agent/internal/event"
+	"reames-agent/internal/permission"
+	"reames-agent/internal/provider"
 )
 
 // notifier is the slice of Conn the dispatch sink depends on: it pushes

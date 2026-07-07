@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/pluginpkg"
+	"reames-agent/internal/pluginpkg"
 )
 
 func writeSettings(t *testing.T, dir, json string) {
@@ -189,8 +189,8 @@ func TestLoadPermissionRequestHook(t *testing.T) {
 
 func TestLoadIncludesPluginSessionStartHook(t *testing.T) {
 	home := t.TempDir()
-	reasonixHome := filepath.Join(home, ".reasonix")
-	root := filepath.Join(reasonixHome, "plugins", "superpowers")
+	reamesAgentHome := filepath.Join(home, ".reames-agent")
+	root := filepath.Join(reamesAgentHome, "plugins", "superpowers")
 	writeSettings(t, home, `{"hooks":{"PostToolUse":[{"command":"echo global"}]}}`)
 	writeHookTestFile(t, filepath.Join(root, pluginpkg.CodexManifest), `{
   "name": "superpowers",
@@ -198,7 +198,7 @@ func TestLoadIncludesPluginSessionStartHook(t *testing.T) {
   "skills": "./skills/"
 }`)
 	writeHookTestFile(t, filepath.Join(root, "hooks", "session-start-codex"), "#!/usr/bin/env bash\necho ok\n")
-	if err := pluginpkg.Upsert(reasonixHome, pluginpkg.InstalledPlugin{
+	if err := pluginpkg.Upsert(reamesAgentHome, pluginpkg.InstalledPlugin{
 		Name:         "superpowers",
 		Root:         "plugins/superpowers",
 		Version:      "6.1.0",
@@ -215,7 +215,7 @@ func TestLoadIncludesPluginSessionStartHook(t *testing.T) {
 	if got[0].Scope != ScopePlugin || got[0].Event != SessionStart {
 		t.Fatalf("first hook = %+v, want plugin SessionStart", got[0])
 	}
-	if got[0].Env["REASONIX_PLUGIN_NAME"] != "superpowers" || got[0].Env["REASONIX_WORKSPACE_ROOT"] != "/workspace" {
+	if got[0].Env["REAMES_AGENT_PLUGIN_NAME"] != "superpowers" || got[0].Env["REAMES_AGENT_WORKSPACE_ROOT"] != "/workspace" {
 		t.Fatalf("plugin env = %#v", got[0].Env)
 	}
 	if got[1].Scope != ScopeGlobal {
@@ -225,8 +225,8 @@ func TestLoadIncludesPluginSessionStartHook(t *testing.T) {
 
 func TestLoadIncludesPluginClaudeCompatibilityHooks(t *testing.T) {
 	home := t.TempDir()
-	reasonixHome := filepath.Join(home, ".reasonix")
-	root := filepath.Join(reasonixHome, "plugins", "claude-pack")
+	reamesAgentHome := filepath.Join(home, ".reames-agent")
+	root := filepath.Join(reamesAgentHome, "plugins", "claude-pack")
 	writeHookTestFile(t, filepath.Join(root, pluginpkg.CodexManifest), `{
   "name": "claude-pack",
   "version": "1.0.0",
@@ -252,7 +252,7 @@ func TestLoadIncludesPluginClaudeCompatibilityHooks(t *testing.T) {
     ]
   }
 }`)
-	if err := pluginpkg.Upsert(reasonixHome, pluginpkg.InstalledPlugin{
+	if err := pluginpkg.Upsert(reamesAgentHome, pluginpkg.InstalledPlugin{
 		Name:         "claude-pack",
 		Root:         "plugins/claude-pack",
 		Version:      "1.0.0",
@@ -282,29 +282,29 @@ func TestLoadIncludesPluginClaudeCompatibilityHooks(t *testing.T) {
 	if h := byEvent[UserPromptSubmit]; h.Command != "node hooks/prompt.js" || h.Cwd != root {
 		t.Fatalf("UserPromptSubmit hook = %+v", h)
 	}
-	if h := byEvent[PostToolUse]; h.Env["CLAUDE_PROJECT_DIR"] != "/workspace" || h.Env["REASONIX_PLUGIN_NAME"] != "claude-pack" {
+	if h := byEvent[PostToolUse]; h.Env["CLAUDE_PROJECT_DIR"] != "/workspace" || h.Env["REAMES_AGENT_PLUGIN_NAME"] != "claude-pack" {
 		t.Fatalf("plugin env = %#v", h.Env)
 	}
 }
 
 func TestReasonixHomeOverridesGlobalHookPaths(t *testing.T) {
 	home := t.TempDir()
-	reasonixHome := filepath.Join(t.TempDir(), "rx-home")
+	reamesAgentHome := filepath.Join(t.TempDir(), "rx-home")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("REASONIX_HOME", reasonixHome)
-	if err := os.MkdirAll(reasonixHome, 0o755); err != nil {
+	t.Setenv("REAMES_AGENT_HOME", reamesAgentHome)
+	if err := os.MkdirAll(reamesAgentHome, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(reasonixHome, SettingsFilename), []byte(`{"hooks":{"PostToolUse":[{"command":"echo rx"}]}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(reamesAgentHome, SettingsFilename), []byte(`{"hooks":{"PostToolUse":[{"command":"echo rx"}]}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	writeSettings(t, home, `{"hooks":{"PostToolUse":[{"command":"echo old"}]}}`)
 
-	if got := GlobalSettingsPath(""); got != filepath.Join(reasonixHome, SettingsFilename) {
+	if got := GlobalSettingsPath(""); got != filepath.Join(reamesAgentHome, SettingsFilename) {
 		t.Fatalf("GlobalSettingsPath = %q, want Reasonix home", got)
 	}
-	if got := TrustPath(""); got != filepath.Join(reasonixHome, TrustFilename) {
+	if got := TrustPath(""); got != filepath.Join(reamesAgentHome, TrustFilename) {
 		t.Fatalf("TrustPath = %q, want Reasonix home", got)
 	}
 	hooks := Load(LoadOptions{})
@@ -315,16 +315,16 @@ func TestReasonixHomeOverridesGlobalHookPaths(t *testing.T) {
 
 func TestReasonixHomeDoesNotFallBackToLegacyWhenIsolated(t *testing.T) {
 	home := t.TempDir()
-	reasonixHome := filepath.Join(t.TempDir(), "rx-home")
+	reamesAgentHome := filepath.Join(t.TempDir(), "rx-home")
 	proj := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("REASONIX_HOME", reasonixHome)
+	t.Setenv("REAMES_AGENT_HOME", reamesAgentHome)
 	writeSettings(t, home, `{"hooks":{"PostToolUse":[{"command":"echo old"}]}}`)
 
 	hooks := Load(LoadOptions{})
 	if len(hooks) != 0 {
-		t.Fatalf("Load hooks = %+v, want empty (isolated REASONIX_HOME must not load legacy hooks)", hooks)
+		t.Fatalf("Load hooks = %+v, want empty (isolated REAMES_AGENT_HOME must not load legacy hooks)", hooks)
 	}
 
 	absProj, err := filepath.Abs(proj)
@@ -340,12 +340,12 @@ func TestReasonixHomeDoesNotFallBackToLegacyWhenIsolated(t *testing.T) {
 		t.Fatal(err)
 	}
 	if IsTrusted(proj, "") {
-		t.Fatal("legacy trust must not be honored when REASONIX_HOME is set and trust.json is absent")
+		t.Fatal("legacy trust must not be honored when REAMES_AGENT_HOME is set and trust.json is absent")
 	}
 	if err := Trust(proj, ""); err != nil {
 		t.Fatalf("Trust: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(reasonixHome, TrustFilename)); err != nil {
+	if _, err := os.Stat(filepath.Join(reamesAgentHome, TrustFilename)); err != nil {
 		t.Fatalf("Trust should write current Reasonix home trust file: %v", err)
 	}
 }

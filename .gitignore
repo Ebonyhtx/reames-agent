@@ -3,8 +3,8 @@
 /dist/
 /stage/
 /npm/.stage/
-/reasonix
-/reasonix.exe
+/reames-agent
+/reames-agent.exe
 
 # Website (Astro) build output
 /site/dist/
@@ -30,13 +30,13 @@ mem.prof
 /desktop/frontend/wailsjs/
 /desktop/frontend/package.json.md5
 
-# Environment / local config (reasonix.example.toml is the shared template)
+# Environment / local config (reames-agent.example.toml is the shared template)
 .env
 .env.local
 *.local
-/reasonix.toml
+/reames-agent.toml
 /desktop/.env
-/desktop/reasonix.toml
+/desktop/reames-agent.toml
 
 # Node / frontend dependencies and caches
 node_modules/
@@ -44,9 +44,9 @@ node_modules/
 .npm/
 
 # Project-local Reasonix state; keep the checked-in review command.
-/.reasonix/*
-!/.reasonix/commands/
-!/.reasonix/commands/review.md
+/.reames-agent/*
+!/.reames-agent/commands/
+!/.reames-agent/commands/review.md
 
 # CodeGraph per-project index (rebuilt locally; never committed)
 .codegraph/

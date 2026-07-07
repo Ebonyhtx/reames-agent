@@ -7,16 +7,16 @@ import (
 	"runtime"
 	"strings"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/mcpdiag"
-	"reasonix/internal/netclient"
-	"reasonix/internal/permission"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/mcpdiag"
+	"reames-agent/internal/netclient"
+	"reames-agent/internal/permission"
 )
 
 // edit.go is the programmatic mutation surface a settings UI drives: change the
 // default model, add/remove a provider, set the planner, edit permission rules,
 // add/remove an MCP server — each validated, then persisted with SaveTo. It is
-// separate from the `reasonix setup` wizard (cli) so a GUI can apply one setting at a
+// separate from the `reamesAgent setup` wizard (cli) so a GUI can apply one setting at a
 // time without replaying the whole interactive flow. Every mutator works on the
 // in-memory *Config; nothing writes to disk until SaveTo/Save is called, so a UI
 // can stage several changes and commit once. Mutations round-trip through
@@ -158,7 +158,7 @@ func (c *Config) SetProviderEffort(name, effort string) error {
 	return fmt.Errorf("set provider effort: no provider %q", name)
 }
 
-// SetLanguage pins the CLI UI/model language; empty/auto clears the override so runtime detection falls back to REASONIX_LANG / locale.
+// SetLanguage pins the CLI UI/model language; empty/auto clears the override so runtime detection falls back to REAMES_AGENT_LANG / locale.
 func (c *Config) SetLanguage(lang string) error {
 	switch strings.ToLower(strings.TrimSpace(lang)) {
 	case "", "auto":
@@ -781,7 +781,7 @@ func (c *Config) TrustPluginReadOnlyTool(name, toolName string) (PluginEntry, bo
 // ClearPluginAuthenticationInSource clears auth material in the file that actually
 // owns the MCP server. Load() merges user/project TOML and project .mcp.json into
 // one Config, so callers must not mutate that merged view and Save() it back: a
-// .mcp.json-only server would otherwise be serialized into reasonix.toml or the
+// .mcp.json-only server would otherwise be serialized into reamesAgent.toml or the
 // user config. Source priority mirrors Load(): project TOML, user TOML, then the
 // project .mcp.json entry if TOML did not define that server.
 func ClearPluginAuthenticationInSource(name string) (PluginEntry, bool, string, error) {
@@ -842,9 +842,9 @@ func TrustPluginReadOnlyToolInSource(name, toolName string) (PluginEntry, bool, 
 }
 
 func pluginTOMLSourcePathForRoot(root, name string) string {
-	projectTOML := "reasonix.toml"
+	projectTOML := "reamesAgent.toml"
 	if resolved := resolveRoot(root); resolved != "." {
-		projectTOML = filepath.Join(resolved, "reasonix.toml")
+		projectTOML = filepath.Join(resolved, "reamesAgent.toml")
 	}
 	paths := append([]string{projectTOML}, userConfigCandidatePaths()...)
 	for _, path := range paths {
@@ -894,10 +894,10 @@ func validatePlugin(e PluginEntry) error {
 
 // SaveTo writes the configuration to path as annotated TOML, atomically: it
 // writes a sibling temp file then renames, so a crash mid-write can't leave a
-// half-written reasonix.toml that fails to parse on next load. Parent directories
+// half-written reamesAgent.toml that fails to parse on next load. Parent directories
 // are created as needed.
 //
-// For project configs (./reasonix.toml) the write is incremental: only sections
+// For project configs (./reamesAgent.toml) the write is incremental: only sections
 // and fields that differ from built-in defaults are written, so the file never
 // accumulates fields that override the user's global config. User configs still
 // write the full annotated template since they are the user's own settings store.
@@ -1291,24 +1291,24 @@ func isUserConfigPath(path string) bool {
 }
 
 // Save writes the configuration back to the file it was loaded from
-// (SourcePath), or to ./reasonix.toml when none exists yet — the conventional
+// (SourcePath), or to ./reamesAgent.toml when none exists yet — the conventional
 // project-local target a fresh GUI session would create.
 func (c *Config) Save() error {
 	path := SourcePath()
 	if path == "" {
-		path = "reasonix.toml"
+		path = "reamesAgent.toml"
 	}
 	return c.SaveTo(path)
 }
 
 // SaveForRoot saves root's project config when it exists, falling back to the
-// user's global config when root has no reasonix.toml. Existing project files
+// user's global config when root has no reamesAgent.toml. Existing project files
 // are edited from their own TOML only, never from a runtime user+project merge.
 func (c *Config) SaveForRoot(root string) error {
 	root = resolveRoot(root)
-	projectTOML := "reasonix.toml"
+	projectTOML := "reamesAgent.toml"
 	if root != "." {
-		projectTOML = filepath.Join(root, "reasonix.toml")
+		projectTOML = filepath.Join(root, "reamesAgent.toml")
 	}
 	if _, err := os.Stat(projectTOML); err == nil {
 		projectCfg := LoadForEditWithoutCredentials(projectTOML)

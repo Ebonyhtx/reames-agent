@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/control"
+	"reames-agent/internal/control"
 )
 
 type closeProbeBotController struct {
@@ -63,7 +63,7 @@ func TestBotGatewayStopClosesSessionsWithoutGatewayLock(t *testing.T) {
 // sessionOptionsForMessage and the project/session index builders read them.
 // Run with -race; a lock-free read is a concurrent map read/write crash.
 func TestBotGatewayToolApprovalModeConcurrentWithConfigReaders(t *testing.T) {
-	t.Setenv("REASONIX_HOME", t.TempDir())
+	t.Setenv("REAMES_AGENT_HOME", t.TempDir())
 	gw := &BotGateway{
 		cfg: GatewayConfig{
 			WorkspaceRoot: t.TempDir(),

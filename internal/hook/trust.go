@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 )
 
-// Trust gates project hooks. A project's .reasonix/settings.json can run
+// Trust gates project hooks. A project's .reames-agent/settings.json can run
 // arbitrary shell commands, so cloning a repo must not silently execute its
 // hooks: project hooks load only after the user explicitly trusts that project
-// root. The trust flag lives in user-global state (~/.reasonix/trust.json),
+// root. The trust flag lives in user-global state (~/.reames-agent/trust.json),
 // NOT in the project file itself — an attacker controls the latter. Global
-// hooks (~/.reasonix/settings.json) are the user's own and always run.
+// hooks (~/.reames-agent/settings.json) are the user's own and always run.
 
-// TrustFilename is the user-global trust store under ~/.reasonix.
+// TrustFilename is the user-global trust store under ~/.reamesAgent.
 const TrustFilename = "trust.json"
 
 type trustFile struct {
@@ -24,7 +24,7 @@ type trustFile struct {
 // TrustPath is <Reasonix home>/trust.json (homeDir overrides ~ for tests and
 // legacy callers).
 func TrustPath(homeDir string) string {
-	return filepath.Join(reasonixHome(homeDir), TrustFilename)
+	return filepath.Join(reamesAgentHome(homeDir), TrustFilename)
 }
 
 // IsTrusted reports whether projectRoot has been trusted to run its hooks.

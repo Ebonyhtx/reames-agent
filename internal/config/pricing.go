@@ -7,7 +7,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"reasonix/internal/provider"
+	"reames-agent/internal/provider"
 )
 
 func deepSeekV4FlashPrice() *provider.Pricing {

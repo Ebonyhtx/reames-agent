@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/provider"
-	"reasonix/internal/textutil"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/textutil"
 )
 
 // ---- list_sessions tool -----------------------------------------------------

@@ -21,8 +21,8 @@ import (
 	"time"
 	"unicode"
 
-	"reasonix/internal/fileutil"
-	"reasonix/internal/provider"
+	"reames-agent/internal/fileutil"
+	"reames-agent/internal/provider"
 )
 
 const (
@@ -30,7 +30,7 @@ const (
 	tracesFile         = "traces.jsonl"
 	learningTracesFile = "learning_traces.jsonl"
 	debugTracesFile    = "debug_traces.jsonl"
-	debugTraceEnv      = "REASONIX_MEMORY_COMPILER_DEBUG_TRACE"
+	debugTraceEnv      = "REAMES_AGENT_MEMORY_COMPILER_DEBUG_TRACE"
 	version            = "v5.9"
 
 	explorationRatePercent    = 10

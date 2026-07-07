@@ -3,13 +3,13 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"reasonix/internal/event"
+	"reames-agent/internal/event"
 	"strings"
 	"testing"
 
-	"reasonix/internal/planmode"
-	"reasonix/internal/provider"
-	"reasonix/internal/tool"
+	"reames-agent/internal/planmode"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
 )
 
 // planSafeTool wraps fakeTool to self-report a plan-mode stance, mimicking a

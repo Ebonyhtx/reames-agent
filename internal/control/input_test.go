@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"reasonix/internal/agent"
+	"reames-agent/internal/agent"
 
-	"reasonix/internal/command"
-	"reasonix/internal/event"
-	"reasonix/internal/hook"
-	"reasonix/internal/memory"
-	"reasonix/internal/skill"
+	"reames-agent/internal/command"
+	"reames-agent/internal/event"
+	"reames-agent/internal/hook"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/skill"
 )
 
 type fakeAutoPlanClassifier struct {
@@ -83,7 +83,7 @@ func TestSkillsReflectStoreChangesAfterControllerBuild(t *testing.T) {
 	if _, ok := c.RunSkill("/hot now"); ok {
 		t.Fatal("skill should not exist before it is written")
 	}
-	writeControlSkill(t, project, ".reasonix/skills/hot/SKILL.md", "---\nname: hot\ndescription: Hot install\n---\nHot body")
+	writeControlSkill(t, project, ".reames-agent/skills/hot/SKILL.md", "---\nname: hot\ndescription: Hot install\n---\nHot body")
 
 	if skills := c.Skills(); len(skills) != 1 || skills[0].Name != "hot" {
 		t.Fatalf("Skills() = %+v, want newly installed hot skill", skills)
@@ -393,7 +393,7 @@ func TestAutoStartResearchGoalUsesOnlyStrongSignals(t *testing.T) {
 		"持续排查这个线上卡顿直到根因明确，并验证修复",
 		"不要原地打转，把这个方向完整做成方案并验证",
 		"thoroughly implement, test, optimize, and document this feature",
-		"继续 .reasonix/autoresearch/20260618-224530-cache-audit/ 这个任务",
+		"继续 .reames-agent/autoresearch/20260618-224530-cache-audit/ 这个任务",
 	} {
 		if !shouldAutoStartResearchGoal(input) {
 			t.Fatalf("shouldAutoStartResearchGoal(%q) = false, want true", input)

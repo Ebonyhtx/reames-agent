@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"reasonix/internal/plugin"
+	"reames-agent/internal/plugin"
 )
 
 // sharedPluginHost is a reference-counted plugin.Host shared across tabs

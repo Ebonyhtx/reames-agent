@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/skill"
-	"reasonix/internal/tool"
+	"reames-agent/internal/skill"
+	"reames-agent/internal/tool"
 )
 
 type Kind string

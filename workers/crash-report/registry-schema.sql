@@ -1,6 +1,6 @@
--- Reasonix registry: published skills/MCP servers, their versions, and the
+-- Reames Agent registry: published skills/MCP servers, their versions, and the
 -- activity/install event log. Apply:
---   wrangler d1 migrations apply reasonix-registry --local   (or --remote)
+--   wrangler d1 migrations apply reames-agent-registry --local   (or --remote)
 
 -- One row per published capability. The registry stores only metadata and a
 -- source pointer; it never fetches or executes the content — install happens

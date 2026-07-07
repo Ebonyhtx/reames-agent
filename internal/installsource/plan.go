@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/skill"
+	"reames-agent/internal/skill"
 )
 
 var githubAPIBaseURL = "https://api.github.com"

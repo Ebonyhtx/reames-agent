@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/i18n"
-	"reasonix/internal/memory"
+	"reames-agent/internal/i18n"
+	"reames-agent/internal/memory"
 )
 
 func renderMemory(width int, set *memory.Set) string {

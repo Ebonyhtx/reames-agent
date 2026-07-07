@@ -13,8 +13,8 @@ import (
 func TestConfigureCLIThemeSwitchesModeAndDefaultStyle(t *testing.T) {
 	t.Setenv("COLORTERM", "")
 	t.Setenv("TERM_PROGRAM", "")
-	t.Setenv("REASONIX_THEME", "")
-	t.Setenv("REASONIX_THEME_STYLE", "")
+	t.Setenv("REAMES_AGENT_THEME", "")
+	t.Setenv("REAMES_AGENT_THEME_STYLE", "")
 	defer restoreThemeForTest(colorEnabled, activeCLITheme)
 	colorEnabled = true
 
@@ -38,8 +38,8 @@ func TestConfigureCLIThemeSwitchesModeAndDefaultStyle(t *testing.T) {
 func TestConfigureCLIThemeStyleOverride(t *testing.T) {
 	t.Setenv("COLORTERM", "")
 	t.Setenv("TERM_PROGRAM", "")
-	t.Setenv("REASONIX_THEME", "")
-	t.Setenv("REASONIX_THEME_STYLE", "")
+	t.Setenv("REAMES_AGENT_THEME", "")
+	t.Setenv("REAMES_AGENT_THEME_STYLE", "")
 	defer restoreThemeForTest(colorEnabled, activeCLITheme)
 	colorEnabled = true
 
@@ -60,14 +60,14 @@ func TestConfigureCLIThemeStyleOverride(t *testing.T) {
 func TestConfigureCLIThemeHonorsEnvOverride(t *testing.T) {
 	t.Setenv("COLORTERM", "")
 	t.Setenv("TERM_PROGRAM", "")
-	t.Setenv("REASONIX_THEME", "ember")
-	t.Setenv("REASONIX_THEME_STYLE", "")
+	t.Setenv("REAMES_AGENT_THEME", "ember")
+	t.Setenv("REAMES_AGENT_THEME_STYLE", "")
 	defer restoreThemeForTest(colorEnabled, activeCLITheme)
 	colorEnabled = true
 
 	configureCLIThemeWithStyle("light", "glacier")
 	if activeCLITheme.name != "dark" || activeCLITheme.style != "ember" {
-		t.Fatalf("REASONIX_THEME override resolved %s/%s, want dark/ember", activeCLITheme.name, activeCLITheme.style)
+		t.Fatalf("REAMES_AGENT_THEME override resolved %s/%s, want dark/ember", activeCLITheme.name, activeCLITheme.style)
 	}
 }
 
@@ -89,8 +89,8 @@ func TestThemeArgCompletion(t *testing.T) {
 func TestRunThemeSubcommandSwitchesAccentAndTextarea(t *testing.T) {
 	t.Setenv("COLORTERM", "")
 	t.Setenv("TERM_PROGRAM", "")
-	t.Setenv("REASONIX_THEME", "")
-	t.Setenv("REASONIX_THEME_STYLE", "")
+	t.Setenv("REAMES_AGENT_THEME", "")
+	t.Setenv("REAMES_AGENT_THEME_STYLE", "")
 	defer restoreThemeForTest(colorEnabled, activeCLITheme)
 	colorEnabled = true
 	configureCLIThemeWithStyle("dark", "graphite")
@@ -167,8 +167,8 @@ func TestAutoThemeFallsBackToColorFGBG(t *testing.T) {
 func TestApplyTextareaThemeClearsCursorLineBackground(t *testing.T) {
 	t.Setenv("COLORTERM", "")
 	t.Setenv("TERM_PROGRAM", "")
-	t.Setenv("REASONIX_THEME", "")
-	t.Setenv("REASONIX_THEME_STYLE", "")
+	t.Setenv("REAMES_AGENT_THEME", "")
+	t.Setenv("REAMES_AGENT_THEME_STYLE", "")
 	defer restoreThemeForTest(colorEnabled, activeCLITheme)
 	colorEnabled = true
 
@@ -205,8 +205,8 @@ func TestApplyTextareaThemeClearsCursorLineBackground(t *testing.T) {
 func TestApplyTextareaThemeHonorsCursorShape(t *testing.T) {
 	t.Setenv("COLORTERM", "")
 	t.Setenv("TERM_PROGRAM", "")
-	t.Setenv("REASONIX_THEME", "")
-	t.Setenv("REASONIX_THEME_STYLE", "")
+	t.Setenv("REAMES_AGENT_THEME", "")
+	t.Setenv("REAMES_AGENT_THEME_STYLE", "")
 	defer restoreThemeForTest(colorEnabled, activeCLITheme)
 	prevShape := cliCursorShape
 	defer func() { cliCursorShape = prevShape }()
@@ -242,8 +242,8 @@ func TestApplyTextareaThemeHonorsCursorShape(t *testing.T) {
 func TestRuntimeAutoThemeDoesNotProbeStdin(t *testing.T) {
 	t.Setenv("COLORTERM", "")
 	t.Setenv("TERM_PROGRAM", "")
-	t.Setenv("REASONIX_THEME", "")
-	t.Setenv("REASONIX_THEME_STYLE", "")
+	t.Setenv("REAMES_AGENT_THEME", "")
+	t.Setenv("REAMES_AGENT_THEME_STYLE", "")
 	t.Setenv("COLORFGBG", "15;0")
 	defer restoreThemeForTest(colorEnabled, activeCLITheme)
 	colorEnabled = true

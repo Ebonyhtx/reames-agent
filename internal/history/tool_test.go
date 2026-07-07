@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/provider"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/provider"
 )
 
 func TestHistoryToolSearchAndAroundAreUsable(t *testing.T) {

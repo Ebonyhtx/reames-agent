@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"reasonix/internal/config"
+	"reames-agent/internal/config"
 )
 
 // DesktopZoomFactor persists the user's WebView2 zoom factor preference across

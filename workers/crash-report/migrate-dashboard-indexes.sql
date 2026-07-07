@@ -1,5 +1,5 @@
 -- Indexes for the dashboard's filter/aggregation queries. Apply:
---   wrangler d1 execute reasonix-crash --remote --file=migrate-dashboard-indexes.sql
+--   wrangler d1 execute reames-agent-crash --remote --file=migrate-dashboard-indexes.sql
 -- groups has no index but crashGroups filters/sorts by these columns every load;
 -- the pings/metrics facets group by version and (signal,bucket) over a window.
 CREATE INDEX IF NOT EXISTS groups_status ON groups (status);

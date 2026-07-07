@@ -1,7 +1,7 @@
-// Command reasonix-desktop is the Wails shell around the Reasonix kernel: a native
+// Command reamesAgent-desktop is the Wails shell around the Reasonix kernel: a native
 // window hosting a webview frontend, with the Go-side control.Controller bound
 // directly to the UI (no HTTP hop — bindings in, runtime events out). It lives in
-// a nested module (reasonix/desktop) so the CGO/WebKit desktop build never touches
+// a nested module (reamesAgent/desktop) so the CGO/WebKit desktop build never touches
 // the CLI's CGO_ENABLED=0 single-static-binary guarantee, while still importing
 // the same internal/* kernel.
 package main
@@ -21,11 +21,11 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
 	// Blank imports wire compile-time built-ins into their registries, exactly as
-	// cmd/reasonix does — boot.Build resolves providers/tools from these registries.
-	_ "reasonix/internal/provider/anthropic"
-	_ "reasonix/internal/provider/openai"
-	"reasonix/internal/sandbox"
-	_ "reasonix/internal/tool/builtin"
+	// cmd/reamesAgent does — boot.Build resolves providers/tools from these registries.
+	_ "reames-agent/internal/provider/anthropic"
+	_ "reames-agent/internal/provider/openai"
+	"reames-agent/internal/sandbox"
+	_ "reames-agent/internal/tool/builtin"
 )
 
 // runWindowsSandboxHelperIfRequested reports whether argv (os.Args-shaped, so
@@ -47,7 +47,7 @@ func runWindowsSandboxHelperIfRequested(argv []string) (int, bool) {
 var assets embed.FS
 
 // version is injected at build time via `wails build -ldflags "-X main.version=..."`,
-// mirroring cmd/reasonix/main.go. The auto-updater reads it (App.Version) to compare
+// mirroring cmd/reamesAgent/main.go. The auto-updater reads it (App.Version) to compare
 // against the published manifest; an un-injected dev build stays "dev" and never
 // prompts to update.
 var version = "dev"
@@ -62,7 +62,7 @@ var channel = "stable"
 var macSelfUpdate = "false"
 
 const (
-	disableWebview2GPUEnv  = "REASONIX_DESKTOP_DISABLE_WEBVIEW2_GPU"
+	disableWebview2GPUEnv  = "REAMES_AGENT_DESKTOP_DISABLE_WEBVIEW2_GPU"
 	linuxDRIRenderNodeGlob = "/dev/dri/renderD*"
 )
 

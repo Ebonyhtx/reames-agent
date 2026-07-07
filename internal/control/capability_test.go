@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/skill"
-	"reasonix/internal/tool"
+	"reames-agent/internal/skill"
+	"reames-agent/internal/tool"
 )
 
 type capabilityRecordingRunner struct {

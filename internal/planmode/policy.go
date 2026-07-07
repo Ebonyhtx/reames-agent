@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"reasonix/internal/shellparse"
-	"reasonix/internal/shellsafe"
+	"reames-agent/internal/shellparse"
+	"reames-agent/internal/shellsafe"
 )
 
 // Marker is the model-facing plan-mode instruction block. It rides in the user

@@ -1,6 +1,6 @@
 # Goal 模式增强 — 强制执行与并行调度
 
-Reasonix 的 Goal 模式（`/goal`）在 v1.9+ 中增加了来自 Oh-My-OpenAgent 的三个核心强制执行模式，让 AI agent 更可靠地完成复杂任务。
+Reames Agent 的 Goal 模式（`/goal`）在 v1.9+ 中增加了来自 Oh-My-OpenAgent 的三个核心强制执行模式，让 AI agent 更可靠地完成复杂任务。
 
 ## 功能一览
 

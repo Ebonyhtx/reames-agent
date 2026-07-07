@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/tool"
+	"reames-agent/internal/tool"
 )
 
 type historyTool struct {

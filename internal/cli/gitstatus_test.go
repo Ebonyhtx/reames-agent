@@ -94,7 +94,7 @@ func TestLoadGitStatus(t *testing.T) {
 
 	root := t.TempDir()
 	runGitForTest(t, root, "init")
-	runGitForTest(t, root, "config", "user.email", "reasonix@example.invalid")
+	runGitForTest(t, root, "config", "user.email", "reamesAgent@example.invalid")
 	runGitForTest(t, root, "config", "user.name", "Reasonix Test")
 	writeFileForTest(t, filepath.Join(root, "tracked.txt"), "one\ntwo\n")
 	runGitForTest(t, root, "add", "tracked.txt")

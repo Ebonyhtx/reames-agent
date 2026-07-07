@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/event"
-	"reasonix/internal/eventwire"
+	"reames-agent/internal/event"
+	"reames-agent/internal/eventwire"
 )
 
 func TestBroadcasterFanOut(t *testing.T) {

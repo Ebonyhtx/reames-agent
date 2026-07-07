@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"reasonix/internal/config"
-	"reasonix/internal/control"
-	"reasonix/internal/memorycompiler"
+	"reames-agent/internal/config"
+	"reames-agent/internal/control"
+	"reames-agent/internal/memorycompiler"
 )
 
 func (m *chatTUI) runMemoryV5Command(input string) {

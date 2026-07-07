@@ -2,8 +2,8 @@
 // PreToolUse / PostToolUse fire around each tool call, PermissionRequest fires
 // before a tool approval prompt is shown, UserPromptSubmit before a turn, Stop
 // after it. Hooks come from settings.json — a project
-// (.reasonix/settings.json, only when the project is trusted) and a global
-// (~/.reasonix/settings.json) file. A hook's exit
+// (.reames-agent/settings.json, only when the project is trusted) and a global
+// (~/.reames-agent/settings.json) file. A hook's exit
 // code is its verdict: 0 = pass, 2 = block (only on the gating events), other =
 // warn. The payload is delivered as JSON on stdin; output is captured (capped)
 // and surfaced to the user. This package only loads, matches, and runs hooks;
@@ -26,9 +26,9 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/config"
-	"reasonix/internal/pluginpkg"
-	"reasonix/internal/proc"
+	"reames-agent/internal/config"
+	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/proc"
 )
 
 // Event is a point in the agent loop a hook can fire at.
@@ -134,17 +134,17 @@ func (h ResolvedHook) timeout() time.Duration {
 
 // SettingsDirname / SettingsFilename locate a scope's settings.json.
 const (
-	SettingsDirname  = ".reasonix"
+	SettingsDirname  = ".reames-agent"
 	SettingsFilename = "settings.json"
 )
 
 // GlobalSettingsPath is <Reasonix home>/settings.json (homeDir overrides ~ for
 // tests and legacy callers).
 func GlobalSettingsPath(homeDir string) string {
-	return filepath.Join(reasonixHome(homeDir), SettingsFilename)
+	return filepath.Join(reamesAgentHome(homeDir), SettingsFilename)
 }
 
-// ProjectSettingsPath is <root>/.reasonix/settings.json.
+// ProjectSettingsPath is <root>/.reames-agent/settings.json.
 func ProjectSettingsPath(projectRoot string) string {
 	return filepath.Join(projectRoot, SettingsDirname, SettingsFilename)
 }
@@ -168,7 +168,7 @@ func Load(opts LoadOptions) []ResolvedHook {
 			appendResolved(&out, s, ScopeProject, p)
 		}
 	}
-	appendPluginHooks(&out, reasonixHome(opts.HomeDir), opts.ProjectRoot)
+	appendPluginHooks(&out, reamesAgentHome(opts.HomeDir), opts.ProjectRoot)
 	g := GlobalSettingsPath(opts.HomeDir)
 	if s := readSettings(g); s != nil {
 		appendResolved(&out, s, ScopeGlobal, g)
@@ -235,11 +235,11 @@ func appendResolved(out *[]ResolvedHook, s *Settings, scope Scope, source string
 	}
 }
 
-func appendPluginHooks(out *[]ResolvedHook, reasonixHomeDir, projectRoot string) {
-	if strings.TrimSpace(reasonixHomeDir) == "" {
+func appendPluginHooks(out *[]ResolvedHook, reamesAgentHomeDir, projectRoot string) {
+	if strings.TrimSpace(reamesAgentHomeDir) == "" {
 		return
 	}
-	installed, _ := pluginpkg.LoadInstalled(reasonixHomeDir)
+	installed, _ := pluginpkg.LoadInstalled(reamesAgentHomeDir)
 	for _, item := range installed {
 		pkg := item.Package
 		events := make([]string, 0, len(pkg.Manifest.Hooks))
@@ -269,13 +269,13 @@ func appendPluginHooks(out *[]ResolvedHook, reasonixHomeDir, projectRoot string)
 					cwd = filepath.Join(pkg.Root, filepath.FromSlash(cwd))
 				}
 				env := cloneEnv(h.Env)
-				env["REASONIX_PLUGIN_ROOT"] = pkg.Root
-				env["REASONIX_PLUGIN_NAME"] = item.Installed.Name
-				env["REASONIX_HOME"] = reasonixHomeDir
-				env["REASONIX_WORKSPACE_ROOT"] = projectRoot
+				env["REAMES_AGENT_PLUGIN_ROOT"] = pkg.Root
+				env["REAMES_AGENT_PLUGIN_NAME"] = item.Installed.Name
+				env["REAMES_AGENT_HOME"] = reamesAgentHomeDir
+				env["REAMES_AGENT_WORKSPACE_ROOT"] = projectRoot
 				env["CLAUDE_PROJECT_DIR"] = projectRoot
 				if item.Installed.Version != "" {
-					env["REASONIX_PLUGIN_VERSION"] = item.Installed.Version
+					env["REAMES_AGENT_PLUGIN_VERSION"] = item.Installed.Version
 				}
 				*out = append(*out, ResolvedHook{
 					HookConfig: HookConfig{
@@ -650,7 +650,7 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 
 func (c *cappedBuffer) String() string { return c.buf.String() }
 
-func reasonixHome(override string) string {
+func reamesAgentHome(override string) string {
 	if override != "" {
 		return filepath.Join(override, SettingsDirname)
 	}
@@ -691,7 +691,7 @@ func legacyReasonixHome(override string) string {
 		return ""
 	}
 	legacy := filepath.Join(home, SettingsDirname)
-	if sameCleanPath(legacy, reasonixHome("")) {
+	if sameCleanPath(legacy, reamesAgentHome("")) {
 		return ""
 	}
 	return legacy

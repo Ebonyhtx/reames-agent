@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"reasonix/internal/agent"
-	"reasonix/internal/control"
+	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
 )
 
 func (m *chatTUI) showBranchTree() {

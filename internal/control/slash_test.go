@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/config"
-	"reasonix/internal/event"
-	"reasonix/internal/hook"
-	"reasonix/internal/memory"
-	"reasonix/internal/skill"
+	"reames-agent/internal/config"
+	"reames-agent/internal/event"
+	"reames-agent/internal/hook"
+	"reames-agent/internal/memory"
+	"reames-agent/internal/skill"
 )
 
 func labelsOf(items []SlashItem) []string {

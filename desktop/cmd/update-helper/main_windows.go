@@ -24,7 +24,7 @@ func main() {
 func run(args []string) int {
 	var parentPID uint
 	var installer, installDir, relaunch string
-	fs := flag.NewFlagSet("reasonix-update-helper", flag.ContinueOnError)
+	fs := flag.NewFlagSet("reamesAgent-update-helper", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.UintVar(&parentPID, "parent-pid", 0, "Reasonix process id to wait for before installing")
 	fs.StringVar(&installer, "installer", "", "verified NSIS installer path")

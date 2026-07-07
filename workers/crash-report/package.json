@@ -1,5 +1,5 @@
 {
-  "name": "reasonix-crash-report",
+  "name": "reames-agent-crash-report",
   "private": true,
   "type": "module",
   "scripts": {

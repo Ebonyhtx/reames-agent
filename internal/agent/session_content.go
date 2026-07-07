@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"reasonix/internal/provider"
-	"reasonix/internal/store"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/store"
 )
 
 // SessionsShareContent reports whether two saved sessions decode to the same

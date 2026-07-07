@@ -31,9 +31,9 @@ mkdirSync(STAGE, { recursive: true });
 
 const subPackages = [];
 for (const t of TARGETS) {
-  const name = `@reasonix/cli-${t.node}`;
+  const name = `@reames-agent/cli-${t.node}`;
   const dir = join(STAGE, `cli-${t.node}`);
-  const exe = t.goos === "windows" ? "reasonix.exe" : "reasonix";
+  const exe = t.goos === "windows" ? "reames-agent.exe" : "reames-agent";
   mkdirSync(join(dir, "bin"), { recursive: true });
 
   console.log(`build ${t.goos}/${t.goarch} -> ${name}`);
@@ -46,7 +46,7 @@ for (const t of TARGETS) {
       `-s -w -X main.version=${binaryVersion}`,
       "-o",
       join(dir, "bin", exe),
-      "./cmd/reasonix",
+      "./cmd/reames-agent",
     ],
     {
       cwd: ROOT,
@@ -61,14 +61,14 @@ for (const t of TARGETS) {
       {
         name,
         version,
-        description: `reasonix prebuilt binary for ${t.node}.`,
+        description: `reames-agent prebuilt binary for ${t.node}.`,
         os: [t.goos === "windows" ? "win32" : t.goos],
         cpu: [t.goarch === "amd64" ? "x64" : "arm64"],
         files: ["bin/"],
         license: "MIT",
         repository: {
           type: "git",
-          url: "git+https://github.com/esengine/DeepSeek-Reasonix.git",
+          url: "git+https://github.com/esengine/DeepSeek-Reames Agent.git",
         },
       },
       null,
@@ -78,13 +78,13 @@ for (const t of TARGETS) {
   subPackages.push({ name, dir });
 }
 
-const mainDir = join(STAGE, "reasonix");
+const mainDir = join(STAGE, "reames-agent");
 mkdirSync(mainDir, { recursive: true });
-cpSync(join(HERE, "reasonix", "bin"), join(mainDir, "bin"), { recursive: true });
+cpSync(join(HERE, "reames-agent", "bin"), join(mainDir, "bin"), { recursive: true });
 cpSync(join(ROOT, "README.md"), join(mainDir, "README.md"));
 
 const mainPkg = JSON.parse(
-  readFileSync(join(HERE, "reasonix", "package.json"), "utf8"),
+  readFileSync(join(HERE, "reames-agent", "package.json"), "utf8"),
 );
 mainPkg.version = version;
 for (const key of Object.keys(mainPkg.optionalDependencies)) {
@@ -119,5 +119,5 @@ for (const sub of subPackages) {
   console.log(`publish ${sub.name}@${version} (${distTag})`);
   execFileSync("npm", publishArgs, { cwd: sub.dir, stdio: "inherit" });
 }
-console.log(`publish reasonix@${version} (${distTag})`);
+console.log(`publish reames-agent@${version} (${distTag})`);
 execFileSync("npm", publishArgs, { cwd: mainDir, stdio: "inherit" });

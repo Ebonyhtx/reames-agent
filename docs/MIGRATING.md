@@ -1,17 +1,17 @@
-# Migrating to Reasonix 1.0 (the Go rewrite)
+# Migrating to Reames Agent 1.0 (the Go rewrite)
 
-Reasonix 1.0 is a **ground-up rewrite in Go**. It is a new codebase, not an
+Reames Agent 1.0 is a **ground-up rewrite in Go**. It is a new codebase, not an
 incremental upgrade of the `0.x` TypeScript releases. This guide explains what
 changed and how to move over.
 
 ## TL;DR
 
-| | Legacy (v1) | Reasonix 1.0+ (v2) |
+| | Legacy (v1) | Reames Agent 1.0+ (v2) |
 |---|---|---|
 | Language | TypeScript / Node | Go |
-| Branch | [`v1`](https://github.com/esengine/DeepSeek-Reasonix/tree/v1) (maintenance only) | `main-v2` (default, active) |
+| Branch | [`v1`](https://github.com/esengine/DeepSeek-Reames Agent/tree/v1) (maintenance only) | `main-v2` (default, active) |
 | Versions | `0.x` (up to v0.54.x) | `1.0.0`+ |
-| Install | `npm i -g reasonix@0.53.2` (pin a `0.x` version) | `npm i -g reasonix` — `latest` points at the current `1.x` stable; or a release archive / `go build` |
+| Install | `npm i -g reames-agent@0.53.2` (pin a `0.x` version) | `npm i -g reames-agent` — `latest` points at the current `1.x` stable; or a release archive / `go build` |
 | Code intelligence | embedding semantic search + tree-sitter symbols | LSP-assisted code reading plus grep/read_file/glob; semantic index is not yet ported |
 
 "v1" and "v2" are **codebase generations**, not semver: the v1 line never reached
@@ -23,19 +23,19 @@ changed and how to move over.
 same way esbuild/biome ship native binaries via npm). The binary itself is a
 standalone Go executable; npm is only the installer, not a runtime dependency.
 
-**`npm i -g reasonix` installs the current `1.x` stable.** npm's `latest` tag
+**`npm i -g reames-agent` installs the current `1.x` stable.** npm's `latest` tag
 moved to the Go line with `1.17.5` — the earlier "`latest` stays pinned to
 `0.x`" migration guard silently downgraded `npm update -g` users once 1.x went
 stable (#5822), so it was retired. Release candidates still ship under the
 `next` tag; `0.x` stays installable by pinning:
 
 ```sh
-npm i -g reasonix          # current 1.x stable
-npm i -g reasonix@next     # release candidate, when one is ahead of stable
-npm i -g reasonix@0.53.2   # pin the legacy TS build
+npm i -g reames-agent          # current 1.x stable
+npm i -g reames-agent@next     # release candidate, when one is ahead of stable
+npm i -g reames-agent@0.53.2   # pin the legacy TS build
 ```
 
-Prebuilt archives (`reasonix-<os>-<arch>.tar.gz` / `.zip`) and the desktop
+Prebuilt archives (`reames-agent-<os>-<arch>.tar.gz` / `.zip`) and the desktop
 installer are attached to each GitHub release. These are a **separate channel**
 from npm: the installer drops a standalone desktop/binary build and does not
 touch a CLI you installed with `npm i -g`, so the two coexist — an npm `0.53` in
@@ -43,26 +43,26 @@ your shell alongside a `1.x` desktop app is expected, not a conflict. Or build
 from source:
 
 ```sh
-git clone https://github.com/esengine/DeepSeek-Reasonix   # default: main-v2 (Go)
-cd DeepSeek-Reasonix && make build                        # -> bin/reasonix(.exe)
+git clone https://github.com/esengine/DeepSeek-Reames Agent   # default: main-v2 (Go)
+cd DeepSeek-Reames Agent && make build                        # -> bin/reames-agent(.exe)
 ```
 
 ## Configuration
 
-| Legacy | Reasonix 1.0 |
+| Legacy | Reames Agent 1.0 |
 |---|---|
-| TS config files | `reasonix.toml` (project) / `config.toml` in Reasonix home (`~/.reasonix/` on macOS/Linux; `%AppData%\reasonix\` on Windows) from v1.8.1 — see `reasonix.example.toml` and [Configuration paths](./CONFIG_PATHS.md) |
-| env / API keys | Provider config keeps `api_key_env`; saved key values live in Reasonix home `.env` (`DEEPSEEK_API_KEY`, `MIMO_API_KEY`, …) |
+| TS config files | `reames-agent.toml` (project) / `config.toml` in Reames Agent home (`~/.reames-agent/` on macOS/Linux; `%AppData%\reames-agent\` on Windows) from v1.8.1 — see `reames-agent.example.toml` and [Configuration paths](./CONFIG_PATHS.md) |
+| env / API keys | Provider config keeps `api_key_env`; saved key values live in Reames Agent home `.env` (`DEEPSEEK_API_KEY`, `MIMO_API_KEY`, …) |
 | project memory | `REASONIX.md` (+ auto-memory), Claude-Code-compatible |
-| MCP servers | `[[plugins]]` in `reasonix.toml`, or a Claude-Code `.mcp.json` (read as-is) |
+| MCP servers | `[[plugins]]` in `reames-agent.toml`, or a Claude-Code `.mcp.json` (read as-is) |
 
 On first launch, v1.8.1+ runs a one-time, **non-destructive** import: it reads
-legacy config from `~/Library/Application Support/reasonix/config.toml`,
-`~/.config/reasonix/config.toml`, `~/.reasonix/reasonix.toml`, or v0.x
-`~/.reasonix/config.json` (API key, base URL, language, MCP servers), migrates
-legacy credentials into `<Reasonix home>/.env` when a key is missing there, and
+legacy config from `~/Library/Application Support/reames-agent/config.toml`,
+`~/.config/reames-agent/config.toml`, `~/.reames-agent/reames-agent.toml`, or v0.x
+`~/.reames-agent/config.json` (API key, base URL, language, MCP servers), migrates
+legacy credentials into `<Reames Agent home>/.env` when a key is missing there, and
 imports past sessions from legacy session directories. Old files are left
-untouched, and Reasonix prints a boot notice when it imports data. Each session lands in the
+untouched, and Reames Agent prints a boot notice when it imports data. Each session lands in the
 workspace it belonged to (read from its v0.x sidecar meta, summary carried over
 as the title), so the desktop sidebar lists it under the right project; sessions
 whose workspace no longer exists land in the global session dir. Imported
@@ -73,7 +73,7 @@ across by hand.
 
 If the automatic pass missed data because you opened a v1.8.1+ CLI/desktop build
 before the old paths were available, run `/migrate` from an interactive session.
-The command is available only in Go-based Reasonix builds that include it; if you
+The command is available only in Go-based Reames Agent builds that include it; if you
 see `unknown command`, upgrade first. It prints progress while it checks legacy
 config and credentials, scans legacy memory and session directories, imports
 memory files and sessions that were not previously imported, and summarizes the
@@ -81,7 +81,7 @@ result. `/migrate` keeps the same safety rules as startup migration: it does not
 overwrite an existing `config.toml` or memory file, it respects session import
 markers, and it is not available in the legacy 0.x TypeScript line. If the old
 v0.x sessions are in a custom Windows install/data directory, use
-`/migrate --from "D:\OldReasonix"` to import sessions from that explicit source.
+`/migrate --from "D:\OldReames Agent"` to import sessions from that explicit source.
 See
 [Configuration paths](./CONFIG_PATHS.md) for the full path list and limitations.
 
@@ -135,7 +135,7 @@ and DeepSeek prefix-cache–oriented design.
 
 ## File encoding
 
-Reasonix 1.0 supports reading and editing files in UTF-8, UTF-8 BOM, UTF-16
+Reames Agent 1.0 supports reading and editing files in UTF-8, UTF-8 BOM, UTF-16
 LE/BE, and GB18030 (a superset of GBK). This matches v1's behavior.
 
 - `read_file` decodes any supported encoding to UTF-8 for the model.
@@ -150,4 +150,4 @@ Issues and PRs are labelled by line: **`v1`** (legacy TypeScript) and **`v2`**
 (Go). File new reports against the line you're using. The legacy `v1` line is in
 maintenance mode — bug fixes only, no new features.
 
-Questions? Open a [Discussion](https://github.com/esengine/DeepSeek-Reasonix/discussions).
+Questions? Open a [Discussion](https://github.com/esengine/DeepSeek-Reames Agent/discussions).

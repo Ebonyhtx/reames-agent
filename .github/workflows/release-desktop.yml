@@ -194,7 +194,7 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: DeepSeek-Reasonix
+          project-slug: DeepSeek-Reames Agent
           signing-policy-slug: ${{ steps.ver.outputs.channel == 'canary' && 'test-signing' || 'release-signing' }}
           artifact-configuration-slug: windows-installer
           github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
@@ -271,7 +271,7 @@ jobs:
         run: |
           # Keep the repository homepage focused on the installable desktop app;
           # the CLI release line is configured not to claim repository-wide latest.
-          args=(--title "Reasonix Desktop ${{ steps.ver.outputs.version }}" --generate-notes)
+          args=(--title "Reames Agent Desktop ${{ steps.ver.outputs.version }}" --generate-notes)
           if [ "${{ steps.ver.outputs.prerelease }}" = "true" ]; then
             args+=(--prerelease --latest=false)
           else
@@ -334,7 +334,7 @@ jobs:
       - name: Rewrite latest.json URLs to R2
         if: env.HAS_R2 == 'true'
         env:
-          R2_PUBLIC_BASE: https://dl.reasonix.io
+          R2_PUBLIC_BASE: https://dl.reames-agent.io
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
           f=assets/latest.json
@@ -373,7 +373,7 @@ jobs:
             aws s3 cp assets/ "s3://${R2_BUCKET}/latest/" --recursive --endpoint-url "$ENDPOINT"
           fi
 
-      # dl.reasonix.io serves 403 to GitHub Actions egress IPs (Cloudflare bot
+      # dl.reames-agent.io serves 403 to GitHub Actions egress IPs (Cloudflare bot
       # protection), so smoke the mirrored objects over the authenticated S3 API
       # instead of the public edge. This verifies the mirror landed; the public
       # edge itself is not reachable from CI and is covered by end users' traffic.
@@ -390,15 +390,15 @@ jobs:
           set -euo pipefail
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           f=assets/latest.json
-          jq -e --arg version "$VERSION" --arg prefix "https://dl.reasonix.io/${TAG}/" '
+          jq -e --arg version "$VERSION" --arg prefix "https://dl.reames-agent.io/${TAG}/" '
             .version == $version and
-            .download_page == "https://reasonix.io/#start" and
+            .download_page == "https://reames-agent.io/#start" and
             ([.platforms[] | (.url, .sig)] |
               all(type == "string" and startswith($prefix) and (contains("/releases/latest/") | not)))
           ' "$f" >/dev/null
 
-          aws s3 cp "s3://${R2_BUCKET}/${TAG}/latest.json" /tmp/reasonix-desktop-tag-latest.json --endpoint-url "$ENDPOINT"
-          jq -e --arg version "$VERSION" '.version == $version' /tmp/reasonix-desktop-tag-latest.json >/dev/null
+          aws s3 cp "s3://${R2_BUCKET}/${TAG}/latest.json" /tmp/reames-agent-desktop-tag-latest.json --endpoint-url "$ENDPOINT"
+          jq -e --arg version "$VERSION" '.version == $version' /tmp/reames-agent-desktop-tag-latest.json >/dev/null
           if [ "$CHANNEL" = "canary" ]; then
             pointer="canary"
           elif [ "$PRERELEASE" = "true" ]; then
@@ -407,12 +407,12 @@ jobs:
             pointer="latest"
           fi
           if [ -n "$pointer" ]; then
-            aws s3 cp "s3://${R2_BUCKET}/${pointer}/latest.json" /tmp/reasonix-desktop-pointer-latest.json --endpoint-url "$ENDPOINT"
-            jq -e --arg version "$VERSION" '.version == $version' /tmp/reasonix-desktop-pointer-latest.json >/dev/null
+            aws s3 cp "s3://${R2_BUCKET}/${pointer}/latest.json" /tmp/reames-agent-desktop-pointer-latest.json --endpoint-url "$ENDPOINT"
+            jq -e --arg version "$VERSION" '.version == $version' /tmp/reames-agent-desktop-pointer-latest.json >/dev/null
           fi
 
           jq -r '.platforms[] | .url, .sig' "$f" | while IFS= read -r asset; do
-            key="${asset#https://dl.reasonix.io/}"
+            key="${asset#https://dl.reames-agent.io/}"
             aws s3api head-object --bucket "$R2_BUCKET" --key "$key" --endpoint-url "$ENDPOINT" >/dev/null
           done
 
@@ -438,7 +438,7 @@ jobs:
           fi
           chan="stable"
           [ "$CHANNEL" = "canary" ] && chan="canary"
-          url="https://crash.reasonix.io/v1/desktop/releases/${chan}/latest.json"
+          url="https://crash.reames-agent.io/v1/desktop/releases/${chan}/latest.json"
           # curl already prints 000 for a transport failure; || true keeps -e
           # from killing the step so the case below can route it.
           code="$(curl -sS -A "Go-http-client/2.0" -o /tmp/gateway-latest.json -w '%{http_code}' "$url" || true)"

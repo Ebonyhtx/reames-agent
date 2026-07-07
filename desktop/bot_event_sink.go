@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"reasonix/internal/bot"
-	"reasonix/internal/event"
+	"reames-agent/internal/bot"
+	"reames-agent/internal/event"
 )
 
 const botForwardSendTimeout = 30 * time.Second
