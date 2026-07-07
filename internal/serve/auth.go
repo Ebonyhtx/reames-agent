@@ -213,9 +213,16 @@ func (ag *authGate) middleware(next http.Handler) http.Handler {
 		}
 		// /login and /login/ are handled directly by the auth gate — they must
 		// not pass through the CSRF guard (which rejects non-JSON POSTs).
-		if r.URL.Path == "/login" || r.URL.Path == "/login/" {
+		if r.URL.Path == "/login" || r.URL.Path == "/login/" || r.URL.Path == "/health" || r.URL.Path == "/ready" {
 			ag.handleLogin(w, r)
 			return
+		}
+		// Check X-API-Key header (for CI/API clients) in token mode.
+		if ag.mode == authToken && r.Header.Get("X-API-Key") != "" {
+			if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-API-Key")), []byte(ag.token)) == 1 {
+				next.ServeHTTP(w, r)
+				return
+			}
 		}
 		if ag.mode == authToken {
 			ag.checkToken(w, r, next)

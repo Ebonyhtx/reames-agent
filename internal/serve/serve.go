@@ -345,6 +345,9 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /skills", s.skills)
 	mux.HandleFunc("GET /todos", s.todos)
 	mux.HandleFunc("POST /delete-session", s.deleteSession)
+mux.HandleFunc("GET /health", s.health)
+mux.HandleFunc("GET /ready", s.ready)
+mux.HandleFunc("GET /ws", s.wsEvents)
 	return logMiddleware(s.auth.middleware(csrfGuard(mux)))
 }
 
@@ -1283,4 +1286,36 @@ func (s *Server) todos(w http.ResponseWriter, _ *http.Request) {
 		out[i] = todoItem{Content: t.Content, Status: t.Status, ActiveForm: t.ActiveForm, Level: t.Level}
 	}
 	writeJSON(w, out)
+}
+
+// health returns 200 when the server is reachable. No auth required.
+// Suitable for load-balancer health checks and container liveness probes.
+func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, `{"status":"ok"}`)
+}
+
+// ready returns 200 when the controller is initialized and the provider
+// connection is ready. Returns 503 when the controller is nil (not yet
+// booted) or the provider is unreachable. Suitable for Kubernetes readiness
+// probes — the pod won't receive traffic until this passes.
+func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	ctrl := s.ctl()
+	if ctrl == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, `{"status":"not_ready","reason":"controller not initialized"}`)
+		return
+	}
+	// A running turn means the provider is reachable; otherwise
+	// verify by checking the session is accessible.
+	sess := ctrl.SessionPath()
+	if sess == "" {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, `{"status":"not_ready","reason":"no active session"}`)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, `{"status":"ready"}`)
 }

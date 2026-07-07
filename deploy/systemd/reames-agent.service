@@ -1,0 +1,17 @@
+[Unit]
+Description=Reames Agent Serve
+After=network.target
+
+[Service]
+Type=simple
+User=reames
+WorkingDirectory=/opt/reames-agent
+ExecStart=/opt/reames-agent/bin/reames-agent serve --addr 0.0.0.0:8787
+Restart=always
+RestartSec=5
+Environment=REAMES_AGENT_HOME=/opt/reames-agent/data
+Environment=DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
