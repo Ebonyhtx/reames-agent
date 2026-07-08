@@ -667,7 +667,7 @@ func reamesAgentHome(override string) string {
 }
 
 func legacyGlobalSettingsPath(homeDir string) string {
-	dir := legacyReames AgentHome(homeDir)
+	dir := legacyReamesAgentHome(homeDir)
 	if dir == "" {
 		return ""
 	}
@@ -675,14 +675,14 @@ func legacyGlobalSettingsPath(homeDir string) string {
 }
 
 func legacyTrustPath(homeDir string) string {
-	dir := legacyReames AgentHome(homeDir)
+	dir := legacyReamesAgentHome(homeDir)
 	if dir == "" {
 		return ""
 	}
 	return filepath.Join(dir, TrustFilename)
 }
 
-func legacyReames AgentHome(override string) string {
+func legacyReamesAgentHome(override string) string {
 	if override != "" {
 		return ""
 	}

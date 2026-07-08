@@ -169,7 +169,7 @@ func TestConventionDirsDiscovered(t *testing.T) {
 	}
 }
 
-func TestReamesAgentHomeDirOverridesGlobalReames AgentSkills(t *testing.T) {
+func TestReamesAgentHomeDirOverridesGlobalReamesAgentSkills(t *testing.T) {
 	home := t.TempDir()
 	reamesAgentHome := filepath.Join(t.TempDir(), "rx-home")
 	writeSkill(t, home, ".reames-agent/skills/old.md", "---\ndescription: old\n---\nold")

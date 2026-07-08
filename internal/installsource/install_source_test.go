@@ -1118,7 +1118,7 @@ func TestFetchTextAppliesTimeoutAndUA(t *testing.T) {
 	}
 }
 
-func TestGlobalSkillInstallRootUsesReames AgentHome(t *testing.T) {
+func TestGlobalSkillInstallRootUsesReamesAgentHome(t *testing.T) {
 	home := t.TempDir()
 	reamesAgentHome := filepath.Join(t.TempDir(), "rx-home")
 	t.Setenv("HOME", home)

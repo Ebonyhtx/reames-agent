@@ -33,7 +33,7 @@ func setRuntimeGOOS(t *testing.T, goos string) {
 	t.Cleanup(func() { runtimeGOOS = old })
 }
 
-func expectedDefaultReames AgentHome(home string) string {
+func expectedDefaultReamesAgentHome(home string) string {
 	if runtime.GOOS == "windows" {
 		return filepath.Join(home, "AppData", "Roaming", "reames-agent")
 	}
@@ -54,15 +54,15 @@ func TestUserConfigDisplayPathCollapsesHome(t *testing.T) {
 	}
 }
 
-func TestUserConfigPathUsesReames AgentHome(t *testing.T) {
+func TestUserConfigPathUsesReamesAgentHome(t *testing.T) {
 	home := isolateUserConfigHome(t)
-	want := filepath.Join(expectedDefaultReames AgentHome(home), "config.toml")
+	want := filepath.Join(expectedDefaultReamesAgentHome(home), "config.toml")
 	if got := UserConfigPath(); filepath.Clean(got) != filepath.Clean(want) {
 		t.Fatalf("UserConfigPath() = %q, want %q", got, want)
 	}
 }
 
-func TestUserConfigPathHonorsReames AgentHome(t *testing.T) {
+func TestUserConfigPathHonorsReamesAgentHome(t *testing.T) {
 	home := isolateUserConfigHome(t)
 	custom := filepath.Join(home, "custom-home")
 	t.Setenv("REAMES_AGENT_HOME", custom)
@@ -1144,7 +1144,7 @@ func TestLegacyXDGConfigPathsEmptyWhenIsolated(t *testing.T) {
 	}
 }
 
-func TestCacheDirHonorsReames AgentHome(t *testing.T) {
+func TestCacheDirHonorsReamesAgentHome(t *testing.T) {
 	home := t.TempDir()
 	isolated := filepath.Join(home, "isolated-home")
 	t.Setenv("HOME", home)
@@ -1158,7 +1158,7 @@ func TestCacheDirHonorsReames AgentHome(t *testing.T) {
 	}
 }
 
-func TestCacheDirHonorsReames AgentCacheHomeOverReames AgentHome(t *testing.T) {
+func TestCacheDirHonorsReamesAgentCacheHomeOverReamesAgentHome(t *testing.T) {
 	home := t.TempDir()
 	cacheHome := filepath.Join(home, "custom-cache")
 	t.Setenv("HOME", home)
@@ -1179,7 +1179,7 @@ func TestUserConfigLoadPathNoLegacyFallbackWhenIsolated(t *testing.T) {
 	t.Setenv("REAMES_AGENT_HOME", isolated)
 
 	// Create a legacy config at the OS production path — it must not be loaded.
-	productionHome := expectedDefaultReames AgentHome(home)
+	productionHome := expectedDefaultReamesAgentHome(home)
 	if err := os.MkdirAll(productionHome, 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -287,7 +287,7 @@ func TestLoadIncludesPluginClaudeCompatibilityHooks(t *testing.T) {
 	}
 }
 
-func TestReames AgentHomeOverridesGlobalHookPaths(t *testing.T) {
+func TestReamesAgentHomeOverridesGlobalHookPaths(t *testing.T) {
 	home := t.TempDir()
 	reamesAgentHome := filepath.Join(t.TempDir(), "rx-home")
 	t.Setenv("HOME", home)
@@ -313,7 +313,7 @@ func TestReames AgentHomeOverridesGlobalHookPaths(t *testing.T) {
 	}
 }
 
-func TestReames AgentHomeDoesNotFallBackToLegacyWhenIsolated(t *testing.T) {
+func TestReamesAgentHomeDoesNotFallBackToLegacyWhenIsolated(t *testing.T) {
 	home := t.TempDir()
 	reamesAgentHome := filepath.Join(t.TempDir(), "rx-home")
 	proj := t.TempDir()

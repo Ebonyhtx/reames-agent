@@ -646,7 +646,7 @@ func TestStoreCredentialLinesFileMode(t *testing.T) {
 	}
 }
 
-func TestUserCredentialsPathIgnoresReames AgentStateHome(t *testing.T) {
+func TestUserCredentialsPathIgnoresReamesAgentStateHome(t *testing.T) {
 	home := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("HOME", home)
