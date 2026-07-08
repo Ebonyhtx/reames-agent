@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"reames-agent/internal/jobs"
 	"reames-agent/internal/tool"
@@ -173,4 +174,39 @@ func (waitJob) Execute(ctx context.Context, args json.RawMessage) (string, error
 		}
 	}
 	return b.String(), nil
+}
+
+// --- list_jobs: non-blocking summary of all background jobs ---
+
+type listJobs struct{}
+
+func init() { tool.RegisterBuiltin(listJobs{}) }
+
+func (listJobs) Name() string { return "list_jobs" }
+
+func (listJobs) Description() string {
+	return "List all running and recently completed background jobs (bash and task) without blocking. Returns each job's id, kind, label, status, and start time. Use to discover running jobs before calling bash_output or kill_shell."
+}
+
+func (listJobs) Schema() json.RawMessage {
+	return json.RawMessage(`{"type":"object","properties":{}}`)
+}
+
+func (listJobs) ReadOnly() bool { return true }
+
+func (listJobs) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+	jm, ok := jobs.FromContext(ctx)
+	if !ok {
+		return "", fmt.Errorf("background jobs are not available in this context")
+	}
+	views := jm.RunningForSession(jobs.SessionFromContext(ctx))
+	if len(views) == 0 {
+		return "No background jobs running.", nil
+	}
+	var b strings.Builder
+	for _, v := range views {
+		started := time.UnixMilli(v.StartedAt).Format("15:04:05")
+		fmt.Fprintf(&b, "[%s] %s %s — %s (started %s)\n", v.ID, v.Kind, v.Label, v.Status, started)
+	}
+	return strings.TrimSpace(b.String()), nil
 }
