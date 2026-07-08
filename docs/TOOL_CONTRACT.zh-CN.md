@@ -24,6 +24,9 @@
 | `todo_write` | true | 记录并替换当前工作的结构化任务列表。 |
 | `wait` | true | 等待后台 job 完成并返回最终输出。 |
 | `web_fetch` | true | 通过 HTTP/HTTPS 获取 URL 文本内容。 |
+| `web_search` | true | 搜索网络并返回标题、URL 和摘要。最多 10 条结果。 |
+| `apply_patch` | false | 将 unified diff 补丁应用到文件。支持 dry-run 预览。 |
+| `list_jobs` | true | 列出所有运行中的后台任务（bash 和 task），不阻塞。 |
 | `write_file` | false | 写入文件内容，必要时创建父目录。 |
 
 ## Schema 快照
