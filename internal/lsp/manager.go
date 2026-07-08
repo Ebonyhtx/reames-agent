@@ -288,3 +288,76 @@ func readLine(path string, line0 int) string {
 	}
 	return strings.TrimSpace(lines[line0])
 }
+
+// --- Delta diagnostics: capture baseline before edit, return only new issues after ---
+
+type diagKey struct {
+	file    string
+	line    int
+	message string
+}
+
+// baseline stores per-file diagnostic baselines for delta comparison.
+var baseline = struct {
+	mu   sync.Mutex
+	sets map[string]map[diagKey]bool
+}{sets: make(map[string]map[diagKey]bool)}
+
+// SnapshotBaseline captures the current diagnostics for file as a baseline.
+// Call before a write/edit operation.
+func (m *Manager) SnapshotBaseline(ctx context.Context, file string) {
+	path := m.abs(file)
+	c, err := m.resolve(path)
+	if err != nil {
+		return
+	}
+	uri := pathToURI(path)
+	c.ensureSynced(uri, path)
+	diags := c.waitDiagnostics(ctx, uri, c.docVersion(uri), 2*time.Second)
+
+	set := make(map[diagKey]bool)
+	for _, d := range diags {
+		set[diagKey{file: file, line: d.Range.Start.Line, message: d.Message}] = true
+	}
+
+	baseline.mu.Lock()
+	baseline.sets[file] = set
+	baseline.mu.Unlock()
+}
+
+// DeltaDiagnostics returns only diagnostics for file that are NEW since the
+// last SnapshotBaseline call (i.e. introduced by the most recent edit).
+func (m *Manager) DeltaDiagnostics(ctx context.Context, file string) (string, error) {
+	path := m.abs(file)
+	c, err := m.resolve(path)
+	if err != nil {
+		return "", err
+	}
+	uri := pathToURI(path)
+	if err := c.ensureSynced(uri, path); err != nil {
+		return "", err
+	}
+	diags := c.waitDiagnostics(ctx, uri, c.docVersion(uri), 2*time.Second)
+
+	baseline.mu.Lock()
+	set := baseline.sets[file]
+	delete(baseline.sets, file) // consumed
+	baseline.mu.Unlock()
+
+	if set == nil {
+		return formatDiagnostics(m.rel(path), diags), nil // no baseline, return all
+	}
+
+	var newDiags []Diagnostic
+	for _, d := range diags {
+		key := diagKey{file: file, line: d.Range.Start.Line, message: d.Message}
+		if !set[key] {
+			newDiags = append(newDiags, d)
+		}
+	}
+
+	if len(newDiags) == 0 {
+		return "", nil
+	}
+	return formatDiagnostics(m.rel(path), newDiags), nil
+}
