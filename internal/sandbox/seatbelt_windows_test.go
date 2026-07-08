@@ -86,7 +86,7 @@ func TestConvertWindowsSandboxSpec(t *testing.T) {
 	got.WritableRoots[0] = `C:\mutated`
 	got.ForbidReadRoots[0] = `C:\mutated`
 	if spec.WriteRoots[0] == got.WritableRoots[0] || spec.ForbidReadRoots[0] == got.ForbidReadRoots[0] {
-		t.Fatal("converted spec should not alias Reasonix slices")
+		t.Fatal("converted spec should not alias Reames Agent slices")
 	}
 }
 

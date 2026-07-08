@@ -7,12 +7,12 @@ import (
 )
 
 func TestInstallerCommandLineIsSilentAndKeepsDFlagLast(t *testing.T) {
-	got := installerCommandLine(`C:\Temp\Reasonix Installer.exe`, `D:\Tools\Reasonix App`)
-	want := `"C:\Temp\Reasonix Installer.exe" /S /D=D:\Tools\Reasonix App`
+	got := installerCommandLine(`C:\Temp\Reames Agent Installer.exe`, `D:\Tools\Reames Agent App`)
+	want := `"C:\Temp\Reames Agent Installer.exe" /S /D=D:\Tools\Reames Agent App`
 	if got != want {
 		t.Fatalf("installerCommandLine = %q, want %q", got, want)
 	}
-	if !strings.HasSuffix(got, `/D=D:\Tools\Reasonix App`) {
+	if !strings.HasSuffix(got, `/D=D:\Tools\Reames Agent App`) {
 		t.Fatalf("/D= must be the final unquoted NSIS token, got %q", got)
 	}
 }
@@ -20,15 +20,15 @@ func TestInstallerCommandLineIsSilentAndKeepsDFlagLast(t *testing.T) {
 func TestWindowsUpdateHandoffArgsCarryParentInstallAndRelaunch(t *testing.T) {
 	got := windowsUpdateHandoffArgs(
 		4242,
-		`C:\Users\Jane Doe\AppData\Local\Reasonix\updates\Reasonix-windows-amd64-installer.exe`,
-		`D:\Tools\Reasonix App`,
-		`D:\Tools\Reasonix App\reamesAgent-desktop.exe`,
+		`C:\Users\Jane Doe\AppData\Local\Reames Agent\updates\Reames Agent-windows-amd64-installer.exe`,
+		`D:\Tools\Reames Agent App`,
+		`D:\Tools\Reames Agent App\reamesAgent-desktop.exe`,
 	)
 	want := []string{
 		"--parent-pid", "4242",
-		"--installer", `C:\Users\Jane Doe\AppData\Local\Reasonix\updates\Reasonix-windows-amd64-installer.exe`,
-		"--install-dir", `D:\Tools\Reasonix App`,
-		"--relaunch", `D:\Tools\Reasonix App\reamesAgent-desktop.exe`,
+		"--installer", `C:\Users\Jane Doe\AppData\Local\Reames Agent\updates\Reames Agent-windows-amd64-installer.exe`,
+		"--install-dir", `D:\Tools\Reames Agent App`,
+		"--relaunch", `D:\Tools\Reames Agent App\reamesAgent-desktop.exe`,
 	}
 	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("args = %#v, want %#v", got, want)

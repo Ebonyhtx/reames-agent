@@ -151,7 +151,7 @@ func TestSaveCachedUpdateMarksEvaluateDownloaded(t *testing.T) {
 
 	data := []byte("verified artifact")
 	asset := update.Asset{
-		URL:    "https://dl.reamesAgent.io/desktop-v9.9.9/Reasonix-linux-amd64.tar.gz",
+		URL:    "https://dl.reamesAgent.io/desktop-v9.9.9/Reames Agent-linux-amd64.tar.gz",
 		Size:   int64(len(data)),
 		SHA256: sha256Hex(data),
 	}
@@ -182,7 +182,7 @@ func TestCachedUpdateRejectsTamperedArtifact(t *testing.T) {
 
 	data := []byte("verified artifact")
 	asset := update.Asset{
-		URL:    "https://dl.reamesAgent.io/desktop-v9.9.9/Reasonix-linux-amd64.tar.gz",
+		URL:    "https://dl.reamesAgent.io/desktop-v9.9.9/Reames Agent-linux-amd64.tar.gz",
 		Size:   int64(len(data)),
 		SHA256: sha256Hex(data),
 	}
@@ -209,7 +209,7 @@ func TestCachedUpdateRejectsDifferentChannel(t *testing.T) {
 
 	data := []byte("verified artifact")
 	asset := update.Asset{
-		URL:    "https://dl.reamesAgent.io/desktop-v9.9.9/Reasonix-linux-amd64.tar.gz",
+		URL:    "https://dl.reamesAgent.io/desktop-v9.9.9/Reames Agent-linux-amd64.tar.gz",
 		Size:   int64(len(data)),
 		SHA256: sha256Hex(data),
 	}

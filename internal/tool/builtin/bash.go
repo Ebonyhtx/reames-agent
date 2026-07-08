@@ -81,7 +81,7 @@ func cachedBashShellPATH(ctx context.Context) string {
 // empty uses the process cwd. timeout optionally caps foreground commands;
 // zero or negative means no tool-local cap, while parent context cancellation
 // still kills the process tree. guard appends a warning to the output of
-// commands that reference Reasonix's own session stores (see SessionDataGuard).
+// commands that reference Reames Agent's own session stores (see SessionDataGuard).
 type bash struct {
 	sb      sandbox.Spec
 	shell   sandbox.Shell

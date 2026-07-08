@@ -18,7 +18,7 @@ import (
 func TestBuildUnknownModelErrorIsActionable(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "legacy-missing"
 
 [[providers]]
@@ -44,7 +44,7 @@ api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 func TestBuildMigratesLegacyBareMimoModelOverride(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "deepseek-flash"
 
 [[providers]]
@@ -72,7 +72,7 @@ func TestBuildNoticesMissingAPIKey(t *testing.T) {
 	const keyEnv = "REAMES_AGENT_MISSING_KEY_FOR_TEST"
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "x"
 
 [[providers]]
@@ -112,7 +112,7 @@ func TestBuildDoesNotNoticeMissingAPIKeyForNoAuthLoopback(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 	t.Setenv(keyEnv, "")
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "local/model-a"
 
 [[providers]]

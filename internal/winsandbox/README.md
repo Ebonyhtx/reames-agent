@@ -1,6 +1,6 @@
 # internal/winsandbox
 
-Reasonix's bundled native Windows process sandbox helpers.
+Reames Agent's bundled native Windows process sandbox helpers.
 
 This package provides a small Windows-only sandbox runner built from platform
 primitives:

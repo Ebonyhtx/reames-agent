@@ -8,7 +8,7 @@ import (
 )
 
 // ProviderPreset is a curated, editable provider starter template. Presets are
-// not secret-bearing: API key values still live only in Reasonix home .env.
+// not secret-bearing: API key values still live only in Reames Agent home .env.
 type ProviderPreset struct {
 	ID          string
 	Label       string

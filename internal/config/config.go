@@ -1,5 +1,5 @@
-// Package config loads Reasonix's runtime configuration from TOML. Resolution order:
-// flag > project ./reamesAgent.toml > user config.toml (in the OS user-config dir) > built-in defaults.
+// Package config loads Reames Agent's runtime configuration from TOML. Resolution order:
+// flag > project ./reames-agent.toml > user config.toml (in the OS user-config dir) > built-in defaults.
 // User-global runtime controls, such as agent step limits, are documented exceptions.
 // Secrets come from the environment via api_key_env and are never stored in
 // config files.
@@ -37,7 +37,7 @@ func SkillNameKey(name string) string {
 	return name
 }
 
-// Config is Reasonix's runtime configuration.
+// Config is Reames Agent's runtime configuration.
 type Config struct {
 	ConfigVersion    int                 `toml:"config_version"`
 	DefaultModel     string              `toml:"default_model"`
@@ -645,7 +645,7 @@ type ServeConfig struct {
 	// cryptographically random token is generated at startup and printed.
 	Token string `toml:"token"`
 	// PasswordHash is a bcrypt hash of the password for auth_mode = "password".
-	// Generate one with: reamesAgent serve --hash-password --password '...'
+	// Generate one with: reames-agent serve --hash-password --password '...'
 	PasswordHash string `toml:"password_hash"`
 	// BehindProxy indicates the server sits behind a trusted reverse proxy
 	// (nginx, Caddy, Cloudflare, etc.) that sets X-Forwarded-For and
@@ -1390,7 +1390,7 @@ type PermissionsConfig struct {
 // static Headers. String fields support ${VAR} / ${VAR:-default} expansion so
 // secrets (bearer tokens, keys) come from the environment, not the file. The
 // fields mirror Claude Code's mcpServers spec, so entries can come from either
-// reamesAgent.toml's [[plugins]] or a project-root .mcp.json (see loadMCPJSON).
+// reames-agent.toml's [[plugins]] or a project-root .mcp.json (see loadMCPJSON).
 type PluginEntry struct {
 	Name    string            `toml:"name"`
 	Type    string            `toml:"type"` // "stdio" (default) | "http" | "sse"
@@ -1406,7 +1406,7 @@ type PluginEntry struct {
 	// from this server. Keys are server-local tool names, not model-visible
 	// mcp__server__tool names.
 	ToolTimeoutSeconds map[string]int `toml:"tool_timeout_seconds"`
-	// TrustedReadOnlyTools names raw MCP tool names that Reasonix should treat as
+	// TrustedReadOnlyTools names raw MCP tool names that Reames Agent should treat as
 	// trusted read-only for planner / plan-mode / read-only research surfaces.
 	// Use this only for tools whose semantics are known to be side-effect free.
 	TrustedReadOnlyTools []string `toml:"trusted_read_only_tools"`
@@ -1462,7 +1462,7 @@ func (c *Config) AutoStartPlugins() []PluginEntry {
 }
 
 // DefaultSystemPrompt is used when config provides none.
-const DefaultSystemPrompt = `You are Reasonix, a coding agent focused on executing code tasks.
+const DefaultSystemPrompt = `You are Reames Agent, a coding agent focused on executing code tasks.
 Use the provided tools to read and write files and run shell commands.
 Principles: understand the request before acting; verify with tools instead of
 guessing; keep changes minimal and correct; briefly summarize what you did.
@@ -1513,7 +1513,7 @@ func Default() *Config {
 			CompactForceRatio:   0.9,
 			MaxSubagentDepth:    2,
 		},
-		// Mode "ask" with no rules keeps `reamesAgent run` autonomous (no TTY → ask
+		// Mode "ask" with no rules keeps `reames-agent run` autonomous (no TTY → ask
 		// resolves to allow) while `reamesAgent` prompts before writers. Users add
 		// deny/allow rules to harden or quiet specific tools.
 		Permissions: PermissionsConfig{Mode: "ask"},
@@ -1668,7 +1668,7 @@ func (e *ProviderEntry) APIKey() string {
 
 // ResolveAPIKeyFromProcessEnvForProbe pins a setup-time, user-entered key onto
 // this entry for an immediate connectivity probe. Normal runtime resolution does
-// not call this; loaded provider entries still resolve only from Reasonix's
+// not call this; loaded provider entries still resolve only from Reames Agent's
 // global .env.
 func (e *ProviderEntry) ResolveAPIKeyFromProcessEnvForProbe() {
 	if e == nil {

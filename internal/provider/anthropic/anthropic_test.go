@@ -464,7 +464,7 @@ func TestStreamSupportsBearerAuthHeaderAndCustomHeaders(t *testing.T) {
 		t.Fatalf("anthropic-version = %q, want %q", gotVersion, anthropicVersion)
 	}
 	if gotUserAgent != "Reames Agent" {
-		t.Fatalf("User-Agent = %q, want Reasonix", gotUserAgent)
+		t.Fatalf("User-Agent = %q, want Reames Agent", gotUserAgent)
 	}
 }
 

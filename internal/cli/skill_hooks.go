@@ -258,7 +258,7 @@ func (m *chatTUI) runHooksSubcommand(input string) {
 			m.notice("hooks trust: " + err.Error())
 			return
 		}
-		m.notice("trusted this project's hooks — restart Reasonix to load them")
+		m.notice("trusted this project's hooks — restart Reames Agent to load them")
 	default:
 		m.notice("unknown /hooks subcommand " + args[1] + " — try: /hooks, /hooks trust")
 	}

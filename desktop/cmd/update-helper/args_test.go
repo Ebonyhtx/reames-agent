@@ -6,12 +6,12 @@ import (
 )
 
 func TestInstallerCommandLineIsSilentAndLeavesDFlagLast(t *testing.T) {
-	got := installerCommandLine(`C:\Temp\Reasonix Installer.exe`, `D:\Tools\Reasonix App`)
-	want := `"C:\Temp\Reasonix Installer.exe" /S /D=D:\Tools\Reasonix App`
+	got := installerCommandLine(`C:\Temp\Reames Agent Installer.exe`, `D:\Tools\Reames Agent App`)
+	want := `"C:\Temp\Reames Agent Installer.exe" /S /D=D:\Tools\Reames Agent App`
 	if got != want {
 		t.Fatalf("installerCommandLine = %q, want %q", got, want)
 	}
-	if !strings.HasSuffix(got, `/D=D:\Tools\Reasonix App`) {
+	if !strings.HasSuffix(got, `/D=D:\Tools\Reames Agent App`) {
 		t.Fatalf("/D= must be the final unquoted NSIS token, got %q", got)
 	}
 }

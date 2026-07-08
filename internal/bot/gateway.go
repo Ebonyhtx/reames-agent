@@ -144,7 +144,7 @@ type AdapterHealthSnapshot struct {
 	Closed        bool      `json:"closed"`
 }
 
-// BotGateway 是 reamesAgent bot 消息网关，管理 Controller 生命周期、session 并发、
+// BotGateway 是 reames-agent bot 消息网关，管理 Controller 生命周期、session 并发、
 // 事件渲染和平台适配器。
 type BotGateway struct {
 	cfg      GatewayConfig
@@ -969,7 +969,7 @@ func (gw *BotGateway) offerPairing(ctx context.Context, adapter Adapter, msg Inb
 	if !created {
 		prefix = "你已有待批准的配对请求。"
 	}
-	text := fmt.Sprintf("%s\n配对码: %s\n请在本机运行: reamesAgent bot pairing approve %s\n此码将在 %s 过期。",
+	text := fmt.Sprintf("%s\n配对码: %s\n请在本机运行: reames-agent bot pairing approve %s\n此码将在 %s 过期。",
 		prefix, req.Code, req.Code, req.ExpiresAt.Local().Format("2006-01-02 15:04"))
 	_ = gw.sendText(ctx, adapter, msg, text)
 	return true

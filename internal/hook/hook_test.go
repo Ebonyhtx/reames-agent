@@ -287,7 +287,7 @@ func TestLoadIncludesPluginClaudeCompatibilityHooks(t *testing.T) {
 	}
 }
 
-func TestReasonixHomeOverridesGlobalHookPaths(t *testing.T) {
+func TestReames AgentHomeOverridesGlobalHookPaths(t *testing.T) {
 	home := t.TempDir()
 	reamesAgentHome := filepath.Join(t.TempDir(), "rx-home")
 	t.Setenv("HOME", home)
@@ -302,18 +302,18 @@ func TestReasonixHomeOverridesGlobalHookPaths(t *testing.T) {
 	writeSettings(t, home, `{"hooks":{"PostToolUse":[{"command":"echo old"}]}}`)
 
 	if got := GlobalSettingsPath(""); got != filepath.Join(reamesAgentHome, SettingsFilename) {
-		t.Fatalf("GlobalSettingsPath = %q, want Reasonix home", got)
+		t.Fatalf("GlobalSettingsPath = %q, want Reames Agent home", got)
 	}
 	if got := TrustPath(""); got != filepath.Join(reamesAgentHome, TrustFilename) {
-		t.Fatalf("TrustPath = %q, want Reasonix home", got)
+		t.Fatalf("TrustPath = %q, want Reames Agent home", got)
 	}
 	hooks := Load(LoadOptions{})
 	if len(hooks) != 1 || hooks[0].Command != "echo rx" {
-		t.Fatalf("Load hooks = %+v, want Reasonix home hook only", hooks)
+		t.Fatalf("Load hooks = %+v, want Reames Agent home hook only", hooks)
 	}
 }
 
-func TestReasonixHomeDoesNotFallBackToLegacyWhenIsolated(t *testing.T) {
+func TestReames AgentHomeDoesNotFallBackToLegacyWhenIsolated(t *testing.T) {
 	home := t.TempDir()
 	reamesAgentHome := filepath.Join(t.TempDir(), "rx-home")
 	proj := t.TempDir()
@@ -346,7 +346,7 @@ func TestReasonixHomeDoesNotFallBackToLegacyWhenIsolated(t *testing.T) {
 		t.Fatalf("Trust: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(reamesAgentHome, TrustFilename)); err != nil {
-		t.Fatalf("Trust should write current Reasonix home trust file: %v", err)
+		t.Fatalf("Trust should write current Reames Agent home trust file: %v", err)
 	}
 }
 

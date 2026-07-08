@@ -13,14 +13,14 @@ import (
 	"reames-agent/internal/mcpdiag"
 )
 
-// mcpJSONFile is the project-root file Claude Code calls .mcp.json. Reasonix reads
+// mcpJSONFile is the project-root file Claude Code calls .mcp.json. Reames Agent reads
 // it so an MCP server already configured for Claude works here unchanged — the
 // server specs map field-for-field onto PluginEntry.
 const mcpJSONFile = ".mcp.json"
 
 // mcpServerSpec mirrors one entry of Claude Code's "mcpServers" map. The field
 // names and semantics match PluginEntry: command/args/env describe a local
-// stdio server; type/url/headers describe a remote one. Reasonix also accepts
+// stdio server; type/url/headers describe a remote one. Reames Agent also accepts
 // timeout fields as MCP call policy extensions.
 type mcpServerSpec struct {
 	Type                 string            `json:"type"`
@@ -210,8 +210,8 @@ func pluginEntryFromMCPSpec(name string, s mcpServerSpec) PluginEntry {
 }
 
 // mergeMCPJSON appends servers from .mcp.json that the TOML config did not
-// already declare. reamesAgent.toml's [[plugins]] win on a name collision: it is the
-// Reasonix-specific, more explicit of the two, so it overrides the shared,
+// already declare. reames-agent.toml's [[plugins]] win on a name collision: it is the
+// Reames Agent-specific, more explicit of the two, so it overrides the shared,
 // checked-in .mcp.json rather than the other way round.
 func (c *Config) mergeMCPJSON(entries []PluginEntry) {
 	have := make(map[string]bool, len(c.Plugins))

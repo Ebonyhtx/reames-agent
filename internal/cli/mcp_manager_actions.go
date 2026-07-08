@@ -310,7 +310,7 @@ func mcpConfigLocation() string {
 	if path := config.UserConfigPath(); path != "" {
 		return path
 	}
-	return "reamesAgent.toml"
+	return "reames-agent.toml"
 }
 
 type mcpEditConfigLaunch struct {

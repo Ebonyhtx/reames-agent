@@ -126,7 +126,7 @@ func mainThreadHangReport(age time.Duration, lastHeartbeat, observedAt time.Time
 	age = age.Round(time.Second)
 	message := fmt.Sprintf(`[mac.main_thread.hang]
 
-Reasonix detected that the macOS main-thread heartbeat stopped for %s.
+Reames Agent detected that the macOS main-thread heartbeat stopped for %s.
 
 --- watchdog context ---
 last heartbeat: %s

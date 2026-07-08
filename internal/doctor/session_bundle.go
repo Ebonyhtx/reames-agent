@@ -206,7 +206,7 @@ func resolveSessionBundlePath(ref string) (string, error) {
 		}
 	}
 	if len(matches) == 0 {
-		return "", fmt.Errorf("session %q not found under Reasonix session directories", branch)
+		return "", fmt.Errorf("session %q not found under Reames Agent session directories", branch)
 	}
 	sort.Strings(matches)
 	if len(matches) > 1 {

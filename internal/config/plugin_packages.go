@@ -11,7 +11,7 @@ import (
 
 // mergeInstalledPluginPackages overlays enabled plugin package capabilities onto
 // the in-memory config. It never writes config.toml: plugin package state lives
-// in <Reasonix home>/plugin-packages.json so uninstall/disable can remove the
+// in <Reames Agent home>/plugin-packages.json so uninstall/disable can remove the
 // entire bundle without editing user-authored config.
 func mergeInstalledPluginPackages(cfg *Config, root string) []string {
 	if cfg == nil {

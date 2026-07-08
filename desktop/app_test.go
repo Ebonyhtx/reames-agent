@@ -673,7 +673,7 @@ func TestSettingsUsesUserDesktopPreferencesNotProjectConfig(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	project := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reames-agent.toml"), []byte(`
 [desktop]
 language = "zh"
 layout_style = "workbench"
@@ -922,7 +922,7 @@ func TestSettingsSeedsMissingUserConfigFromLegacyProjectConfig(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	project := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reames-agent.toml"), []byte(`
 default_model = "legacy-provider/legacy-model"
 
 [desktop]
@@ -2802,7 +2802,7 @@ base_url = "https://api.deepseek.com"
 model = "deepseek-v4-flash"
 api_key_env = "DEEPSEEK_API_KEY"
 `
-	if err := os.WriteFile(filepath.Join(projectRoot, "reamesAgent.toml"), []byte(projectConfig), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectRoot, "reames-agent.toml"), []byte(projectConfig), 0o644); err != nil {
 		t.Fatalf("write project config: %v", err)
 	}
 
@@ -3605,7 +3605,7 @@ api_key_env = "OWNER_MODEL_KEY"
 supported_efforts = ["max"]
 default_effort = "max"
 `
-	if err := os.WriteFile(filepath.Join(projectA, "reamesAgent.toml"), []byte(ownerConfig), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectA, "reames-agent.toml"), []byte(ownerConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	staleConfig := `default_model = "stale/stale-model"
@@ -3617,7 +3617,7 @@ model = "stale-model"
 api_key_env = "STALE_MODEL_KEY"
 reasoning_protocol = "none"
 `
-	if err := os.WriteFile(filepath.Join(projectB, "reamesAgent.toml"), []byte(staleConfig), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectB, "reames-agent.toml"), []byte(staleConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -6285,7 +6285,7 @@ func TestForkCreatesActiveTabWithoutSwitchingSourceController(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	workspace := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(workspace, "reamesAgent.toml"), []byte(""), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workspace, "reames-agent.toml"), []byte(""), 0o644); err != nil {
 		t.Fatalf("write workspace config: %v", err)
 	}
 	dir := config.SessionDir()
@@ -6379,7 +6379,7 @@ func TestCapabilitiesShowsDefaultMCPAsAutomaticIdleNotDisabled(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "playwright"
 command = "npx"
@@ -6464,7 +6464,7 @@ func TestDesktopSharedHostBackgroundMCPAutoConnectsOnBoot(t *testing.T) {
 
 	srv := desktopMCPHTTPServer(t)
 	defer srv.Close()
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(fmt.Sprintf(`
 [[plugins]]
 name = "h"
 type = "http"
@@ -6520,7 +6520,7 @@ func TestMCPServersMatchesCapabilitiesServerProjection(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "playwright"
 command = "npx"
@@ -6542,7 +6542,7 @@ func TestConfiguredMCPWithFormerBuiltInNameIsUserServer(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "time"
 command = "custom-time"
@@ -6593,7 +6593,7 @@ func TestSetMCPServerEnabledSharedHostPreservesSiblingTabs(t *testing.T) {
 
 	srv := desktopMCPHTTPServer(t)
 	defer srv.Close()
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(fmt.Sprintf(`
 [[plugins]]
 name = "h"
 type = "http"
@@ -6690,7 +6690,7 @@ func TestEditAndRemoveConfiguredMCPWithBuiltInName(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "time"
 command = "custom-time"
@@ -6736,7 +6736,7 @@ func TestRemoveMCPServerClearsRecordedStartupFailure(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "broken"
 command = "reamesAgent-missing-mcp-binary"
@@ -6856,7 +6856,7 @@ func TestTrustMCPServerToolPersistsTrustedReadOnlyTools(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "github"
 command = "npx"
@@ -7008,7 +7008,7 @@ func TestCapabilitiesMarksBackgroundRemoteMCPAuthPossible(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "dida"
 type = "http"
@@ -7038,7 +7038,7 @@ func TestCapabilitiesDoesNotMarkRemoteMCPWithAuthHeaderPossible(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "stripe"
 type = "http"
@@ -7069,7 +7069,7 @@ func TestCapabilitiesMarksAuthFailureRequired(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "figma"
 type = "http"
@@ -7101,7 +7101,7 @@ func TestClearMCPServerAuthenticationClearsConfigAndFailure(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "figma"
 type = "http"
@@ -7161,7 +7161,7 @@ func TestUpdateMCPServerMigratesLegacyTierToBackground(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "playwright"
 command = "npx"
@@ -7209,7 +7209,7 @@ tier = "lazy"
 	if userPlugin.Tier != "" {
 		t.Fatalf("user plugin tier = %q, want migrated empty", userPlugin.Tier)
 	}
-	projectCfg := config.LoadForEdit(filepath.Join(dir, "reamesAgent.toml"))
+	projectCfg := config.LoadForEdit(filepath.Join(dir, "reames-agent.toml"))
 	if _, ok := findPluginEntry(projectCfg.Plugins, "playwright"); ok {
 		t.Fatalf("project plugin should be removed after desktop migration: %+v", projectCfg.Plugins)
 	}
@@ -7232,7 +7232,7 @@ func TestUpdateMCPServerSplitsPastedCommandLine(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := t.TempDir()
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "playwright"
 command = "npx"
@@ -7270,7 +7270,7 @@ func TestUpdateMCPServerRecordsReconnectFailure(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "broken"
 command = "npx"
@@ -7322,7 +7322,7 @@ func TestReconnectMCPServerClearsInitializingPlaceholderAndRecordsFailure(t *tes
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "codegraph"
 `), 0o644); err != nil {
@@ -7378,7 +7378,7 @@ func TestSetMCPServerTierRecordsConnectFailure(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "broken"
 command = "reamesAgent-missing-mcp-binary"
@@ -7413,7 +7413,7 @@ tier = "lazy"
 	if userPlugin.Tier != "" {
 		t.Fatalf("user plugin tier = %q, want migrated empty", userPlugin.Tier)
 	}
-	projectCfg := config.LoadForEdit(filepath.Join(dir, "reamesAgent.toml"))
+	projectCfg := config.LoadForEdit(filepath.Join(dir, "reames-agent.toml"))
 	if _, ok := findPluginEntry(projectCfg.Plugins, "broken"); ok {
 		t.Fatalf("project plugin should be removed after desktop migration: %+v", projectCfg.Plugins)
 	}
@@ -7471,7 +7471,7 @@ func TestCapabilitiesMigratesFailedMCPConfiguredTierAfterRestart(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "broken"
 command = "reamesAgent-missing-mcp-binary"

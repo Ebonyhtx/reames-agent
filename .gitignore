@@ -43,7 +43,7 @@ node_modules/
 .pnpm-store/
 .npm/
 
-# Project-local Reasonix state; keep the checked-in review command.
+# Project-local Reames Agent state; keep the checked-in review command.
 /.reames-agent/*
 !/.reames-agent/commands/
 !/.reames-agent/commands/review.md

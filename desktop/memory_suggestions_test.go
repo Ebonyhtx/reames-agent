@@ -192,7 +192,7 @@ func TestMemorySuggestionsAcceptSkillCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read skill: %v", err)
 	}
-	if !strings.Contains(string(body), "Review or update a Reasonix GitHub PR") {
+	if !strings.Contains(string(body), "Review or update a Reames Agent GitHub PR") {
 		t.Fatalf("skill body missing description: %s", body)
 	}
 }

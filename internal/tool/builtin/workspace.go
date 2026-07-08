@@ -23,7 +23,7 @@ import (
 // root, so writes stay inside the project by default. ForbidReadRoots confines
 // the read/list/search built-ins so they cannot peek at the listed directories.
 // Bash is the OS-sandbox spec for the bash tool (as ConfineBash). SessionGuard
-// rejects writer-tool targets inside Reasonix's own session stores and makes
+// rejects writer-tool targets inside Reames Agent's own session stores and makes
 // bash warn when a command references them (see SessionDataGuard).
 type Workspace struct {
 	Dir             string

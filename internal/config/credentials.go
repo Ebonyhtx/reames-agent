@@ -133,9 +133,9 @@ func credentialEnvNamesForRoot(root string) []string {
 	root = resolveRoot(root)
 	cfg := Default()
 
-	projectTOML := "reamesAgent.toml"
+	projectTOML := "reames-agent.toml"
 	if root != "." {
-		projectTOML = filepath.Join(root, "reamesAgent.toml")
+		projectTOML = filepath.Join(root, "reames-agent.toml")
 	}
 	if uc := userConfigLoadPath(); uc != "" {
 		_ = mergeFile(cfg, uc)

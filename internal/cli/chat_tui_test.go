@@ -111,7 +111,7 @@ func writeTUIImageCapabilityConfig(t *testing.T, root string) {
 		Models:       []string{"text-only", "vision-pro"},
 		VisionModels: []string{"vision-pro"},
 	}}
-	if err := cfg.SaveTo(filepath.Join(root, "reamesAgent.toml")); err != nil {
+	if err := cfg.SaveTo(filepath.Join(root, "reames-agent.toml")); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 }
@@ -1375,7 +1375,7 @@ func TestAutoPlanCommandPersistsAndUpdatesController(t *testing.T) {
 
 func TestAutoPlanCommandWritesUserConfigNotProjectConfig(t *testing.T) {
 	isolateUserConfig(t)
-	projectPath := filepath.Join(mustGetwd(t), "reamesAgent.toml")
+	projectPath := filepath.Join(mustGetwd(t), "reames-agent.toml")
 	if err := os.WriteFile(projectPath, []byte("[agent]\nauto_plan = \"off\"\n"), 0o644); err != nil {
 		t.Fatalf("write project config: %v", err)
 	}
@@ -1424,7 +1424,7 @@ func TestReasoningLanguageCommandPersistsAndUpdatesController(t *testing.T) {
 
 func TestReasoningLanguageCommandWritesUserConfigNotProjectConfig(t *testing.T) {
 	isolateUserConfig(t)
-	projectPath := filepath.Join(mustGetwd(t), "reamesAgent.toml")
+	projectPath := filepath.Join(mustGetwd(t), "reames-agent.toml")
 	if err := os.WriteFile(projectPath, []byte("[agent]\nreasoning_language = \"en\"\n"), 0o644); err != nil {
 		t.Fatalf("write project config: %v", err)
 	}
@@ -1451,7 +1451,7 @@ func TestReasoningLanguageCommandWritesUserConfigNotProjectConfig(t *testing.T) 
 
 func TestMemoryV5CommandWritesUserConfigNotProjectConfig(t *testing.T) {
 	isolateUserConfig(t)
-	projectPath := filepath.Join(mustGetwd(t), "reamesAgent.toml")
+	projectPath := filepath.Join(mustGetwd(t), "reames-agent.toml")
 	if err := os.WriteFile(projectPath, []byte("[agent]\nmemory_compiler = { enabled = true }\n"), 0o644); err != nil {
 		t.Fatalf("write project config: %v", err)
 	}
@@ -1529,7 +1529,7 @@ func TestLanguageCommandAutoClearsLowerPriorityUserOverride(t *testing.T) {
 		t.Fatalf("save user config: %v", err)
 	}
 	projectCfg := config.Default()
-	if err := projectCfg.SaveTo("reamesAgent.toml"); err != nil {
+	if err := projectCfg.SaveTo("reames-agent.toml"); err != nil {
 		t.Fatalf("save project config: %v", err)
 	}
 
@@ -2477,7 +2477,7 @@ func TestSlashMigrateShowsProgress(t *testing.T) {
 
 func TestSlashMigrateFromImportsExplicitSessions(t *testing.T) {
 	home := isolateCLIConfigHome(t)
-	legacySessions := filepath.Join(home, "Old Reasonix", "sessions")
+	legacySessions := filepath.Join(home, "Old Reames Agent", "sessions")
 	if err := os.MkdirAll(legacySessions, 0o755); err != nil {
 		t.Fatal(err)
 	}

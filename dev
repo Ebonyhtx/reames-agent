@@ -33,7 +33,7 @@ export REASONIX_DEV=1
 export npm_config_confirm_modules_purge=false
 export npm_config_minimum_release_age=0
 
-echo "Reasonix desktop dev"
+echo "Reames Agent desktop dev"
 echo "  worktree: $root"
 echo "  vite:     http://127.0.0.1:$vite_port"
 echo "  wails:    127.0.0.1:$wails_port"

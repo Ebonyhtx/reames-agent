@@ -93,7 +93,7 @@ func ImportCCSwitchMCPEntries(entries []PluginEntry) (total, added, updated int,
 }
 
 // ImportCCSwitchMCP upserts cc-switch's Codex-enabled MCP servers into the
-// active Reasonix config and saves it.
+// active Reames Agent config and saves it.
 func ImportCCSwitchMCP() (total, added, updated int, err error) {
 	entries, err := LoadCCSwitchMCP()
 	if err != nil {

@@ -193,7 +193,7 @@ func TestRunLegacyRescueSkipsImplicitSourcesWhenIsolated(t *testing.T) {
 
 func TestRunLegacyRescueCommandImportsFromExplicitInstallDir(t *testing.T) {
 	home := isolateMigrationHome(t)
-	installRoot := filepath.Join(home, "Custom Reasonix")
+	installRoot := filepath.Join(home, "Custom Reames Agent")
 	legacySessions := filepath.Join(installRoot, "sessions")
 	if err := os.MkdirAll(legacySessions, 0o755); err != nil {
 		t.Fatal(err)
@@ -247,7 +247,7 @@ func TestMigrateLegacySessionSourcesSkipsCurrentProjectTree(t *testing.T) {
 	t.Setenv("REAMES_AGENT_HOME", "")
 	t.Setenv("REAMES_AGENT_STATE_HOME", "")
 	if !samePath(config.MemoryUserDir(), filepath.Join(home, ".reames-agent")) {
-		t.Skip("current Reasonix home is not ~/.reamesAgent on this platform")
+		t.Skip("current Reames Agent home is not ~/.reamesAgent on this platform")
 	}
 
 	projectSessions := filepath.Join(config.MemoryUserDir(), "projects", "current-project", "sessions")

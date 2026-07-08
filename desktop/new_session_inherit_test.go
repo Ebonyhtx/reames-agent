@@ -13,7 +13,7 @@ import (
 func TestEnsureBlankTabInheritsActiveTabLocalSettings(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	workspace := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(workspace, "reamesAgent.toml"),
+	if err := os.WriteFile(filepath.Join(workspace, "reames-agent.toml"),
 		[]byte(""), 0o644); err != nil {
 		t.Fatalf("write workspace config: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestEnsureBlankTabInheritsActiveTabLocalSettings(t *testing.T) {
 func TestEnsureBlankTabUsesGlobalSessionDefaultsForModelAndToolApproval(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	workspace := robustTempDir(t)
-	if err := os.WriteFile(filepath.Join(workspace, "reamesAgent.toml"),
+	if err := os.WriteFile(filepath.Join(workspace, "reames-agent.toml"),
 		[]byte(""), 0o644); err != nil {
 		t.Fatalf("write workspace config: %v", err)
 	}

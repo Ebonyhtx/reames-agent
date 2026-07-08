@@ -17,7 +17,7 @@ type windowsSandboxPayload struct {
 	Writable bool `json:"writable"`
 }
 
-// Command wraps the shell invocation in Reasonix's hidden Windows sandbox
+// Command wraps the shell invocation in Reames Agent's hidden Windows sandbox
 // helper. The helper applies the native Windows sandbox backend and a Job
 // Object before starting the requested command.
 func Command(spec Spec, sh Shell, command string) ([]string, bool) {
@@ -51,7 +51,7 @@ func windowsSandboxCommand(spec Spec, args []string, writable bool) ([]string, b
 	return out, true
 }
 
-// Available reports whether Reasonix can reach its bundled Windows sandbox
+// Available reports whether Reames Agent can reach its bundled Windows sandbox
 // helper and the native Windows sandbox backend is available. The helper is
 // this same executable relaunched with WindowsHelperCommand, so the entry
 // point must have registered its dispatch route (RegisterHelperDispatch);

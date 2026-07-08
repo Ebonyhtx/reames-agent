@@ -2131,7 +2131,7 @@ func TestTwoModelShortChoiceReplySkipsPlanner(t *testing.T) {
 	if !strings.Contains(reqText, "1. Subagent-Driven") {
 		t.Fatalf("executor request lost the previous assistant options:\n%s", reqText)
 	}
-	if strings.Contains(reqText, "Reasonix executor handoff") {
+	if strings.Contains(reqText, "Reames Agent executor handoff") {
 		t.Fatalf("short choice reply should not be wrapped as a planner handoff:\n%s", reqText)
 	}
 	if got := lastUserMessage(execProv.requests[0].Messages); got != "1" {
@@ -2219,7 +2219,7 @@ func TestRemoveMCPServerRemovesUnconnectedLazyPlaceholder(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData", "Roaming"))
 	t.Chdir(dir)
-	if err := os.WriteFile("reamesAgent.toml", []byte(`
+	if err := os.WriteFile("reames-agent.toml", []byte(`
 [[plugins]]
 name = "mock"
 command = "mock-mcp"
@@ -2722,7 +2722,7 @@ func TestApprovalPersistentBashPrefixRememberRule(t *testing.T) {
 		}),
 		OnRemember: func(rule string) RememberResult {
 			remembered = rule
-			return RememberResult{Rule: rule, Path: "reamesAgent.toml", Saved: true}
+			return RememberResult{Rule: rule, Path: "reames-agent.toml", Saved: true}
 		},
 	})
 	go func() {
@@ -2736,7 +2736,7 @@ func TestApprovalPersistentBashPrefixRememberRule(t *testing.T) {
 	if remembered != "Bash(go test:*)" {
 		t.Fatalf("remembered rule = %q, want Bash(go test:*)", remembered)
 	}
-	if len(notices) != 1 || !strings.Contains(notices[0], "Bash(go test:*)") || !strings.Contains(notices[0], "reamesAgent.toml") {
+	if len(notices) != 1 || !strings.Contains(notices[0], "Bash(go test:*)") || !strings.Contains(notices[0], "reames-agent.toml") {
 		t.Fatalf("notices = %v, want saved rule notice", notices)
 	}
 }
@@ -2760,7 +2760,7 @@ func TestPlanModeReadOnlyTrustApprovalPersistsMCPTrust(t *testing.T) {
 		}),
 		OnRememberMCPReadOnlyTrust: func(serverName, rawToolName string) MCPReadOnlyTrustResult {
 			rememberedServer, rememberedTool = serverName, rawToolName
-			return MCPReadOnlyTrustResult{Server: serverName, Tool: rawToolName, Path: "reamesAgent.toml", Saved: true}
+			return MCPReadOnlyTrustResult{Server: serverName, Tool: rawToolName, Path: "reames-agent.toml", Saved: true}
 		},
 	})
 
@@ -2817,7 +2817,7 @@ func TestPlanModeReadOnlyTrustApprovalPersistsBashCommandTrust(t *testing.T) {
 		}),
 		OnRememberPlanModeReadOnlyCommand: func(prefix string) PlanModeReadOnlyCommandTrustResult {
 			rememberedPrefix = prefix
-			return PlanModeReadOnlyCommandTrustResult{Prefix: prefix, Path: "reamesAgent.toml", Saved: true}
+			return PlanModeReadOnlyCommandTrustResult{Prefix: prefix, Path: "reames-agent.toml", Saved: true}
 		},
 	})
 
@@ -2911,7 +2911,7 @@ func TestPlanModeReadOnlyTrustApprovalUsesChineseCatalog(t *testing.T) {
 	if !strings.Contains(approval.Subject, "在计划模式中信任") || !strings.Contains(approval.Subject, "gh issue view 5867") {
 		t.Fatalf("approval subject = %q, want Chinese plan-mode trust subject", approval.Subject)
 	}
-	if !strings.Contains(approval.Reason, "不在 Reasonix 内置只读集合中") {
+	if !strings.Contains(approval.Reason, "不在 Reames Agent 内置只读集合中") {
 		t.Fatalf("approval reason = %q, want Chinese plan-mode trust reason", approval.Reason)
 	}
 
@@ -3722,7 +3722,7 @@ func TestReloadCommandsSameNameAcrossDirs(t *testing.T) {
 
 	// Higher priority: .reames-agent/commands
 	reamesAgentDir := filepath.Join(wsRoot, ".reames-agent", "commands")
-	writeCmdFile(t, reamesAgentDir, "greet", "Reasonix greet", "Hello from Reasonix: $1")
+	writeCmdFile(t, reamesAgentDir, "greet", "Reames Agent greet", "Hello from Reames Agent: $1")
 
 	reg := tool.NewRegistry()
 	c := New(Options{
@@ -3752,7 +3752,7 @@ func TestReloadCommandsSameNameAcrossDirs(t *testing.T) {
 	if !ok {
 		t.Fatal("/greet should be found")
 	}
-	if !strings.Contains(sent, "Hello from Reasonix") {
+	if !strings.Contains(sent, "Hello from Reames Agent") {
 		t.Errorf("expected .reamesAgent version to win, got render: %q", sent)
 	}
 }

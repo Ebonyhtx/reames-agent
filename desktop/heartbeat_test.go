@@ -11,7 +11,7 @@ import (
 	"reames-agent/internal/control"
 )
 
-func TestHeartbeatConfigPathUsesReasonixUserStateDir(t *testing.T) {
+func TestHeartbeatConfigPathUsesReames AgentUserStateDir(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	engine := &HeartbeatEngine{}
 	want := filepath.Join(config.MemoryUserDir(), "heartbeat-tasks.json")

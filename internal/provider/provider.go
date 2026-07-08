@@ -647,7 +647,7 @@ func (e *AuthError) Error() string {
 	if e.KeySource != "" {
 		key += " from " + e.KeySource
 	}
-	return fmt.Sprintf("authentication failed for provider %q (HTTP %d): %s is invalid or expired — update it (in .env or your environment) and retry, or run `reamesAgent setup`",
+	return fmt.Sprintf("authentication failed for provider %q (HTTP %d): %s is invalid or expired — update it (in .env or your environment) and retry, or run `reames-agent setup`",
 		e.Provider, e.Status, key)
 }
 

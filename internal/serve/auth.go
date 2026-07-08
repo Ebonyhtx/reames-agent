@@ -183,7 +183,7 @@ func HashPassword(password string) (string, error) {
 
 func sessionKeyForPasswordHash(passwordHash string) []byte {
 	if passwordHash != "" {
-		key, err := pbkdf2.Key(sha256.New, passwordHash, []byte("reamesAgent serve session key"), pbkdf2Iter, 32)
+		key, err := pbkdf2.Key(sha256.New, passwordHash, []byte("reames-agent serve session key"), pbkdf2Iter, 32)
 		if err != nil {
 			panic("serve/auth: pbkdf2 failed: " + err.Error())
 		}

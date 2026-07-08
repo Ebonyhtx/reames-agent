@@ -164,7 +164,7 @@ func botStart(args []string, version string) int {
 		gw.Stop()
 	}()
 
-	fmt.Fprintf(os.Stderr, "reamesAgent bot starting (model: %s, channels: %s)...\n", modelName, *channels)
+	fmt.Fprintf(os.Stderr, "reames-agent bot starting (model: %s, channels: %s)...\n", modelName, *channels)
 	fmt.Fprintf(os.Stderr, "version: %s\n", version)
 
 	if err := gw.Start(ctx); err != nil {
@@ -333,7 +333,7 @@ func botDoctor(args []string) int {
 		} else if weixin.HasSavedAccount(bc.Weixin.AccountID) {
 			addCheck("bot.weixin.token", "ok", "saved iLink account is available")
 		} else {
-			addCheck("bot.weixin.token", "missing", bc.Weixin.TokenEnv+" is not set; run `reamesAgent bot weixin-login` to save an iLink account")
+			addCheck("bot.weixin.token", "missing", bc.Weixin.TokenEnv+" is not set; run `reames-agent bot weixin-login` to save an iLink account")
 		}
 	} else {
 		addCheck("bot.weixin", "disabled", "")
@@ -468,12 +468,12 @@ func botPairing(args []string) int {
 }
 
 func botPairingUsage() {
-	fmt.Print(`reamesAgent bot pairing — approve pending bot DM pairings
+	fmt.Print(`reames-agent bot pairing — approve pending bot DM pairings
 
 Usage:
-  reamesAgent bot pairing list
-  reamesAgent bot pairing approve CODE
-  reamesAgent bot pairing reject CODE
+  reames-agent bot pairing list
+  reames-agent bot pairing approve CODE
+  reames-agent bot pairing reject CODE
 `)
 }
 
@@ -503,7 +503,7 @@ func botWeixinLogin(args []string) int {
 		return 1
 	}
 	fmt.Printf("\n微信登录成功: account_id=%s user_id=%s base_url=%s\n", result.AccountID, result.UserID, result.BaseURL)
-	fmt.Println("凭据已保存到 Reasonix 用户配置目录；也可以把 [bot.weixin] account_id 设置为该 account_id。")
+	fmt.Println("凭据已保存到 Reames Agent 用户配置目录；也可以把 [bot.weixin] account_id 设置为该 account_id。")
 
 	return 0
 }
@@ -548,13 +548,13 @@ func botConfigIsUserOwned(bc config.BotConfig) bool {
 }
 
 func botUsage() {
-	fmt.Print(`reamesAgent bot — multi-channel IM bot gateway (QQ / Feishu / WeChat)
+	fmt.Print(`reames-agent bot — multi-channel IM bot gateway (QQ / Feishu / WeChat)
 
 Usage:
-  reamesAgent bot start   [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
-  reamesAgent bot doctor  [--json] [--deep]
-  reamesAgent bot pairing list|approve|reject
-  reamesAgent bot weixin-login [--timeout SECONDS]
+  reames-agent bot start   [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
+  reames-agent bot doctor  [--json] [--deep]
+  reames-agent bot pairing list|approve|reject
+  reames-agent bot weixin-login [--timeout SECONDS]
 
 Subcommands:
   start         启动 bot 网关
@@ -563,12 +563,12 @@ Subcommands:
   weixin-login  微信 iLink 二维码登录
 
 Examples:
-  reamesAgent bot start --channels qq,feishu
-  reamesAgent bot start --dir /path/to/project --model deepseek-pro
-  reamesAgent bot doctor --json
+  reames-agent bot start --channels qq,feishu
+  reames-agent bot start --dir /path/to/project --model deepseek-pro
+  reames-agent bot doctor --json
 
 Configuration:
-  Edit reamesAgent.toml:
+  Edit reames-agent.toml:
     [bot]           enabled / model / max_steps
     [bot]           queue_mode / queue_cap / queue_drop
     [bot.pairing]   enabled / request_ttl_minutes / max_pending_per_platform

@@ -645,7 +645,7 @@ func FileRefLine(line string) (string, bool) {
 }
 
 // SlashCodeCommentLine reports whether a slash-prefixed line is ordinary source
-// text rather than a Reasonix slash command.
+// text rather than a Reames Agent slash command.
 func SlashCodeCommentLine(line string) bool {
 	trimmed := strings.TrimSpace(line)
 	return strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*")

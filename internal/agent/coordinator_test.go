@@ -94,7 +94,7 @@ func TestHandoffTaskRecoversOriginalInput(t *testing.T) {
 	if got := HandoffTask(formatHandoff(multi, "plan")); got != multi {
 		t.Errorf("HandoffTask(multi-line) = %q, want %q", got, multi)
 	}
-	for _, plain := range []string{"ordinary input", "", "# Reasonix executor handoff with no sections"} {
+	for _, plain := range []string{"ordinary input", "", "# Reames Agent executor handoff with no sections"} {
 		if got := HandoffTask(plain); got != plain {
 			t.Errorf("HandoffTask(%q) = %q, want unchanged", plain, got)
 		}
@@ -563,7 +563,7 @@ func TestCoordinatorHandoffAffirmsExecutorToolSchemasWhenPlannerClaimsNoMCP(t *t
 			{Type: provider.ChunkDone},
 		},
 		{
-			{Type: provider.ChunkToolCall, ToolCall: &provider.ToolCall{ID: "call-1", Name: "mcp__github__search", Arguments: `{"query":"Reasonix discussions"}`}},
+			{Type: provider.ChunkToolCall, ToolCall: &provider.ToolCall{ID: "call-1", Name: "mcp__github__search", Arguments: `{"query":"Reames Agent discussions"}`}},
 			{Type: provider.ChunkDone},
 		},
 		{

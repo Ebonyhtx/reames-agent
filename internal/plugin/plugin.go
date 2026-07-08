@@ -1,4 +1,4 @@
-// Package plugin is Reasonix's MCP client. It connects to external MCP servers and
+// Package plugin is Reames Agent's MCP client. It connects to external MCP servers and
 // adapts their tools to the tool.Tool interface, so the agent treats plugin
 // tools and built-ins uniformly. The wire protocol is JSON-RPC 2.0 in every
 // case; only the transport differs (stdio subprocess, Streamable HTTP, or the
@@ -24,7 +24,7 @@ import (
 	"reames-agent/internal/tool"
 )
 
-// protocolVersion is the MCP revision Reasonix advertises during initialize.
+// protocolVersion is the MCP revision Reames Agent advertises during initialize.
 const protocolVersion = "2024-11-05"
 
 // defaultCallTimeout is the MCP JSON-RPC call deadline applied when neither the
@@ -44,7 +44,7 @@ type Spec struct {
 	URL     string
 	Headers map[string]string
 	// DefaultCallTimeout is the global MCP call cap for this server. Zero keeps
-	// Reasonix's built-in defaultCallTimeout.
+	// Reames Agent's built-in defaultCallTimeout.
 	DefaultCallTimeout time.Duration
 	// CallTimeout overrides DefaultCallTimeout for all calls to this server.
 	// Zero falls back to DefaultCallTimeout.
@@ -86,7 +86,7 @@ type Spec struct {
 // transport carries JSON-RPC messages to and from one MCP server. call sends a
 // request and returns its result (correlating by id internally); notify sends a
 // fire-and-forget notification; close releases resources. Server-initiated
-// messages (notifications, requests like roots/list) are ignored — Reasonix is a
+// messages (notifications, requests like roots/list) are ignored — Reames Agent is a
 // tools/prompts/resources consumer, not a sampling/roots provider (see SPEC §9).
 type transport interface {
 	call(ctx context.Context, method string, params any) (json.RawMessage, error)
@@ -1106,7 +1106,7 @@ type mcpTool struct {
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"inputSchema"`
 	// Annotations carries MCP's optional tool hints. We read readOnlyHint: a
-	// plugin that declares a tool read-only opts it into Reasonix's parallel-dispatch
+	// plugin that declares a tool read-only opts it into Reames Agent's parallel-dispatch
 	// path and the permission layer's "readers default to allow". Absent
 	// annotations stay false — opaque by default, never trusted implicitly.
 	Annotations *struct {

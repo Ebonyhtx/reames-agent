@@ -22,7 +22,7 @@ import (
 	"reames-agent/internal/tool/builtin"
 )
 
-// acpCommand runs Reasonix as an Agent Client Protocol agent: a stdio JSON-RPC
+// acpCommand runs Reames Agent as an Agent Client Protocol agent: a stdio JSON-RPC
 // server that editors and other host clients drive (initialize, session/new,
 // session/prompt, session/cancel). It keeps v2 wire-compatible with the many
 // tools that integrated with v1 over ACP.

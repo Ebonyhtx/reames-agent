@@ -248,7 +248,7 @@ func migrateMCPToUserConfig(projectRoots []string) (*MCPGlobalMigrationResult, e
 		addEntries(loadPluginEntriesFromTOML(path))
 	}
 	for _, root := range normalizedMCPMigrationRoots(projectRoots) {
-		addEntries(loadPluginEntriesFromTOML(filepath.Join(root, "reamesAgent.toml")))
+		addEntries(loadPluginEntriesFromTOML(filepath.Join(root, "reames-agent.toml")))
 		if entries, err := loadMCPJSON(filepath.Join(root, mcpJSONFile)); err == nil {
 			addEntries(entries)
 		}
@@ -481,11 +481,11 @@ func legacyTOMLPaths(dest, home string) []string {
 	}
 	for _, legacy := range legacyXDGConfigPaths() {
 		add(legacy)
-		add(filepath.Join(filepath.Dir(legacy), "reamesAgent.toml"))
+		add(filepath.Join(filepath.Dir(legacy), "reames-agent.toml"))
 	}
-	add(filepath.Join(filepath.Dir(dest), "reamesAgent.toml"))
+	add(filepath.Join(filepath.Dir(dest), "reames-agent.toml"))
 	if home != "" {
-		add(filepath.Join(home, ".reames-agent", "reamesAgent.toml"))
+		add(filepath.Join(home, ".reames-agent", "reames-agent.toml"))
 	}
 	return paths
 }
@@ -593,7 +593,7 @@ func mergeEnv(base, overlay map[string]string) map[string]string {
 
 // writeCredentialsEnv merges lines into Reames Agent's global .env
 // and pins them into the current process env so the just-built session resolves
-// the key without a restart. Falls back to ~/.env only when Reasonix home can't
+// the key without a restart. Falls back to ~/.env only when Reames Agent home can't
 // be resolved — never a project .env, so a migration keeps secrets out of the
 // user's project tree.
 func writeCredentialsEnv(home string, lines []string) error {

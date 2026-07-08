@@ -26,10 +26,10 @@ func run(args []string) int {
 	var installer, installDir, relaunch string
 	fs := flag.NewFlagSet("reamesAgent-update-helper", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	fs.UintVar(&parentPID, "parent-pid", 0, "Reasonix process id to wait for before installing")
+	fs.UintVar(&parentPID, "parent-pid", 0, "Reames Agent process id to wait for before installing")
 	fs.StringVar(&installer, "installer", "", "verified NSIS installer path")
-	fs.StringVar(&installDir, "install-dir", "", "Reasonix installation directory")
-	fs.StringVar(&relaunch, "relaunch", "", "Reasonix executable to start after the installer succeeds")
+	fs.StringVar(&installDir, "install-dir", "", "Reames Agent installation directory")
+	fs.StringVar(&relaunch, "relaunch", "", "Reames Agent executable to start after the installer succeeds")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

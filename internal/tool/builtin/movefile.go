@@ -18,7 +18,7 @@ func init() { tool.RegisterBuiltin(moveFile{}) }
 var renameFile = os.Rename
 
 // moveFile moves or renames one file. roots, when non-empty, confine both the
-// source and destination to the workspace; guard rejects Reasonix session-data
+// source and destination to the workspace; guard rejects Reames Agent session-data
 // endpoints on either side (a move out of the store mutates it too); workDir
 // resolves relative paths.
 type moveFile struct {

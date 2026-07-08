@@ -44,7 +44,7 @@ homebrew_casks:
       name: homebrew-reames-agent
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: "https://github.com/esengine/DeepSeek-Reasonix"
+    homepage: "https://github.com/reames-agent/reames-agent"
     description: "Cache-first DeepSeek coding agent for the terminal."
     commit_author:
       name: reames-agent
@@ -59,4 +59,4 @@ homebrew_casks:
 release:
   prerelease: auto
   make_latest: false
-  name_template: "Reasonix CLI {{ .Tag }}"
+  name_template: "Reames Agent CLI {{ .Tag }}"

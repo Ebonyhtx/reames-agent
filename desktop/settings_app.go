@@ -1064,7 +1064,7 @@ func botDomainOrDefault(domain string) string {
 // applyConfigChange mutates the user-global config and rebuilds the controller so
 // the change takes effect this session. Desktop settings such as providers and
 // keys are account-level, not per-project: writing them to the global config
-// rather than the cwd's reamesAgent.toml is what lets them survive a workspace switch.
+// rather than the cwd's reames-agent.toml is what lets them survive a workspace switch.
 func (a *App) applyConfigChange(mutate func(*config.Config) error) error {
 	_, err := a.applyConfigChangeWithWarning("settings", mutate)
 	return err
@@ -1233,7 +1233,7 @@ func (a *App) loadDesktopUserConfigForView() (*config.Config, string, error) {
 }
 
 // loadDesktopUserConfigForViewWithCredentials is loadDesktopUserConfigForView
-// plus credential resolution: like config.LoadForEdit it loads Reasonix's
+// plus credential resolution: like config.LoadForEdit it loads Reames Agent's
 // global .env into the process env. Use it for read-only loads whose result
 // feeds a runtime that resolves env-based secrets — the bot runtime
 // (app-secret/control-token envs) and MCP server connects. It still never
@@ -1451,9 +1451,9 @@ func providerCredentialSourceNotice(apiKeyEnv, value string) string {
 
 func projectConfigPathForRoot(root string) string {
 	if strings.TrimSpace(root) == "" || root == "." {
-		return "reamesAgent.toml"
+		return "reames-agent.toml"
 	}
-	return filepath.Join(root, "reamesAgent.toml")
+	return filepath.Join(root, "reames-agent.toml")
 }
 
 func sameConfigPath(a, b string) bool {
@@ -2130,7 +2130,7 @@ func (a *App) AddProviderPresetAccess(id, key string) (string, error) {
 
 // ResetProviderPresetAccess intentionally overwrites same-name provider entries
 // with the curated preset template. It only mutates config; provider secrets stay
-// in Reasonix home .env under whichever api_key_env the resulting preset uses.
+// in Reames Agent home .env under whichever api_key_env the resulting preset uses.
 func (a *App) ResetProviderPresetAccess(id string) error {
 	preset, ok := config.CuratedProviderPreset(id)
 	if !ok {

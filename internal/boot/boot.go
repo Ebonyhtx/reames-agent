@@ -98,7 +98,7 @@ type Options struct {
 	WorkspaceRoot string
 	// ExtraPlugins are session-scoped MCP servers supplied by a host transport
 	// (for example ACP session/new). They are connected eagerly for this
-	// controller but are not persisted to reamesAgent.toml.
+	// controller but are not persisted to reames-agent.toml.
 	ExtraPlugins []plugin.Spec
 	// TokenMode selects how much optional context/tool surface this session exposes
 	// at boot. Empty/full preserves the normal capability surface. "economy" keeps
@@ -156,7 +156,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	keepPolicy := agentKeepPolicy(cfg.Agent.Keep)
 	entry, ok := cfg.ResolveModel(modelName)
 	if !ok {
-		return nil, fmt.Errorf("%w %q (configured: %s); note: defining [[providers]] replaces the built-in presets, so add a [[providers]] entry for it or use a configured name, or run `reamesAgent setup` to reconfigure", ErrUnknownModel, modelName, providerNames(cfg))
+		return nil, fmt.Errorf("%w %q (configured: %s); note: defining [[providers]] replaces the built-in presets, so add a [[providers]] entry for it or use a configured name, or run `reames-agent setup` to reconfigure", ErrUnknownModel, modelName, providerNames(cfg))
 	}
 	modelRef := entry.Name + "/" + entry.Model
 	if opts.EffortOverride != nil {
@@ -310,7 +310,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	reg := tool.NewRegistry()
 	bashSpec := sandbox.Spec{Mode: cfg.BashMode(), WriteRoots: cfg.WriteRootsForRoot(root), ForbidReadRoots: cfg.ForbidReadRootsForRoot(root), Network: cfg.Sandbox.Network}
 	bashSpec.Shell = shell
-	// The session-data guard blocks agent writes into Reasonix's own session
+	// The session-data guard blocks agent writes into Reames Agent's own session
 	// stores (they race the app's saves and surface as conflict-copy loops);
 	// explicit allow_write entries stay a sanctioned escape hatch.
 	sessionGuard := builtin.NewSessionDataGuard(config.MemoryUserDir(), cfg.AllowWriteRoots())
@@ -537,7 +537,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	}
 
 	// Permission policy gates every tool call. The headless gate (no Approver)
-	// resolves ordinary "ask" decisions to allow — preserving `reamesAgent run`
+	// resolves ordinary "ask" decisions to allow — preserving `reames-agent run`
 	// autonomy — while deny rules and fresh-human approval tools hard-block.
 	// Interactive frontends (chat, desktop) swap in an interactive gate later via
 	// Controller.EnableInteractiveApproval.
@@ -747,7 +747,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		parentSession := agent.ParentSession(sctx)
 		var run *agent.SubagentRun
 		if subagentStore == nil || parentSession == "" {
-			// Headless runs (e.g. `reamesAgent run`) have no persistent session to
+			// Headless runs (e.g. `reames-agent run`) have no persistent session to
 			// own a transcript. Run the skill sub-agent ephemerally, as before
 			// persisted transcripts existed, instead of failing. Continuation needs
 			// a persisted owner, so it errors here.
@@ -1183,11 +1183,11 @@ func rememberPermissionRule(workspaceRoot, rule string) control.RememberResult {
 func rememberPermissionConfigPath(workspaceRoot string) string {
 	workspaceRoot = strings.TrimSpace(workspaceRoot)
 	if workspaceRoot != "" {
-		return filepath.Join(workspaceRoot, "reamesAgent.toml")
+		return filepath.Join(workspaceRoot, "reames-agent.toml")
 	}
 	path := config.SourcePath()
 	if path == "" {
-		path = "reamesAgent.toml" // match Config.Save() fallback
+		path = "reames-agent.toml" // match Config.Save() fallback
 	}
 	return path
 }
@@ -1483,7 +1483,7 @@ func NewProviderWithProxy(e *config.ProviderEntry, proxy netclient.ProxySpec) (p
 // the listed directories.
 // When workDir is non-empty, tools resolve relative paths against it instead of
 // the process cwd, enabling concurrent multi-project sessions.
-// sessionGuard blocks writer-tool targets inside Reasonix's own session stores
+// sessionGuard blocks writer-tool targets inside Reames Agent's own session stores
 // and makes bash warn when a command references them.
 func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sandbox.Spec, bashTimeout time.Duration, searchSpec builtin.SearchSpec, stderr io.Writer, workDir string, proxySpec netclient.ProxySpec, forbidReadRoots []string, readPathResolver *builtin.PathResolver, sessionGuard builtin.SessionDataGuard) {
 	// If a workspace directory is set, use workspace-bound tools that resolve

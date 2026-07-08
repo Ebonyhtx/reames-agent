@@ -9,7 +9,7 @@ import (
 
 func TestLoadForEdit(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "reamesAgent.toml")
+	path := filepath.Join(dir, "reames-agent.toml")
 	custom := `default_model = "custom"
 [[providers]]
 name = "custom"
@@ -40,7 +40,7 @@ api_key_env = "X_KEY"
 
 func TestLoadForEditMigratesLegacyMCPTiers(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "reamesAgent.toml")
+	path := filepath.Join(dir, "reames-agent.toml")
 	body := `
 [[plugins]]
 name = "playwright"
@@ -77,7 +77,7 @@ func TestLoadForEditIgnoresProjectDotEnvForProviderCredentials(t *testing.T) {
 	project := t.TempDir()
 	launch := t.TempDir()
 	home := t.TempDir()
-	path := filepath.Join(project, "reamesAgent.toml")
+	path := filepath.Join(project, "reames-agent.toml")
 	body := `default_model = "custom/m"
 [[providers]]
 name = "custom"

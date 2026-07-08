@@ -26,7 +26,7 @@ func loadDotEnv() {
 // expansion, then loads Reames Agent's global .env for provider credentials.
 // Workspace .env values are deliberately not written into the process
 // environment, so multiple desktop/ACP workspaces cannot leak tokens into each
-// other and project files cannot redirect Reasonix's own config/credential
+// other and project files cannot redirect Reames Agent's own config/credential
 // paths.
 func loadDotEnvForRoot(root string) map[string]string {
 	projectEnv := loadProjectDotEnvForExpansion(root)

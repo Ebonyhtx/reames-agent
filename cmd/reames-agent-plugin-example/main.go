@@ -3,7 +3,7 @@
 // document the contract end-to-end (the protocol the internal/plugin client
 // drives) and to give users a working example to copy.
 //
-// Wire it up in reamesAgent.toml:
+// Wire it up in reames-agent.toml:
 //
 //	[[plugins]]
 //	name    = "example"
@@ -165,7 +165,7 @@ type toolDef struct {
 }
 
 // tools is the registry. Both demo tools are read-only and declare it via the
-// readOnlyHint annotation, so reamesAgent runs them in parallel batches and (with the
+// readOnlyHint annotation, so reames-agent runs them in parallel batches and (with the
 // permission layer) auto-allows them without prompting.
 var tools = []toolDef{
 	{

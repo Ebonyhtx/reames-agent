@@ -421,7 +421,7 @@ func TestCuratedProviderPresetCapabilities(t *testing.T) {
 		t.Fatal("gmi provider missing")
 	}
 	if got := gmi.Headers["User-Agent"]; got != "Reames Agent" {
-		t.Fatalf("gmi User-Agent header = %q, want Reasonix", got)
+		t.Fatalf("gmi User-Agent header = %q, want Reames Agent", got)
 	}
 	vercel, ok := cfg.Provider("vercel-ai-gateway")
 	if !ok {

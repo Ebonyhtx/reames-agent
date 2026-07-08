@@ -99,7 +99,7 @@ func (t *installSourceTool) pluginPackageAction(req request, pkg pluginpkg.Packa
 		a.RiskReasons = append(a.RiskReasons, "links a plugin package from a mutable local directory")
 	}
 	if hooks > 0 {
-		a.RiskReasons = append(a.RiskReasons, "registers shell hooks that execute during Reasonix sessions")
+		a.RiskReasons = append(a.RiskReasons, "registers shell hooks that execute during Reames Agent sessions")
 	}
 	if mcp > 0 {
 		a.RiskReasons = append(a.RiskReasons, "adds MCP servers that can change provider-visible tool schemas")
@@ -117,7 +117,7 @@ func modeForPlugin(mode string) string {
 
 func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req request, act *action) error {
 	if t.reamesAgentHome == "" {
-		return newErr(ErrSourceUnreadable, "plugin install requires a Reasonix home directory")
+		return newErr(ErrSourceUnreadable, "plugin install requires a Reames Agent home directory")
 	}
 	if !pluginpkg.IsValidName(act.Name) {
 		return newErr(ErrInvalidManifest, "invalid plugin name %q", act.Name)

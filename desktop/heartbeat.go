@@ -1,7 +1,7 @@
 // Heartbeat task engine — scheduled AI prompts that create or update topics.
 //
 // Each task is a prompt submitted to a dedicated topic on a schedule.
-// The config file under the Reasonix user state directory is human- and
+// The config file under the Reames Agent user state directory is human- and
 // AI-editable; the engine runs the schedule in a background goroutine and
 // exposes Wails bindings on App for the frontend panel.
 //

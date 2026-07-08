@@ -68,7 +68,7 @@ type MCPServerRef struct {
 	URL       string
 }
 
-// Manifest is the normalized manifest shape used by Reasonix.
+// Manifest is the normalized manifest shape used by Reames Agent.
 type Manifest struct {
 	Name        string
 	Version     string
@@ -102,7 +102,7 @@ type MCPServer struct {
 	Tier      string            `json:"tier,omitempty"`
 }
 
-// State is persisted at <Reasonix home>/plugin-packages.json.
+// State is persisted at <Reames Agent home>/plugin-packages.json.
 type State struct {
 	Version int               `json:"version"`
 	Plugins []InstalledPlugin `json:"plugins"`
@@ -174,7 +174,7 @@ func SaveState(reamesAgentHome string, st State) error {
 // process. SaveState writes atomically (tmpfile + rename), so concurrent
 // callers never see a half-written file; this lock additionally prevents two
 // in-process load-modify-save cycles from clobbering each other's edit. It is
-// not a cross-process lock — concurrent Reasonix processes can still race.
+// not a cross-process lock — concurrent Reames Agent processes can still race.
 var stateMu sync.Mutex
 
 func Upsert(reamesAgentHome string, p InstalledPlugin) error {
@@ -381,14 +381,14 @@ func parseCodexLike(path, root, kind string, includeCodexSessionStartHook bool) 
 var claudeConventionSkillDirs = []string{"skills", ".claude/skills"}
 
 // claudeUnmappedCapabilities are the conventional Claude plugin surfaces
-// Reasonix does not map yet. Their presence is worth a warning: silently
+// Reames Agent does not map yet. Their presence is worth a warning: silently
 // installing a package while dropping half its capabilities reads as "install
 // succeeded" when it mostly didn't.
 var claudeUnmappedCapabilities = []string{"commands", "agents", "hooks/hooks.json", ".mcp.json"}
 
 // applyClaudeConventionDirs fills manifest.Skills from the conventional skill
 // directories when the manifest declares none (the standard Claude plugin
-// shape), and reports the conventional capabilities Reasonix cannot map.
+// shape), and reports the conventional capabilities Reames Agent cannot map.
 func applyClaudeConventionDirs(root string, manifest *Manifest) []string {
 	var warnings []string
 	if len(manifest.Skills) == 0 {
@@ -401,7 +401,7 @@ func applyClaudeConventionDirs(root string, manifest *Manifest) []string {
 	}
 	for _, rel := range claudeUnmappedCapabilities {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
-			warnings = append(warnings, fmt.Sprintf("claude plugin declares %s, which Reasonix does not map yet; that capability will not be installed", rel))
+			warnings = append(warnings, fmt.Sprintf("claude plugin declares %s, which Reames Agent does not map yet; that capability will not be installed", rel))
 		}
 	}
 	return warnings

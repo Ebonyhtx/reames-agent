@@ -112,7 +112,7 @@ func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config) *tool
 		}
 	}
 	// Keep review bash unconfined as before (read-oriented skill), but attach
-	// the session-data guard so commands touching Reasonix's own state warn the
+	// the session-data guard so commands touching Reames Agent's own state warn the
 	// same way the boot-assembled bash does.
 	if _, ok := parentReg.Get("bash"); ok {
 		guard := builtin.NewSessionDataGuard(config.MemoryUserDir(), cfg.AllowWriteRoots())

@@ -44,8 +44,8 @@ func TestLoadDotEnvDoesNotImportProjectOrHomeEnv(t *testing.T) {
 	}
 }
 
-// TestLoadDotEnvReadsGlobalCredentials proves `reamesAgent setup`'s target — the
-// reamesAgent-owned credentials file under Reasonix home — is loaded from any
+// TestLoadDotEnvReadsGlobalCredentials proves `reames-agent setup`'s target — the
+// reamesAgent-owned credentials file under Reames Agent home — is loaded from any
 // working directory and wins over a project ./.env on a shared key.
 func TestLoadDotEnvReadsGlobalCredentials(t *testing.T) {
 	cwd := t.TempDir()
@@ -347,7 +347,7 @@ func TestLoadForRootResolvesProviderCredentialsOverInheritedEnv(t *testing.T) {
 	if err := os.WriteFile(cred, []byte(key+"=from_credentials\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reames-agent.toml"), []byte(`
 default_model = "custom/m"
 [[providers]]
 name = "custom"
@@ -390,7 +390,7 @@ func TestLoadForRootIgnoresProjectProviderEnvAndInheritedEnv(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(project, ".env"), []byte(key+"=from_project\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reames-agent.toml"), []byte(`
 default_model = "custom/m"
 [[providers]]
 name = "custom"
@@ -646,7 +646,7 @@ func TestStoreCredentialLinesFileMode(t *testing.T) {
 	}
 }
 
-func TestUserCredentialsPathIgnoresReasonixStateHome(t *testing.T) {
+func TestUserCredentialsPathIgnoresReames AgentStateHome(t *testing.T) {
 	home := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("HOME", home)
@@ -776,7 +776,7 @@ func TestProjectConfigCannotOverrideCredentialStoreMode(t *testing.T) {
 	if err := os.WriteFile(UserConfigPath(), []byte(`credentials_store = "file"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`credentials_store = "keyring"`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(project, "reames-agent.toml"), []byte(`credentials_store = "keyring"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -789,7 +789,7 @@ func TestProjectConfigCannotOverrideCredentialStoreMode(t *testing.T) {
 	}
 }
 
-// TestLoadDotEnvGlobalCredentialsOverrideEnv confirms Reasonix-owned global
+// TestLoadDotEnvGlobalCredentialsOverrideEnv confirms Reames Agent-owned global
 // credentials beat inherited environment variables.
 func TestLoadDotEnvGlobalCredentialsOverrideEnv(t *testing.T) {
 	home := t.TempDir()

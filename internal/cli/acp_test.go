@@ -75,7 +75,7 @@ func TestACPFactoryLoadsSessionCwdProjectConfig(t *testing.T) {
 		t.Fatalf("SetCredential: %v", err)
 	}
 	project := t.TempDir()
-	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reames-agent.toml"), []byte(`
 default_model = "local"
 
 [[providers]]
@@ -118,7 +118,7 @@ func TestACPFactoryClearsEffortOverrideForUnsupportedModel(t *testing.T) {
 		t.Fatalf("SetCredential: %v", err)
 	}
 	project := t.TempDir()
-	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reames-agent.toml"), []byte(`
 default_model = "reasoner/reasoning-model"
 
 [[providers]]

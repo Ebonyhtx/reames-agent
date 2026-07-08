@@ -8,7 +8,7 @@ var Chinese = Messages{
 	WelcomeTitleFmt: "欢迎使用 %s",
 	NoConfigYet:     "还没有配置 — 现在来设置一下吧。",
 	StartingChatFmt: "正在启动 %s…",
-	SetKeyHint:      "设置好 API key 后运行 `reamesAgent`。",
+	SetKeyHint:      "设置好 API key 后运行 `reames-agent`。",
 	ConfigLabel:     "配置",
 	ModelsLabel:     "模型",
 	ConfigNotFound:  "未找到 — 使用内置默认值",
@@ -16,18 +16,18 @@ var Chinese = Messages{
 	NoKey:           "未设置 key",
 	Ready:           "已就绪",
 	GetStarted:      "开始使用",
-	StepScaffold:    "生成 reamesAgent.toml",
+	StepScaffold:    "生成 reames-agent.toml",
 	StepSetKey:      "设置 API key",
 
-	InitHint:       "项目记忆（AGENTS.md）在会话内由模型生成：运行 `reamesAgent`，然后 `/init` —— 模型会分析代码库并写入。配置请用 `reamesAgent setup`。",
-	StepSetKeyHint: "运行 `reamesAgent setup`，或 export DEEPSEEK_API_KEY=…",
+	InitHint:       "项目记忆（AGENTS.md）在会话内由模型生成：运行 `reames-agent`，然后 `/init` —— 模型会分析代码库并写入。配置请用 `reames-agent setup`。",
+	StepSetKeyHint: "运行 `reames-agent setup`，或 export DEEPSEEK_API_KEY=…",
 	StepChatDesc:   "交互式会话",
 	StepRunDesc:    "执行单次任务",
-	HelpFooter:     "reamesAgent help · 查看全部命令",
+	HelpFooter:     "reames-agent help · 查看全部命令",
 
 	ChatTip:           "对话上下文将跨轮保留。输入 'exit' 或按 Ctrl-D 退出。",
 	TurnCancelled:     "已取消 — 回到提示符",
-	NoSessionToResume: "没有可恢复的会话 — 用 `reamesAgent` 开一个新的",
+	NoSessionToResume: "没有可恢复的会话 — 用 `reames-agent` 开一个新的",
 	ResumeRequiresTTY: "--resume 需要交互式终端；用 --continue 直接恢复最近一次",
 	PickSessionLabel:  "恢复哪个会话？",
 
@@ -95,7 +95,7 @@ var Chinese = Messages{
 	PlanModeMCPTrustReason:                 "这个 MCP 工具声明自己是只读的，但外部只读提示需要你确认后，计划模式才能使用。选择总是允许可为后续计划和只读研究记住这份信任。",
 	PlanModeMCPTrustDeclined:               "用户拒绝信任这个 MCP 只读提示；不要重试它，请继续使用其它已信任的只读工具，或询问用户希望如何继续。",
 	PlanModeBashTrustSubjectFmt:            "在计划模式中信任 %q 为只读命令前缀\n命令：%s",
-	PlanModeBashTrustReason:                "这条 bash 命令不在 Reasonix 内置只读集合中。只有在确认这个精确前缀用于计划和研究时是只读的，才应批准。自动/YOLO 审批不能回答这个信任提示。",
+	PlanModeBashTrustReason:                "这条 bash 命令不在 Reames Agent 内置只读集合中。只有在确认这个精确前缀用于计划和研究时是只读的，才应批准。自动/YOLO 审批不能回答这个信任提示。",
 	PlanModeBashTrustDeclined:              "用户拒绝将这条 bash 命令信任为计划模式只读命令；不要重试它，请继续使用其它已信任的只读工具，或询问用户希望如何继续。",
 	SandboxEscapeSubjectFallback:           "仅本次不进沙箱运行 shell 命令",
 	SandboxEscapeSubjectPrefix:             "仅本次不进沙箱运行：",
@@ -117,7 +117,7 @@ var Chinese = Messages{
 
 	OutputStyleNone:    "没有可用的输出风格",
 	OutputStyleHeader:  "输出风格：",
-	OutputStyleHint:    "在 reamesAgent.toml 设置 agent.output_style 即可启用（下次会话生效）",
+	OutputStyleHint:    "在 reames-agent.toml 设置 agent.output_style 即可启用（下次会话生效）",
 	ThemeHeader:        "主题：",
 	ThemeHint:          "使用 /theme <auto|light|dark|style> 切换",
 	ThemeChangedFmt:    "已切换主题为 %s / %s",
@@ -190,7 +190,7 @@ var Chinese = Messages{
 	SkillPickerStatusNotDir:      "非目录",
 	SkillPickerStatusUnreadable:  "无权限",
 	SlashPromptEmpty:             "该 MCP prompt 没有返回可发送的内容",
-	SlashMCPNone:                 "没有配置 MCP 服务器 — 在 reamesAgent.toml 加一个 [[plugins]] 条目",
+	SlashMCPNone:                 "没有配置 MCP 服务器 — 在 reames-agent.toml 加一个 [[plugins]] 条目",
 	CtrlCQuitHint:                "再按一次 Ctrl+C 退出",
 	CompHintSlash:                "↑/↓ 移动 · Tab/Enter 选中 · Esc 关闭",
 	CompHintFile:                 "↑/↓ 移动 · Tab/Enter 进入文件夹或选中文件 · Esc 关闭",
@@ -280,7 +280,7 @@ var Chinese = Messages{
 	ListHooksHeaderFmt:  "hooks（生效 %d 个）",
 	ListHooksNone:       "无生效 hooks — 在 .reames-agent/settings.json（项目，需信任后）或 ~/.reames-agent/settings.json（全局）配置",
 	ListMcpHeader:       "MCP 服务器",
-	ListMcpNone:         "未连接 MCP 服务器 — 在 reamesAgent.toml（[[plugins]]）或项目 .mcp.json 中添加",
+	ListMcpNone:         "未连接 MCP 服务器 — 在 reames-agent.toml（[[plugins]]）或项目 .mcp.json 中添加",
 
 	MemoryNone:             "还没有加载任何记忆 — 输入 “/remember 内容” 可快速记录，也可以在项目根目录创建 REASONIX.md",
 	MemoryLoaded:           "当前已加载的记忆：",
@@ -316,12 +316,12 @@ var Chinese = Messages{
 
 	SelectProvidersLabel:  "选择要启用的 provider",
 	EnterAPIKeysHeader:    "输入 API key（回车跳过、稍后再设）：",
-	MissingKeyIntro:       "reamesAgent.toml 已配置好 — 只差一个 API key 就可以开始。",
+	MissingKeyIntro:       "reames-agent.toml 已配置好 — 只差一个 API key 就可以开始。",
 	WroteFileFmt:          "已写入 %s",
 	SetupComplete:         "设置完成。",
 	SetupCancelled:        "设置已取消。",
 	TryHintFmt:            "试试: %s",
-	NextHint:              "下一步：设置 API key（运行 `reamesAgent setup` 或 export DEEPSEEK_API_KEY=...），然后运行 `reamesAgent run \"你的任务\"`。",
+	NextHint:              "下一步：设置 API key（运行 `reames-agent setup` 或 export DEEPSEEK_API_KEY=...），然后运行 `reames-agent run \"你的任务\"`。",
 	ConfirmReconfigureFmt: "%s 已存在。重新配置并覆盖？",
 	KeepingExisting:       "保留原配置不变。",
 	NotOverwritingFmt:     "%s 已存在，不覆盖",
@@ -336,7 +336,7 @@ var Chinese = Messages{
 	NoModelsAvailableFmt:       "%s: 没有可用模型，跳过",
 	CustomFetchEmpty:           "/models 返回为空，回退到手动输入",
 	AnthropicFetchEmpty:        "/models 返回为空 — Anthropic 兼容服务通常不提供此端点，回退到手动输入",
-	SkipStaleCustomEntryFmt:    "跳过 reamesAgent.toml 里的旧 %q 条目（指向 %s）— 请手动从 [[providers]] 里删除",
+	SkipStaleCustomEntryFmt:    "跳过 reames-agent.toml 里的旧 %q 条目（指向 %s）— 请手动从 [[providers]] 里删除",
 	APIKeyAlreadySetFmt:        "复用已设置的 %s",
 	APIKeyResetPromptFmt:       "重新输入 %s？",
 
@@ -369,15 +369,15 @@ var Chinese = Messages{
 	AnthropicSelectModelsLabel:     "选择要启用的 %s 模型",
 
 	UnknownCommandFmt:         "未知命令 %q",
-	UsageRunHint:              "用法：reamesAgent run [--model NAME] <task>",
+	UsageRunHint:              "用法：reames-agent run [--model NAME] <task>",
 	ErrorPrefix:               "错误：",
 	ReconfigureOnUnknownModel: "配置的模型已不可用 —— 重新运行引导配置。",
 	WriteConfigErr:            "写入配置失败：",
 	WriteEnvErr:               "写入 .env 失败：",
 
 	ProviderErrBadRequest:          "请求格式错误 (HTTP 400)：请求体被拒绝，通常是程序缺陷。若持续出现请反馈。",
-	ProviderErrAuth:                "认证失败 (HTTP 401)：未读到 API key（缺失或未设置）。请在 .env 中配置密钥，或运行 `reamesAgent setup`。",
-	ProviderErrAuthRejected:        "认证失败 (HTTP 401)：服务端拒绝了你的 API key。可能是 key 错误或已过期，也可能是服务端出现瞬时鉴权/额度问题——已退避重试仍失败。请稍后再试，或检查 .env 中的密钥 / 运行 `reamesAgent setup`。",
+	ProviderErrAuth:                "认证失败 (HTTP 401)：未读到 API key（缺失或未设置）。请在 .env 中配置密钥，或运行 `reames-agent setup`。",
+	ProviderErrAuthRejected:        "认证失败 (HTTP 401)：服务端拒绝了你的 API key。可能是 key 错误或已过期，也可能是服务端出现瞬时鉴权/额度问题——已退避重试仍失败。请稍后再试，或检查 .env 中的密钥 / 运行 `reames-agent setup`。",
 	ProviderErrInsufficientBalance: "余额不足 (HTTP 402)：账户余额不足，请前往充值后重试。",
 	ProviderErrUnprocessable:       "参数错误 (HTTP 422)：某个请求参数被拒绝，通常是程序缺陷。若持续出现请反馈。",
 	ProviderErrRateLimited:         "请求速率达到上限 (HTTP 429)：请求过于频繁 (TPM/RPM)。已退避重试，请放慢速率或稍后再试。",
@@ -418,37 +418,37 @@ var Chinese = Messages{
 	UpgradeApplyFailed:         "应用更新失败：%v",
 	UpgradeSuccessFmt:          "已更新 %s → %s",
 
-	UsageBody: `reamesAgent — 由配置和插件驱动的 coding agent（多模型）
+	UsageBody: `reames-agent — 由配置和插件驱动的 coding agent（多模型）
 
 用法：
-  reamesAgent [--model NAME] [-c|--continue] [--resume] [--copy] [--yolo] [--dir PATH]   交互式会话（多轮；-c 恢复最近一次，--resume 选择一个，--copy 在副本中继续）
-  reamesAgent run  [--model NAME] [--max-steps N] [-c|--continue] [--resume PATH] [--copy] <task>   执行单次任务后退出
-  reamesAgent review [--base BRANCH] [--commit SHA] [--model NAME]  AI 代码审查（基于本地 diff）
-  reamesAgent serve [--model NAME] [--addr HOST:PORT] [--auth none|token|password] [--token STR] [--password STR] [--hash-password]  通过 HTTP+SSE 提供服务（支持可选认证）
-  reamesAgent acp [--model NAME]                           通过 stdio 提供 Agent Client Protocol（也可用：reamesAgent --acp）
-  reamesAgent setup [path]                                 交互式配置向导；生成 reamesAgent.toml（及 .env）
-  reamesAgent config auto-plan [off|on]                    配置自动计划模式
-  reamesAgent config memory-v5 [off|observe|compact|on|status]  配置 Memory v5
-  reamesAgent config reasoning-language [auto|zh|en]        配置可见思考语言
-  reamesAgent mcp <add|remove|list|import>                 管理 reamesAgent.toml 里的 MCP 服务器
-  reamesAgent init                                         查看如何生成项目记忆（AGENTS.md）
-  reamesAgent doctor [--json]                              输出脱敏的本地诊断信息
-  reamesAgent doctor session <branch-id> [--zip] [--out PATH]  导出会话冲突诊断 zip
-  reamesAgent bot start|doctor|weixin-login                多渠道 IM bot 网关
-  reamesAgent upgrade [--check] [--force]                   自更新到最新版本（也可用：reamesAgent update）
-  reamesAgent version
-  reamesAgent help
+  reames-agent [--model NAME] [-c|--continue] [--resume] [--copy] [--yolo] [--dir PATH]   交互式会话（多轮；-c 恢复最近一次，--resume 选择一个，--copy 在副本中继续）
+  reames-agent run  [--model NAME] [--max-steps N] [-c|--continue] [--resume PATH] [--copy] <task>   执行单次任务后退出
+  reames-agent review [--base BRANCH] [--commit SHA] [--model NAME]  AI 代码审查（基于本地 diff）
+  reames-agent serve [--model NAME] [--addr HOST:PORT] [--auth none|token|password] [--token STR] [--password STR] [--hash-password]  通过 HTTP+SSE 提供服务（支持可选认证）
+  reames-agent acp [--model NAME]                           通过 stdio 提供 Agent Client Protocol（也可用：reames-agent --acp）
+  reames-agent setup [path]                                 交互式配置向导；生成 reames-agent.toml（及 .env）
+  reames-agent config auto-plan [off|on]                    配置自动计划模式
+  reames-agent config memory-v5 [off|observe|compact|on|status]  配置 Memory v5
+  reames-agent config reasoning-language [auto|zh|en]        配置可见思考语言
+  reames-agent mcp <add|remove|list|import>                 管理 reames-agent.toml 里的 MCP 服务器
+  reames-agent init                                         查看如何生成项目记忆（AGENTS.md）
+  reames-agent doctor [--json]                              输出脱敏的本地诊断信息
+  reames-agent doctor session <branch-id> [--zip] [--out PATH]  导出会话冲突诊断 zip
+  reames-agent bot start|doctor|weixin-login                多渠道 IM bot 网关
+  reames-agent upgrade [--check] [--force]                   自更新到最新版本（也可用：reames-agent update）
+  reames-agent version
+  reames-agent help
 
 示例：
   reamesAgent
-  reamesAgent --continue
-  reamesAgent run "把 main.go 里的 TODO 实现掉"
-  reamesAgent run --model mimo-pro "给这个函数补单元测试"
-  echo "解释这段代码" | reamesAgent run
+  reames-agent --continue
+  reames-agent run "把 main.go 里的 TODO 实现掉"
+  reames-agent run --model mimo-pro "给这个函数补单元测试"
+  echo "解释这段代码" | reames-agent run
 
 配置：
-  优先级：flag > ./reamesAgent.toml > ~/.reames-agent/config.toml > 内置默认值
+  优先级：flag > ./reames-agent.toml > ~/.reames-agent/config.toml > 内置默认值
   密钥通过 api_key_env 从环境变量注入（如 DEEPSEEK_API_KEY）。
-  运行 'reamesAgent setup' 生成配置；详见 docs/SPEC.md。
+  运行 'reames-agent setup' 生成配置；详见 docs/SPEC.md。
 `,
 }

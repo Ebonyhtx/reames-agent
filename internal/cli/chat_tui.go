@@ -58,7 +58,7 @@ type chatTUI struct {
 	// click-drag selection and right-click context menu work again. Toggled by
 	// "/mouse" or REAMES_AGENT_DISABLE_MOUSE at startup; trades away in-app
 	// drag-select, the transcript scrollbar, and wheel-scroll while it's on,
-	// since the terminal no longer forwards those events to Reasonix.
+	// since the terminal no longer forwards those events to Reames Agent.
 	mouseCaptureOff bool
 
 	input   textarea.Model
@@ -3178,7 +3178,7 @@ func (m *chatTUI) toggleVerboseReasoning(notify bool) {
 	}
 }
 
-// toggleMouseCapture flips whether Reasonix owns the mouse. It's session-only
+// toggleMouseCapture flips whether Reames Agent owns the mouse. It's session-only
 // (unlike /verbose, this accommodates the terminal/multiplexer at hand rather
 // than recording a lasting preference) — mirrors nativeScrollback, which is
 // likewise never persisted to config. Clears any in-app selection/scrollbar

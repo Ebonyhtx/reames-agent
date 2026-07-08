@@ -326,7 +326,7 @@ func TestManagementMigrateEmitsProgress(t *testing.T) {
 
 func TestManagementMigrateFromImportsExplicitSessions(t *testing.T) {
 	home := isolateControlConfigHome(t)
-	legacySessions := filepath.Join(home, "Old Reasonix", "sessions")
+	legacySessions := filepath.Join(home, "Old Reames Agent", "sessions")
 	if err := os.MkdirAll(legacySessions, 0o755); err != nil {
 		t.Fatal(err)
 	}

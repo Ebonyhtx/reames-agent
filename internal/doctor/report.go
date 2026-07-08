@@ -119,10 +119,10 @@ func Collect(opts Options) Report {
 	cwd, _ := os.Getwd()
 	sourcePath := config.SourcePath()
 	// Settings UIs and `reamesAgent config` edit the user-level config, but a
-	// project reamesAgent.toml outranks it. Users who toggle the sandbox off in
+	// project reames-agent.toml outranks it. Users who toggle the sandbox off in
 	// Settings while the project file pins [sandbox] read the no-op as "bash is
 	// broken" (#5961, #6046) — surface the layering explicitly.
-	if sourcePath != "" && filepath.Base(sourcePath) == "reamesAgent.toml" {
+	if sourcePath != "" && filepath.Base(sourcePath) == "reames-agent.toml" {
 		if raw, err := os.ReadFile(sourcePath); err == nil && tomlHasSandboxTable(raw) {
 			warnings = append(warnings, "project "+redactHome(sourcePath)+" sets [sandbox]; it overrides user-level Settings -> Sandbox for this workspace — edit the project file to change sandbox behavior here")
 		}

@@ -751,7 +751,7 @@ func TestSetReasoningLanguagePersistsToUserConfig(t *testing.T) {
 func TestSetDesktopLanguagePersistsResponseLanguageAndUpdatesLiveTabs(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	projectRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(projectRoot, "reamesAgent.toml"), []byte("language = \"zh\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectRoot, "reames-agent.toml"), []byte("language = \"zh\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -798,7 +798,7 @@ func TestSetDesktopLanguagePersistsResponseLanguageAndUpdatesLiveTabs(t *testing
 func TestSetReasoningLanguageUpdatesLiveTabControllers(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	projectRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(projectRoot, "reamesAgent.toml"), []byte("[agent]\nreasoning_language = \"en\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectRoot, "reames-agent.toml"), []byte("[agent]\nreasoning_language = \"en\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -887,7 +887,7 @@ func TestSetAutoPlanUpdatesLiveTabControllers(t *testing.T) {
 func TestSetAutoPlanIgnoresProjectOverrideForLiveTab(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	projectRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(projectRoot, "reamesAgent.toml"), []byte("[agent]\nauto_plan = \"on\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectRoot, "reames-agent.toml"), []byte("[agent]\nauto_plan = \"on\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1308,7 +1308,7 @@ func TestLoadDesktopUserConfigViewKeepsLegacyBotConfigMigrationInMemory(t *testi
 		t.Fatal(err)
 	}
 	legacyRoot := t.TempDir()
-	legacyPath := filepath.Join(legacyRoot, "reamesAgent.toml")
+	legacyPath := filepath.Join(legacyRoot, "reames-agent.toml")
 	legacyBody := "[bot]\nenabled = true\nmodel = \"local/m1\"\n"
 	if err := os.WriteFile(legacyPath, []byte(legacyBody), 0o644); err != nil {
 		t.Fatal(err)

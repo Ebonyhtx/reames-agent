@@ -241,7 +241,7 @@ func TestMigrateMCPToUserConfigOnUpgradeCollectsKnownSources(t *testing.T) {
 			"global": {"command": "legacy-should-not-win"}
 		}
 	}`)
-	writeLegacy(t, filepath.Join(filepath.Dir(dest), "reamesAgent.toml"), `
+	writeLegacy(t, filepath.Join(filepath.Dir(dest), "reames-agent.toml"), `
 [[plugins]]
 name = "legacy-toml"
 command = "legacy-toml-bin"
@@ -257,7 +257,7 @@ command = "global-bin"
 		t.Fatal(err)
 	}
 	projectTOML := t.TempDir()
-	if err := os.WriteFile(filepath.Join(projectTOML, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(projectTOML, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "project-toml"
 command = "project-toml-bin"
@@ -309,7 +309,7 @@ command = "project-should-not-win"
 	}
 
 	lateProject := t.TempDir()
-	if err := os.WriteFile(filepath.Join(lateProject, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(lateProject, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "late"
 command = "late-bin"
@@ -383,7 +383,7 @@ func TestMigrateMCPToUserConfigOnUpgradePreservesConfigVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	project := t.TempDir()
-	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reames-agent.toml"), []byte(`
 [[plugins]]
 name = "project"
 command = "project-bin"
@@ -409,7 +409,7 @@ command = "project-bin"
 
 func TestMigrateImportsLegacyV1TOMLBeforeJSON(t *testing.T) {
 	srcJSON, dest, _ := legacyHome(t)
-	legacyTOML := filepath.Join(filepath.Dir(dest), "reamesAgent.toml")
+	legacyTOML := filepath.Join(filepath.Dir(dest), "reames-agent.toml")
 	if err := os.MkdirAll(filepath.Dir(legacyTOML), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -455,7 +455,7 @@ command = "legacy-bin"
 
 func TestMigrateImportsLegacyV1HomeTOMLBeforeJSON(t *testing.T) {
 	srcJSON, dest, home := legacyHome(t)
-	legacyTOML := filepath.Join(home, ".reames-agent", "reamesAgent.toml")
+	legacyTOML := filepath.Join(home, ".reames-agent", "reames-agent.toml")
 	if err := os.MkdirAll(filepath.Dir(legacyTOML), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -698,7 +698,7 @@ func TestMigrateLegacyCredentialsUsesWorkspaceRootForKeyring(t *testing.T) {
 	if err := os.WriteFile(dest, []byte(`default_model = "deepseek-flash/deepseek-chat"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(project, "reamesAgent.toml"), []byte(`
+	if err := os.WriteFile(filepath.Join(project, "reames-agent.toml"), []byte(`
 default_model = "custom/m"
 [[providers]]
 name = "custom"

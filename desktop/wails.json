@@ -10,10 +10,10 @@
     "name": "esengine"
   },
   "info": {
-    "companyName": "Reasonix",
-    "productName": "Reasonix",
+    "companyName": "Reames Agent",
+    "productName": "Reames Agent",
     "productVersion": "0.0.0",
-    "copyright": "Copyright © 2026 Reasonix Contributors",
-    "comments": "Reasonix desktop — a Wails shell around the Go kernel."
+    "copyright": "Copyright © 2026 Reames Agent Contributors",
+    "comments": "Reames Agent desktop — a Wails shell around the Go kernel."
   }
 }

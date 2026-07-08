@@ -11,7 +11,7 @@ import (
 	"reames-agent/internal/sandbox"
 )
 
-// stateRootFor builds a fake Reasonix state root with the two guarded session
+// stateRootFor builds a fake Reames Agent state root with the two guarded session
 // trees populated, returning the root and one file path in each tree.
 func stateRootFor(t *testing.T) (root, cliSession, projectSession string) {
 	t.Helper()
@@ -41,7 +41,7 @@ func TestSessionDataGuardDeniesSessionStores(t *testing.T) {
 	} {
 		if err := g.Check(target); err == nil {
 			t.Errorf("Check(%q) = nil, want session-data denial", target)
-		} else if !strings.Contains(err.Error(), "Reasonix's own session/state data") {
+		} else if !strings.Contains(err.Error(), "Reames Agent's own session/state data") {
 			t.Errorf("Check(%q) error %q does not name session/state data", target, err)
 		}
 	}
@@ -287,7 +287,7 @@ func TestBashAppendsSessionDataHint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bash: %v", err)
 	}
-	if !strings.Contains(out, "WARNING: this command referenced Reasonix's own session/state data") {
+	if !strings.Contains(out, "WARNING: this command referenced Reames Agent's own session/state data") {
 		t.Fatalf("bash output missing session-data warning:\n%s", out)
 	}
 	// An ordinary command stays clean.

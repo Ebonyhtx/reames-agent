@@ -461,7 +461,7 @@ func TestServeLifecycle(t *testing.T) {
 		t.Errorf("image must not be advertised")
 	}
 	if len(ir.AuthMethods) != 1 || ir.AuthMethods[0].ID != "reamesAgent-setup" || ir.AuthMethods[0].Type != "terminal" {
-		t.Fatalf("authMethods = %+v, want terminal reamesAgent setup", ir.AuthMethods)
+		t.Fatalf("authMethods = %+v, want terminal reames-agent setup", ir.AuthMethods)
 	}
 	if len(ir.AuthMethods[0].Args) != 1 || ir.AuthMethods[0].Args[0] != "setup" {
 		t.Fatalf("auth args = %+v, want [setup]", ir.AuthMethods[0].Args)

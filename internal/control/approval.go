@@ -72,7 +72,7 @@ func newApprovalManager(policy permission.Policy, mode string, timeout time.Dura
 	}
 }
 
-// NewHeadlessPermissionGate builds the non-interactive gate used by `reamesAgent run`
+// NewHeadlessPermissionGate builds the non-interactive gate used by `reames-agent run`
 // and sub-agents. It preserves headless autonomy for ordinary Ask decisions, but
 // refuses tools whose contract requires a fresh human approval.
 func NewHeadlessPermissionGate(policy permission.Policy) *freshHumanHeadlessGate {

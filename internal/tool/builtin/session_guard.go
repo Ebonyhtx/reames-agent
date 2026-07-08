@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// SessionDataGuard rejects agent writes into Reasonix's own session stores:
+// SessionDataGuard rejects agent writes into Reames Agent's own session stores:
 // <state root>/sessions and <state root>/projects/<slug>/sessions. The runtime
 // is the only writer of those files (CAS ledger + autosave); an agent editing
 // them from inside a chat races the app's own saves, which surfaces to the user
@@ -25,7 +25,7 @@ type SessionDataGuard struct {
 	hintNeedles []string
 }
 
-// NewSessionDataGuard builds a guard for the given Reasonix state root
+// NewSessionDataGuard builds a guard for the given Reames Agent state root
 // (config.MemoryUserDir()) and the explicit allow_write entries. Both are
 // resolved to absolute, symlink-free paths once here, mirroring realRoots.
 // An empty stateRoot yields an unconfined guard.
@@ -58,8 +58,8 @@ func (g SessionDataGuard) Check(target string) error {
 	if !g.denies(abs) {
 		return nil
 	}
-	return fmt.Errorf("path %q is inside Reasonix's own session/state data (%s); the app is the only writer of these files, and edits from a chat race its saves — that surfaces as repeated save-conflict copies. "+
-		"Do not modify session or runtime-state files directly; report the underlying problem instead. If raw access is truly intended, add the directory to [sandbox] allow_write in reamesAgent.toml",
+	return fmt.Errorf("path %q is inside Reames Agent's own session/state data (%s); the app is the only writer of these files, and edits from a chat race its saves — that surfaces as repeated save-conflict copies. "+
+		"Do not modify session or runtime-state files directly; report the underlying problem instead. If raw access is truly intended, add the directory to [sandbox] allow_write in reames-agent.toml",
 		target, g.stateRoot)
 }
 
@@ -147,7 +147,7 @@ func (g SessionDataGuard) CommandHint(workDir, command string) string {
 	if g.stateRoot == "" || command == "" {
 		return ""
 	}
-	warn := fmt.Sprintf("WARNING: this command referenced Reasonix's own session/state data under %s. "+
+	warn := fmt.Sprintf("WARNING: this command referenced Reames Agent's own session/state data under %s. "+
 		"The app is actively saving those files; external modifications conflict with its saves and are preserved as conflict copies, so an edit can look like it \"did not take\". "+
 		"Do not modify session files from a chat — stop retrying and report the underlying problem instead.", g.stateRoot)
 	haystack := strings.ToLower(filepath.ToSlash(command))

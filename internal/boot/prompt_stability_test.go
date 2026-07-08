@@ -20,7 +20,7 @@ func TestBuildComposesByteStableSystemPrompt(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]

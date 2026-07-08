@@ -10,12 +10,12 @@ import (
 )
 
 // sessionLeaseResumeRefusal is the startup-time refusal for `reamesAgent
-// [--resume|--continue]` and `reamesAgent run --resume/--continue`: it names the
+// [--resume|--continue]` and `reames-agent run --resume/--continue`: it names the
 // holder and offers the two ways out (close the holder, or continue in a
 // duplicated session via --copy).
 func sessionLeaseResumeRefusal(err error) string {
 	return control.SessionInUseMessage(err) +
-		"; close the other Reasonix window or process, or rerun with --copy to continue in a duplicated session"
+		"; close the other Reames Agent window or process, or rerun with --copy to continue in a duplicated session"
 }
 
 // sessionLeaseHeldNotice is the in-TUI refusal for /resume and /switch, where

@@ -133,7 +133,7 @@ type Controller struct {
 	// tool registry the executor reads each turn, and the session-scoped context a
 	// hot-added stdio server binds its subprocess to — behind its own lock, off
 	// c.mu. The Controller keeps the config-facing orchestration (persisting
-	// reamesAgent.toml on add/remove, building specs from entries). See mcp.go.
+	// reames-agent.toml on add/remove, building specs from entries). See mcp.go.
 	mcp mcpManager
 
 	// goals owns the active goal's FSM (status, intercepts, idle/turn counters)
@@ -1348,7 +1348,7 @@ func (c *Controller) notice(text string) {
 }
 
 // Run executes a turn synchronously, returning the agent's error. Used by the
-// headless `reamesAgent run` path, where the Sink renders to stdout and the caller
+// headless `reames-agent run` path, where the Sink renders to stdout and the caller
 // just needs the exit status — no TurnDone event, no cancel bookkeeping.
 func (c *Controller) Run(ctx context.Context, input string) error {
 	c.maybeSessionStart(ctx)
@@ -3672,7 +3672,7 @@ func (c *Controller) AddMCPServer(e config.PluginEntry) (int, error) {
 
 // ConnectMCPServer connects an MCP server entry for this session without writing
 // it to config. Desktop owns config placement so it can keep user-level settings
-// out of project reamesAgent.toml while preserving the CLI AddMCPServer semantics.
+// out of project reames-agent.toml while preserving the CLI AddMCPServer semantics.
 func (c *Controller) ConnectMCPServer(e config.PluginEntry) (int, error) {
 	return c.connectMCPServer(e)
 }

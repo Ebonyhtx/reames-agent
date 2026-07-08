@@ -1321,7 +1321,7 @@ func TestGatewayUnknownDMGetsPairingCode(t *testing.T) {
 	gw.handleMessage(context.Background(), AdapterBinding{ID: "feishu-feishu", Platform: PlatformFeishu, Adapter: adapter}, msg)
 
 	sent := adapter.sentMessages()
-	if len(sent) != 1 || !strings.Contains(sent[0].Text, "配对码") || !strings.Contains(sent[0].Text, "reamesAgent bot pairing approve") {
+	if len(sent) != 1 || !strings.Contains(sent[0].Text, "配对码") || !strings.Contains(sent[0].Text, "reames-agent bot pairing approve") {
 		t.Fatalf("sent = %#v, want pairing instructions", sent)
 	}
 	reqs, err := ListPairingRequests()

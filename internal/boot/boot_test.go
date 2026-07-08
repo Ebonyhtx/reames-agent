@@ -56,7 +56,7 @@ func TestBuildFoldsProjectMemoryIntoSystemPrompt(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -101,7 +101,7 @@ func TestBuildRunsCleanupPendingReconciler(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -140,7 +140,7 @@ func TestBuildRegistersUsableHistoryAndMemoryRetrievalTools(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -405,7 +405,7 @@ func TestBuildSubagentSkillFailedContinuationPersistsTranscript(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -463,7 +463,7 @@ func TestBuildSubagentStoreHonorsSessionDirOverride(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -510,7 +510,7 @@ func TestBuildSubagentSkillUsesLiveReasoningLanguage(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -553,7 +553,7 @@ func TestBuildUsesConfiguredLanguageForResponsePreference(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 language = "en"
 
@@ -592,7 +592,7 @@ func TestBuildSubagentSkillGetsForegroundOnlyBash(t *testing.T) {
 	registerBootSubagentTestProvider()
 	prov := &bootSubagentTestProvider{}
 	setBootSubagentTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -758,7 +758,7 @@ func subagentRefFromHistory(t *testing.T, msgs []provider.Message) string {
 }
 
 // TestBuildHeadlessRunRunsTaskSubagentWithoutSessionPath reproduces headless
-// `reamesAgent run`: a controller built via Build with NO SetSessionPath (exactly
+// `reames-agent run`: a controller built via Build with NO SetSessionPath (exactly
 // what internal/cli.runAgent does) must still be able to run a `task` sub-agent.
 // Before the ephemeral fallback this failed with "parent session is required".
 func TestBuildHeadlessRunRunsTaskSubagentWithoutSessionPath(t *testing.T) {
@@ -769,7 +769,7 @@ func TestBuildHeadlessRunRunsTaskSubagentWithoutSessionPath(t *testing.T) {
 	registerHeadlessTaskTestProvider()
 	prov := &headlessTaskTestProvider{}
 	setHeadlessTaskTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -963,7 +963,7 @@ func TestBuildHonorsSessionDirOverride(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [[providers]]
@@ -995,7 +995,7 @@ func TestBuildDiscoversSkills(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1043,7 +1043,7 @@ func TestBuildTokenFullMatchesDefaultRequestPrefix(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1085,7 +1085,7 @@ func TestBuildInjectsEnvironmentBlockByDefaultAndEconomy(t *testing.T) {
 			isolateConfigHome(t)
 			dir := robustTempDir(t)
 			t.Chdir(dir)
-			writeFile(t, dir, "reamesAgent.toml", `
+			writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1113,7 +1113,7 @@ func TestBuildSkipsEnvironmentBlockWhenDisabled(t *testing.T) {
 	isolateConfigHome(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [environment]
@@ -1148,7 +1148,7 @@ func TestBuildDoesNotExecuteWorkspaceEnvironmentOverride(t *testing.T) {
 	if err := os.WriteFile(toolPath, []byte(body), 0o755); err != nil {
 		t.Fatalf("write fake tool: %v", err)
 	}
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [environment.tools]
@@ -1184,7 +1184,7 @@ func TestBootToolContractMatchesProviderVisibleSurface(t *testing.T) {
 			isolateConfigHome(t)
 			dir := robustTempDir(t)
 			t.Chdir(dir)
-			writeFile(t, dir, "reamesAgent.toml", `
+			writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1259,7 +1259,7 @@ func TestToolContractDocCoversDefaultBootSurfaces(t *testing.T) {
 	isolateConfigHome(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1387,7 +1387,7 @@ func TestBuildTokenEconomyStartsWithLeanToolSurface(t *testing.T) {
 	registerBootTokenProfileTestProvider()
 	prov := testutil.NewMock("token-economy", testutil.Turn{Text: "done"})
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1485,7 +1485,7 @@ func TestBuildTokenEconomyConnectsWebFetchOnDemand(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1530,7 +1530,7 @@ func TestBuildTokenEconomyPlanModeCanConnectWebFetch(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1582,7 +1582,7 @@ func TestBuildTokenEconomyPlanModeCanConnectReadOnlyTask(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1653,7 +1653,7 @@ func TestBuildTokenEconomyPlanModeCanConnectReadOnlySkill(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1738,7 +1738,7 @@ func TestBuildTokenEconomyPlanModeCanConnectAllowedMCPSource(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", fmt.Sprintf(`
+	writeFile(t, dir, "reames-agent.toml", fmt.Sprintf(`
 default_model = "test-model"
 
 [agent]
@@ -1799,7 +1799,7 @@ func TestBuildTokenEconomyPlanModeCanConnectTrustedReadOnlyMCPSource(t *testing.
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", fmt.Sprintf(`
+	writeFile(t, dir, "reames-agent.toml", fmt.Sprintf(`
 default_model = "test-model"
 
 [agent]
@@ -1896,7 +1896,7 @@ func TestBuildTokenEconomyPlanModeBlocksSourcesWithPolicy(t *testing.T) {
 				testutil.Turn{Text: "done"},
 			)
 			setBootTokenProfileTestProvider(t, prov)
-			writeFile(t, dir, "reamesAgent.toml", `
+			writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -1958,7 +1958,7 @@ func TestBuildWarnsIgnoredPlanModeAllowedTools(t *testing.T) {
 	registerBootTokenProfileTestProvider()
 	prov := testutil.NewMock("plan-mode-allowed-tools", testutil.Turn{Text: "done"})
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2006,7 +2006,7 @@ func TestBuildWarnsIgnoredPlanModeReadOnlyCommands(t *testing.T) {
 	registerBootTokenProfileTestProvider()
 	prov := testutil.NewMock("plan-mode-read-only-commands", testutil.Turn{Text: "done"})
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2057,7 +2057,7 @@ func TestBuildTokenEconomyWebFetchConnectorHonorsDisabledBuiltin(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [tools]
@@ -2111,7 +2111,7 @@ func TestBuildTokenEconomyConnectsSkillsOnDemand(t *testing.T) {
 		testutil.Turn{Text: "done"},
 	)
 	setBootTokenProfileTestProvider(t, prov)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2180,7 +2180,7 @@ func TestBuildOmitsDisabledSkillsFromPromptAndRuntimeList(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2233,7 +2233,7 @@ func TestBuildOmitsExcludedSkillRootsFromPromptAndRuntimeList(t *testing.T) {
 	excluded := filepath.Join(home, ".agents", "skills")
 	writeFile(t, home, ".reames-agent/skills/keep.md", "---\ndescription: keep\n---\nplaybook")
 	writeFile(t, home, ".agents/skills/noisy.md", "---\ndescription: noisy\n---\nplaybook")
-	writeFile(t, dir, "reamesAgent.toml", fmt.Sprintf(`
+	writeFile(t, dir, "reames-agent.toml", fmt.Sprintf(`
 default_model = "test-model"
 
 [agent]
@@ -2280,7 +2280,7 @@ func TestBuildWithoutMemoryLeavesPromptUnchanged(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2326,7 +2326,7 @@ func TestBuildAddsCurrentWorkspaceToSystemPrompt(t *testing.T) {
 	projectA := robustTempDir(t)
 	projectB := robustTempDir(t)
 	for _, dir := range []string{projectA, projectB} {
-		writeFile(t, dir, "reamesAgent.toml", `
+		writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2389,7 +2389,7 @@ func TestCurrentWorkspacePromptLineEscapesControlCharacters(t *testing.T) {
 func TestBuildLanguagePolicyIsAppended(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2418,7 +2418,7 @@ api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 func TestBuildAppendsUserDecisionPolicyToCustomSystemPrompt(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -2505,11 +2505,11 @@ func TestRememberPermissionRuleUsesWorkspaceRoot(t *testing.T) {
 	cwd := robustTempDir(t)
 	workspace := robustTempDir(t)
 	t.Chdir(cwd)
-	writeFile(t, cwd, "reamesAgent.toml", `
+	writeFile(t, cwd, "reames-agent.toml", `
 [permissions]
 allow = ["Bash(cwd*)"]
 `)
-	writeFile(t, workspace, "reamesAgent.toml", `
+	writeFile(t, workspace, "reames-agent.toml", `
 [permissions]
 allow = ["Bash(workspace*)"]
 `)
@@ -2517,11 +2517,11 @@ allow = ["Bash(workspace*)"]
 	const rule = "Bash(go test ./...)"
 	rememberPermissionRule(workspace, rule)
 
-	cwdCfg := config.LoadForEdit(filepath.Join(cwd, "reamesAgent.toml"))
+	cwdCfg := config.LoadForEdit(filepath.Join(cwd, "reames-agent.toml"))
 	if hasPermissionRule(cwdCfg.Permissions.Allow, rule) {
 		t.Fatalf("remembered rule was written to cwd config: %v", cwdCfg.Permissions.Allow)
 	}
-	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
+	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reames-agent.toml"))
 	if !hasPermissionRule(workspaceCfg.Permissions.Allow, rule) {
 		t.Fatalf("remembered rule missing from workspace config: %v", workspaceCfg.Permissions.Allow)
 	}
@@ -2543,7 +2543,7 @@ allow = ["Bash(user)"]
 
 	const rule = "Edit(src/app.go)"
 	res := rememberPermissionRule(workspace, rule)
-	if !res.Saved || res.Path != filepath.Join(workspace, "reamesAgent.toml") {
+	if !res.Saved || res.Path != filepath.Join(workspace, "reames-agent.toml") {
 		t.Fatalf("remember result = %+v, want saved to workspace config", res)
 	}
 
@@ -2551,7 +2551,7 @@ allow = ["Bash(user)"]
 	if hasPermissionRule(userCfg.Permissions.Allow, rule) {
 		t.Fatalf("workspace rule was written to user config: %v", userCfg.Permissions.Allow)
 	}
-	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
+	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reames-agent.toml"))
 	if !hasPermissionRule(workspaceCfg.Permissions.Allow, rule) {
 		t.Fatalf("workspace rule missing from project config: %v", workspaceCfg.Permissions.Allow)
 	}
@@ -2582,14 +2582,14 @@ allow = ["Bash(user*)"]
 	if !hasPermissionRule(userCfg.Permissions.Allow, rule) {
 		t.Fatalf("empty root should remember into SourcePath config: %v", userCfg.Permissions.Allow)
 	}
-	if _, err := os.Stat(filepath.Join(cwd, "reamesAgent.toml")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(cwd, "reames-agent.toml")); !os.IsNotExist(err) {
 		t.Fatalf("empty root should not create cwd config when SourcePath exists, err=%v", err)
 	}
 }
 
 func TestRememberPermissionRuleSkipsRuleCoveredByExistingAllow(t *testing.T) {
 	workspace := robustTempDir(t)
-	writeFile(t, workspace, "reamesAgent.toml", `
+	writeFile(t, workspace, "reames-agent.toml", `
 [permissions]
 allow = ["Bash(go test:*)"]
 `)
@@ -2598,7 +2598,7 @@ allow = ["Bash(go test:*)"]
 	if res.Saved || res.CoveredBy != "Bash(go test:*)" {
 		t.Fatalf("remember result = %+v, want already covered", res)
 	}
-	cfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
+	cfg := config.LoadForEdit(filepath.Join(workspace, "reames-agent.toml"))
 	if len(cfg.Permissions.Allow) != 1 || cfg.Permissions.Allow[0] != "Bash(go test:*)" {
 		t.Fatalf("allow rules = %v, want only existing prefix", cfg.Permissions.Allow)
 	}
@@ -2606,7 +2606,7 @@ allow = ["Bash(go test:*)"]
 
 func TestRememberPermissionRulePrunesNarrowRulesWhenSavingBroaderRule(t *testing.T) {
 	workspace := robustTempDir(t)
-	writeFile(t, workspace, "reamesAgent.toml", `
+	writeFile(t, workspace, "reames-agent.toml", `
 [permissions]
 allow = ["Bash(go test ./...)", "Bash(go build ./...)"]
 `)
@@ -2615,7 +2615,7 @@ allow = ["Bash(go test ./...)", "Bash(go build ./...)"]
 	if !res.Saved || res.CoveredBy != "" {
 		t.Fatalf("remember result = %+v, want saved broader rule", res)
 	}
-	cfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
+	cfg := config.LoadForEdit(filepath.Join(workspace, "reames-agent.toml"))
 	if hasPermissionRule(cfg.Permissions.Allow, "Bash(go test ./...)") {
 		t.Fatalf("narrow go test rule should be pruned: %v", cfg.Permissions.Allow)
 	}
@@ -2634,25 +2634,25 @@ func TestRememberPlanModeReadOnlyCommandUsesWorkspaceRoot(t *testing.T) {
 	cwd := robustTempDir(t)
 	workspace := robustTempDir(t)
 	t.Chdir(cwd)
-	writeFile(t, cwd, "reamesAgent.toml", `
+	writeFile(t, cwd, "reames-agent.toml", `
 [agent]
 plan_mode_read_only_commands = ["cwd query"]
 `)
-	writeFile(t, workspace, "reamesAgent.toml", `
+	writeFile(t, workspace, "reames-agent.toml", `
 [agent]
 plan_mode_read_only_commands = ["workspace query"]
 `)
 
 	res := rememberPlanModeReadOnlyCommand(workspace, "gh issue view")
-	if !res.Saved || res.Path != filepath.Join(workspace, "reamesAgent.toml") {
+	if !res.Saved || res.Path != filepath.Join(workspace, "reames-agent.toml") {
 		t.Fatalf("remember result = %+v, want saved to workspace config", res)
 	}
 
-	cwdCfg := config.LoadForEdit(filepath.Join(cwd, "reamesAgent.toml"))
+	cwdCfg := config.LoadForEdit(filepath.Join(cwd, "reames-agent.toml"))
 	if hasPlanModeReadOnlyCommand(cwdCfg.Agent.PlanModeReadOnlyCommands, "gh issue view") {
 		t.Fatalf("remembered command was written to cwd config: %v", cwdCfg.Agent.PlanModeReadOnlyCommands)
 	}
-	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
+	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reames-agent.toml"))
 	if !hasPlanModeReadOnlyCommand(workspaceCfg.Agent.PlanModeReadOnlyCommands, "gh issue view") {
 		t.Fatalf("remembered command missing from workspace config: %v", workspaceCfg.Agent.PlanModeReadOnlyCommands)
 	}
@@ -2660,7 +2660,7 @@ plan_mode_read_only_commands = ["workspace query"]
 
 func TestRememberPlanModeReadOnlyCommandSkipsCoveredPrefix(t *testing.T) {
 	workspace := robustTempDir(t)
-	writeFile(t, workspace, "reamesAgent.toml", `
+	writeFile(t, workspace, "reames-agent.toml", `
 [agent]
 plan_mode_read_only_commands = ["gh issue view"]
 `)
@@ -2669,7 +2669,7 @@ plan_mode_read_only_commands = ["gh issue view"]
 	if res.Saved || res.CoveredBy != "gh issue view" {
 		t.Fatalf("remember result = %+v, want already covered", res)
 	}
-	cfg := config.LoadForEdit(filepath.Join(workspace, "reamesAgent.toml"))
+	cfg := config.LoadForEdit(filepath.Join(workspace, "reames-agent.toml"))
 	if len(cfg.Agent.PlanModeReadOnlyCommands) != 1 || cfg.Agent.PlanModeReadOnlyCommands[0] != "gh issue view" {
 		t.Fatalf("plan-mode read-only commands = %v, want only existing prefix", cfg.Agent.PlanModeReadOnlyCommands)
 	}
@@ -2709,7 +2709,7 @@ func TestBuildMigratesLegacyConfigEndToEnd(t *testing.T) {
 	t.Chdir(proj)
 	// Project config merges over the migrated user config without dropping the
 	// migrated plugins.
-	writeFile(t, proj, "reamesAgent.toml", "")
+	writeFile(t, proj, "reames-agent.toml", "")
 	writeFile(t, filepath.Join(home, ".reames-agent"), "config.json",
 		`{"apiKey":"sk-e2e","lang":"zh","mcpServers":{"fs":{"command":"npx","args":["-y","server-fs"]}}}`)
 	writeFile(t, filepath.Join(home, ".reames-agent", "sessions"), "chat-1.events.jsonl",
@@ -2782,7 +2782,7 @@ func TestBuildMigratesLegacySessionsFromConfigSessionDir(t *testing.T) {
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 
 	proj := robustTempDir(t)
-	writeFile(t, proj, "reamesAgent.toml", "")
+	writeFile(t, proj, "reames-agent.toml", "")
 
 	legacyConfig := config.LegacyUserConfigPath()
 	if legacyConfig == "" {
@@ -2845,7 +2845,7 @@ func TestBuildSkipsLegacySessionMigrationWhenIsolated(t *testing.T) {
 	t.Setenv("REAMES_AGENT_HOME", reamesAgentHome)
 
 	proj := robustTempDir(t)
-	writeFile(t, proj, "reamesAgent.toml", "[codegraph]\nenabled = false\n")
+	writeFile(t, proj, "reames-agent.toml", "[codegraph]\nenabled = false\n")
 
 	legacyRoot := filepath.Join(xdg, "reames-agent")
 	writeFile(t, filepath.Join(legacyRoot, "sessions"), "xdg-flat.events.jsonl",
@@ -3047,7 +3047,7 @@ func TestBuildMigratesLegacyEagerTierToBackground(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -3078,7 +3078,7 @@ tier = "eager"
 	if len(failures) != 1 || failures[0].Name != "legacy-eager" {
 		t.Fatalf("failures = %+v, want background startup failure for migrated legacy eager plugin", failures)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "reamesAgent.toml"))
+	raw, err := os.ReadFile(filepath.Join(dir, "reames-agent.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3092,7 +3092,7 @@ func TestBuildMigratesLegacyLazyTierToBackground(t *testing.T) {
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]
@@ -3123,7 +3123,7 @@ tier = "lazy"
 	if len(failures) != 1 || failures[0].Name != "legacy-lazy" {
 		t.Fatalf("failures = %+v, want background startup failure for migrated legacy lazy plugin", failures)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "reamesAgent.toml"))
+	raw, err := os.ReadFile(filepath.Join(dir, "reames-agent.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3142,7 +3142,7 @@ func TestBuildDefaultsToNearestGitRoot(t *testing.T) {
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, root, "reamesAgent.toml", `
+	writeFile(t, root, "reames-agent.toml", `
 default_model = "root-model"
 
 [agent]
@@ -3178,7 +3178,7 @@ func TestBuildMigratesLegacyEagerBeforeStatsDemotion(t *testing.T) {
 		}
 	}
 
-	writeFile(t, dir, "reamesAgent.toml", `
+	writeFile(t, dir, "reames-agent.toml", `
 default_model = "test-model"
 
 [agent]

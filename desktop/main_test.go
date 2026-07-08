@@ -11,7 +11,7 @@ import (
 
 // TestMain isolates user config/state/cache dirs for the whole package. Without
 // this, tests that persist desktop state, sessions, cache, or CLI-style config
-// can leak into the developer's real Reasonix directories.
+// can leak into the developer's real Reames Agent directories.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "reamesAgent-desktop-test")
 	if err != nil {

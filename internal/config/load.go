@@ -24,8 +24,8 @@ func Load() (*Config, error) {
 // LoadForRoot builds the configuration with project files resolved from root
 // instead of the current working directory. When root is "" or ".", it behaves
 // like Load(). This is the workspace-aware entry point: desktop tabs use it so
-// each project's reamesAgent.toml + .mcp.json are resolved independently without
-// changing the process cwd, while provider keys stay rooted in Reasonix home.
+// each project's reames-agent.toml + .mcp.json are resolved independently without
+// changing the process cwd, while provider keys stay rooted in Reames Agent home.
 func LoadForRoot(root string) (*Config, error) {
 	root = resolveRoot(root)
 	expansionEnv := loadDotEnvForRoot(root)
@@ -33,9 +33,9 @@ func LoadForRoot(root string) (*Config, error) {
 	cfg.setExpansionEnv(expansionEnv)
 	cfg.CredentialsStore = credentialsStoreMode()
 
-	projectTOML := "reamesAgent.toml"
+	projectTOML := "reames-agent.toml"
 	if root != "." {
-		projectTOML = filepath.Join(root, "reamesAgent.toml")
+		projectTOML = filepath.Join(root, "reames-agent.toml")
 	}
 
 	var tomlSources []string
@@ -54,14 +54,14 @@ func LoadForRoot(root string) (*Config, error) {
 		return nil, err
 	}
 	// Runtime step caps are user/global controls, not project policy. Keep the
-	// project config's other fields, but do not let ./reamesAgent.toml override
+	// project config's other fields, but do not let ./reames-agent.toml override
 	// the user's execution and planner round limits.
 	cfg.Agent.MaxSteps = globalMaxSteps
 	cfg.Agent.PlannerMaxSteps = globalPlannerMaxSteps
 	cfg.Agent.MemoryCompiler = globalMemoryCompiler
 	// toml.DecodeFile replaces [[plugins]] wholesale, so cfg.Plugins now holds
 	// only the last file's. Re-merge by name across all sources (later wins) so a
-	// project reamesAgent.toml doesn't drop the global config's MCP servers.
+	// project reames-agent.toml doesn't drop the global config's MCP servers.
 	plugins, err := mergeTOMLPlugins(tomlSources)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func LoadForRoot(root string) (*Config, error) {
 
 	// Claude Code's .mcp.json (project root) is read last and merged into
 	// [[plugins]], so a server configured for Claude works here unchanged.
-	// reamesAgent.toml wins on a name collision (see mergeMCPJSON).
+	// reames-agent.toml wins on a name collision (see mergeMCPJSON).
 	mcpFile := mcpJSONFile
 	if root != "." {
 		mcpFile = filepath.Join(root, mcpJSONFile)
@@ -364,7 +364,7 @@ func mergeTOMLProviderAccess(paths []string) ([]string, bool, error) {
 	return merged, saw, nil
 }
 
-// LoadForEdit returns a config to seed the `reamesAgent setup` wizard when reconfiguring:
+// LoadForEdit returns a config to seed the `reames-agent setup` wizard when reconfiguring:
 // the built-in defaults with the file at path (if present) decoded on top, so a
 // reconfigure preserves the user's existing providers and agent settings instead
 // of resetting to defaults. Reames Agent's global .env is loaded so api_key_env
@@ -735,7 +735,7 @@ func normalizeLegacyMimoCustomProviders(c *Config) bool {
 }
 
 // NormalizeLegacyMimoCustomProvidersForRefs appends custom OpenAI-compatible
-// MiMo providers needed by legacy refs that live outside reamesAgent.toml, such as
+// MiMo providers needed by legacy refs that live outside reames-agent.toml, such as
 // restored desktop tab state.
 func NormalizeLegacyMimoCustomProvidersForRefs(c *Config, refs ...string) bool {
 	return normalizeLegacyMimoCustomProvidersForRefs(c, refs...)

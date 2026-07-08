@@ -55,7 +55,7 @@ const (
 // release.yml also keeps a desktop-manifest mirror attached to stable CLI
 // releases for older publishing windows. Canary has no GitHub release, so its
 // chain stays two-deep.
-const githubManifestFallback = "https://github.com/esengine/DeepSeek-Reasonix/releases/latest/download/latest.json"
+const githubManifestFallback = "https://github.com/esengine/DeepSeek-Reames Agent/releases/latest/download/latest.json"
 
 // manifestEndpoints returns the manifest URLs for the running build's channel,
 // in the order fetchManifest tries them.
@@ -78,7 +78,7 @@ func manifestEndpoints() []string {
 // lets the release edge allowlist updater requests and makes them attributable
 // in server logs.
 func updaterUserAgent() string {
-	return fmt.Sprintf("Reasonix-Updater/%s (%s/%s; %s)", version, runtime.GOOS, runtime.GOARCH, channel)
+	return fmt.Sprintf("Reames Agent-Updater/%s (%s/%s; %s)", version, runtime.GOOS, runtime.GOARCH, channel)
 }
 
 // downloadPage is the human-facing releases page shown when self-update is
@@ -272,7 +272,7 @@ func assetFileName(asset update.Asset, version string) string {
 		}
 	}
 	clean := strings.NewReplacer("/", "-", "\\", "-", ":", "-", " ", "-").Replace(version)
-	return "Reasonix-" + clean + "-" + update.CurrentPlatform() + ".update"
+	return "Reames Agent-" + clean + "-" + update.CurrentPlatform() + ".update"
 }
 
 func writeAtomic(path string, data []byte, mode os.FileMode) error {

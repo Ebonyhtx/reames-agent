@@ -10,7 +10,7 @@ import "sync"
 // lock around its load→mutate→save cycle: bot mapping/pairing persistence,
 // desktop settings and MCP writers, serve effort switches, controller skill
 // toggles, and the CLI TUI / `reamesAgent config` write paths. One writer stays
-// unlocked on purpose: the single-threaded `reamesAgent setup` wizard (an
+// unlocked on purpose: the single-threaded `reames-agent setup` wizard (an
 // interactive whole-file write with no concurrent editors in that process).
 // Desktop's read-only config loads (tray/view/bot-runtime paths) never write:
 // they apply legacy migrations in memory only, and the migrated form reaches

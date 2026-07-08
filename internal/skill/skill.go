@@ -82,7 +82,7 @@ func IsValidName(name string) bool { return config.IsValidSkillName(name) }
 
 // Options configure a Store. ProjectRoot "" reads only the global + custom
 // scopes. HomeDir "" resolves to the OS home dir (tests point it at a tmpdir).
-// ReamesAgentHomeDir overrides the canonical Reasonix home; empty uses
+// ReamesAgentHomeDir overrides the canonical Reames Agent home; empty uses
 // config.ReamesAgentHomeDir(), or HomeDir/.reamesAgent when HomeDir is explicitly set.
 type Options struct {
 	HomeDir         string
@@ -191,7 +191,7 @@ type discoveryRoot struct {
 
 // roots returns the discovery directories, highest priority first: the
 // convention dirs (config.ConventionDirs: .reamesAgent / .agents / .agent / .claude)
-// under the project root → custom paths → the Reasonix home skills dir → other
+// under the project root → custom paths → the Reames Agent home skills dir → other
 // home-dir convention dirs. A later root never overrides an earlier one.
 func (s *Store) roots() []discoveryRoot {
 	type de struct {

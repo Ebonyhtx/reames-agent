@@ -228,7 +228,7 @@ func userConfigDisplayPath() string {
 	return p
 }
 
-// UserConfigPath is the user-global config.toml. It lives under Reasonix home:
+// UserConfigPath is the user-global config.toml. It lives under Reames Agent home:
 // REAMES_AGENT_HOME/config.toml, then ~/.reames-agent/config.toml on Unix-like systems,
 // or %AppData%/reamesAgent/config.toml on Windows. If %AppData% is unavailable on
 // Windows, it falls back to %USERPROFILE%/AppData/Roaming/reamesAgent/config.toml.
@@ -241,7 +241,7 @@ func UserConfigPath() string { return userConfigPath() }
 func LegacyUserConfigPath() string { return legacyUserConfigPath() }
 
 // LegacyUserConfigPaths returns every known legacy user config path that differs
-// from the current v1.8.1 Reasonix-home config path.
+// from the current v1.8.1 Reames Agent-home config path.
 func LegacyUserConfigPaths() []string {
 	primary := userConfigPath()
 	var out []string
@@ -263,16 +263,16 @@ func LegacyUserConfigPaths() []string {
 	return out
 }
 
-// ReamesAgentHomeDir is the current Reasonix home directory. It honors
+// ReamesAgentHomeDir is the current Reames Agent home directory. It honors
 // REAMES_AGENT_HOME, then uses ~/.reamesAgent on macOS/Linux or %APPDATA%/reamesAgent on
 // Windows, with a %USERPROFILE%/AppData/Roaming fallback when %APPDATA% is
 // unavailable.
 func ReamesAgentHomeDir() string { return reamesAgentHomeDir() }
 
-// UserCredentialsPath is the reamesAgent-owned global .env file under Reasonix
-// home. It is the single source for provider credentials saved by Reasonix, so
+// UserCredentialsPath is the reamesAgent-owned global .env file under Reames Agent
+// home. It is the single source for provider credentials saved by Reames Agent, so
 // stale shell, Windows, project, or home env vars cannot silently override keys
-// the user saved through setup or settings. "" when Reasonix home can't be
+// the user saved through setup or settings. "" when Reames Agent home can't be
 // resolved.
 func UserCredentialsPath() string {
 	dir := reamesAgentHomeDir()
@@ -388,7 +388,7 @@ func conventionSubdirsAsc(base, sub string) []string {
 // CommandDirs returns the directories scanned for custom slash commands, lowest
 // priority first, so a later (more specific) directory overrides an earlier one
 // on a name clash. Order: home-dir convention dirs (~/.claude/commands …
-// ~/.reames-agent/commands), the Reasonix home commands dir, the legacy OS
+// ~/.reames-agent/commands), the Reames Agent home commands dir, the legacy OS
 // app-support dir if different, then the project's
 // convention dirs (.claude/commands … .reames-agent/commands). Scanning the .claude /
 // .agents / .agent dirs lets commands authored for other agent tools (same .md +
@@ -446,9 +446,9 @@ func SourcePath() string {
 // root, or "" if none. Equivalent to SourcePath() when root is ".".
 func SourcePathForRoot(root string) string {
 	root = resolveRoot(root)
-	projectTOML := "reamesAgent.toml"
+	projectTOML := "reames-agent.toml"
 	if root != "." {
-		projectTOML = filepath.Join(root, "reamesAgent.toml")
+		projectTOML = filepath.Join(root, "reames-agent.toml")
 	}
 	if _, err := os.Stat(projectTOML); err == nil {
 		return projectTOML

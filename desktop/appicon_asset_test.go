@@ -80,11 +80,11 @@ func assertFullCanvasRoundedIcon(t *testing.T, img image.Image, size int) {
 		if a == 0 {
 			t.Fatalf("%s edge must contain visible rounded-rect background", point.name)
 		}
-		assertReasonixBlue(t, point.name, img.At(point.x, point.y))
+		assertReames AgentBlue(t, point.name, img.At(point.x, point.y))
 	}
 }
 
-func assertReasonixBlue(t *testing.T, name string, colorValue color.Color) {
+func assertReames AgentBlue(t *testing.T, name string, colorValue color.Color) {
 	t.Helper()
 
 	r16, g16, b16, _ := colorValue.RGBA()

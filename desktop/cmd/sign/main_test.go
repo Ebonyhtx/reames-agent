@@ -29,7 +29,7 @@ func TestSignFiles(t *testing.T) {
 	t.Setenv("MINISIGN_PASSWORD", "pw")
 
 	dir := t.TempDir()
-	artifact := filepath.Join(dir, "Reasonix-linux-amd64.tar.gz")
+	artifact := filepath.Join(dir, "Reames Agent-linux-amd64.tar.gz")
 	payload := []byte("pretend this is a release tarball")
 	if err := os.WriteFile(artifact, payload, 0o644); err != nil {
 		t.Fatal(err)
@@ -53,15 +53,15 @@ func TestSignFiles(t *testing.T) {
 func TestGenManifest(t *testing.T) {
 	dir := t.TempDir()
 	names := []string{
-		"Reasonix-darwin-arm64.zip",
-		"Reasonix-darwin-amd64.zip",
-		"Reasonix-windows-amd64-installer.exe",
-		"Reasonix-windows-amd64.zip", // portable download, not the updater channel
-		"Reasonix-windows-arm64-installer.exe",
-		"Reasonix-windows-arm64.zip", // portable download, not the updater channel
-		"Reasonix-linux-amd64.tar.gz",
-		"Reasonix-linux-amd64.deb",            // human download, not the updater channel
-		"Reasonix-linux-amd64.tar.gz.minisig", // must be skipped
+		"Reames Agent-darwin-arm64.zip",
+		"Reames Agent-darwin-amd64.zip",
+		"Reames Agent-windows-amd64-installer.exe",
+		"Reames Agent-windows-amd64.zip", // portable download, not the updater channel
+		"Reames Agent-windows-arm64-installer.exe",
+		"Reames Agent-windows-arm64.zip", // portable download, not the updater channel
+		"Reames Agent-linux-amd64.tar.gz",
+		"Reames Agent-linux-amd64.deb",            // human download, not the updater channel
+		"Reames Agent-linux-amd64.tar.gz.minisig", // must be skipped
 		"README.txt",                          // unmatched, must be skipped
 	}
 	for _, n := range names {
@@ -95,7 +95,7 @@ func TestGenManifest(t *testing.T) {
 	if !ok {
 		t.Fatal("windows-amd64 missing")
 	}
-	wantURL := "https://github.com/esengine/DeepSeek-Reasonix/releases/download/desktop-v1.2.0/Reasonix-windows-amd64-installer.exe"
+	wantURL := "https://github.com/esengine/DeepSeek-Reames Agent/releases/download/desktop-v1.2.0/Reames Agent-windows-amd64-installer.exe"
 	if win.URL != wantURL {
 		t.Fatalf("windows url = %q, want %q", win.URL, wantURL)
 	}
@@ -111,7 +111,7 @@ func TestGenManifest(t *testing.T) {
 	if !ok {
 		t.Fatal("windows-arm64 missing")
 	}
-	if !strings.HasSuffix(arm.URL, "/Reasonix-windows-arm64-installer.exe") {
+	if !strings.HasSuffix(arm.URL, "/Reames Agent-windows-arm64-installer.exe") {
 		t.Fatalf("windows-arm64 url = %q, want the installer, not the portable zip", arm.URL)
 	}
 	// The Linux updater channel must stay the .tar.gz; the co-located .deb is a
@@ -120,7 +120,7 @@ func TestGenManifest(t *testing.T) {
 	if !ok {
 		t.Fatal("linux-amd64 missing")
 	}
-	if !strings.HasSuffix(lin.URL, "/Reasonix-linux-amd64.tar.gz") {
+	if !strings.HasSuffix(lin.URL, "/Reames Agent-linux-amd64.tar.gz") {
 		t.Fatalf("linux-amd64 url = %q, want the .tar.gz, not the .deb", lin.URL)
 	}
 }

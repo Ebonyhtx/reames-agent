@@ -510,7 +510,7 @@ func TestApplyDeepSeekOfficialDefaultPricingKeepsCustomPrice(t *testing.T) {
 }
 
 func TestResetOfficialProviderPricingOnUpgradeRunsOnce(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "reamesAgent.toml")
+	path := filepath.Join(t.TempDir(), "reames-agent.toml")
 	c := &Config{
 		ConfigVersion: 2,
 		Providers: []ProviderEntry{

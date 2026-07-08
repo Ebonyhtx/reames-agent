@@ -6,7 +6,7 @@
 // (*policy*): a permitted command still cannot escape the box.
 //
 // macOS uses Seatbelt via sandbox-exec, Linux uses bubblewrap when available,
-// and Windows uses Reasonix's bundled native helper: AppContainer for read-only
+// and Windows uses Reames Agent's bundled native helper: AppContainer for read-only
 // commands, a low-integrity token for writable commands, and a kill-on-close
 // Job Object. When enforce is requested but no OS sandbox backend is available,
 // the bash tool fails closed instead of running the command unwrapped.

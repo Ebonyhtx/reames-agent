@@ -27,7 +27,7 @@ import (
 
 const (
 	ghOwner        = "esengine"
-	ghRepo         = "DeepSeek-Reasonix"
+	ghRepo         = "DeepSeek-Reames Agent"
 	ghAPIReleases  = "https://api.github.com/repos/" + ghOwner + "/" + ghRepo + "/releases"
 	ghDownloadBase = "https://github.com/" + ghOwner + "/" + ghRepo + "/releases/download"
 	upgradeTimeout = 60 * time.Second

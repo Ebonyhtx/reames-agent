@@ -149,7 +149,7 @@ func TestSessionInUseMessageNamesHolder(t *testing.T) {
 		},
 	}
 	msg := SessionInUseMessage(err)
-	if !strings.Contains(msg, "another Reasonix process") {
+	if !strings.Contains(msg, "another Reames Agent process") {
 		t.Fatalf("message %q missing holder wording", msg)
 	}
 	if !strings.Contains(msg, "pid 12345") || !strings.Contains(msg, "on devbox") {

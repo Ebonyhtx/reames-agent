@@ -138,7 +138,7 @@ const (
 	SettingsFilename = "settings.json"
 )
 
-// GlobalSettingsPath is <Reasonix home>/settings.json (homeDir overrides ~ for
+// GlobalSettingsPath is <Reames Agent home>/settings.json (homeDir overrides ~ for
 // tests and legacy callers).
 func GlobalSettingsPath(homeDir string) string {
 	return filepath.Join(reamesAgentHome(homeDir), SettingsFilename)
@@ -667,7 +667,7 @@ func reamesAgentHome(override string) string {
 }
 
 func legacyGlobalSettingsPath(homeDir string) string {
-	dir := legacyReasonixHome(homeDir)
+	dir := legacyReames AgentHome(homeDir)
 	if dir == "" {
 		return ""
 	}
@@ -675,14 +675,14 @@ func legacyGlobalSettingsPath(homeDir string) string {
 }
 
 func legacyTrustPath(homeDir string) string {
-	dir := legacyReasonixHome(homeDir)
+	dir := legacyReames AgentHome(homeDir)
 	if dir == "" {
 		return ""
 	}
 	return filepath.Join(dir, TrustFilename)
 }
 
-func legacyReasonixHome(override string) string {
+func legacyReames AgentHome(override string) string {
 	if override != "" {
 		return ""
 	}

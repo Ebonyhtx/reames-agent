@@ -7,7 +7,7 @@ var English = Messages{
 	WelcomeTitleFmt: "Welcome to %s",
 	NoConfigYet:     "No configuration found yet — let's set it up.",
 	StartingChatFmt: "Starting %s…",
-	SetKeyHint:      "Set your API key, then run `reamesAgent`.",
+	SetKeyHint:      "Set your API key, then run `reames-agent`.",
 	ConfigLabel:     "config",
 	ModelsLabel:     "models",
 	ConfigNotFound:  "not found — using built-in defaults",
@@ -15,18 +15,18 @@ var English = Messages{
 	NoKey:           "no key",
 	Ready:           "ready",
 	GetStarted:      "Get started",
-	StepScaffold:    "scaffold reamesAgent.toml",
+	StepScaffold:    "scaffold reames-agent.toml",
 	StepSetKey:      "set API key",
 
-	InitHint:       "Project memory (AGENTS.md) is generated in-session: run `reamesAgent`, then `/init` — the model analyzes the codebase and writes it. For configuration, use `reamesAgent setup`.",
-	StepSetKeyHint: "run `reamesAgent setup`, or export DEEPSEEK_API_KEY=…",
+	InitHint:       "Project memory (AGENTS.md) is generated in-session: run `reames-agent`, then `/init` — the model analyzes the codebase and writes it. For configuration, use `reames-agent setup`.",
+	StepSetKeyHint: "run `reames-agent setup`, or export DEEPSEEK_API_KEY=…",
 	StepChatDesc:   "interactive session",
 	StepRunDesc:    "one-shot task",
-	HelpFooter:     "reamesAgent help · all commands",
+	HelpFooter:     "reames-agent help · all commands",
 
 	ChatTip:           "Context is kept across turns. Type 'exit' or Ctrl-D to quit.",
 	TurnCancelled:     "cancelled — back to prompt",
-	NoSessionToResume: "no saved session to resume — start a new one with `reamesAgent`",
+	NoSessionToResume: "no saved session to resume — start a new one with `reames-agent`",
 	ResumeRequiresTTY: "--resume needs an interactive terminal; pass --continue for the most recent session",
 	PickSessionLabel:  "Resume which session?",
 
@@ -94,7 +94,7 @@ var English = Messages{
 	PlanModeMCPTrustReason:                 "This MCP tool reports read-only, but external read-only hints need your confirmation before plan mode can use them. Choose always allow to remember this trust for future planning and read-only research.",
 	PlanModeMCPTrustDeclined:               "the user declined to trust this MCP read-only hint - do not retry it; continue with other trusted read-only tools or ask how to proceed.",
 	PlanModeBashTrustSubjectFmt:            "Trust %q as a read-only command prefix while planning\nCommand: %s",
-	PlanModeBashTrustReason:                "This bash command is not in Reasonix's built-in read-only set. Confirm only if this exact prefix is read-only for planning and research. Auto/YOLO approval cannot answer this trust prompt.",
+	PlanModeBashTrustReason:                "This bash command is not in Reames Agent's built-in read-only set. Confirm only if this exact prefix is read-only for planning and research. Auto/YOLO approval cannot answer this trust prompt.",
 	PlanModeBashTrustDeclined:              "the user declined to trust this bash command as read-only for plan mode - do not retry it; continue with other trusted read-only tools or ask how to proceed.",
 	SandboxEscapeSubjectFallback:           "run shell command unconfined once",
 	SandboxEscapeSubjectPrefix:             "run unconfined once: ",
@@ -116,7 +116,7 @@ var English = Messages{
 
 	OutputStyleNone:    "no output styles available",
 	OutputStyleHeader:  "output styles:",
-	OutputStyleHint:    "set agent.output_style in reamesAgent.toml to apply one (takes effect next session)",
+	OutputStyleHint:    "set agent.output_style in reames-agent.toml to apply one (takes effect next session)",
 	ThemeHeader:        "themes:",
 	ThemeHint:          "switch with /theme <auto|light|dark|style>",
 	ThemeChangedFmt:    "theme switched to %s / %s",
@@ -189,7 +189,7 @@ var English = Messages{
 	SkillPickerStatusNotDir:      "not-directory",
 	SkillPickerStatusUnreadable:  "unreadable",
 	SlashPromptEmpty:             "the MCP prompt returned no content to send",
-	SlashMCPNone:                 "no MCP servers configured — add a [[plugins]] entry in reamesAgent.toml",
+	SlashMCPNone:                 "no MCP servers configured — add a [[plugins]] entry in reames-agent.toml",
 	CtrlCQuitHint:                "press Ctrl+C again to quit",
 	CompHintSlash:                "↑/↓ move · Tab/Enter select · Esc close",
 	CompHintFile:                 "↑/↓ move · Tab/Enter open folder or pick file · Esc close",
@@ -279,7 +279,7 @@ var English = Messages{
 	ListHooksHeaderFmt:  "hooks (%d active)",
 	ListHooksNone:       "hooks: none active — configure in .reames-agent/settings.json (project, after trust) or ~/.reames-agent/settings.json (global)",
 	ListMcpHeader:       "mcp servers",
-	ListMcpNone:         "mcp: no servers connected — add one in reamesAgent.toml ([[plugins]]) or a project .mcp.json",
+	ListMcpNone:         "mcp: no servers connected — add one in reames-agent.toml ([[plugins]]) or a project .mcp.json",
 
 	MemoryNone:             "memory: none — add with “/remember <note>” or create REASONIX.md in the project root",
 	MemoryLoaded:           "memory loaded:",
@@ -315,12 +315,12 @@ var English = Messages{
 
 	SelectProvidersLabel:  "Select providers to enable",
 	EnterAPIKeysHeader:    "Enter API keys (Enter to skip and set later):",
-	MissingKeyIntro:       "reamesAgent.toml is ready — just an API key away.",
+	MissingKeyIntro:       "reames-agent.toml is ready — just an API key away.",
 	WroteFileFmt:          "Wrote %s",
 	SetupComplete:         "Setup complete.",
 	SetupCancelled:        "setup cancelled.",
 	TryHintFmt:            "Try: %s",
-	NextHint:              "Next: set your API key (run `reamesAgent setup` or export DEEPSEEK_API_KEY=...), then run `reamesAgent run \"your task\"`.",
+	NextHint:              "Next: set your API key (run `reames-agent setup` or export DEEPSEEK_API_KEY=...), then run `reames-agent run \"your task\"`.",
 	ConfirmReconfigureFmt: "%s already exists. Reconfigure and overwrite?",
 	KeepingExisting:       "Keeping existing config.",
 	NotOverwritingFmt:     "%s already exists; not overwriting",
@@ -335,7 +335,7 @@ var English = Messages{
 	NoModelsAvailableFmt:       "%s: no models available, skipping",
 	CustomFetchEmpty:           "/models returned an empty list — falling back to manual entry",
 	AnthropicFetchEmpty:        "/models returned an empty list — Anthropic-compatible providers usually don't expose one, falling back to manual entry",
-	SkipStaleCustomEntryFmt:    "skipping stale %q entry from reamesAgent.toml (pointing at %s) — please remove it from [[providers]]",
+	SkipStaleCustomEntryFmt:    "skipping stale %q entry from reames-agent.toml (pointing at %s) — please remove it from [[providers]]",
 	APIKeyAlreadySetFmt:        "reusing existing value for %s",
 	APIKeyResetPromptFmt:       "Re-enter %s?",
 
@@ -368,15 +368,15 @@ var English = Messages{
 	AnthropicSelectModelsLabel:     "Select models to enable for %s",
 
 	UnknownCommandFmt:         "unknown command %q",
-	UsageRunHint:              "usage: reamesAgent run [--model NAME] <task>",
+	UsageRunHint:              "usage: reames-agent run [--model NAME] <task>",
 	ErrorPrefix:               "error:",
 	ReconfigureOnUnknownModel: "Configured model is no longer available — re-running setup.",
 	WriteConfigErr:            "write config:",
 	WriteEnvErr:               "write .env:",
 
 	ProviderErrBadRequest:          "Malformed request (HTTP 400): the request body was rejected. This is likely a bug — please report it if it persists.",
-	ProviderErrAuth:                "Authentication failed (HTTP 401): your API key is missing or unset. Add it to .env or run `reamesAgent setup`.",
-	ProviderErrAuthRejected:        "Authentication failed (HTTP 401): the server rejected your API key. It may be wrong or expired, or the provider hit a transient auth/quota issue — retried with backoff and still failed. Try again shortly, or check the key in .env / run `reamesAgent setup`.",
+	ProviderErrAuth:                "Authentication failed (HTTP 401): your API key is missing or unset. Add it to .env or run `reames-agent setup`.",
+	ProviderErrAuthRejected:        "Authentication failed (HTTP 401): the server rejected your API key. It may be wrong or expired, or the provider hit a transient auth/quota issue — retried with backoff and still failed. Try again shortly, or check the key in .env / run `reames-agent setup`.",
 	ProviderErrInsufficientBalance: "Insufficient balance (HTTP 402): your account is out of credit. Top up your account, then retry.",
 	ProviderErrUnprocessable:       "Invalid parameters (HTTP 422): a request parameter was rejected. This is likely a bug — please report it if it persists.",
 	ProviderErrRateLimited:         "Rate limit reached (HTTP 429): too many requests (TPM/RPM). Retried with backoff — slow down or try again shortly.",
@@ -417,37 +417,37 @@ var English = Messages{
 	UpgradeApplyFailed:         "failed to apply update: %v",
 	UpgradeSuccessFmt:          "Updated %s → %s",
 
-	UsageBody: `reamesAgent — a config- and plugin-driven coding agent (multi-model)
+	UsageBody: `reames-agent — a config- and plugin-driven coding agent (multi-model)
 
 Usage:
-  reamesAgent [--model NAME] [-c|--continue] [--resume] [--copy] [--yolo] [--dir PATH]   interactive session (multi-turn; -c resumes the latest, --resume picks one, --copy continues in a duplicate)
-  reamesAgent run  [--model NAME] [--max-steps N] [-c|--continue] [--resume PATH] [--copy] <task>   run one task and exit
-  reamesAgent review [--base BRANCH] [--commit SHA] [--model NAME]  AI-powered code review on local diffs
-  reamesAgent serve [--model NAME] [--addr HOST:PORT] [--auth none|token|password] [--token STR] [--password STR] [--hash-password]  serve over HTTP+SSE (with optional auth)
-  reamesAgent acp [--model NAME]                           serve Agent Client Protocol over stdio (also: reamesAgent --acp)
-  reamesAgent setup [path]                                 interactive config wizard; writes reamesAgent.toml (+ .env)
-  reamesAgent config auto-plan [off|on]                    configure automatic plan mode
-  reamesAgent config memory-v5 [off|observe|compact|on|status]  configure Memory v5
-  reamesAgent config reasoning-language [auto|zh|en]        configure visible reasoning language
-  reamesAgent mcp <add|remove|list|import>                 manage MCP servers in reamesAgent.toml
-  reamesAgent init                                         show how to generate project memory (AGENTS.md)
-  reamesAgent doctor [--json]                              print redacted local diagnostics
-  reamesAgent doctor session <branch-id> [--zip] [--out PATH]  export a session conflict diagnostic zip
-  reamesAgent bot start|doctor|weixin-login                multi-channel IM bot gateway
-  reamesAgent upgrade [--check] [--force]                   self-update to the latest release (also: reamesAgent update)
-  reamesAgent version
-  reamesAgent help
+  reames-agent [--model NAME] [-c|--continue] [--resume] [--copy] [--yolo] [--dir PATH]   interactive session (multi-turn; -c resumes the latest, --resume picks one, --copy continues in a duplicate)
+  reames-agent run  [--model NAME] [--max-steps N] [-c|--continue] [--resume PATH] [--copy] <task>   run one task and exit
+  reames-agent review [--base BRANCH] [--commit SHA] [--model NAME]  AI-powered code review on local diffs
+  reames-agent serve [--model NAME] [--addr HOST:PORT] [--auth none|token|password] [--token STR] [--password STR] [--hash-password]  serve over HTTP+SSE (with optional auth)
+  reames-agent acp [--model NAME]                           serve Agent Client Protocol over stdio (also: reames-agent --acp)
+  reames-agent setup [path]                                 interactive config wizard; writes reames-agent.toml (+ .env)
+  reames-agent config auto-plan [off|on]                    configure automatic plan mode
+  reames-agent config memory-v5 [off|observe|compact|on|status]  configure Memory v5
+  reames-agent config reasoning-language [auto|zh|en]        configure visible reasoning language
+  reames-agent mcp <add|remove|list|import>                 manage MCP servers in reames-agent.toml
+  reames-agent init                                         show how to generate project memory (AGENTS.md)
+  reames-agent doctor [--json]                              print redacted local diagnostics
+  reames-agent doctor session <branch-id> [--zip] [--out PATH]  export a session conflict diagnostic zip
+  reames-agent bot start|doctor|weixin-login                multi-channel IM bot gateway
+  reames-agent upgrade [--check] [--force]                   self-update to the latest release (also: reames-agent update)
+  reames-agent version
+  reames-agent help
 
 Examples:
   reamesAgent
-  reamesAgent --continue
-  reamesAgent run "implement the TODOs in main.go"
-  reamesAgent run --model mimo-pro "add unit tests for this function"
-  echo "explain this code" | reamesAgent run
+  reames-agent --continue
+  reames-agent run "implement the TODOs in main.go"
+  reames-agent run --model mimo-pro "add unit tests for this function"
+  echo "explain this code" | reames-agent run
 
 Configuration:
-  Resolution: flag > ./reamesAgent.toml > ~/.reames-agent/config.toml > built-in defaults
+  Resolution: flag > ./reames-agent.toml > ~/.reames-agent/config.toml > built-in defaults
   Secrets come from the environment via api_key_env (e.g. DEEPSEEK_API_KEY).
-  Run 'reamesAgent setup' to scaffold a config; see docs/SPEC.md.
+  Run 'reames-agent setup' to scaffold a config; see docs/SPEC.md.
 `,
 }

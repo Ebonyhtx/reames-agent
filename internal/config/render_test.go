@@ -33,7 +33,7 @@ func setRuntimeGOOS(t *testing.T, goos string) {
 	t.Cleanup(func() { runtimeGOOS = old })
 }
 
-func expectedDefaultReasonixHome(home string) string {
+func expectedDefaultReames AgentHome(home string) string {
 	if runtime.GOOS == "windows" {
 		return filepath.Join(home, "AppData", "Roaming", "reames-agent")
 	}
@@ -54,15 +54,15 @@ func TestUserConfigDisplayPathCollapsesHome(t *testing.T) {
 	}
 }
 
-func TestUserConfigPathUsesReasonixHome(t *testing.T) {
+func TestUserConfigPathUsesReames AgentHome(t *testing.T) {
 	home := isolateUserConfigHome(t)
-	want := filepath.Join(expectedDefaultReasonixHome(home), "config.toml")
+	want := filepath.Join(expectedDefaultReames AgentHome(home), "config.toml")
 	if got := UserConfigPath(); filepath.Clean(got) != filepath.Clean(want) {
 		t.Fatalf("UserConfigPath() = %q, want %q", got, want)
 	}
 }
 
-func TestUserConfigPathHonorsReasonixHome(t *testing.T) {
+func TestUserConfigPathHonorsReames AgentHome(t *testing.T) {
 	home := isolateUserConfigHome(t)
 	custom := filepath.Join(home, "custom-home")
 	t.Setenv("REAMES_AGENT_HOME", custom)
@@ -1085,7 +1085,7 @@ func TestRenderTOMLDefaultStepsDoNotOverrideGlobalConfig(t *testing.T) {
 
 	projectDir := t.TempDir()
 	projectTOML := RenderTOML(Default())
-	projectPath := filepath.Join(projectDir, "reamesAgent.toml")
+	projectPath := filepath.Join(projectDir, "reames-agent.toml")
 	if err := os.WriteFile(projectPath, []byte(projectTOML), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1144,7 +1144,7 @@ func TestLegacyXDGConfigPathsEmptyWhenIsolated(t *testing.T) {
 	}
 }
 
-func TestCacheDirHonorsReasonixHome(t *testing.T) {
+func TestCacheDirHonorsReames AgentHome(t *testing.T) {
 	home := t.TempDir()
 	isolated := filepath.Join(home, "isolated-home")
 	t.Setenv("HOME", home)
@@ -1158,7 +1158,7 @@ func TestCacheDirHonorsReasonixHome(t *testing.T) {
 	}
 }
 
-func TestCacheDirHonorsReasonixCacheHomeOverReasonixHome(t *testing.T) {
+func TestCacheDirHonorsReames AgentCacheHomeOverReames AgentHome(t *testing.T) {
 	home := t.TempDir()
 	cacheHome := filepath.Join(home, "custom-cache")
 	t.Setenv("HOME", home)
@@ -1179,7 +1179,7 @@ func TestUserConfigLoadPathNoLegacyFallbackWhenIsolated(t *testing.T) {
 	t.Setenv("REAMES_AGENT_HOME", isolated)
 
 	// Create a legacy config at the OS production path — it must not be loaded.
-	productionHome := expectedDefaultReasonixHome(home)
+	productionHome := expectedDefaultReames AgentHome(home)
 	if err := os.MkdirAll(productionHome, 0o755); err != nil {
 		t.Fatal(err)
 	}

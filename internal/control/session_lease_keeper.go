@@ -89,7 +89,7 @@ func (k *SessionLeaseKeeper) releaseLocked() {
 
 // SessionLeaseCloseHint is the universal way out of a lease refusal, appended
 // by surfaces that have no copy escape hatch (in-TUI switches, serve, ACP).
-const SessionLeaseCloseHint = "close the other Reasonix window or process first"
+const SessionLeaseCloseHint = "close the other Reames Agent window or process first"
 
 // SessionInUseMessage renders a lease-acquisition failure as the shared
 // operator-facing "who is holding this" line used by the CLI, serve, and ACP.
@@ -104,7 +104,7 @@ func SessionInUseMessage(err error) string {
 	}
 	info := leaseErr.Info
 	var b strings.Builder
-	fmt.Fprintf(&b, "this session is in use by another Reasonix process (pid %d", info.PID)
+	fmt.Fprintf(&b, "this session is in use by another Reames Agent process (pid %d", info.PID)
 	if host := strings.TrimSpace(info.Hostname); host != "" {
 		b.WriteString(" on " + host)
 	}

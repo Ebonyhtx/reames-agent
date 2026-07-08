@@ -20,7 +20,7 @@ func writeVisionTestConfig(t *testing.T, root string) {
 		Models:       []string{"text-only", "vision-pro"},
 		VisionModels: []string{"vision-pro"},
 	}}
-	if err := cfg.SaveTo(filepath.Join(root, "reamesAgent.toml")); err != nil {
+	if err := cfg.SaveTo(filepath.Join(root, "reames-agent.toml")); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 }
@@ -110,7 +110,7 @@ func TestControllerInputImagesSkipsModelImagesWhenSelectedModelIsTextOnly(t *tes
 		Models:       []string{"text-only", "vision-pro"},
 		VisionModels: []string{"vision-pro"},
 	}}
-	if err := cfg.SaveTo(filepath.Join(workspace, "reamesAgent.toml")); err != nil {
+	if err := cfg.SaveTo(filepath.Join(workspace, "reames-agent.toml")); err != nil {
 		t.Fatalf("save workspace config: %v", err)
 	}
 	path := filepath.Join(workspace, "diagram.png")

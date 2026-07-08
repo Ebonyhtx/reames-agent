@@ -22,7 +22,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Reasonix launches every sandboxed command as its own helper process, so two
+// Reames Agent launches every sandboxed command as its own helper process, so two
 // commands running against the same workspace are separate OS processes. This
 // sandbox enforces its boundary by temporarily mutating a path's ACLs and
 // integrity label and restoring them from a snapshot afterward. If two

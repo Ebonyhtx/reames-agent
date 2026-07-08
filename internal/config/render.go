@@ -18,7 +18,7 @@ const (
 	RenderScopeProject RenderScope = "project"
 )
 
-// RenderTOML renders the config as annotated TOML in the `reamesAgent setup` house style:
+// RenderTOML renders the config as annotated TOML in the `reames-agent setup` house style:
 // comments preserved, system_prompt as a multi-line string, helpful hints. The
 // output round-trips back through Load (see render_test.go).
 func RenderTOML(c *Config) string {
@@ -27,7 +27,7 @@ func RenderTOML(c *Config) string {
 
 // RenderTOMLForScope renders an annotated TOML file for a specific persistence
 // target. User configs can carry desktop and account-level preferences; project
-// reamesAgent.toml stays focused on project behavior and intentionally excludes
+// reames-agent.toml stays focused on project behavior and intentionally excludes
 // desktop-only preferences.
 func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	if c == nil {
@@ -44,9 +44,9 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	defaults := Default()
 	var b strings.Builder
 
-	b.WriteString("# Reasonix configuration.\n")
-	fmt.Fprintf(&b, "# Resolution order: flag > ./reamesAgent.toml > %s > built-in defaults.\n", userConfigDisplayPath())
-	b.WriteString("# Fields marked user/global only are not overridden by ./reamesAgent.toml.\n")
+	b.WriteString("# Reames Agent configuration.\n")
+	fmt.Fprintf(&b, "# Resolution order: flag > ./reames-agent.toml > %s > built-in defaults.\n", userConfigDisplayPath())
+	b.WriteString("# Fields marked user/global only are not overridden by ./reames-agent.toml.\n")
 	b.WriteString("# Secrets are named via api_key_env and stored in Reames Agent's global .env; never put keys here.\n\n")
 
 	fmt.Fprintf(&b, "config_version = %d   # schema marker for diagnostics; old versions may ignore it\n", configVersion(c))
@@ -1586,7 +1586,7 @@ func renderBotRoute(b *strings.Builder, route BotRouteConfig) {
 }
 
 // renderRuleList emits a permission rule list. A populated list renders as an
-// active TOML array; an empty one renders as a commented example so `reamesAgent setup`
+// active TOML array; an empty one renders as a commented example so `reames-agent setup`
 // scaffolds discoverable guidance without imposing surprising rules.
 func renderRuleList(key string, rules []string, example string) string {
 	if len(rules) == 0 {

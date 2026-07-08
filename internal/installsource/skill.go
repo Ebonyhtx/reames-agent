@@ -99,7 +99,7 @@ func (t *installSourceTool) skillRootAction(req request, path string, names []st
 func (t *installSourceTool) skillInstallRoot(scope string) (string, error) {
 	if scope == "global" {
 		if t.reamesAgentHome == "" {
-			return "", newErr(ErrSourceUnreadable, "global skill install requires a Reasonix home directory")
+			return "", newErr(ErrSourceUnreadable, "global skill install requires a Reames Agent home directory")
 		}
 		return filepath.Join(t.reamesAgentHome, skill.SkillsDirname), nil
 	}
@@ -125,7 +125,7 @@ func (t *installSourceTool) skillCanonicalPath(name, scope string) (string, erro
 func (t *installSourceTool) verifySkill(scope, name string, act *action) error {
 	custom := []string(nil)
 	if scope == "project" {
-		cfg := config.LoadForEdit(filepath.Join(t.root, "reamesAgent.toml"))
+		cfg := config.LoadForEdit(filepath.Join(t.root, "reames-agent.toml"))
 		custom = cfg.SkillCustomPaths()
 	} else {
 		cfg := config.LoadForEdit(t.configPath(scope))

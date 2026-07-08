@@ -418,9 +418,9 @@ func (*installSkillTool) Name() string   { return "install_skill" }
 func (*installSkillTool) ReadOnly() bool { return false }
 
 func (t *installSkillTool) Description() string {
-	scope := "'global' (only option — no project workspace) writes to the Reasonix home skills directory."
+	scope := "'global' (only option — no project workspace) writes to the Reames Agent home skills directory."
 	if t.store.HasProjectScope() {
-		scope = "'project' (default) writes to <repo>/.reames-agent/skills/ (this workspace only); 'global' writes to the Reasonix home skills directory (every project)."
+		scope = "'project' (default) writes to <repo>/.reames-agent/skills/ (this workspace only); 'global' writes to the Reames Agent home skills directory (every project)."
 	}
 	return "Author and save a new skill — a reusable playbook future turns invoke via run_skill (or /<name>). Runnable immediately this turn; appears in the pinned Skills index on the next launch. " + scope
 }

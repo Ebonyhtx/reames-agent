@@ -21,7 +21,7 @@ type trustFile struct {
 	Projects map[string]bool `json:"projects"`
 }
 
-// TrustPath is <Reasonix home>/trust.json (homeDir overrides ~ for tests and
+// TrustPath is <Reames Agent home>/trust.json (homeDir overrides ~ for tests and
 // legacy callers).
 func TrustPath(homeDir string) string {
 	return filepath.Join(reamesAgentHome(homeDir), TrustFilename)
