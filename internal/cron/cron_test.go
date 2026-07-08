@@ -1,7 +1,9 @@
 package cron
 
 import (
+	"fmt"
 	"testing"
+	"time"
 )
 
 func TestParseSchedule(t *testing.T) {
@@ -84,5 +86,93 @@ func TestPersistence(t *testing.T) {
 	jobs := s2.List()
 	if len(jobs) != 1 || jobs[0].ID != "persist-1" {
 		t.Fatalf("persistence failed: %+v", jobs)
+	}
+}
+
+func TestConcurrentAddRemove(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := Open(dir)
+
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func(n int) {
+			id := fmt.Sprintf("job-%d", n)
+			s.Add(Job{ID: id, Name: id, Prompt: "test", Enabled: true,
+				Schedule: Schedule{Kind: KindInterval, Minutes: 60}})
+			done <- true
+		}(i)
+	}
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	jobs := s.List()
+	if len(jobs) != 10 {
+		t.Fatalf("concurrent add: got %d jobs", len(jobs))
+	}
+
+	for i := 0; i < 5; i++ {
+		go func(n int) {
+			s.Remove(fmt.Sprintf("job-%d", n))
+			done <- true
+		}(i)
+	}
+	for i := 0; i < 5; i++ {
+		<-done
+	}
+	if len(s.List()) != 5 {
+		t.Fatalf("after remove: got %d jobs", len(s.List()))
+	}
+}
+
+func TestMarkRun(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := Open(dir)
+	s.Add(Job{ID: "mark-test", Name: "test", Prompt: "test", Enabled: true,
+		Schedule: Schedule{Kind: KindInterval, Minutes: 60}})
+
+	if err := s.MarkRun("mark-test", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	jobs := s.List()
+	if jobs[0].RunCount != 1 || jobs[0].LastStatus != "ok" {
+		t.Fatalf("mark not persisted: count=%d status=%s", jobs[0].RunCount, jobs[0].LastStatus)
+	}
+}
+
+func TestParseScheduleErrors(t *testing.T) {
+	_, err := ParseSchedule("")
+	if err == nil {
+		t.Fatal("expected error for empty")
+	}
+	_, err = ParseSchedule("invalid")
+	if err == nil {
+		t.Fatal("expected error for invalid")
+	}
+}
+
+func TestDueJobs(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := Open(dir)
+	s.Add(Job{ID: "past", Name: "past", Prompt: "test", Enabled: true,
+		Schedule: Schedule{Kind: KindInterval, Minutes: 1}})
+	// Force next run to be in the past
+	s.mu.Lock()
+	s.jobs["past"].NextRunAt = time.Now().Add(-1 * time.Minute)
+	s.mu.Unlock()
+
+	due := s.Due()
+	if len(due) != 1 {
+		t.Fatalf("expected 1 due job, got %d", len(due))
+	}
+
+	s.Add(Job{ID: "disabled", Name: "off", Prompt: "test", Enabled: false,
+		Schedule: Schedule{Kind: KindInterval, Minutes: 1}})
+	s.mu.Lock()
+	s.jobs["disabled"].NextRunAt = time.Now().Add(-1 * time.Minute)
+	s.mu.Unlock()
+
+	if len(s.Due()) != 1 {
+		t.Fatal("disabled job should not be due")
 	}
 }
