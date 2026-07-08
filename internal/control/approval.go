@@ -45,6 +45,7 @@ type approvalManager struct {
 	// terminal); bot/headless frontends set it so a walked-away user can't wedge
 	// the session forever (#4626, #4402). Write-once at construction.
 	approvalTimeout time.Duration
+	sessionID     string // for pending snapshot persistence
 	// planAutoApprove auto-allows writer tool calls without prompting while a
 	// just-approved plan executes. Set by the turn loop, read by the bypass
 	// check. Plan approval is the go-ahead, so the model shouldn't re-prompt for
@@ -186,6 +187,7 @@ func (a *approvalManager) registerAsk(questions []event.AskQuestion) (string, ch
 	id := strconv.Itoa(a.nextID)
 	reply := make(chan []event.AskAnswer, 1)
 	a.asks[id] = pendingAsk{questions: questions, reply: reply}
+	a.writePendingSnapshot(a.sessionID)
 	return id, reply
 }
 
