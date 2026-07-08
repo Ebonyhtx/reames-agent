@@ -48,6 +48,9 @@ docker run -p 8787:8787 -e DEEPSEEK_API_KEY=sk-xxx reames-agent
 
 ## 文档
 
+- [权威接手文档](docs/REAMES_AGENT_AUTHORITY.md)
+- [详细执行计划](docs/REAMES_AGENT_EXECUTION_PLAN.md)
+- [文档索引](docs/DOCS_INDEX.md)
 - [架构设计](docs/ARCHITECTURE.md)
 - [部署指南](docs/DEPLOY.md)
 - [产品路线图](docs/PRODUCT_ROADMAP.md)

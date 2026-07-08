@@ -172,6 +172,7 @@ func workspaceGitOutputWithTimeout(timeout time.Duration, args ...string) ([]byt
 }
 
 func workspaceGitStatus(base string) ([]gitStatusEntry, error) {
+	base = canonicalWorkspaceRootForGit(base)
 	cmd := workspaceGit("-C", base, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	raw, err := cmd.Output()
 	if err != nil {
@@ -187,6 +188,7 @@ func workspaceGitStatus(base string) ([]gitStatusEntry, error) {
 	if repoRoot == "" {
 		return entries, nil
 	}
+	repoRoot = canonicalWorkspaceRootForGit(repoRoot)
 	out := make([]gitStatusEntry, 0, len(entries))
 	for _, entry := range entries {
 		entry.Path = workspaceRelPathFromGitStatus(repoRoot, base, entry.Path)
@@ -197,6 +199,20 @@ func workspaceGitStatus(base string) ([]gitStatusEntry, error) {
 		out = append(out, entry)
 	}
 	return out, nil
+}
+
+func canonicalWorkspaceRootForGit(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	return filepath.Clean(path)
 }
 
 func parseGitStatusPorcelainZ(raw []byte) []gitStatusEntry {

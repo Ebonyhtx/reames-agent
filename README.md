@@ -51,6 +51,9 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for systemd, nginx, and SSH deployment guid
 
 ## Documentation
 
+- [Authoritative Handoff](docs/REAMES_AGENT_AUTHORITY.md)
+- [Execution Plan](docs/REAMES_AGENT_EXECUTION_PLAN.md)
+- [Documentation Index](docs/DOCS_INDEX.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment Guide](docs/DEPLOY.md)
 - [Product Roadmap](docs/PRODUCT_ROADMAP.md)
