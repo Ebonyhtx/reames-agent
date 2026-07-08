@@ -1,572 +1,396 @@
-# Reames Agent 详细执行计划
+# Reames Agent 详细执行计划 v2
 
-> 状态：唯一执行计划  
-> 创建时间：2026-07-08  
-> 前置阅读：`docs/REAMES_AGENT_AUTHORITY.md`  
-> 约束：本计划用于指导后续执行；没有用户明确许可时，不执行代码导入、删除、重构、提交或 push。
+> 状态：当前唯一执行计划
+> 更新时间：2026-07-09
+> 前置阅读：`docs/REAMES_AGENT_AUTHORITY.md`
+> 主仓库：`F:\reames-agent` / `main` / `https://github.com/Ebonyhtx/reames-agent.git`
 
 ## 0. 执行总原则
 
-1. **先基线，后改造**：Reasonix 原样 baseline 不清楚前，不做 Reames 化。
-2. **先公共边界，后多入口**：Desktop/Web/Gateway/CLI 都必须经过 ReamesClient-equivalent boundary。
-3. **先真实测试，后主观 UI 调整**：截图和审美反馈重要，但必须绑定可复现 landmark/click/visual tests。
-4. **保留 Reasonix cache pipeline**：不重写，不覆盖，只加 metadata-invisibility guard。
-5. **每批小步可回滚**：每批有明确文件范围、验证命令、风险记录。
-6. **不再散乱写文档**：方向更新写 `REAMES_AGENT_AUTHORITY.md`，执行进度/变更写本文件。
+1. **新主仓库优先**：所有主线开发在 `F:\reames-agent` 进行；`F:\Reames-Lite` 只作 legacy/reference。
+2. **Reasonix 是底座**：优先保留和适配 Reasonix runtime/desktop/server/provider，不重写已有成熟机制。
+3. **桌面 UI 优先**：近期优先级是桌面 Agent 视觉与真实点击体验，不再做 CLI 面板式桌面。
+4. **Apple-light + 中文优先**：主 UI 面向用户，不展示工程迁移/基线/契约术语。
+5. **cache/provider 不乱动**：保留 Reasonix cache-hit/prefix-cache，Reames 只补 metadata 隔离和 boundary tests。
+6. **每批验证、提交、push**：小步可回滚，文档同步更新，验证命令写清楚。
 
-## 1. Phase A：文档收敛与接手入口
+## 1. 当前基线
 
-目标：让后来的人能接手，不再从几十份历史文档里猜方向。
-
-### A0. 2026-07-09 新仓库接管基线
-
-当前主仓库：
+### 1.1 新仓库
 
 ```text
 Path:   F:\reames-agent
 Branch: main
 Remote: https://github.com/Ebonyhtx/reames-agent.git
-Role:   新主项目；Reasonix 源码底座 + Reames/其他参考项目融合
+Role:   新主项目；Reasonix-derived 源码底座
 ```
 
-本批已建立的基线命令：
+### 1.2 已建立的验证入口
 
 ```powershell
 .\scripts\verify-baseline.ps1
 go test ./... -run '^$'
 ```
 
-注意事项：
+注意：
 
-- `desktop/` 是 nested Go module，root `go test ./...` 不会覆盖它；
-- `desktop/frontend/node_modules` 当前未安装，UI 构建需要先安装前端依赖；
-- full `cd desktop; go test . -count=1` 当前耗时较长，不作为本批硬门禁；本批门禁先固定 critical desktop baseline。
+- root `go test ./...` 不覆盖 `desktop/` nested module；
+- `desktop/frontend/node_modules` 当前未安装；
+- UI 批次必须恢复 frontend build 和浏览器/桌面截图验证；
+- full `cd desktop; go test . -count=1` 当前耗时较长，可先用 critical desktop baseline 做门禁，再逐步扩大。
 
-### A1. 标定权威文档
+## 2. Phase A：文档收敛与接手入口
+
+目标：让后来接手的人不再从旧 Reames Lite、Reasonix、Hermes、桌面实验文档里猜方向。
+
+### A1. 权威文档 v2
 
 交付：
 
 - `docs/REAMES_AGENT_AUTHORITY.md`
 - `docs/REAMES_AGENT_EXECUTION_PLAN.md`
-
-动作：
-
-- 不删除旧文档；
-- 旧文档作为证据库；
-- 后续总方向只改 Authority；
-- 后续执行计划只改 Execution Plan。
+- `docs/DOCS_INDEX.md`
 
 验收：
 
-- 新接手者读两份文档能回答：
-  - 项目目标是什么；
-  - Reasonix 为什么是基座；
-  - Reames 保留什么；
-  - Hermes/Codex/Kimi 等融合什么；
-  - 当前最大风险是什么；
-  - 下一步从哪里开始。
+- 文档明确 `F:\reames-agent` 是新主项目；
+- 文档不再以“把 Reasonix 导入旧 Reames-Lite”为主语；
+- 文档明确旧 Reames Lite 是 legacy/contract/reference；
+- 文档明确桌面 UI 是近期最高优先级；
+- 文档明确 Reasonix cache pipeline 保留，不被 Reames 覆盖。
 
-## 2. Phase B：Reasonix 最新基线复现
+### A2. 文档瘦身策略
 
-目标：导入前先证明 Reasonix 最新源码在本机的真实状态。
+暂不大规模删除历史文档。先做三件事：
 
-### B1. 固定 Reasonix 源快照
+1. `DOCS_INDEX.md` 标明唯一入口；
+2. README 指向权威文档；
+3. 后续每批如果发现旧文档误导方向，只做“归档/标记过时/从索引移除”，不随手删。
 
-当前快照：
+## 3. Phase B：恢复桌面前端可验证基线
 
-```text
-Path:   F:\code-reference\DeepSeek-Reasonix
-Branch: main-v2
-HEAD:   07c65c22226e4886004215168230e1e1edad734b
-```
+目标：让桌面 UI 能真实运行、截图、点击、构建，而不是只改 Go 后端。
 
-执行命令：
-
-```powershell
-cd F:\code-reference\DeepSeek-Reasonix
-git fetch --all --prune
-git pull --ff-only
-git status --short --branch
-git log -1 --oneline
-```
-
-验收：
-
-- 工作树 clean；
-- HEAD 记录进本计划；
-- 如果 HEAD 变化，必须重新跑 B2-B5。
-
-### B2. Provider/Agent cache baseline
+### B1. 安装并验证前端依赖
 
 执行：
 
 ```powershell
-cd F:\code-reference\DeepSeek-Reasonix
-$env:GOPROXY='https://goproxy.cn,direct'
-$env:GOSUMDB='sum.golang.google.cn'
-go test ./internal/provider/openai ./internal/agent -run 'Test(Normalise|Normalize|Usage|Cache|SessionCache|SetSession|ReleaseCache|PlanModeDoesNotMutateSystemOrTools)' -count=1
+cd F:\reames-agent\desktop\frontend
+npm install
+npm run build
 ```
 
-必须保持通过。失败时不得继续导入。
+如果 npm 版本或 lockfile 冲突：
 
-### B3. Memory/config latest delta baseline
-
-执行：
-
-```powershell
-cd F:\code-reference\DeepSeek-Reasonix
-$env:GOPROXY='https://goproxy.cn,direct'
-$env:GOSUMDB='sum.golang.google.cn'
-go test ./internal/memorycompiler ./internal/config -run 'Test.*' -count=1
-```
-
-意义：确认 `memory-v5-memory-candidates` 新增代码可用。
-
-### B4. Desktop narrow baseline
-
-执行：
-
-```powershell
-cd F:\code-reference\DeepSeek-Reasonix\desktop
-$env:GOPROXY='https://goproxy.cn,direct'
-$env:GOSUMDB='sum.golang.google.cn'
-go test . -run 'Test(Memory|Suggestion|Recovery)' -count=1
-```
-
-意义：确认桌面 memory/recovery 新增路径可用。
-
-### B5. Desktop workspace baseline bug 复现与处理策略
-
-当前已知失败命令：
-
-```powershell
-cd F:\code-reference\DeepSeek-Reasonix\desktop
-$env:GOPROXY='https://goproxy.cn,direct'
-$env:GOSUMDB='sum.golang.google.cn'
-go test . -run 'Test(Memory|Workspace|Suggestion|Slug|Tabs|Recovery)' -count=1
-```
-
-失败点：
-
-```text
-TestWorkspaceChangesGitStatus
-TestWorkspaceChangesGitStatusFromRepoSubdirectory
-TestWorkspaceChangesUntrackedDirectoryListsFiles
-```
-
-定位步骤：
-
-1. 单独跑：
-
-```powershell
-go test . -run '^TestWorkspaceChangesGitStatus$' -count=1 -v
-```
-
-2. 用临时 debug test 或外部小程序验证：
-
-- `git status --porcelain=v1 -z --untracked-files=all` raw 是否正常；
-- `workspaceGit(...).Output()` raw 是否正常；
-- `parseGitStatusPorcelainZ(raw)` 是否正常；
-- `workspaceRelPathFromGitStatus(repoRoot, base, path)` 是否因 Windows 短路径/长路径不一致过滤。
-
-修复策略候选：
-
-| 策略 | 内容 | 优先级 |
-|---|---|---|
-| S1 | 在 `workspaceGitStatus` 中把 `repoRoot` 和 `base` 都 canonicalize 到同一 Windows path spelling 后再 `filepath.Rel` | 高 |
-| S2 | 如果 `filepath.Rel(base, absPath)` 失败或越界，再尝试 `EvalSymlinks`/long path/short path normalization | 中 |
-| S3 | 测试里避免空 App + cwd 短路径，显式设置 tab `WorkspaceRoot` | 低，不治本 |
-| S4 | 暂时跳过 workspace git-status 测试 | 禁止，除非只作为临时外部环境隔离且记录 |
+- 先记录错误；
+- 不盲目升级 React/Vite；
+- 优先还原 Reasonix-compatible 依赖；
+- 修改后必须提交 lockfile。
 
 验收：
 
-- 三个 workspace git-status 测试通过；
-- 不破坏 `TestWorkspaceChangesUsesRequestedTabCheckpoints`；
-- 不让 workspace 外路径出现在 files list；
-- Windows 和非 Windows 都有合理路径处理。
+- `desktop/frontend/node_modules` 存在；
+- `npm run build` 通过；
+- 不引入大规模无关依赖升级。
 
-## 3. Phase C：Staged import 设计
+### B2. 启动桌面/前端预览
 
-目标：原样导入 Reasonix，但不污染主线、不混改、不立刻删除 Reames。
-
-### C1. 分支策略
-
-用户明确允许执行后再做：
+优先顺序：
 
 ```powershell
-cd F:\Reames-Lite
-git switch -c codex/reasonix-base-migration
+cd F:\reames-agent\desktop\frontend
+npm run dev
 ```
 
-要求：
+如果需要 Wails：
 
-- 不在 `main` 上直接大规模复制；
-- 分支创建后立即 push；
-- 每批导入可回滚。
+```powershell
+cd F:\reames-agent\desktop
+wails dev
+```
 
-### C2. 导入布局
+验收：
 
-推荐：
+- 能打开主界面；
+- 能截图；
+- 能点击主导航、设置、会话、输入区；
+- 控制台没有阻断性错误。
+
+### B3. 建立 UI 验证方法
+
+后续 UI 批次必须至少满足其中两项：
+
+- in-app browser 截图；
+- Playwright/browser 自动检查 landmark；
+- 手动点击验证记录；
+- 前端 build；
+- desktop critical Go tests。
+
+## 4. Phase C：桌面 Agent 视觉和交互重建
+
+目标：优先解决用户最不满意的问题：视觉乱、丑、不像桌面 Agent、工程文案太多。
+
+### C1. 主界面结构
+
+必须围绕“用户使用 Agent”设计：
+
+| 区域 | 必须呈现 |
+|---|---|
+| App chrome | 应用标题、窗口控制、全局命令、设置入口 |
+| 左栏 | 会话/项目/最近任务/新建任务 |
+| 中央 | 对话流、任务进度、工具结果、Agent 提问 |
+| 输入区 | 任务输入、发送/停止、附件、模式选择 |
+| 右栏 | 工作区、文件变更、上下文、记忆、缓存/成本 |
+| 设置中心 | 模型、密钥、权限、MCP、插件、记忆、外观、网络、更新 |
+
+不允许主界面把工程计划、基线报告、迁移说明当作核心内容。
+
+### C2. Apple-light token pass
+
+统一视觉 token：
+
+- 背景：浅灰/白，避免黑金和高对比噪音；
+- 卡片：柔和圆角、轻阴影、清晰边界；
+- 字体：中文可读，字号层级稳定；
+- 间距：更像桌面应用，少堆叠；
+- 按钮：主次明确；
+- 状态：运行、等待、审批、失败、完成都要有清楚但克制的视觉表达。
+
+验收：
+
+- 主界面截图视觉统一；
+- 设置页截图视觉统一；
+- 审批弹窗截图视觉统一；
+- 空状态不像工程 demo。
+
+### C3. 中文产品 copy pass
+
+把 UI 文案从工程语言改成用户语言。
+
+重点检查：
+
+- 首页/空状态；
+- 输入区 placeholder；
+- 设置分组；
+- 模型/密钥说明；
+- 权限审批；
+- 工具执行状态；
+- 缓存/上下文/成本展示；
+- 错误提示。
+
+禁止在普通 UI 出现：
 
 ```text
-third_party/reasonix/NOTICE.md       # upstream commit/license/attribution
-migration/reasonix-base/             # first unmodified import, optional staging
-cmd/                                 # later promoted Reames CLI/server/gateway entrypoints
-internal/                            # later Reasonix-derived runtime
-desktop/                             # later Reasonix-derived Wails desktop
-web/                                 # later browser UI
-server/deploy/ or deploy/            # Docker/compose/systemd/reverse proxy
+baseline
+migration
+contract
+provider-visible
+cache-first boundary
+Reasonix import
+Phase A/B/C
+P0 verification
 ```
 
-第一批不要做：
+### C4. 真实点击体验
 
-- 不 rebrand；
-- 不改 UI；
-- 不改 cache；
-- 不混 Hermes；
-- 不删 Python；
-- 不把 packages/desktop 删掉。
+关键路径：
 
-第一批只做：
+1. 新建会话；
+2. 输入任务；
+3. 看到 Agent 状态；
+4. 打开设置；
+5. 修改模型/密钥/权限；
+6. 打开 MCP/插件/记忆；
+7. 触发或模拟审批；
+8. 查看工作区文件变更；
+9. 暂停/继续/取消任务。
 
-- copy source；
-- preserve license；
-- record commit；
-- run baseline commands；
-- record failures；
-- push branch。
+验收不是“按钮存在”，而是点击后用户能理解下一步。
 
-## 4. Phase D：Reames public boundary
+## 5. Phase D：Reames public boundary
 
-目标：让 Reasonix-derived runtime 不被 UI/Web/Gateway 直接乱调。
+目标：把 Reames Lite 的核心优势迁成 Go 项目的边界约束，而不是复制旧 Python 内部实现。
 
-### D1. 设计 Go public boundary
+### D1. 定义边界
 
-候选包：
+候选位置：
 
 ```text
-internal/api
-internal/reamesclient
-internal/runtimeapi
+internal/reamesapi/
+internal/boundary/
+internal/control facade
 ```
 
-职责：
+边界能力：
 
-- Submit/Cancel/Steer；
-- Approve/Deny/Answer；
-- Session list/open/fork/rewind；
-- Context/Usage/Cache status；
-- Settings read/write；
-- Workspace/files/git；
-- Memory；
-- Server/Gateway message ingress。
+- session create/list/open；
+- submit user task；
+- stream event；
+- approve/deny；
+- ask/answer；
+- cancel/pause/resume；
+- settings read/write；
+- workspace snapshot；
+- provider usage/cache summary。
 
 ### D2. Boundary tests
 
-必须新增测试：
+必须覆盖：
 
-1. Desktop 只能调用 public API/bridge，不直接 mutate provider messages。
-2. Web/server submit 只能走 API envelope。
-3. Gateway channel metadata 不进入 provider messages。
-4. Settings/layout/theme/sidebar/right-dock state 不进入 provider messages。
-5. Product copy 不进入 system prompt。
+- Desktop/Web/Gateway 不直接构造 provider messages；
+- UI layout/settings/channel metadata 不进入 provider-visible prompt；
+- tool schema 顺序和 system prompt prefix 稳定；
+- 新增中文 copy 不污染模型上下文；
+- gateway channel identity 只在 runtime envelope，不进 prompt。
 
-测试命名建议：
+## 6. Phase E：清理 legacy/Hermes/Python 残留
 
-```text
-internal/api/provider_payload_boundary_test.go
-internal/api/gateway_metadata_boundary_test.go
-desktop/frontend/src/__tests__/product-copy-visibility.test.ts
-```
+目标：让仓库结构变清楚，但不能一上来暴删导致可用能力丢失。
 
-## 5. Phase E：Desktop UI 重建
+### E1. 先分类
 
-目标：基于 Reasonix 真实桌面 UI，而不是继续修当前 Reames 手写 UI。
+把残留分成：
 
-### E1. UI skeleton 保留
+| 类别 | 处理 |
+|---|---|
+| 当前可编译 Go/desktop/server | 保留 |
+| 被 README/AGENTS 引用但实际未验证 | 标记待验证 |
+| Python/Hermes legacy，但有参考价值 | 移到 legacy/reference 或文档说明 |
+| 明确无用、无引用、无测试 | 单独清理 PR/commit |
+| 大文件/生成物 | 从 git 中移除或加入 ignore |
 
-必须保留：
+### E2. 删除门槛
 
-```text
-AppChrome
-TabBar
-Transcript
-Composer
-ApprovalModal
-CommandPalette
-SettingsPanel
-ContextPanel
-WorkspacePanel
-MemoryPanel
-StatusBar
-Welcome
-bridge.ts
-useController.ts
-layout store
-i18n/locales
-```
+删除前必须满足：
 
-### E2. Apple-light token pass
+- 有 `git grep` 引用检查；
+- 有验证命令；
+- 删除范围单一；
+- 提交信息说明原因；
+- 不和 UI 重构混在一批。
 
-只改视觉 token，不改结构：
+## 7. Phase F：Server/Web/Cloud
 
-- 背景：浅色、毛玻璃、低饱和；
-- 边框：细、半透明；
-- 阴影：轻；
-- 圆角：Apple-like；
-- 字体：中文优先，系统字体；
-- 不再黑金；
-- 不再 Nintendo；
-- 不再工程 dashboard。
+目标：像 Hermes 一样可以部署到云服务器，但不牺牲桌面体验。
 
-### E3. 中文产品 copy pass
+优先保留 Reasonix `internal/serve`：
 
-普通用户界面不能出现：
+- auth；
+- token/password；
+- cookie；
+- CSRF/path 安全；
+- SSE broadcaster；
+- session lease；
+- local/remote 访问模式。
 
-```text
-migration
-provider prompt
-runtime/status
-RPC
-params
-turn/start
-baseline
-cache prefix changed（默认视图）
-Reasonix migration
-```
+新增 Reames 云部署需要：
 
-这些词只能出现在高级诊断/开发者模式。
+- Dockerfile/docker-compose；
+- systemd；
+- nginx reverse proxy；
+- 环境变量/密钥说明；
+- 只读/审批/沙箱策略；
+- Web UI 与 Desktop 共用 boundary。
 
-普通用户应看到：
+## 8. Phase G：Gateway
 
-- 新任务；
-- 当前项目；
-- 继续会话；
-- 模型；
-- 审批；
-- 记忆；
-- 上下文；
-- 文件；
-- 设置；
-- 权限；
-- 连接；
-- 自动化；
-- 发送；
-- 停止；
-- 继续。
+目标：融合 Hermes 风格多渠道入口，但保持 provider prompt 干净。
 
-### E4. UI 验收测试
+渠道：
 
-必须有：
+- Feishu；
+- WeChat；
+- QQ；
+- Telegram；
+- 后续可扩展 Discord/Slack。
 
-- first-screen landmark test；
-- settings open/click test；
-- command palette keyboard test；
-- composer send/cancel test；
-- approval modal test；
-- context/status cache display test；
-- no engineering self-talk test；
-- zh-CN default copy test；
-- screenshot/manual acceptance checklist。
+Gateway 规则：
 
-## 6. Phase F：Server/Web
-
-目标：让项目以后能像 Hermes/AgentArk 一样部署到云服务器，同时不牺牲本机桌面。
-
-### F1. Preserve Reasonix `internal/serve`
-
-先保留：
-
-```text
-internal/serve/serve.go
-internal/serve/auth.go
-internal/serve/broadcaster.go
-internal/serve/*_test.go
-```
-
-不要一开始就重写成新 RPC。
-
-### F2. Reames server mode
-
-新增入口候选：
-
-```text
-cmd/reames-server
-```
-
-能力：
-
-- bind host/port；
-- loopback 默认安全；
-- public bind 必须 auth；
-- REST/SSE 起步；
-- 后续再加 WebSocket snapshot/cursor。
-
-### F3. Web UI
-
-借鉴 Kimi/Codex：
-
-- session snapshot；
-- event cursor；
-- pending approvals/questions/tasks；
-- reconnect recovery；
-- browser workspace controls；
-- auth-aware API client。
-
-## 7. Phase G：Gateway
-
-目标：融合 Hermes 的强项，但不复制整个 Hermes。
-
-### G1. Gateway runtime-only envelope
-
-消息 envelope 必须包含：
-
-```text
-platform
-channel_id
-thread_id
-message_id
-sender_id
-sender_display
-attachments
-received_at
-routing_metadata
-```
-
-禁止直接进入 provider prompt。
-
-只允许转换后的用户内容进入 user message，例如：
-
-```text
-用户在飞书发来：请帮我检查这个 PR
-```
-
-平台 metadata 留在 runtime/audit，不进 prompt。
-
-### G2. Platform registry
-
-借鉴 Hermes：
-
-```text
-internal/gateway/registry
-internal/gateway/platforms/base
-internal/gateway/adapters/<platform>
-```
-
-先做 generic webhook/API adapter，再做一个高价值平台。
-
-### G3. Gateway tests
-
-必须测试：
-
-- signature validation；
-- dedupe；
-- rate limit；
-- redaction；
-- outbound approval；
-- metadata prompt-invisibility；
-- reconnect/backoff；
-- channel allowlist。
-
-## 8. Phase H：Legacy retirement
-
-目标：删除旧东西，但只在新东西站住后删。
-
-### H1. 删除条件
-
-必须全部满足：
-
-- Reasonix-derived runtime build pass；
-- desktop can open first screen；
-- settings center works；
-- submit/cancel/approval basic flow works；
-- cache/provider tests pass；
-- Reames boundary tests pass；
-- provider-visible metadata-invisibility tests pass；
-- server smoke pass；
-- old packages/desktop no longer required。
-
-### H2. 删除/归档顺序
-
-1. 标记旧 desktop 为 deprecated；
-2. 移除旧 desktop route/build；
-3. 删除伪 Reasonix UI/CSS；
-4. 归档旧桌面计划；
-5. Python core 只在新 runtime parity 后移动到 `legacy/python-reames/` 或保留分支；
-6. README 和 docs index 最后统一更新。
+- channel metadata 不进 prompt；
+- 用户身份、渠道、消息 ID 只在 runtime envelope；
+- 外发消息要有审批/节流/去重；
+- 文件/图片/富文本先标准化为 runtime attachment；
+- 所有渠道复用同一 Reames boundary。
 
 ## 9. 每批执行模板
 
-每批必须写清楚：
-
-```text
-目标：
-改动文件：
-为什么改：
-不改什么：
-风险：
-验证命令：
-结果：
-下一步：
-```
-
-推荐命令：
-
-### Reames 当前仓库
+每批开始前：
 
 ```powershell
-ruff check .
-ruff format --check .
-python -m pytest tests/test_reames_client.py tests/test_cli_architecture_boundary.py tests/test_cache_first.py tests/test_cache_shape.py tests/test_desktop_shell_contract.py -q
-python scripts/cli_virtual_terminal.py --all --check
+cd F:\reames-agent
+git status --short --branch
 ```
 
-### Reasonix root
+常规验证：
 
 ```powershell
-$env:GOPROXY='https://goproxy.cn,direct'
-$env:GOSUMDB='sum.golang.google.cn'
-go test ./internal/provider/openai ./internal/agent -run 'Test(Normalise|Normalize|Usage|Cache|SessionCache|SetSession|ReleaseCache|PlanModeDoesNotMutateSystemOrTools)' -count=1
-go test ./internal/memorycompiler ./internal/config -run 'Test.*' -count=1
+.\scripts\verify-baseline.ps1
+go test ./... -run '^$'
 ```
 
-### Reasonix desktop
+UI 批次额外验证：
 
 ```powershell
-cd F:\code-reference\DeepSeek-Reasonix\desktop
-$env:GOPROXY='https://goproxy.cn,direct'
-$env:GOSUMDB='sum.golang.google.cn'
-go test . -run 'Test(Memory|Suggestion|Recovery)' -count=1
-go test . -run '^TestWorkspaceChangesGitStatus$' -count=1 -v
+cd F:\reames-agent\desktop\frontend
+npm run build
+```
+
+desktop Go 关键验证：
+
+```powershell
+cd F:\reames-agent\desktop
+go test . -run 'TestWorkspaceChangesGitStatus|TestWorkspaceChangesGitStatusFromRepoSubdirectory|TestWorkspaceChangesUntrackedDirectoryListsFiles|TestWorkspaceChangesGitBranchDetachedHead|TestParseGitStatusPorcelainZ|TestHeartbeatConfigPathUsesReamesAgentUserStateDir' -count=1
+```
+
+每批结束：
+
+```powershell
+git status --short
+git add <changed-files>
+git commit -m "<type>: <summary>"
+git push origin main
 ```
 
 ## 10. 当前下一步
 
-在用户允许“开始执行”之前，下一步只应该做调研/计划，不做代码导入。
+按优先级：
 
-如果用户允许执行，第一批实际执行应是：
+1. **恢复 desktop frontend build/dev**：安装依赖、跑 build、打开界面；
+2. **做桌面 UI 视觉校准**：Apple-light、中文、用户语言、主界面和设置中心；
+3. **建立 UI 截图/点击验收**：主界面、设置页、审批弹窗、工作区；
+4. **补 Reames boundary guard tests**：metadata 不进 prompt、cache prefix 不被污染；
+5. **再清理 legacy 残留**：文档、Python、Hermes 混入内容分批处理；
+6. **最后推进云部署和 Gateway**：复用 server/boundary，不另起一套。
 
-1. 创建 `codex/reasonix-base-migration` 分支；
-2. 做 Reasonix workspace git-status bug 最小修复方案验证；
-3. 写可复用 baseline script；
-4. 原样 staged import Reasonix；
-5. 跑 baseline；
-6. 只记录结果，不做 UI rebrand；
-7. push 分支。
+## 11. 阶段完成定义
 
-## 11. 完成定义
+### 桌面 UI 阶段完成
 
-这个迁移不是文档完成就完成。真正完成至少要满足：
+- 用户打开后第一眼像桌面 Agent；
+- 主界面、设置页、审批弹窗视觉统一；
+- 默认中文；
+- 没有工程自嗨文字；
+- 能新建/切换会话；
+- 输入区、工具状态、文件变更、设置入口可点击；
+- 有截图或自动化验证记录；
+- frontend build 通过。
 
-- 桌面首屏像一个可用桌面 Agent；
-- 设置中心真实可点；
-- 命令面板真实可用；
-- composer/approval/context/workspace/memory/status 都有真实路径；
-- Apple-light 中文 UI；
-- 无普通用户可见工程自嗨文案；
-- Reasonix cache-hit pipeline 保留；
-- Reames boundary tests 存在并通过；
-- Server/Web 可启动；
-- Gateway metadata 不进 prompt；
-- 旧桌面实验已删除或归档；
-- 新接手者只读两份文档就能继续推进。
+### 项目基线阶段完成
+
+- `.\scripts\verify-baseline.ps1` 通过；
+- root compile-only test 通过；
+- desktop critical tests 通过；
+- 文档入口清晰；
+- main 已 push；
+- 后续接手者能根据本文档继续推进。
+
+### 全面融合阶段完成
+
+- Desktop/CLI/Web/Gateway 共用 runtime boundary；
+- provider/cache pipeline 稳定；
+- metadata 隔离有测试；
+- 云部署可用；
+- Gateway 可接至少一个真实渠道；
+- legacy 残留已归档或删除；
+- README/AGENTS/docs 与实际项目一致。

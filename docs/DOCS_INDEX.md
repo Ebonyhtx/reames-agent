@@ -6,8 +6,8 @@
 
 | 文档 | 用途 |
 |---|---|
-| `docs/REAMES_AGENT_AUTHORITY.md` | **权威接手文档**：说明项目目标、Reasonix 底座、Reames Lite/其他参考项目分别保留什么，以及不能再犯的融合错误。 |
-| `docs/REAMES_AGENT_EXECUTION_PLAN.md` | **唯一执行计划**：按阶段说明基线、文档、桌面、边界、云部署和融合路线。 |
+| `docs/REAMES_AGENT_AUTHORITY.md` | **权威接手文档 v2**：确认 `F:\reames-agent` 是新主项目，说明 Reasonix 底座、桌面 Agent 优先级、Reames Lite/其他参考项目分别保留什么。 |
+| `docs/REAMES_AGENT_EXECUTION_PLAN.md` | **唯一执行计划 v2**：按当前真实路线推进桌面 UI、公共边界、legacy 清理、云部署和 Gateway 融合。 |
 | `README.md` / `README.zh-CN.md` | 项目介绍与快速开始。 |
 | `AGENTS.md` | AI 编程助手工作指南。 |
 | `CONTRIBUTING.md` | 开发者贡献指南。 |
