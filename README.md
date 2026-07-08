@@ -59,3 +59,26 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for systemd, nginx, and SSH deployment guid
 ## License
 
 MIT. Based on [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix).
+
+## Development
+
+See [AGENTS.md](AGENTS.md) for AI agent instructions and [CONTRIBUTING.md](CONTRIBUTING.md) for developer setup.
+
+```bash
+git clone <repo-url> && cd reames-agent
+go build -o bin/reames-agent.exe ./cmd/reames-agent
+go test ./internal/... -count=1
+```
+
+China mainland: `export GOPROXY=https://goproxy.cn,direct`
+
+## New Modules (from reference projects)
+
+| Module | Source | Purpose |
+|---|---|---|
+| `internal/crypto/` | AgentArk | AES-256-GCM encrypted credential store |
+| `internal/trust/` | AgentArk | HTML sanitization + output envelope |
+| `internal/cron/` | Hermes | Persistent scheduled tasks |
+| `internal/provider/classify.go` | Hermes | Error classifier (12 failover reasons) |
+| `internal/lsp/` | Codex | LSP Delta baseline diagnostics |
+| `internal/bot/telegram/` | — | Telegram Bot API adapter |

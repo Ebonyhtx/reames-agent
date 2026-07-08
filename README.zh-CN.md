@@ -56,3 +56,26 @@ docker run -p 8787:8787 -e DEEPSEEK_API_KEY=sk-xxx reames-agent
 ## 许可证
 
 MIT。基于 [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix)。
+
+## 开发
+
+详见 [AGENTS.md](AGENTS.md)（AI 助手指南）和 [CONTRIBUTING.md](CONTRIBUTING.md)（开发者指南）。
+
+```bash
+git clone <repo-url> && cd reames-agent
+go build -o bin/reames-agent.exe ./cmd/reames-agent
+go test ./internal/... -count=1
+```
+
+国内用户：`export GOPROXY=https://goproxy.cn,direct`
+
+## 新增模块（来自参考项目）
+
+| 模块 | 来源 | 用途 |
+|---|---|---|
+| `internal/crypto/` | AgentArk | AES-256-GCM 加密凭证存储 |
+| `internal/trust/` | AgentArk | HTML 清洗 + 输出信封 |
+| `internal/cron/` | Hermes | 持久化定时任务 |
+| `internal/provider/classify.go` | Hermes | 错误分类器（12 种故障原因） |
+| `internal/lsp/` | Codex | LSP Delta 基线诊断 |
+| `internal/bot/telegram/` | — | Telegram Bot API 适配器 |
