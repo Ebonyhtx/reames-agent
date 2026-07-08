@@ -225,6 +225,10 @@ type Agent struct {
 	sessMu      sync.Mutex // guards the session pointer for external Session()/SetSession
 	maxSteps    int
 	maxStepsKey string
+	maxTokens    int
+	maxDuration  time.Duration
+	totalTokens  int64
+	startTime    time.Time
 	// executorHandoffGuard is enabled by Coordinator for the executor agent. The
 	// per-turn marker check in Run keeps ordinary single-model turns unaffected.
 	executorHandoffGuard bool
@@ -818,6 +822,12 @@ type Options struct {
 	// MaxStepsKey names the configuration knob shown when the MaxSteps guard is
 	// hit. Empty defaults to agent.max_steps.
 	MaxStepsKey string
+	// MaxTokens caps total output tokens across all turns of a goal/task.
+	// <= 0 means no token budget.
+	MaxTokens int
+	// MaxDuration caps total wall-clock time for a goal/task.
+	// Zero means no time budget.
+	MaxDuration time.Duration
 	Temperature float64
 	Pricing     *provider.Pricing // optional, for per-turn cost display
 	UsageSource string            // optional billable usage source; default executor
@@ -948,6 +958,9 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 		tools:                    tools,
 		session:                  session,
 		maxSteps:                 opts.MaxSteps,
+		maxTokens:                opts.MaxTokens,
+		maxDuration:              opts.MaxDuration,
+		startTime:                time.Now(),
 		maxStepsKey:              maxStepsKey,
 		temperature:              opts.Temperature,
 		pricing:                  opts.Pricing,
@@ -1003,6 +1016,19 @@ func usageSourceOrDefault(source, fallback string) string {
 // finishing, and the real safety bounds are user cancellation and compaction, not
 // a round count. A positive maxSteps imposes an optional hard guard, surfaced as
 // a resumable notice when hit.
+func (a *Agent) withinBudget(step int) bool {
+	if a.maxSteps > 0 && step >= a.maxSteps {
+		return false
+	}
+	if a.maxTokens > 0 && a.totalTokens >= int64(a.maxTokens) {
+		return false
+	}
+	if a.maxDuration > 0 && time.Since(a.startTime) >= a.maxDuration {
+		return false
+	}
+	return a.maxSteps <= 0 || step < a.maxSteps
+}
+
 func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	defer a.clearSteerQueue()
 	a.steerMu.Lock()
@@ -1076,7 +1102,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	streamRecoveries := 0
 	graceRound := false
 	executorHandoff := a.executorHandoffGuard && strings.Contains(input, executorHandoffMarker)
-	for step := 0; a.maxSteps <= 0 || step < a.maxSteps || graceRound; step++ {
+	for step := 0; a.withinBudget(step) || graceRound; step++ {
 		// Consume a queued steer and persist it to the session so it
 		// survives tab switches and history replay. The model sees it as
 		// guidance (with a prefix), not a new task. One cache miss per
@@ -1128,6 +1154,10 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
     		a.sink.Emit(event.Event{Kind: event.CacheUpdated, CacheDiagnostics: &cacheDiagnostics,
     		    SessionHit: int(a.sessCacheHit.Load()), SessionMiss: int(a.sessCacheMiss.Load())})
 
+		}
+		// Track cumulative tokens for goal budget.
+		if usage != nil {
+			a.totalTokens += int64(usage.TotalTokens)
 		}
 		if msg, ok := finishReasonMessage(usage); ok {
 			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: msg})

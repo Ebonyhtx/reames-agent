@@ -326,6 +326,9 @@ func MatchesTool(h ResolvedHook, toolName string) bool {
 	if m == "" || m == "*" {
 		return true
 	}
+	if matchGlob(m, toolName) {
+		return true
+	}
 	re, err := regexp.Compile("^(?:" + m + ")$")
 	if err != nil {
 		return false
@@ -708,4 +711,28 @@ func sameCleanPath(a, b string) bool {
 		b = bb
 	}
 	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+func matchGlob(pattern, name string) bool {
+	if !strings.ContainsAny(pattern, "*?") || strings.ContainsAny(pattern, "\\^$[]{}()+.") {
+		return false
+	}
+	var b strings.Builder
+	b.WriteString("^")
+	for _, r := range pattern {
+		switch r {
+		case '*':
+			b.WriteString(".*")
+		case '?':
+			b.WriteString(".")
+		default:
+			b.WriteString(regexp.QuoteMeta(string(r)))
+		}
+	}
+	b.WriteString("$")
+	re, err := regexp.Compile(b.String())
+	if err != nil {
+		return false
+	}
+	return re.MatchString(name)
 }

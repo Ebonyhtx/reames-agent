@@ -72,6 +72,9 @@ type Skill struct {
 	AutoUse          string // off | suggest | prefer | require
 	NeedsFreshData   bool
 	Cost             string // low | medium | high (advisory)
+	Tags           []string // discoverable tags (frontmatter `tags:`)
+	Platforms      []string // os compatibility filter: linux, macos, windows (empty=all)
+	RelatedSkills  []string // related skill names for progressive disclosure
 }
 
 // IsValidName reports whether name is a usable skill identifier.
@@ -500,6 +503,9 @@ func (s *Store) parseSkill(path, stem string, scope Scope, requireSkillMarker bo
 		AutoUse:        parseAutoUse(fm[skillFrontmatterAutoUse]),
 		NeedsFreshData: parseBoolFrontmatter(fm[skillFrontmatterNeedsFreshData]),
 		Cost:           parseCost(fm[skillFrontmatterCost]),
+    		Tags:           parseCSVFrontmatter(fm[skillFrontmatterTags]),
+    		Platforms:      parseCSVFrontmatter(fm[skillFrontmatterPlatforms]),
+    		RelatedSkills:  parseCSVFrontmatter(fm[skillFrontmatterRelatedSkills]),
 	}, true
 }
 
@@ -517,6 +523,10 @@ const (
 	skillFrontmatterAutoUse          = "auto-use"
 	skillFrontmatterNeedsFreshData   = "needs-fresh-data"
 	skillFrontmatterCost             = "cost"
+
+	skillFrontmatterTags           = "tags"
+	skillFrontmatterPlatforms      = "platforms"
+	skillFrontmatterRelatedSkills  = "related-skills"
 )
 
 var skillMarkerFrontmatterKeys = []string{
@@ -533,6 +543,10 @@ var skillMarkerFrontmatterKeys = []string{
 	skillFrontmatterAutoUse,
 	skillFrontmatterNeedsFreshData,
 	skillFrontmatterCost,
+
+	skillFrontmatterTags,
+	skillFrontmatterPlatforms,
+	skillFrontmatterRelatedSkills,
 }
 
 func hasSkillMarker(content string, fm map[string]string) bool {
