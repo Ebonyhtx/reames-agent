@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	"reames-agent/internal/netclient"
+	"reames-agent/internal/trust"
 	"reames-agent/internal/tool"
 )
 
@@ -288,10 +289,10 @@ func (wf webFetch) Execute(ctx context.Context, args json.RawMessage) (string, e
 	}
 	out = strings.TrimSpace(out)
 	if out == "" {
-		return fmt.Sprintf("(empty body — status %s)", resp.Status), nil
+		return trust.WrapUntrusted(fmt.Sprintf("(empty body - status %s)", resp.Status), "web_fetch"), nil
 	}
 	header := fmt.Sprintf("status %s · %s · %d bytes\n\n", resp.Status, contentTypeShort(ct), len(body))
-	return header + out, nil
+	return trust.WrapUntrusted(header+out, "web_fetch"), nil
 }
 
 // looksLikeHTML lets servers that misreport Content-Type still hit the HTML

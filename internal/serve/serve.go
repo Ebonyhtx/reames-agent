@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"reames-agent/internal/agent"
+	"reames-agent/internal/board"
 	"reames-agent/internal/boot"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
@@ -347,6 +348,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("POST /delete-session", s.deleteSession)
 mux.HandleFunc("GET /health", s.health)
 mux.HandleFunc("GET /ready", s.ready)
+	mux.HandleFunc("GET /api/board", s.boardStatus)
 mux.HandleFunc("GET /ws", s.wsEvents)
 	return logMiddleware(s.auth.middleware(csrfGuard(mux)))
 }
@@ -1318,4 +1320,13 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, `{"status":"ready"}`)
+}
+
+func (s *Server) boardStatus(w http.ResponseWriter, _ *http.Request) {
+	ctrl := s.ctl()
+	if ctrl == nil {
+		writeJSON(w, map[string]string{"error": "not initialized"})
+		return
+	}
+	writeJSON(w, board.Build(ctrl, nil))
 }

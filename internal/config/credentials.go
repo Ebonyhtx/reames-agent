@@ -11,6 +11,11 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/joho/godotenv"
 
+	"crypto/sha256"
+	"os/user"
+	"runtime"
+
+	"reames-agent/internal/crypto"
 	"reames-agent/internal/fileutil"
 )
 
@@ -687,4 +692,80 @@ func envFileHasClearedKey(path, key string) bool {
 		}
 	}
 	return false
+}
+
+// --- Encrypted credential store (side-by-side with plaintext .env) ---
+
+
+// machineKey derives a stable machine-local encryption key for the encrypted
+// credential store. Uses hostname + username + OS as salt for Argon2id.
+func machineKey() ([]byte, error) {
+	var parts []string
+	if h, err := os.Hostname(); err == nil {
+		parts = append(parts, h)
+	}
+	if u, err := user.Current(); err == nil {
+		parts = append(parts, u.Username)
+	}
+	parts = append(parts, runtime.GOOS)
+	salt := sha256.Sum256([]byte(strings.Join(parts, ":")))
+	return crypto.DeriveKey(strings.Join(parts, ":"), salt[:]), nil
+}
+
+// encryptedCredentialPath returns the path to the encrypted credential file.
+func encryptedCredentialPath() string {
+	return filepath.Join(filepath.Dir(UserCredentialsPath()), "credentials.enc")
+}
+
+// WriteEncrypted writes a credential to the encrypted store using AES-256-GCM.
+func WriteEncrypted(key, value string) error {
+	mk, err := machineKey()
+	if err != nil {
+		return err
+	}
+	enc, err := crypto.Encrypt([]byte(value), mk)
+	if err != nil {
+		return err
+	}
+	line := key + "=" + enc + "\n"
+	path := encryptedCredentialPath()
+	existing, _ := os.ReadFile(path)
+	lines := strings.Split(string(existing), "\n")
+	found := false
+	for i, l := range lines {
+		if strings.HasPrefix(l, key+"=") {
+			lines[i] = strings.TrimRight(line, "\n")
+			found = true
+			break
+		}
+	}
+	if !found {
+		lines = append(lines, strings.TrimRight(line, "\n"))
+	}
+	return crypto.SecureWrite(path, []byte(strings.Join(lines, "\n")+"\n"))
+}
+
+// ReadEncrypted reads and decrypts a credential from the encrypted store.
+func ReadEncrypted(key string) (string, bool) {
+	mk, err := machineKey()
+	if err != nil {
+		return "", false
+	}
+	path := encryptedCredentialPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, key+"=") {
+			continue
+		}
+		enc := strings.TrimPrefix(line, key+"=")
+		dec, err := crypto.Decrypt(enc, mk)
+		if err != nil {
+			return "", false
+		}
+		return string(dec), true
+	}
+	return "", false
 }
