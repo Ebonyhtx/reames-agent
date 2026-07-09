@@ -1,0 +1,127 @@
+package control
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"reames-agent/internal/agent"
+	"reames-agent/internal/event"
+	"reames-agent/internal/permission"
+	"reames-agent/internal/provider"
+	"reames-agent/internal/tool"
+	"reames-agent/internal/tool/builtin"
+)
+
+func TestProviderAuthErrorEmitsTurnDoneAndClearsRuntimeStatus(t *testing.T) {
+	authErr := &provider.AuthError{Provider: "deepseek", KeyEnv: "DEEPSEEK_API_KEY", Status: 401, HasKey: true}
+	prov := &scriptedTurns{turns: [][]provider.Chunk{{
+		{Type: provider.ChunkError, Err: authErr},
+	}}}
+	events := make(chan event.Event, 16)
+	ag := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.FuncSink(func(e event.Event) {
+		events <- e
+	}))
+	c := New(Options{
+		Runner:   ag,
+		Executor: ag,
+		Sink: event.FuncSink(func(e event.Event) {
+			events <- e
+		}),
+	})
+
+	c.Submit("hello")
+	done := waitForTurnDoneEvent(t, events)
+	if done.Err == nil {
+		t.Fatal("TurnDone.Err is nil, want provider auth error")
+	}
+	if !strings.Contains(done.Err.Error(), "DEEPSEEK_API_KEY") {
+		t.Fatalf("TurnDone.Err = %v, want actionable key env", done.Err)
+	}
+	status := c.RuntimeStatus()
+	if status.Running || status.PendingPrompt || status.CancelRequested || status.Cancellable {
+		t.Fatalf("runtime status after auth failure = %+v, want idle", status)
+	}
+}
+
+func TestApprovalTimeoutBlocksWriteAndClearsPendingPrompt(t *testing.T) {
+	workspace := t.TempDir()
+	rel := filepath.Join("notes", "timed-out.txt")
+	args, err := json.Marshal(struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}{Path: rel, Content: "should not be written\n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reg := tool.NewRegistry()
+	for _, tl := range (builtin.Workspace{Dir: workspace}).Tools("write_file") {
+		reg.Add(tl)
+	}
+	prov := &scriptedTurns{turns: [][]provider.Chunk{
+		toolCallTurn("w-timeout", "write_file", string(args)),
+		textTurn("I could not write the file."),
+	}}
+	events := make(chan event.Event, 32)
+	sink := event.FuncSink(func(e event.Event) { events <- e })
+	ag := agent.New(prov, reg, agent.NewSession("sys"), agent.Options{}, sink)
+	c := New(Options{
+		Runner:          ag,
+		Executor:        ag,
+		Policy:          permission.New("ask", nil, nil, nil),
+		Sink:            sink,
+		WorkspaceRoot:   workspace,
+		ApprovalTimeout: 30 * time.Millisecond,
+	})
+	c.EnableInteractiveApproval()
+
+	c.Submit("write the timeout note")
+
+	var result event.Event
+	deadline := time.After(5 * time.Second)
+	for result.Kind == 0 {
+		select {
+		case e := <-events:
+			if e.Kind == event.ToolResult && e.Tool.ID == "w-timeout" {
+				result = e
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for write_file ToolResult")
+		}
+	}
+	if result.Tool.Err == "" || !strings.Contains(result.Tool.Err, context.DeadlineExceeded.Error()) {
+		t.Fatalf("ToolResult.Err = %q, want approval timeout", result.Tool.Err)
+	}
+
+	done := waitForTurnDoneEvent(t, events)
+	if done.Err != nil {
+		t.Fatalf("TurnDone.Err = %v, want nil because the model received the blocked tool result", done.Err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, rel)); !os.IsNotExist(err) {
+		t.Fatalf("timed-out write stat err = %v, want file not created", err)
+	}
+	status := c.RuntimeStatus()
+	if status.Running || status.PendingPrompt || status.CancelRequested || status.Cancellable {
+		t.Fatalf("runtime status after approval timeout = %+v, want idle", status)
+	}
+}
+
+func waitForTurnDoneEvent(t *testing.T, events <-chan event.Event) event.Event {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case e := <-events:
+			if e.Kind == event.TurnDone {
+				return e
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for TurnDone")
+		}
+	}
+}
