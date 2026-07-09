@@ -12,6 +12,12 @@ This keeps IM commands such as `/stop`, `/new`, `/current`, `/approve`, and
 `/deny` as gateway-layer controls instead of model prompts, while avoiding
 prefix-only false positives such as `/statusx` or `/stopwatch`.
 
+The Gateway CLI surface also exposes `reames-agent gateway doctor` as the
+recommended headless spelling for the existing read-only bot diagnostics, so
+server deployments can discover config, credential-env, access-control,
+connection, queue, and pairing checks without falling back to the legacy
+`bot doctor` name.
+
 ## Evidence
 
 Code and tests:
@@ -25,6 +31,9 @@ Code and tests:
   - dispatches slash commands by parsed verb rather than string prefix;
   - routes `/current` to the same status response as `/status`;
   - advertises `/status 或 /current` in `/help`.
+- `internal/cli/bot.go`
+  - routes `reames-agent gateway doctor` to the shared read-only diagnostics;
+  - documents the doctor command in Gateway help.
 - `internal/bot/session_test.go`
   - covers `/current`;
   - prevents `/statusx` and `/stopwatch` from being treated as control commands;

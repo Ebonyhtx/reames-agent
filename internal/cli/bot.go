@@ -62,6 +62,8 @@ func gatewayCommand(args []string, version string) int {
 	switch sub {
 	case "run":
 		return gatewayRun(rest, version)
+	case "doctor":
+		return botDoctor(rest)
 	case "install", "start", "stop", "restart", "status", "uninstall":
 		return gatewayService(sub, rest)
 	case "help", "--help", "-h":
@@ -673,11 +675,13 @@ func gatewayUsage() {
 
 Usage:
   reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
+  reames-agent gateway doctor [--json] [--deep]
   reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--home PATH] [--channels LIST] [--dir PATH] [--model NAME]
   reames-agent gateway start|stop|restart|status|uninstall [--dry-run] [--scope user|system]
 
 Subcommands:
   run       run the gateway in the foreground; compatible with "reames-agent bot start"
+  doctor    inspect gateway config, credentials, access control, and connection records
   install   install a user-level OS service (systemd, launchd, or Windows Scheduled Task)
   start     start the installed gateway service
   stop      stop the installed gateway service

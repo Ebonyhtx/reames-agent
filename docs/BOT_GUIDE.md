@@ -149,6 +149,7 @@ runtime itself can also run as a long-lived headless gateway:
 ```sh
 reames-agent bot doctor
 reames-agent bot doctor --deep
+reames-agent gateway doctor --deep
 reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
 reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
 reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu --dir /path/to/project
@@ -159,6 +160,11 @@ Use `--channels` to choose which configured IM inputs to accept. `feishu` and
 WeChat iLink account; `qq` selects the configured QQ bot. Use `--dir` to attach
 incoming messages to a project workspace and `--model` to override the default
 model for this process.
+
+`gateway doctor` is the recommended headless spelling for the same diagnostics
+as `bot doctor`: it checks configuration, credential environment variables,
+access control, connection records, queue settings, and pairing state without
+starting the gateway or printing secret values.
 
 The headless gateway uses the same config records as the desktop app:
 

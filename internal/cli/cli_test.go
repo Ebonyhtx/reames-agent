@@ -336,6 +336,9 @@ func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
 	if !strings.Contains(out, "install") || !strings.Contains(out, "--dry-run") {
 		t.Fatalf("gateway help output missing service lifecycle details:\n%s", out)
 	}
+	if !strings.Contains(out, "reames-agent gateway doctor") {
+		t.Fatalf("gateway help output missing doctor diagnostics:\n%s", out)
+	}
 	if !strings.Contains(out, "--home PATH") {
 		t.Fatalf("gateway help output missing service home binding:\n%s", out)
 	}
@@ -353,6 +356,25 @@ func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "flag provided but not defined") {
 		t.Fatalf("gateway run bad flag stderr = %q, want flag parser error", errOut)
+	}
+}
+
+func TestGatewayDoctorAliasesBotDoctor(t *testing.T) {
+	isolateCLIConfigHome(t)
+
+	out := captureStdout(t, func() {
+		if rc := Run([]string{"gateway", "doctor", "--json"}, "test-version"); rc != 0 {
+			t.Fatalf("gateway doctor rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{
+		`"name":"bot.enabled"`,
+		`"name":"bot.queue"`,
+		`"name":"bot.connections"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("gateway doctor output missing %q:\n%s", want, out)
+		}
 	}
 }
 

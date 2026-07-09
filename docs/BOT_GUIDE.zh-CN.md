@@ -136,6 +136,7 @@ HTTP 调用使用带超时的 client，避免平台请求卡住后无限阻塞 g
 ```sh
 reames-agent bot doctor
 reames-agent bot doctor --deep
+reames-agent gateway doctor --deep
 reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
 reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
 reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu --dir /path/to/project
@@ -145,6 +146,10 @@ reames-agent gateway install --start-now --home ~/.reames-agent --channels feish
 飞书系连接，`weixin` 会选择已保存的微信 iLink 账号，`qq` 会选择已配置的 QQ
 Bot。`--dir` 用来把远端消息绑定到某个项目工作区，`--model` 可以为这个进程
 临时覆盖默认模型。
+
+`gateway doctor` 是无界面部署推荐使用的诊断入口，复用 `bot doctor` 的同一套
+检查：配置、凭据环境变量、访问控制、连接记录、队列设置和配对状态；它不会启动
+gateway，也不会打印 secret 值。
 
 无界面网关复用桌面端保存的同一套配置：
 
