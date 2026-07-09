@@ -113,14 +113,14 @@ func (a *approvalManager) preApprovedForDecision(tool, subject string, fresh boo
 
 // register allocates an approval ID, records the pending prompt, and returns the
 // reply channel the resolve path will signal.
-func (a *approvalManager) register(tool, subject, reason string) (string, chan approvalReply) {
-	return a.registerDecision(tool, subject, reason, false)
+func (a *approvalManager) register(tool, subject, reason string, fileDiff event.FileDiff) (string, chan approvalReply) {
+	return a.registerDecision(tool, subject, reason, fileDiff, false)
 }
 
 // registerDecision allocates an approval ID for either an ordinary tool
 // permission or a fresh user decision. Fresh decisions are not auto-drained when
 // the user switches to auto/yolo tool approval while the prompt is visible.
-func (a *approvalManager) registerDecision(tool, subject, reason string, fresh bool) (string, chan approvalReply) {
+func (a *approvalManager) registerDecision(tool, subject, reason string, fileDiff event.FileDiff, fresh bool) (string, chan approvalReply) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.nextID++
@@ -130,7 +130,7 @@ func (a *approvalManager) registerDecision(tool, subject, reason string, fresh b
 	if !fresh {
 		autoDrain = a.autoApprovalWouldAllowLocked(tool, subject)
 	}
-	a.approvals[id] = pendingApproval{tool: tool, subject: subject, reason: reason, fresh: fresh, autoDrain: autoDrain, reply: reply}
+	a.approvals[id] = pendingApproval{tool: tool, subject: subject, reason: reason, fileDiff: fileDiff, fresh: fresh, autoDrain: autoDrain, reply: reply}
 	a.writePendingSnapshotLocked(a.sessionID)
 	return id, reply
 }
@@ -274,7 +274,7 @@ func (a *approvalManager) snapshotPrompts() ([]event.Approval, []event.Ask) {
 	defer a.mu.Unlock()
 	approvals := make([]event.Approval, 0, len(a.approvals))
 	for id, p := range a.approvals {
-		approvals = append(approvals, event.Approval{ID: id, Tool: p.tool, Subject: p.subject, Reason: p.reason})
+		approvals = append(approvals, event.Approval{ID: id, Tool: p.tool, Subject: p.subject, Reason: p.reason, FileDiff: p.fileDiff})
 	}
 	asks := make([]event.Ask, 0, len(a.asks))
 	for id, p := range a.asks {

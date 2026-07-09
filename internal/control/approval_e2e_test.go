@@ -3,6 +3,10 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +16,7 @@ import (
 	"reames-agent/internal/permission"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/tool"
+	"reames-agent/internal/tool/builtin"
 )
 
 type recordingWriter struct {
@@ -89,6 +94,104 @@ func TestApprovalToolWideEndToEnd(t *testing.T) {
 	defer writer.mu.Unlock()
 	if len(writer.paths) != 2 || writer.paths[0] != "a.txt" || writer.paths[1] != "b.txt" {
 		t.Errorf("executed writes = %v, want both a.txt and b.txt", writer.paths)
+	}
+}
+
+// TestApprovalRealWriteFilePreviewDiskAndRewindEndToEnd locks the M1 file-write
+// contract to a real builtin writer: a model-requested write_file call must
+// surface an approval, carry the same patch preview on ToolDispatch and
+// ApprovalRequest, write to disk only after approval, and be removable by code
+// rewind through the checkpoint pre-edit hook.
+func TestApprovalRealWriteFilePreviewDiskAndRewindEndToEnd(t *testing.T) {
+	workspace := t.TempDir()
+	sessionDir := t.TempDir()
+	rel := filepath.Join("notes", "hello.txt")
+	content := "hello\nfrom reames\n"
+	args, err := json.Marshal(struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}{Path: rel, Content: content})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reg := tool.NewRegistry()
+	for _, tl := range (builtin.Workspace{Dir: workspace}).Tools("write_file") {
+		reg.Add(tl)
+	}
+	prov := &scriptedTurns{turns: [][]provider.Chunk{
+		toolCallTurn("w1", "write_file", string(args)),
+		textTurn("Done."),
+	}}
+
+	var events []event.Event
+	approvalID := make(chan string, 1)
+	sink := event.FuncSink(func(e event.Event) {
+		events = append(events, e)
+		if e.Kind == event.ApprovalRequest {
+			approvalID <- e.Approval.ID
+		}
+	})
+	ag := agent.New(prov, reg, agent.NewSession("sys"), agent.Options{}, sink)
+	c := New(Options{
+		Runner:        ag,
+		Executor:      ag,
+		Policy:        permission.New("ask", nil, nil, nil),
+		SessionDir:    sessionDir,
+		WorkspaceRoot: workspace,
+		Sink:          sink,
+	})
+	c.SetSessionPath(agent.NewSessionPath(sessionDir, "m1-write"))
+	c.EnableInteractiveApproval()
+
+	go func() { c.Approve(<-approvalID, true, false, false) }()
+	if err := c.runTurnWithRaw(context.Background(), "write the note", "write the note"); err != nil {
+		t.Fatalf("runTurnWithRaw: %v", err)
+	}
+
+	var dispatchDiff, approvalDiff event.FileDiff
+	for _, e := range events {
+		switch e.Kind {
+		case event.ToolDispatch:
+			if e.Tool.ID == "w1" {
+				dispatchDiff = e.Tool.FileDiff
+			}
+		case event.ApprovalRequest:
+			if e.Approval.Tool == "write_file" {
+				approvalDiff = e.Approval.FileDiff
+			}
+		}
+	}
+	if dispatchDiff.Diff == "" || dispatchDiff.Added == 0 {
+		t.Fatalf("ToolDispatch FileDiff = %+v, want non-empty patch preview", dispatchDiff)
+	}
+	if approvalDiff.Diff == "" || approvalDiff.Added == 0 {
+		t.Fatalf("ApprovalRequest FileDiff = %+v, want non-empty patch preview", approvalDiff)
+	}
+	if dispatchDiff.Diff != approvalDiff.Diff || dispatchDiff.Added != approvalDiff.Added || dispatchDiff.Removed != approvalDiff.Removed {
+		t.Fatalf("approval diff = %+v, want same preview as dispatch %+v", approvalDiff, dispatchDiff)
+	}
+	if !strings.Contains(approvalDiff.Diff, "+hello") || !strings.Contains(approvalDiff.Diff, "+from reames") {
+		t.Fatalf("approval diff %q does not show added content", approvalDiff.Diff)
+	}
+
+	target := filepath.Join(workspace, rel)
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read written file: %v", err)
+	}
+	if string(got) != content {
+		t.Fatalf("written content = %q, want %q", got, content)
+	}
+	cps := c.Checkpoints()
+	if len(cps) != 1 || len(cps[0].Paths) != 1 {
+		t.Fatalf("checkpoints = %+v, want one checkpoint with one file snapshot", cps)
+	}
+	if err := c.Rewind(0, RewindCode); err != nil {
+		t.Fatalf("Rewind code: %v", err)
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("written file after rewind stat err = %v, want not exist", err)
 	}
 }
 

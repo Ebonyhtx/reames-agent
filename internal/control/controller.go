@@ -220,6 +220,7 @@ type pendingApproval struct {
 	tool      string
 	subject   string
 	reason    string
+	fileDiff  event.FileDiff
 	fresh     bool
 	autoDrain bool
 	reply     chan approvalReply
@@ -4623,13 +4624,14 @@ func (c *Controller) requestApprovalDecisionWithOptions(ctx context.Context, too
 	}
 	var id string
 	var reply chan approvalReply
+	fileDiff := c.approvalFileDiff(tool, args)
 	if opts.fresh {
-		id, reply = c.approval.registerDecision(tool, subject, reason, true)
+		id, reply = c.approval.registerDecision(tool, subject, reason, fileDiff, true)
 	} else {
-		id, reply = c.approval.register(tool, subject, reason)
+		id, reply = c.approval.register(tool, subject, reason, fileDiff)
 	}
 
-	c.sink.Emit(event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{ID: id, Tool: tool, Subject: subject, Reason: reason}})
+	c.sink.Emit(event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{ID: id, Tool: tool, Subject: subject, Reason: reason, FileDiff: fileDiff}})
 	if hookSubject, hookArgs, ok := permissionRequestHookPayload(tool, subject, args); ok {
 		go c.hooks.PermissionRequest(ctx, tool, hookSubject, hookArgs)
 	}
@@ -4647,6 +4649,17 @@ func (c *Controller) requestApprovalDecisionWithOptions(ctx context.Context, too
 		c.approval.cancel(id)
 		return approvalReply{}, waitCtx.Err()
 	}
+}
+
+func (c *Controller) approvalFileDiff(toolName string, args json.RawMessage) event.FileDiff {
+	if c.executor == nil {
+		return event.FileDiff{}
+	}
+	fileDiff, ok := c.executor.PreviewFileDiff(toolName, args)
+	if !ok {
+		return event.FileDiff{}
+	}
+	return fileDiff
 }
 
 func (c *Controller) emitRememberResult(r RememberResult) {

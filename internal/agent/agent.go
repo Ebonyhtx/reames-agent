@@ -225,10 +225,10 @@ type Agent struct {
 	sessMu      sync.Mutex // guards the session pointer for external Session()/SetSession
 	maxSteps    int
 	maxStepsKey string
-	maxTokens    int
-	maxDuration  time.Duration
-	totalTokens  int64
-	startTime    time.Time
+	maxTokens   int
+	maxDuration time.Duration
+	totalTokens int64
+	startTime   time.Time
 	// executorHandoffGuard is enabled by Coordinator for the executor agent. The
 	// per-turn marker check in Run keeps ordinary single-model turns unaffected.
 	executorHandoffGuard bool
@@ -461,6 +461,25 @@ func (a *Agent) SetTools(tools *tool.Registry) {
 		return
 	}
 	a.tools = tools
+}
+
+// PreviewFileDiff returns the same writer-tool diff preview that ToolDispatch
+// carries, without executing the tool. Controllers use this to put the preview
+// directly on ApprovalRequest events, so reconnect/replay and approval modals do
+// not have to infer it from a separate ToolDispatch card.
+func (a *Agent) PreviewFileDiff(name string, args json.RawMessage) (event.FileDiff, bool) {
+	if a == nil || a.tools == nil {
+		return event.FileDiff{}, false
+	}
+	t, ok := a.tools.Get(name)
+	if !ok {
+		return event.FileDiff{}, false
+	}
+	ch, ok := tool.PreviewChange(t, args)
+	if !ok {
+		return event.FileDiff{}, false
+	}
+	return event.FileDiff{Diff: ch.Diff, Added: ch.Added, Removed: ch.Removed}, true
 }
 
 // SetReasoningLanguage updates the visible reasoning language preference for
@@ -1150,9 +1169,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 				UsageSource:      a.usageSource,
 				CacheDiagnostics: &cacheDiagnostics,
 				SessionHit:       int(a.sessCacheHit.Load()), SessionMiss: int(a.sessCacheMiss.Load())})
-    		// Emit a dedicated cache-update event so frontends can track cache-hit trends.
-    		a.sink.Emit(event.Event{Kind: event.CacheUpdated, CacheDiagnostics: &cacheDiagnostics,
-    		    SessionHit: int(a.sessCacheHit.Load()), SessionMiss: int(a.sessCacheMiss.Load())})
+			// Emit a dedicated cache-update event so frontends can track cache-hit trends.
+			a.sink.Emit(event.Event{Kind: event.CacheUpdated, CacheDiagnostics: &cacheDiagnostics,
+				SessionHit: int(a.sessCacheHit.Load()), SessionMiss: int(a.sessCacheMiss.Load())})
 
 		}
 		// Track cumulative tokens for goal budget.

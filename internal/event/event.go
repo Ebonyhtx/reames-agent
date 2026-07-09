@@ -166,6 +166,7 @@ type Approval struct {
 	Tool    string
 	Subject string
 	Reason  string // optional annotation explaining why approval is needed
+	FileDiff
 }
 
 // AskOption is one choice the user can pick for an AskQuestion.
