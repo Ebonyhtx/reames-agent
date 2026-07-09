@@ -7648,6 +7648,114 @@ func TestRunShellForTabStaysBoundDuringRapidProjectTabSwitching(t *testing.T) {
 	}
 }
 
+type submitBlockingRunner struct {
+	started chan string
+	done    chan error
+	release chan struct{}
+}
+
+func (r *submitBlockingRunner) Run(ctx context.Context, input string) error {
+	r.started <- input
+	select {
+	case <-ctx.Done():
+		err := ctx.Err()
+		r.done <- err
+		return err
+	case <-r.release:
+		r.done <- nil
+		return nil
+	}
+}
+
+func TestSubmitAndCancelForTabStayBoundDuringActiveTabSwitching(t *testing.T) {
+	isolateDesktopUserDirs(t)
+
+	projectA := t.TempDir()
+	projectB := t.TempDir()
+	sessionA := filepath.Join(t.TempDir(), "a")
+	sessionB := filepath.Join(t.TempDir(), "b")
+	for _, dir := range []string{sessionA, sessionB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runnerA := &submitBlockingRunner{started: make(chan string, 1), done: make(chan error, 1), release: make(chan struct{})}
+	runnerB := &submitBlockingRunner{started: make(chan string, 1), done: make(chan error, 1), release: make(chan struct{})}
+	defer close(runnerA.release)
+	defer close(runnerB.release)
+	ctrlA := control.New(control.Options{
+		Runner:        runnerA,
+		WorkspaceRoot: projectA,
+		SessionDir:    sessionA,
+		SessionPath:   filepath.Join(sessionA, "a.jsonl"),
+		Label:         "model-a",
+	})
+	ctrlB := control.New(control.Options{
+		Runner:        runnerB,
+		WorkspaceRoot: projectB,
+		SessionDir:    sessionB,
+		SessionPath:   filepath.Join(sessionB, "b.jsonl"),
+		Label:         "model-b",
+	})
+	defer ctrlA.Close()
+	defer ctrlB.Close()
+
+	app := &App{
+		tabs: map[string]*WorkspaceTab{
+			"project-a": {ID: "project-a", Scope: "project", WorkspaceRoot: projectA, Ctrl: ctrlA, Ready: true},
+			"project-b": {ID: "project-b", Scope: "project", WorkspaceRoot: projectB, Ctrl: ctrlB, Ready: true},
+		},
+		tabOrder:    []string{"project-a", "project-b"},
+		activeTabID: "project-a",
+	}
+
+	const prompt = "route this prompt to project A"
+	if err := app.SubmitToTab("project-a", prompt); err != nil {
+		t.Fatalf("SubmitToTab(project-a): %v", err)
+	}
+	select {
+	case got := <-runnerA.started:
+		if got != prompt {
+			t.Fatalf("project-a runner input = %q, want %q", got, prompt)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for project-a submit")
+	}
+	select {
+	case got := <-runnerB.started:
+		t.Fatalf("project-b runner unexpectedly started with %q", got)
+	default:
+	}
+	if got := normalizeProjectRoot(ctrlA.WorkspaceRoot()); got != normalizeProjectRoot(projectA) {
+		t.Fatalf("project-a controller workspace = %q, want %q", got, normalizeProjectRoot(projectA))
+	}
+
+	if err := app.SetActiveTab("project-b"); err != nil {
+		t.Fatalf("SetActiveTab(project-b): %v", err)
+	}
+	app.CancelTab("project-a")
+	select {
+	case err := <-runnerA.done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("project-a runner error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for project-a cancellation")
+	}
+	waitNotRunning(t, ctrlA)
+	if ctrlB.Running() {
+		t.Fatal("project-b controller should not be running")
+	}
+	select {
+	case got := <-runnerB.started:
+		t.Fatalf("project-b runner unexpectedly started after cancel with %q", got)
+	default:
+	}
+	if got := activeTabIDForTest(app); got != "project-b" {
+		t.Fatalf("active tab = %q, want project-b after cancelling background tab", got)
+	}
+}
+
 func longRunningMarkerCommand(marker string) string {
 	if sandbox.ResolveShell("", "", nil).Kind == sandbox.ShellPowerShell {
 		return fmt.Sprintf("Set-Content -LiteralPath %s -Value shell; Start-Sleep -Seconds 30", marker)
