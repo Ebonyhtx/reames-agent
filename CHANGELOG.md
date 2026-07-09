@@ -8,6 +8,7 @@
 - Restored CodeQL workflow for Go, JavaScript/TypeScript, and GitHub Actions analysis.
 - Documented SemVer source, changelog expectations, and signing/checksum strategy before production releases.
 - Removed inherited Hermes/Python scripts from the public `scripts/` surface and added a regression gate to keep old release, live-test, Open WebUI, and WhatsApp bridge entrypoints from returning.
+- Rebranded the private root Node workspace metadata from inherited Hermes links to Reames and added public-readiness gates against tracked build artifacts.
 
 ### Deployment
 

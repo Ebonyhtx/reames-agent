@@ -1,7 +1,7 @@
 {
-  "name": "hermes-agent",
-  "version": "1.0.0",
-  "description": "An AI agent with advanced tool-calling capabilities, featuring a flexible toolsets system for organizing and managing tools.",
+  "name": "reames-agent",
+  "version": "0.1.0",
+  "description": "Reames Agent private root workspace for legacy web/TUI assets and maintenance tooling.",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -10,7 +10,7 @@
     "web"
   ],
   "scripts": {
-    "postinstall": "echo '✅ Browser tools ready. Run: python run_agent.py --help'",
+    "postinstall": "echo 'Reames Agent workspace ready. Use scripts/install.sh, scripts/install.ps1, or cmd/reames-agent for the Go runtime.'",
     "install:root": "npm install --workspaces=false",
     "install:web": "npm install --workspace web",
     "install:tui": "npm install --workspace ui-tui",
@@ -24,13 +24,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NousResearch/Hermes-Agent.git"
+    "url": "git+https://github.com/Ebonyhtx/reames-agent.git"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/NousResearch/Hermes-Agent/issues"
+    "url": "https://github.com/Ebonyhtx/reames-agent/issues"
   },
-  "homepage": "https://github.com/NousResearch/Hermes-Agent#readme",
+  "homepage": "https://github.com/Ebonyhtx/reames-agent#readme",
   "dependencies": {
     "@streamdown/math": "^1.0.2",
     "agent-browser": "^0.26.0"

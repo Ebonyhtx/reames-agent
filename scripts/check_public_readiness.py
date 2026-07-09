@@ -9,6 +9,7 @@ required after the repository is made public.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 
@@ -117,6 +118,63 @@ def check_brand_env_regressions(failures: list[str]) -> None:
         require("REASONIX_BOT_CONTROL_TOKEN" not in text, f"{rel} must use REAMES_AGENT_BOT_CONTROL_TOKEN.", failures)
 
 
+def check_root_package_metadata(failures: list[str]) -> None:
+    package = read("package.json")
+    package_lock = read("package-lock.json")
+    for rel, text in [("package.json", package), ("package-lock.json", package_lock)]:
+        require('"name": "reames-agent"' in text, f"{rel} root package metadata must use the Reames package name.", failures)
+        require("NousResearch/Hermes-Agent" not in text, f"{rel} root package metadata must not link the inherited Hermes repository.", failures)
+    require("python run_agent.py" not in package, "package.json postinstall must not advertise the inherited Python runtime.", failures)
+    require("scripts/install.sh" in package, "package.json postinstall should point users to the current Reames installer surface.", failures)
+
+
+def check_tracked_artifacts(failures: list[str]) -> None:
+    try:
+        tracked = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        failures.append(f"could not enumerate tracked files with git ls-files: {exc}")
+        return
+
+    forbidden_exact = {
+        "reames-agent",
+        "reames-agent.exe",
+        "bin/reames-agent",
+        "bin/reames-agent.exe",
+    }
+    forbidden_suffixes = (
+        ".exe",
+        ".dll",
+        ".dylib",
+        ".so",
+        ".test",
+        ".coverprofile",
+    )
+    allowed_suffixes = (
+        ".md",
+        ".go",
+        ".js",
+        ".mjs",
+        ".ts",
+        ".tsx",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".svg",
+    )
+    for rel in tracked:
+        normalized = rel.replace("\\", "/")
+        lower = normalized.lower()
+        if normalized in forbidden_exact:
+            failures.append(f"{normalized} must not be tracked; build binaries stay local or in release artifacts.")
+            continue
+        if lower.startswith(("bin/", "dist/", "stage/")):
+            failures.append(f"{normalized} must not be tracked from generated artifact directories.")
+            continue
+        if lower.endswith(forbidden_suffixes) and not lower.endswith(allowed_suffixes):
+            failures.append(f"{normalized} looks like a generated binary/test artifact and must not be tracked.")
+
+
 def check_installers(failures: list[str]) -> None:
     for rel in ["scripts/install.sh", "scripts/install.ps1", "scripts/install.cmd"]:
         text = read(rel)
@@ -191,6 +249,8 @@ def main() -> int:
         check_release_and_deploy_controls(failures)
         check_codeql_workflow(failures)
         check_brand_env_regressions(failures)
+        check_root_package_metadata(failures)
+        check_tracked_artifacts(failures)
         check_installers(failures)
         check_script_surface(failures)
 
