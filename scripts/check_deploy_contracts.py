@@ -78,6 +78,10 @@ def check() -> list[str]:
     require("reames-agent gateway start" not in deploy, "docs/DEPLOY.md must not document obsolete gateway commands.", failures)
     require("reames-agent bot start --channels feishu" in deploy, "docs/DEPLOY.md must document current bot start commands.", failures)
     require('token_env = "REAMES_AGENT_SERVE_TOKEN"' in deploy, "docs/DEPLOY.md must document serve token_env.", failures)
+    require("服务器 CLI-first" in deploy, "docs/DEPLOY.md must lead with the server CLI-first deployment shape.", failures)
+    require("tmux" in deploy and "reames-agent run" in deploy, "docs/DEPLOY.md must document SSH/tmux CLI usage.", failures)
+    require("<Reames Agent home>/.env" in deploy, "docs/DEPLOY.md must document server user credential storage.", failures)
+    require("不是 CLI 部署的前置条件" in deploy, "docs/DEPLOY.md must state serve/bot are optional after CLI-first setup.", failures)
 
     env_example = read(".env.example")
     require("REAMES_AGENT_SERVE_TOKEN" in env_example, ".env.example must include the serve token env hint.", failures)

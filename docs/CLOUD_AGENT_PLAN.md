@@ -14,16 +14,21 @@
 
 ```text
 Aliyun ECS / 自有服务器
+├─ reames-agent
+│  ├─ SSH 进入服务器后的交互式 CLI/TUI
+│  ├─ 与本机电脑 CLI 一样的会话、审批、工具和恢复体验
+│  └─ tmux/screen/systemd-run 承载长任务
+├─ reames-agent run
+│  ├─ SSH 一条命令触发任务
+│  └─ 管道输入 / 脚本化运维入口
 ├─ reames-agent serve
 │  ├─ HTTP/SSE/Web API
 │  ├─ health/ready/metrics
-│  └─ 统一鉴权与审计
+│  └─ 可选远程控制面，不是云端部署的前置条件
 ├─ reames-agent bot start --channels feishu
 │  ├─ 飞书 / Lark / 微信 / QQ / Telegram
 │  ├─ 审批 / 取消 / 状态 / 会话恢复
 │  └─ 渠道 metadata 与模型 prompt 隔离
-├─ reames-agent run
-│  └─ SSH 终端和服务器本地 CLI
 ├─ upstream research worker
 │  ├─ 检测官方上游和参考项目更新
 │  ├─ 拉取差异、运行测试、生成研究报告
@@ -35,6 +40,25 @@ Aliyun ECS / 自有服务器
 ```
 
 所有入口都应接入同一个 `internal/control` 运行边界。CLI、Server、Desktop、Bot 只负责交互和传输，不各自实现 Agent 行为。
+
+## 形态澄清：先是服务器 CLI，再是 Web/IM
+
+云端部署的第一形态应该像 Hermes：把 Agent 安装到服务器后，用户 SSH 上去就能像在自己电脑上一样运行：
+
+```bash
+reames-agent
+reames-agent run "检查这个仓库并修复失败测试"
+tmux new -s reames
+```
+
+`serve` 不是必须入口，它只是给 Web UI、HTTP/SSE 客户端、健康检查和反向代理使用的控制面。飞书等 IM 通道也不是替代 CLI，而是移动端和异步触达入口。
+
+因此实施优先级应是：
+
+1. **CLI-first**：单二进制、服务器用户、`REAMES_AGENT_HOME`、真实 API key、SSH/tmux 交互、`run` 命令闭环。
+2. **Bot channel**：飞书/微信/QQ/Telegram 把消息转到同一套服务器会话。
+3. **Serve/Web**：需要浏览器控制台或外部客户端时再开启，默认只监听 loopback 并启用鉴权。
+4. **后台 Worker**：上游研究、遥测反馈、定时任务等长期自动化。
 
 ## 目标场景
 
@@ -54,9 +78,11 @@ Aliyun ECS / 自有服务器
 云端部署不应依赖 IM。服务器上仍然需要支持：
 
 ```bash
+reames-agent
 reames-agent run "审查这个仓库并给出风险"
-reames-agent serve
+tmux new -s reames-agent
 reames-agent bot start --channels feishu
+reames-agent serve
 reames-agent upstream watch
 ```
 
@@ -134,7 +160,8 @@ flowchart TD
 
 ### C0：云端部署基线
 
-- 明确 Linux amd64 构建产物和配置目录。
+- 明确 Linux amd64 构建产物、服务器用户和 `REAMES_AGENT_HOME` 配置目录。
+- 提供 SSH/CLI-first 部署说明：安装二进制、写入 `<Reames Agent home>/.env`、交互式 CLI、`run`、tmux 长任务。
 - 补齐阿里云 ECS 部署说明：安全组、systemd、Docker Compose、Nginx/TLS、日志和备份。
 - 提供 `serve` / `bot start` / `run` 三种入口的最小健康检查。
 - 验证 DeepSeek API Key 只来自服务器环境变量或加密凭据，不写入仓库。
@@ -203,4 +230,3 @@ M1 真实任务闭环
 → C2/C3 后台任务与上游研究
 → C4/C5 遥测反馈和长期运维
 ```
-
