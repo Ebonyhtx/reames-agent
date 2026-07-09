@@ -20,6 +20,30 @@ DOCS_INDEX = DOCS / "DOCS_INDEX.md"
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 LOCAL_AUDIT_RE = re.compile(r"\b(?:docs/)?audits/([A-Za-z0-9_.-]+\.md)\b")
 
+# Old env var names that must not appear as current contracts in core docs.
+# REASONIX.md as a file name is excluded — it is a valid convention file name
+# in the memory system (see internal/memory/doc.go).
+_OLD_ENV_PATTERNS = [
+    (re.compile(r"\bREASONIX_HOME\b"), "REAMES_AGENT_HOME"),
+    (re.compile(r"\bREASONIX_STATE_HOME\b"), "REAMES_AGENT_STATE_HOME"),
+    (re.compile(r"\bREASONIX_CACHE_HOME\b"), "REAMES_AGENT_CACHE_HOME"),
+    (re.compile(r"\bREASONIX_DISABLE_MOUSE\b"), "REAMES_AGENT_DISABLE_MOUSE"),
+    (re.compile(r"\bREASONIX_PLUGIN_ROOT\b"), "REAMES_AGENT_PLUGIN_ROOT"),
+    (re.compile(r"\bREASONIX_PLUGIN_NAME\b"), "REAMES_AGENT_PLUGIN_NAME"),
+    (re.compile(r"\bREASONIX_PLUGIN_VERSION\b"), "REAMES_AGENT_PLUGIN_VERSION"),
+    (re.compile(r"\bREASONIX_WORKSPACE_ROOT\b"), "REAMES_AGENT_WORKSPACE_ROOT"),
+]
+
+# Docs that serve as the current configuration/plugin contract.
+# Legacy migration, audit, and upstream-reference docs are exempt.
+_CURRENT_CONTRACT_GLOBS = [
+    "docs/CONFIG_PATHS.md",
+    "docs/CONFIG_PATHS.zh-CN.md",
+    "docs/GUIDE.md",
+    "docs/PLUGIN_PACKAGES.md",
+    "docs/PLUGIN_PACKAGES.zh-CN.md",
+]
+
 
 def read_utf8(path: Path, failures: list[str]) -> str:
     try:
@@ -104,12 +128,29 @@ def check_audit_references_exist(failures: list[str]) -> None:
                 )
 
 
+def check_no_old_env_vars_in_current_contracts(failures: list[str]) -> None:
+    """Ensure current-contract docs do not reference old REASONIX_* env var names."""
+    for pattern, replacement in _OLD_ENV_PATTERNS:
+        for glob_pattern in _CURRENT_CONTRACT_GLOBS:
+            for path in sorted(tracked_files(glob_pattern)):
+                text = read_utf8(path, failures)
+                if not text:
+                    continue
+                for lineno, line in enumerate(text.splitlines(), 1):
+                    if pattern.search(line):
+                        failures.append(
+                            f"{path.relative_to(ROOT).as_posix()}:{lineno}: "
+                            f"old env var '{pattern.pattern[2:-2]}' should be '{replacement}'"
+                        )
+
+
 def main() -> int:
     failures: list[str] = []
     check_all_docs_are_utf8(failures)
     check_docs_index_links(failures)
     check_audits_are_indexed(failures)
     check_audit_references_exist(failures)
+    check_no_old_env_vars_in_current_contracts(failures)
 
     if failures:
         print("Documentation contract check failed:")

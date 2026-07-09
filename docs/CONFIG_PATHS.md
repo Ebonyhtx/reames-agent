@@ -12,18 +12,18 @@ location.
 | Linux | `~/.reames-agent` |
 | Windows | `%APPDATA%\reames-agent` |
 
-Set `REASONIX_HOME` to override Reames Agent home for tests, CI, or portable
+Set `REAMES_AGENT_HOME` to override Reames Agent home for tests, CI, or portable
 installations. Normal users should not need it.
 
-When `REASONIX_HOME` is set, the runtime is fully self-contained: all
+When `REAMES_AGENT_HOME` is set, the runtime is fully self-contained: all
 configuration, state, cache, and data live under that directory tree. Legacy
 migration, OS-home convention directory scanning, and all other fallback paths
 are skipped so no data leaks in from a system-wide production install.
 
-Advanced test and portable setups may set `REASONIX_STATE_HOME` to move runtime
+Advanced test and portable setups may set `REAMES_AGENT_STATE_HOME` to move runtime
 state such as sessions, archives, and memory. It does not move global config or
-provider credentials: those remain under `REASONIX_HOME`. If an older build wrote
-provider keys to `REASONIX_STATE_HOME/.env`, Reames Agent imports those keys
+provider credentials: those remain under `REAMES_AGENT_HOME`. If an older build wrote
+provider keys to `REAMES_AGENT_STATE_HOME/.env`, Reames Agent imports those keys
 non-destructively when `<Reames Agent home>/.env` is missing them.
 
 ## What Lives There
@@ -42,7 +42,7 @@ non-destructively when `<Reames Agent home>/.env` is missing them.
 | Memory | `<state root>/memory/` and `<state root>/projects/` |
 
 `<state root>` defaults to `<Reames Agent home>`. It only differs when
-`REASONIX_STATE_HOME` is set.
+`REAMES_AGENT_STATE_HOME` is set.
 
 The global user config is named `config.toml`. Project-local config files keep
 the name `reames-agent.toml`. If someone says "global reames-agent.toml", they usually
@@ -174,14 +174,14 @@ the new global `.env` is missing a key. Project `.env` files are still read as
 workspace-scoped, non-provider expansion sources for `${VAR}` references in
 MCP/plugin env, headers, URLs, commands, and args; those values are not written
 into the process environment, and Reames Agent control variables such as
-`REASONIX_HOME`, `REASONIX_STATE_HOME`, and `XDG_CONFIG_HOME` are ignored there.
+`REAMES_AGENT_HOME`, `REAMES_AGENT_STATE_HOME`, and `XDG_CONFIG_HOME` are ignored there.
 
 Caches remain in the OS cache directory, for example
 `~/Library/Caches/reames-agent` on macOS, `$XDG_CACHE_HOME/reames-agent` or
 `~/.cache/reames-agent` on Linux, and `%LOCALAPPDATA%\reames-agent\cache` on Windows.
-Set `REASONIX_CACHE_HOME` to override the cache root. When `REASONIX_HOME` is
-set, the cache is placed under `$REASONIX_HOME/cache` (unless
-`REASONIX_CACHE_HOME` is also set, which takes precedence).
+Set `REAMES_AGENT_CACHE_HOME` to override the cache root. When `REAMES_AGENT_HOME` is
+set, the cache is placed under `$REAMES_AGENT_HOME/cache` (unless
+`REAMES_AGENT_CACHE_HOME` is also set, which takes precedence).
 
 ## Config Priority
 
