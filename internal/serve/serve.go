@@ -352,6 +352,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /api/board", s.boardStatus)
 	mux.HandleFunc("POST /api/feedback", s.collectFeedback)
 	mux.HandleFunc("GET /api/feedback/summary", s.feedbackSummary)
+	mux.HandleFunc("POST /api/feedback/draft", s.feedbackDraft)
 	mux.HandleFunc("GET /ws", s.wsEvents)
 	return logMiddleware(s.auth.middleware(csrfGuard(mux)))
 }
@@ -676,6 +677,28 @@ func (s *Server) feedbackSummary(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, summary)
+}
+
+func (s *Server) feedbackDraft(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Limit int `json:"limit"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	if body.Limit <= 0 || body.Limit > 100 {
+		body.Limit = 50
+	}
+	draft, err := feedback.NewStore("").WriteDraft(body.Limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(draft); err != nil {
+		slog.Warn("serve: feedback draft response encode failed", "err", err)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

@@ -23,8 +23,8 @@ Date: 2026-07-09
 服务端侧已新增第一阶段本地收集能力：
 
 - `internal/feedback`：稳定 schema、脱敏、fingerprint 和 JSONL 本地账本。
-- `serve`：`POST /api/feedback` 收集反馈，`GET /api/feedback/summary` 查询去重聚合。
-- 默认写入 `<Reames Agent home>/feedback/feedback.jsonl`，不连接第三方服务，不自动创建 Issue。
+- `serve`：`POST /api/feedback` 收集反馈，`GET /api/feedback/summary` 查询去重聚合，`POST /api/feedback/draft` 生成本地维护草稿。
+- 默认写入 `<Reames Agent home>/feedback/feedback.jsonl`，草稿写入 `<Reames Agent home>/feedback/drafts/*.md`，不连接第三方服务，不自动创建 Issue。
 
 ## 本轮治理
 
@@ -48,8 +48,8 @@ Date: 2026-07-09
 1. 已完成第一阶段：定义 `internal/feedback` 的稳定 schema，覆盖 crash、performance、bot diagnostic、user feedback 和 aggregate metrics。
 2. 已完成第一阶段：实现 `serve` 子路由，只接受现有 serve 鉴权/CSRF 边界内的 JSON 请求。
 3. 已完成第一阶段：写入本地 JSONL 队列，默认不上传第三方。
-4. 已完成第一阶段：建立 fingerprint 去重和 summary 聚合；后续继续扩展错误类型、版本、平台、top frame、工具错误分类。
-5. 生成维护 Issue 或本地 task，但不得自动提交源代码或发送对话全文。
+4. 已完成第一阶段：建立 fingerprint 去重、summary 聚合和本地 Markdown 维护草稿；后续继续扩展错误类型、版本、平台、top frame、工具错误分类。
+5. 后续生成 GitHub Issue 或本地 task，但不得自动提交源代码或发送对话全文。
 6. 在 Desktop/CLI/Gateway 中提供“发送前预览摘要”和 opt-in 开关。
 
 完成声明需要真实端到端证据：一次 crash 或用户反馈可以被收集、脱敏、去重，并转化为可审查维护项。

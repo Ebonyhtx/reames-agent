@@ -7,6 +7,7 @@ This batch adds the first concrete C4 feedback-center primitive:
 - `internal/feedback`
 - `POST /api/feedback`
 - `GET /api/feedback/summary`
+- `POST /api/feedback/draft`
 
 The goal is a local, self-hosted feedback ledger for cloud/server nodes. It does
 not enable third-party telemetry, automatic desktop uploads, or automatic issue
@@ -31,17 +32,23 @@ Before a record is written, it:
   long hex strings, and long base64/base64url tokens;
 - computes a stable fingerprint for duplicate grouping;
 - appends JSONL to `<Reames Agent home>/feedback/feedback.jsonl`.
+- can render the aggregate summary into a local Markdown maintenance draft under
+  `<Reames Agent home>/feedback/drafts/`.
 
 The `serve` API exposes:
 
 ```text
 POST /api/feedback
 GET  /api/feedback/summary
+POST /api/feedback/draft
 ```
 
 The POST endpoint is protected by the existing `serve` JSON content-type guard
 and the existing `serve` authentication middleware when auth is enabled. It does
 not bypass token/password auth.
+
+The draft endpoint writes a local Markdown file and returns its path plus the
+rendered body. It does not call the GitHub API or create an external issue.
 
 ## Evidence
 
@@ -58,6 +65,8 @@ Covered behavior:
 - missing feedback ledgers summarize as empty;
 - HTTP feedback collection writes the local JSONL ledger;
 - HTTP summary output does not leak the submitted secret-like values;
+- HTTP draft generation writes a local Markdown maintenance draft without leaking
+  submitted secret-like values;
 - `text/plain` feedback POSTs are rejected by the serve CSRF/content-type guard.
 
 ## Remaining gap
@@ -66,6 +75,6 @@ This is the local collector and aggregation layer only. The C4 completion bar
 still requires:
 
 - a Desktop/Gateway user-facing submission flow with preview;
-- a maintenance-task or GitHub Issue draft generator;
+- a GitHub Issue draft publishing flow gated by explicit human approval;
 - real cloud-node evidence from a live feedback or crash path;
 - operator controls for retention, export, deletion, and rate limiting.

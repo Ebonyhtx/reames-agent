@@ -179,6 +179,36 @@ func TestServeFeedbackCollectsSanitizedLocalSummary(t *testing.T) {
 			t.Fatalf("ledger leaked %q:\n%s", forbidden, raw)
 		}
 	}
+
+	resp3, err := http.Post(srv.URL+"/api/feedback/draft", "application/json", strings.NewReader(`{"limit":10}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusCreated {
+		out, _ := io.ReadAll(resp3.Body)
+		t.Fatalf("draft status = %d body=%s, want 201", resp3.StatusCode, out)
+	}
+	var draft struct {
+		Path     string `json:"path"`
+		Markdown string `json:"markdown"`
+		Total    int    `json:"total"`
+		Groups   int    `json:"groups"`
+	}
+	if err := json.NewDecoder(resp3.Body).Decode(&draft); err != nil {
+		t.Fatal(err)
+	}
+	if draft.Path == "" || draft.Total != 1 || draft.Groups != 1 {
+		t.Fatalf("draft response = %+v, want path and one group", draft)
+	}
+	if _, err := os.Stat(draft.Path); err != nil {
+		t.Fatalf("draft file missing: %v", err)
+	}
+	for _, forbidden := range []string{"alice@example.com", "sk-secret", "abcdefghijklmnopqrstuvwxyz123456", `C:\\Users\\Alice`} {
+		if strings.Contains(draft.Markdown, forbidden) {
+			t.Fatalf("draft leaked %q:\n%s", forbidden, draft.Markdown)
+		}
+	}
 }
 
 func TestServeFeedbackRequiresJSONContentType(t *testing.T) {

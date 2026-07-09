@@ -88,6 +88,53 @@ func TestStoreAppendAndSummaryDeduplicate(t *testing.T) {
 	}
 }
 
+func TestWriteDraftUsesSanitizedSummaryOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REAMES_AGENT_HOME", home)
+	store := NewStore("")
+	store.now = func() time.Time { return time.Date(2026, 7, 10, 2, 3, 4, 0, time.UTC) }
+	if _, err := store.Append(ReportInput{
+		Kind:         "crash",
+		Source:       "desktop",
+		Label:        "startup",
+		Message:      "user alice@example.com pasted api_key=sk-secret1234567890abcdef",
+		ErrorMessage: "panic: bad token Bearer abcdefghijklmnopqrstuvwxyz123456",
+		TopFrame:     "/home/alice/project/main.go:10",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	draft, err := store.WriteDraft(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if draft.Path == "" || !strings.HasSuffix(draft.Path, filepath.Join("feedback", "drafts", "feedback-maintenance-20260710-020304.md")) {
+		t.Fatalf("draft path = %q, want timestamped feedback draft", draft.Path)
+	}
+	if draft.Total != 1 || draft.Groups != 1 || !strings.Contains(draft.Markdown, "Candidate maintenance items") {
+		t.Fatalf("draft = %+v, want one maintenance item", draft)
+	}
+	raw, err := os.ReadFile(draft.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != draft.Markdown {
+		t.Fatal("draft file content differs from returned markdown")
+	}
+	if strings.Contains(draft.Markdown, home) {
+		t.Fatalf("draft markdown leaked local home path %q:\n%s", home, draft.Markdown)
+	}
+	for _, forbidden := range []string{"alice@example.com", "sk-secret", "abcdefghijklmnopqrstuvwxyz123456", "/home/alice"} {
+		if strings.Contains(draft.Markdown, forbidden) {
+			t.Fatalf("draft leaked %q:\n%s", forbidden, draft.Markdown)
+		}
+	}
+	for _, want := range []string{"Feedback maintenance draft", "startup", "main.go:10"} {
+		if !strings.Contains(draft.Markdown, want) {
+			t.Fatalf("draft missing %q:\n%s", want, draft.Markdown)
+		}
+	}
+}
+
 func TestSummaryMissingFileIsEmpty(t *testing.T) {
 	summary, err := SummarizeFile(filepath.Join(t.TempDir(), "missing.jsonl"), 10)
 	if err != nil {

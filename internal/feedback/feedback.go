@@ -110,6 +110,16 @@ type SummaryGroup struct {
 	ErrorType   string `json:"errorType,omitempty"`
 }
 
+// Draft is a local maintenance/issue draft generated from sanitized aggregate
+// feedback. It is deliberately inert: callers decide whether to file an issue.
+type Draft struct {
+	Path      string `json:"path,omitempty"`
+	Markdown  string `json:"markdown"`
+	CreatedAt string `json:"createdAt"`
+	Total     int    `json:"total"`
+	Groups    int    `json:"groups"`
+}
+
 // DefaultPath returns the self-hosted local feedback ledger path.
 func DefaultPath() string {
 	base := config.MemoryUserDir()
@@ -117,6 +127,15 @@ func DefaultPath() string {
 		return ""
 	}
 	return filepath.Join(base, "feedback", "feedback.jsonl")
+}
+
+// DefaultDraftDir returns the local directory for maintenance drafts.
+func DefaultDraftDir() string {
+	base := config.MemoryUserDir()
+	if strings.TrimSpace(base) == "" {
+		return ""
+	}
+	return filepath.Join(base, "feedback", "drafts")
 }
 
 // NewStore creates a store at path. An empty path falls back to DefaultPath().
@@ -155,6 +174,30 @@ func (s *Store) Append(in ReportInput) (Record, error) {
 // Summary reads the ledger and groups duplicate reports by fingerprint.
 func (s *Store) Summary(limit int) (Summary, error) {
 	return SummarizeFile(s.Path, limit)
+}
+
+// WriteDraft writes a sanitized local maintenance draft from the current
+// feedback summary. It does not contact GitHub or any external service.
+func (s *Store) WriteDraft(limit int) (Draft, error) {
+	summary, err := s.Summary(limit)
+	if err != nil {
+		return Draft{}, err
+	}
+	dir := DefaultDraftDir()
+	if strings.TrimSpace(dir) == "" {
+		return Draft{}, errors.New("feedback draft directory is unavailable")
+	}
+	now := s.now().UTC()
+	draft := GenerateDraft(summary, now)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return Draft{}, err
+	}
+	path := filepath.Join(dir, "feedback-maintenance-"+now.Format("20060102-150405")+".md")
+	if err := os.WriteFile(path, []byte(draft.Markdown), 0o600); err != nil {
+		return Draft{}, err
+	}
+	draft.Path = path
+	return draft, nil
 }
 
 // Normalize returns the sanitized durable record for in.
@@ -259,6 +302,50 @@ func SummarizeFile(path string, limit int) (Summary, error) {
 	return out, nil
 }
 
+// GenerateDraft renders a Markdown maintenance draft from an already sanitized
+// summary. The output is safe to preview or paste into an issue after review.
+func GenerateDraft(summary Summary, created time.Time) Draft {
+	if created.IsZero() {
+		created = time.Now()
+	}
+	createdAt := created.UTC().Format(time.RFC3339)
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Feedback maintenance draft\n\n")
+	fmt.Fprintf(&b, "- Created at: `%s`\n", createdAt)
+	fmt.Fprintf(&b, "- Ledger: `%s`\n", safeDraftText(summary.Path))
+	fmt.Fprintf(&b, "- Total records: `%d`\n", summary.Total)
+	fmt.Fprintf(&b, "- Duplicate groups: `%d`\n\n", len(summary.Groups))
+	if len(summary.Groups) == 0 {
+		b.WriteString("No feedback records are currently available.\n")
+		return Draft{Markdown: b.String(), CreatedAt: createdAt, Total: summary.Total, Groups: len(summary.Groups)}
+	}
+	b.WriteString("## Candidate maintenance items\n\n")
+	for i, group := range summary.Groups {
+		fmt.Fprintf(&b, "### %d. %s feedback cluster `%s`\n\n", i+1, safeDraftText(group.Kind), safeDraftText(group.Fingerprint))
+		fmt.Fprintf(&b, "- Count: `%d`\n", group.Count)
+		if group.Label != "" {
+			fmt.Fprintf(&b, "- Label: `%s`\n", safeDraftText(group.Label))
+		}
+		if group.ErrorType != "" {
+			fmt.Fprintf(&b, "- Error type: `%s`\n", safeDraftText(group.ErrorType))
+		}
+		if group.TopFrame != "" {
+			fmt.Fprintf(&b, "- Top frame: `%s`\n", safeDraftText(group.TopFrame))
+		}
+		if group.FirstSeen != "" {
+			fmt.Fprintf(&b, "- First seen: `%s`\n", safeDraftText(group.FirstSeen))
+		}
+		if group.LastSeen != "" {
+			fmt.Fprintf(&b, "- Last seen: `%s`\n", safeDraftText(group.LastSeen))
+		}
+		if group.LatestID != "" {
+			fmt.Fprintf(&b, "- Latest record: `%s`\n", safeDraftText(group.LatestID))
+		}
+		b.WriteString("\nRecommended next step: inspect the sanitized ledger records for this fingerprint, reproduce if possible, then decide whether to file a GitHub issue or create a local repair task.\n\n")
+	}
+	return Draft{Markdown: b.String(), CreatedAt: createdAt, Total: summary.Total, Groups: len(summary.Groups)}
+}
+
 func normalizeKind(kind string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "crash", "exception", "feedback", "performance", "bot", "metrics":
@@ -345,5 +432,13 @@ func clipForFingerprint(s string) string {
 	if len(s) > 512 {
 		return s[:512]
 	}
+	return s
+}
+
+func safeDraftText(s string) string {
+	s = sanitizeField(s)
+	s = strings.ReplaceAll(s, "`", "'")
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
 	return s
 }

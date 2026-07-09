@@ -285,9 +285,14 @@ curl -X POST http://127.0.0.1:8787/api/feedback \
 
 curl -H "X-API-Key: $REAMES_AGENT_SERVE_TOKEN" \
   http://127.0.0.1:8787/api/feedback/summary
+
+curl -X POST http://127.0.0.1:8787/api/feedback/draft \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $REAMES_AGENT_SERVE_TOKEN" \
+  -d '{"limit":20}'
 ```
 
-记录写入 `<Reames Agent home>/feedback/feedback.jsonl`，会先脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token，再按 fingerprint 聚合重复问题。这个入口不连接第三方服务，也不自动创建 Issue；后续把聚合结果转成维护任务或 Issue 前仍需人工审阅。
+记录写入 `<Reames Agent home>/feedback/feedback.jsonl`，会先脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token，再按 fingerprint 聚合重复问题。`/api/feedback/draft` 会把聚合结果写成 `<Reames Agent home>/feedback/drafts/*.md` 本地维护草稿。这个入口不连接第三方服务，也不自动创建 Issue；后续把草稿发到 GitHub Issue 前仍需人工审阅。
 
 ## Nginx 反向代理（SSL）
 
