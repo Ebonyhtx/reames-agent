@@ -29,11 +29,16 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 		`"--dir" "/srv/work repo"`,
 		`"--model" "deepseek-pro"`,
 		`Environment=REAMES_AGENT_HOME="/home/reames/.reames-agent"`,
+		"/home/reames/.reames-agent/.env",
+		"service definitions do not embed secret values",
 		"Restart=always",
 	} {
-		if !strings.Contains(unit, want) {
-			t.Fatalf("systemd unit missing %q:\n%s", want, unit)
+		if !strings.Contains(FormatPlan(plan), want) {
+			t.Fatalf("systemd plan missing %q:\n%s", want, FormatPlan(plan))
 		}
+	}
+	if strings.Contains(unit, "DEEPSEEK_API_KEY") || strings.Contains(unit, "FEISHU_BOT_APP_SECRET") {
+		t.Fatalf("systemd unit embedded secret env names:\n%s", unit)
 	}
 	if len(plan.Commands) != 2 || plan.Commands[0].Name != "systemctl" {
 		t.Fatalf("commands = %#v, want daemon-reload + enable", plan.Commands)
@@ -72,6 +77,12 @@ func TestDarwinInstallPlanRendersLaunchdPlist(t *testing.T) {
 			t.Fatalf("launchd plist missing %q:\n%s", want, plist)
 		}
 	}
+	formatted := FormatPlan(plan)
+	for _, want := range []string{"/Users/reames/.reames-agent/.env", "service definitions do not embed secret values"} {
+		if !strings.Contains(formatted, want) {
+			t.Fatalf("launchd plan missing %q:\n%s", want, formatted)
+		}
+	}
 }
 
 func TestWindowsInstallPlanRendersScheduledTask(t *testing.T) {
@@ -103,6 +114,12 @@ func TestWindowsInstallPlanRendersScheduledTask(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("scheduled task command missing %q:\n%#v", want, create.Args)
+		}
+	}
+	formatted := FormatPlan(plan)
+	for _, want := range []string{`C:\Users\reames\.reames-agent\.env`, "service definitions do not embed secret values"} {
+		if !strings.Contains(formatted, want) {
+			t.Fatalf("windows plan missing %q:\n%s", want, formatted)
 		}
 	}
 }
@@ -167,6 +184,17 @@ func TestInstallPlansUseGatewayRunAndNeverLegacyEntrypoints(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGatewayServicePlanDocumentsDefaultCredentialHomeWhenHomeUnset(t *testing.T) {
+	plan, err := BuildPlan("linux", Options{Action: "status", Executable: "reames-agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	formatted := FormatPlan(plan)
+	if !strings.Contains(formatted, "no --home supplied") || !strings.Contains(formatted, "platform default Reames Agent home") {
+		t.Fatalf("formatted plan missing default-home credential note:\n%s", formatted)
 	}
 }
 

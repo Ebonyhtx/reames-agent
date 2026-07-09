@@ -86,6 +86,16 @@ def check() -> list[str]:
     require("reames-agent gateway install --start-now" in deploy, "docs/DEPLOY.md must document the Hermes-like gateway service lifecycle.", failures)
     require("--home \"$REAMES_AGENT_HOME\"" in deploy, "docs/DEPLOY.md must bind gateway services to the same REAMES_AGENT_HOME as CLI.", failures)
     require(
+        "service definitions do not embed secret values" in deploy or "不会嵌入 secret 值" in deploy,
+        "docs/DEPLOY.md must state gateway service definitions do not embed secret values.",
+        failures,
+    )
+    require(
+        "<Reames Agent home>/.env" in deploy,
+        "docs/DEPLOY.md must keep the gateway credentials .env source visible.",
+        failures,
+    )
+    require(
         "前台调试与后台常驻" in deploy and "gateway install/start/status" in deploy,
         "docs/DEPLOY.md must distinguish foreground gateway debugging from the current background service lifecycle.",
         failures,

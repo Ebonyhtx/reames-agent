@@ -14,6 +14,7 @@ This batch adds an explicit gateway service home binding:
 - Linux systemd plan: `Environment=REAMES_AGENT_HOME="..."`
 - macOS launchd plan: `EnvironmentVariables.REAMES_AGENT_HOME`
 - Windows Scheduled Task plan: `cmd.exe /C set "REAMES_AGENT_HOME=..." && reames-agent gateway run ...`
+- dry-run output documents `<Reames Agent home>/.env` as the provider/bot secret source and states that service definitions do not embed secret values.
 
 ## Why this matters
 
@@ -41,9 +42,11 @@ Automated coverage:
   - Linux systemd unit renders `Environment=REAMES_AGENT_HOME=...`
   - macOS launchd plist renders `EnvironmentVariables`
   - Windows Scheduled Task command sets `REAMES_AGENT_HOME` before running the gateway
+  - formatted service plans show the selected credentials `.env` path while keeping provider/bot secret values out of service definitions
 - `internal/cli/cli_test.go`
   - `gateway help` documents `--home PATH`
   - `gateway install --dry-run` picks up current `REAMES_AGENT_HOME`
+  - dry-run output documents that secrets remain in `<Reames Agent home>/.env`
 - `internal/cli/bot_test.go`
   - gateway help documents foreground and background entrypoints
 - `scripts/check_deploy_contracts.py`

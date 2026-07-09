@@ -153,6 +153,11 @@ reames-agent gateway restart                # 重启服务，不影响用户 CLI
 reames-agent gateway uninstall              # 卸载后台服务
 ```
 
+`gateway install --dry-run` 会在计划里显示绑定的 `REAMES_AGENT_HOME` 和
+`<Reames Agent home>/.env` 凭据来源。真实 API key、飞书/QQ/微信 secret 等
+仍保存在这个 `.env` 文件里；systemd unit、launchd plist 和 Windows
+Scheduled Task 不会嵌入 secret 值。
+
 后台 gateway 的职责：
 
 - 独立进程常驻，不占用用户 SSH CLI；

@@ -490,6 +490,8 @@ func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
 		"reames-agent gateway start|stop|restart|status|uninstall",
 		"compatible with \"reames-agent bot start\"",
 		"systemd, launchd, or Windows Scheduled Task",
+		"<Reames Agent home>/.env",
+		"do not embed secret values",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("gateway help output missing %q:\n%s", want, out)

@@ -339,6 +339,9 @@ func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
 	if !strings.Contains(out, "--home PATH") {
 		t.Fatalf("gateway help output missing service home binding:\n%s", out)
 	}
+	if !strings.Contains(out, "<Reames Agent home>/.env") || !strings.Contains(out, "do not embed secret values") {
+		t.Fatalf("gateway help output missing credential boundary:\n%s", out)
+	}
 
 	errOut := captureStderr(t, func() {
 		if rc := Run([]string{"gateway", "run", "--definitely-not-a-gateway-flag"}, "test-version"); rc != 2 {
@@ -369,6 +372,8 @@ func TestGatewayInstallDryRunPrintsPlan(t *testing.T) {
 		"run",
 		"feishu",
 		"REAMES_AGENT_HOME",
+		filepath.Join(os.Getenv("REAMES_AGENT_HOME"), ".env"),
+		"service definitions do not embed secret values",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("gateway install --dry-run output missing %q:\n%s", want, out)

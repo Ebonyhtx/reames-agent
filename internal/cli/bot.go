@@ -690,5 +690,9 @@ Examples:
   reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
   reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu
   reames-agent gateway run --dir /path/to/project --model deepseek-pro
+
+Secrets:
+  Provider and bot secrets stay in <Reames Agent home>/.env. Service definitions
+  pin REAMES_AGENT_HOME but do not embed secret values.
 `)
 }

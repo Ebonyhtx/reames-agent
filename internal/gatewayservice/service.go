@@ -103,16 +103,22 @@ func BuildPlan(goos string, opts Options) (Plan, error) {
 	if goos == "" {
 		goos = runtime.GOOS
 	}
+	var plan Plan
 	switch goos {
 	case "linux":
-		return linuxPlan(opts)
+		plan, err = linuxPlan(opts)
 	case "darwin":
-		return launchdPlan(opts)
+		plan, err = launchdPlan(opts)
 	case "windows":
-		return windowsPlan(opts)
+		plan, err = windowsPlan(opts)
 	default:
 		return Plan{}, fmt.Errorf("gateway service lifecycle is not supported on %s yet; use gateway run under your process manager", goos)
 	}
+	if err != nil {
+		return Plan{}, err
+	}
+	appendCredentialNotes(&plan, opts)
+	return plan, nil
 }
 
 // Apply builds and applies a lifecycle operation. With DryRun, it only returns
@@ -261,6 +267,31 @@ func windowsPlan(opts Options) (Plan, error) {
 	}
 	plan.Notes = append(plan.Notes, "Windows uses Scheduled Task for the gateway service")
 	return plan, nil
+}
+
+func appendCredentialNotes(plan *Plan, opts Options) {
+	if plan == nil {
+		return
+	}
+	if opts.Home != "" {
+		plan.Notes = append(plan.Notes,
+			"gateway service pins REAMES_AGENT_HOME="+opts.Home,
+			"provider and bot secrets stay in "+credentialEnvPath(opts.Home)+"; service definitions do not embed secret values",
+		)
+		return
+	}
+	plan.Notes = append(plan.Notes, "no --home supplied; gateway service will use the platform default Reames Agent home for config and credentials")
+}
+
+func credentialEnvPath(home string) string {
+	home = strings.TrimSpace(home)
+	if home == "" {
+		return ".env"
+	}
+	if strings.Contains(home, `\`) && !strings.Contains(home, `/`) {
+		return filepath.Join(home, ".env")
+	}
+	return strings.TrimRight(home, `/`) + "/.env"
 }
 
 func gatewayArgs(opts Options) []string {
