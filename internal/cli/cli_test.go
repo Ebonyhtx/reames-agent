@@ -1644,6 +1644,31 @@ func TestWriteDefaultConfigOmitsLegacyInternalMCPSections(t *testing.T) {
 	}
 }
 
+func TestWriteDefaultConfigPrintsGatewayPreflight(t *testing.T) {
+	isolateCLIConfigHome(t)
+	agentHome := filepath.Join(t.TempDir(), "agent-home")
+	t.Setenv("REAMES_AGENT_HOME", agentHome)
+	path := filepath.Join(t.TempDir(), "reames-agent.toml")
+
+	out := captureStdout(t, func() {
+		if rc := writeDefaultConfig(path); rc != 0 {
+			t.Fatalf("writeDefaultConfig rc = %d, want 0", rc)
+		}
+	})
+
+	for _, want := range []string{
+		"Gateway preflight: reames-agent gateway doctor --deep --home",
+		"Gateway service dry-run: reames-agent gateway install --dry-run --home",
+		agentHome,
+		"--channels feishu",
+		"--dir <workspace>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("writeDefaultConfig output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	old := os.Stderr

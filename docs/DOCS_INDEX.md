@@ -75,6 +75,7 @@
 | [Installer release artifact mode audit](audits/2026-07-09-installer-release-mode.md) | 安装器默认源码构建、显式 release artifact 模式与 SHA256SUMS 校验证据 |
 | [Installer dry-run contract audit](audits/2026-07-10-installer-dry-run-contract.md) | 一键安装器 dry-run 的 Gateway home 绑定、`.env` 凭据来源和 release 校验契约 |
 | [Headless Gateway smoke audit](audits/2026-07-10-headless-gateway-smoke.md) | 隔离 `REAMES_AGENT_HOME` 下真实 CLI 的 `gateway doctor --home` 与 service dry-run 烟测 |
+| [Setup Gateway preflight audit](audits/2026-07-10-setup-gateway-preflight.md) | `reames-agent setup` 完成后提示 Gateway doctor 和 service dry-run 的交接证据 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 

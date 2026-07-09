@@ -966,7 +966,30 @@ func writeDefaultConfig(path string) int {
 	}
 	fmt.Printf(i18n.M.WroteFileFmt+"\n", displayPath(path))
 	fmt.Println(i18n.M.NextHint)
+	printGatewayPreflightHint(os.Stdout)
 	return 0
+}
+
+func printGatewayPreflightHint(w io.Writer) {
+	home := config.IsolatedHomeDir()
+	if home == "" {
+		if p := config.UserConfigPath(); p != "" {
+			home = filepath.Dir(p)
+		}
+	}
+	if home == "" {
+		home = "<Reames Agent home>"
+	}
+	quotedHome := quoteCommandArg(home)
+	fmt.Fprintf(w, "Gateway preflight: reames-agent gateway doctor --deep --home %s\n", quotedHome)
+	fmt.Fprintf(w, "Gateway service dry-run: reames-agent gateway install --dry-run --home %s --channels feishu --dir <workspace>\n", quotedHome)
+}
+
+func quoteCommandArg(value string) string {
+	if value == "" {
+		return `""`
+	}
+	return `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
 }
 
 // initHint handles `reames-agent init`. Unlike a config scaffold, project memory is
@@ -1049,6 +1072,7 @@ func interactiveSetup(configPath, envPath string) int {
 	}
 
 	fmt.Printf("\n%s %s\n", accent("◆"), i18n.M.SetupComplete)
+	printGatewayPreflightHint(os.Stdout)
 	return 0
 }
 

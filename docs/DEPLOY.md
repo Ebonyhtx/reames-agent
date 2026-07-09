@@ -100,6 +100,13 @@ printf '%s\n' 'DEEPSEEK_API_KEY=replace-with-your-key' >> "$REAMES_AGENT_HOME/.e
 reames-agent doctor
 ```
 
+也可以运行 `reames-agent setup` 交互式写入 provider 配置和凭据。setup 完成后
+会打印 Gateway preflight 提示：先执行
+`reames-agent gateway doctor --deep --home "$REAMES_AGENT_HOME"` 检查配置、凭据
+env、访问控制和连接记录，再执行
+`reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME"` 审阅后台服务
+计划。
+
 `<Reames Agent home>/.env` 是 provider key 的运行时来源。不要把真实 key 写入项目仓库、项目 `.env`、systemd unit 或 shell 历史可见的位置。长期使用时，可以把 `export REAMES_AGENT_HOME="$HOME/.reames-agent"` 写入该用户的 shell profile。
 
 ### 4. 像本机一样使用 CLI
