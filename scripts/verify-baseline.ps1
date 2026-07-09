@@ -50,7 +50,7 @@ try {
         Invoke-Native -FilePath "python" -Arguments @("scripts/check_deploy_contracts.py")
         Invoke-Native -FilePath "python" -Arguments @("scripts/check_release_contracts.py")
         Invoke-Native -FilePath "python" -Arguments @("-m", "unittest", "scripts.test_installers", "-v")
-        Invoke-Native -FilePath "python" -Arguments @("scripts/smoke_gateway_headless.py", "--binary", $baselineBinary)
+        Invoke-Native -FilePath "python" -Arguments @("scripts/smoke_gateway_headless.py", "--binary", $baselineBinary, "--out", (Join-Path $RepoRoot "artifacts\headless-gateway-smoke.json"))
         Invoke-Native -FilePath "python" -Arguments @("-m", "unittest", "scripts.test_check_upstreams", "-v")
         Invoke-Native -FilePath "node" -Arguments @("scripts/test_upstream_watch_issue.mjs")
     }

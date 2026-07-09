@@ -14,9 +14,7 @@ import argparse
 import json
 import os
 import platform
-import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -86,7 +84,7 @@ def assert_not_contains(text: str, needle: str) -> None:
         raise AssertionError(f"output leaked {needle!r}:\n{text}")
 
 
-def smoke(binary: Path, home: Path) -> None:
+def smoke(binary: Path, home: Path) -> dict[str, object]:
     workspace = write_smoke_home(home)
     env = os.environ.copy()
     env.pop("REAMES_AGENT_HOME", None)
@@ -112,6 +110,12 @@ def smoke(binary: Path, home: Path) -> None:
     if checks.get("bot.feishu.app_secret", {}).get("status") != "ok":
         raise AssertionError(f"bot.feishu.app_secret was not ok:\n{doctor}")
     assert_not_contains(doctor, SMOKE_SECRET)
+    doctor_contracts = {
+        "home_bound": checks.get("bot.home", {}).get("detail") == str(home),
+        "credentials_ok": checks.get("bot.credentials", {}).get("status") == "ok",
+        "feishu_secret_resolved": checks.get("bot.feishu.app_secret", {}).get("status") == "ok",
+        "secret_redacted": SMOKE_SECRET not in doctor,
+    }
 
     plan = run(
         [
@@ -136,12 +140,34 @@ def smoke(binary: Path, home: Path) -> None:
     assert_contains(plan, ".env")
     assert_contains(plan, "service definitions do not embed secret values")
     assert_not_contains(plan, SMOKE_SECRET)
+    plan_contracts = {
+        "renders_service_plan": "gateway service plan:" in plan,
+        "pins_reames_agent_home": "REAMES_AGENT_HOME" in plan and str(home) in plan,
+        "documents_credentials_env": ".env" in plan,
+        "documents_no_secret_embedding": "service definitions do not embed secret values" in plan,
+        "secret_redacted": SMOKE_SECRET not in plan,
+    }
+    return {
+        "status": "passed",
+        "os": platform.system().lower(),
+        "binary": str(binary),
+        "home": str(home),
+        "workspace": str(workspace),
+        "doctor": doctor_contracts,
+        "service_plan": plan_contracts,
+    }
+
+
+def write_report(path: Path, report: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-test headless Gateway deployment contracts.")
     parser.add_argument("--binary", type=Path, help="Existing reames-agent binary to smoke-test.")
     parser.add_argument("--home", type=Path, help="Existing or new Reames Agent home to use.")
+    parser.add_argument("--out", type=Path, help="Write a JSON smoke report to this path.")
     parser.add_argument("--keep", action="store_true", help="Keep generated temporary files.")
     args = parser.parse_args()
 
@@ -153,8 +179,12 @@ def main() -> int:
             raise FileNotFoundError(binary)
         home = args.home.resolve() if args.home else tmp / "home"
         home.mkdir(parents=True, exist_ok=True)
-        smoke(binary, home)
+        report = smoke(binary, home)
+        if args.out:
+            write_report(args.out, report)
         print(f"Headless Gateway smoke passed: binary={binary} home={home}")
+        if args.out:
+            print(f"Smoke report: {args.out}")
         return 0
     finally:
         if args.keep:

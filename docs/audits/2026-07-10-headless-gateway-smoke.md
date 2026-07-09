@@ -32,7 +32,7 @@ It asserts:
 - Local/CI command:
 
   ```bash
-  python scripts/smoke_gateway_headless.py
+  python scripts/smoke_gateway_headless.py --out artifacts/headless-gateway-smoke.json
   ```
 
 - Baseline command:
@@ -43,6 +43,7 @@ It asserts:
 
 - CI:
   - `deployment-contracts` runs the smoke on Ubuntu with Go 1.25.
+  - `deployment-contracts` uploads `artifacts/headless-gateway-smoke.json`.
 
 ## Remaining evidence gap
 

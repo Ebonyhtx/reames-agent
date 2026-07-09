@@ -131,6 +131,7 @@ def check() -> list[str]:
     require("gateway" in gateway_smoke and "doctor" in gateway_smoke and "--home" in gateway_smoke, "headless Gateway smoke must exercise gateway doctor --home.", failures)
     require("install" in gateway_smoke and "--dry-run" in gateway_smoke, "headless Gateway smoke must exercise gateway install --dry-run.", failures)
     require("service definitions do not embed secret values" in gateway_smoke, "headless Gateway smoke must guard the no-secret service contract.", failures)
+    require("--out" in gateway_smoke and "json.dumps" in gateway_smoke, "headless Gateway smoke must support a JSON evidence report.", failures)
 
     return failures
 
