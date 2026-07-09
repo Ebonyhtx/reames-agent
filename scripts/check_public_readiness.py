@@ -38,6 +38,9 @@ def check_required_files(failures: list[str]) -> None:
         "docs/REFERENCE_GOVERNANCE.md",
         "docs/RELEASING.md",
         "docs/PUBLIC_READINESS.md",
+        "scripts/install.sh",
+        "scripts/install.ps1",
+        "scripts/install.cmd",
         ".github/workflows/codeql.yml",
     ]
     for rel in required:
@@ -110,6 +113,16 @@ def check_brand_env_regressions(failures: list[str]) -> None:
         require("REASONIX_BOT_CONTROL_TOKEN" not in text, f"{rel} must use REAMES_AGENT_BOT_CONTROL_TOKEN.", failures)
 
 
+def check_installers(failures: list[str]) -> None:
+    for rel in ["scripts/install.sh", "scripts/install.ps1", "scripts/install.cmd"]:
+        text = read(rel)
+        require("Reames Agent" in text, f"{rel} must be a Reames installer.", failures)
+        require("Ebonyhtx/reames-agent" in text, f"{rel} must install from the official Reames repository.", failures)
+        require("NousResearch/hermes-agent" not in text, f"{rel} must not install inherited Hermes repositories.", failures)
+        require("HERMES_HOME" not in text, f"{rel} must not use inherited HERMES_HOME.", failures)
+        require(".hermes" not in text, f"{rel} must not write inherited .hermes data paths.", failures)
+
+
 def main() -> int:
     failures: list[str] = []
     check_required_files(failures)
@@ -119,6 +132,7 @@ def main() -> int:
         check_release_and_deploy_controls(failures)
         check_codeql_workflow(failures)
         check_brand_env_regressions(failures)
+        check_installers(failures)
 
     if failures:
         print("Public readiness check failed:")

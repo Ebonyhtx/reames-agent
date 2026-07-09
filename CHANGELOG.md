@@ -14,6 +14,7 @@
 - Clarified the Hermes-like deployment shape: CLI/TUI remains interactive, while social channels run through an independent background gateway service.
 - Added `reames-agent gateway run` as the foreground social gateway entrypoint; `reames-agent bot start` remains compatible.
 - Added `reames-agent gateway install/start/stop/restart/status/uninstall` with dry-run service plans for systemd, launchd, and Windows Scheduled Task.
+- Replaced inherited Hermes installer scripts with Reames source-build installers for Unix, PowerShell, and CMD.
 
 ### Upstream
 

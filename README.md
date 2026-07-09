@@ -22,6 +22,13 @@ go build -o bin/reames-agent ./cmd/reames-agent
 ./bin/reames-agent
 ```
 
+One-command source installer while stable release artifacts are still disabled:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.sh | bash
+powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.ps1)"
+```
+
 ## Features
 
 - **Multi-model**: DeepSeek, OpenAI-compatible, Anthropic — config-driven, no hardcoded models

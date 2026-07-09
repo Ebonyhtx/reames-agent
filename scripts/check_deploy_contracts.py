@@ -92,6 +92,13 @@ def check() -> list[str]:
     require("REAMES_LANG" not in env_example, ".env.example must not use the stale REAMES_LANG name.", failures)
     require("REASONIX_LANG" not in env_example, ".env.example must not use the stale REASONIX_LANG name.", failures)
 
+    for path in ("scripts/install.sh", "scripts/install.ps1"):
+        installer = read(path)
+        require("reames-agent gateway install" in installer or "gateway install" in installer, f"{path} must support installing the gateway service.", failures)
+        require("--dry-run" in installer or "DryRun" in installer, f"{path} must support safe dry-run planning.", failures)
+        require("NousResearch/hermes-agent" not in installer, f"{path} must not install inherited Hermes repositories.", failures)
+        require("HERMES_HOME" not in installer, f"{path} must not use inherited HERMES_HOME.", failures)
+
     return failures
 
 

@@ -16,6 +16,32 @@
 - provider key 保存在该服务器用户的 `<Reames Agent home>/.env`；
 - `serve` 是后续可选 Web/API 控制面，不是 CLI 或 gateway 的前置条件。
 
+### 0. 一键安装脚本
+
+公开稳定 release 还未开启前，官方安装脚本采用源码构建方式，需要目标机器已有 Git 和 Go 1.25+：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.sh | bash -s -- --gateway --channels feishu --gateway-dir /srv/reames-work
+```
+
+Windows PowerShell：
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.ps1)"
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Gateway -Channels feishu -GatewayDir F:\reames-work
+```
+
+所有会安装后台 gateway 的路径都建议先使用 dry-run：
+
+```bash
+scripts/install.sh --dry-run --gateway --channels feishu
+```
+
+```powershell
+.\scripts\install.ps1 -DryRun -Gateway -Channels feishu
+```
+
 ### 1. 创建低权限用户
 
 ```bash
