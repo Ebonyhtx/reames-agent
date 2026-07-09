@@ -60,6 +60,8 @@
 - [x] 公开仓库后恢复 CodeQL workflow，覆盖 Go、JavaScript/TypeScript 和 GitHub Actions；等待远端首次 run 观察。
 - [x] 明确版本号来源、变更日志和发布签名策略，并纳入 CI 发布契约检查。
 - [x] 为安装器补显式 release artifact 模式和 `SHA256SUMS` 校验 dry-run 契约，但默认仍保持 source 构建，避免 pre-stable 阶段误导为稳定发布（见 `audits/2026-07-09-installer-release-mode.md`）。
+- [x] Desktop 支持 `--home <path>` / `--home=<path>` 命令行参数，在 NewApp 前设置 `REAMES_AGENT_HOME`，实现不同 home 的独立 single-instance 锁和状态隔离。
+- [x] 新增 Windows 原生 Desktop 启动 smoke 脚本（`scripts/smoke_desktop_native.py`），支持隔离 home、响应性观察、状态围栏检查和 JSON 证据输出。由于 frameless 窗口捕获接口仍在返回 `0x80004002`（见 `audits/2026-07-10-windows-native-smoke-attempt.md`），smoke 自动化为进程级验证而非 UI 点击自动化。
 
 验收命令：
 
