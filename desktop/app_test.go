@@ -7667,6 +7667,35 @@ func (r *submitBlockingRunner) Run(ctx context.Context, input string) error {
 	}
 }
 
+func replaceTabControllerWithBlockingRunner(t *testing.T, app *App, tabID, label string, runner *submitBlockingRunner) *control.Controller {
+	t.Helper()
+	app.mu.RLock()
+	tab := app.tabs[tabID]
+	app.mu.RUnlock()
+	if tab == nil {
+		t.Fatalf("tab %q not found", tabID)
+	}
+	if tab.Ctrl != nil {
+		tab.Ctrl.Close()
+	}
+	ctrl := control.New(control.Options{
+		Runner:        runner,
+		WorkspaceRoot: tab.WorkspaceRoot,
+		SessionDir:    tabSessionDir(tab),
+		SessionPath:   tab.SessionPath,
+		Label:         label,
+	})
+	app.bindControllerDisplayRecorder(ctrl)
+	app.mu.Lock()
+	tab.Ctrl = ctrl
+	tab.Ready = true
+	tab.StartupErr = ""
+	tab.StartupErrLeaseHeld = false
+	app.mu.Unlock()
+	t.Cleanup(ctrl.Close)
+	return ctrl
+}
+
 func TestSubmitAndCancelForTabStayBoundDuringActiveTabSwitching(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
@@ -7753,6 +7782,97 @@ func TestSubmitAndCancelForTabStayBoundDuringActiveTabSwitching(t *testing.T) {
 	}
 	if got := activeTabIDForTest(app); got != "project-b" {
 		t.Fatalf("active tab = %q, want project-b after cancelling background tab", got)
+	}
+}
+
+func TestDesktopBoundWorkspaceSessionSubmitStopPath(t *testing.T) {
+	isolateDesktopUserDirs(t)
+
+	projectA := t.TempDir()
+	projectB := t.TempDir()
+	app := NewApp()
+	installNoopRuntimeEvents(app)
+
+	metaA, err := app.EnsureBlankTab("project", projectA)
+	if err != nil {
+		t.Fatalf("EnsureBlankTab(projectA): %v", err)
+	}
+	tabA := waitForTabReady(t, app, metaA.ID)
+	metaB, err := app.EnsureBlankTab("project", projectB)
+	if err != nil {
+		t.Fatalf("EnsureBlankTab(projectB): %v", err)
+	}
+	tabB := waitForTabReady(t, app, metaB.ID)
+
+	if tabA.SessionPath == "" {
+		t.Fatalf("project-a blank session path should be pinned")
+	}
+	if tabB.SessionPath == "" {
+		t.Fatalf("project-b blank session path should be pinned")
+	}
+	if sameProjectRoot(tabA.WorkspaceRoot, tabB.WorkspaceRoot) {
+		t.Fatalf("test setup expected distinct project roots, got %q and %q", tabA.WorkspaceRoot, tabB.WorkspaceRoot)
+	}
+
+	selectedA, err := app.OpenProjectTab(projectA, metaA.TopicID)
+	if err != nil {
+		t.Fatalf("OpenProjectTab(projectA): %v", err)
+	}
+	if selectedA.ID != metaA.ID || !selectedA.Active {
+		t.Fatalf("OpenProjectTab(projectA) = %+v, want existing active tab %q", selectedA, metaA.ID)
+	}
+
+	runnerA := &submitBlockingRunner{started: make(chan string, 1), done: make(chan error, 1), release: make(chan struct{})}
+	runnerB := &submitBlockingRunner{started: make(chan string, 1), done: make(chan error, 1), release: make(chan struct{})}
+	ctrlA := replaceTabControllerWithBlockingRunner(t, app, metaA.ID, "desktop-project-a", runnerA)
+	_ = replaceTabControllerWithBlockingRunner(t, app, metaB.ID, "desktop-project-b", runnerB)
+
+	const prompt = "desktop bound path prompt"
+	if err := app.SubmitToTab(metaA.ID, prompt); err != nil {
+		t.Fatalf("SubmitToTab(projectA): %v", err)
+	}
+	select {
+	case got := <-runnerA.started:
+		if got != prompt {
+			t.Fatalf("project-a runner input = %q, want %q", got, prompt)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for project-a submit")
+	}
+	select {
+	case got := <-runnerB.started:
+		t.Fatalf("project-b runner unexpectedly started with %q", got)
+	default:
+	}
+	if got := normalizeProjectRoot(ctrlA.WorkspaceRoot()); got != normalizeProjectRoot(projectA) {
+		t.Fatalf("project-a controller workspace = %q, want %q", got, normalizeProjectRoot(projectA))
+	}
+
+	selectedB, err := app.OpenProjectTab(projectB, metaB.TopicID)
+	if err != nil {
+		t.Fatalf("OpenProjectTab(projectB): %v", err)
+	}
+	if selectedB.ID != metaB.ID || !selectedB.Active {
+		t.Fatalf("OpenProjectTab(projectB) = %+v, want existing active tab %q", selectedB, metaB.ID)
+	}
+
+	app.CancelTab(metaA.ID)
+	select {
+	case err := <-runnerA.done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("project-a runner error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for project-a cancellation")
+	}
+	waitNotRunning(t, ctrlA)
+	select {
+	case got := <-runnerB.started:
+		t.Fatalf("project-b runner unexpectedly started after project-a cancel with %q", got)
+	default:
+	}
+	if got := activeTabIDForTest(app); got != metaB.ID {
+		t.Fatalf("active tab = %q, want project-b after cancelling background project-a", got)
 	}
 }
 

@@ -10,9 +10,10 @@ This audit records the automated bridge evidence added before the manual/native 
 
 ## What was verified
 
-Added `TestSubmitAndCancelForTabStayBoundDuringActiveTabSwitching` in `desktop/app_test.go`.
+Added `TestSubmitAndCancelForTabStayBoundDuringActiveTabSwitching` and
+`TestDesktopBoundWorkspaceSessionSubmitStopPath` in `desktop/app_test.go`.
 
-The test uses real `control.Controller` instances with fake blocking runners, so no real provider key or network call is involved. It verifies:
+The first test uses real `control.Controller` instances with fake blocking runners, so no real provider key or network call is involved. It verifies:
 
 - `SubmitToTab("project-a", prompt)` routes the model turn to project A's controller.
 - Project B's controller does not receive the prompt.
@@ -21,13 +22,22 @@ The test uses real `control.Controller` instances with fake blocking runners, so
 - `CancelTab("project-a")` cancels the original project A turn, not the currently active project B tab.
 - Project B remains idle and the active tab remains project B after background cancellation.
 
+The second test exercises the Wails-bound backend path the frontend calls for
+the M1 create/select/send/stop loop:
+
+- `EnsureBlankTab("project", root)` creates a pinned blank project session for two distinct workspaces.
+- `OpenProjectTab(root, topicID)` selects the existing workspace/topic tab instead of creating a duplicate.
+- `SubmitToTab(tabID, prompt)` starts the turn on the selected project workspace.
+- Switching to another project via `OpenProjectTab` while the first turn is running keeps the first turn bound to its original controller and workspace root.
+- `CancelTab(tabID)` stops the background project turn without cancelling or starting the newly-active project tab.
+
 This closes a key bridge-risk class for Desktop M1: frontend tab focus changes must not reroute an in-flight task or cancel the wrong workspace session.
 
 ## Verification
 
 ```powershell
 Push-Location desktop
-go test . -run 'TestSubmitAndCancelForTabStayBoundDuringActiveTabSwitching|TestRunShellForTabStaysBoundDuringRapidProjectTabSwitching|TestSessionActionsWithoutControllerReturnError' -count=1 -timeout 120s
+go test . -run 'TestDesktopBoundWorkspaceSessionSubmitStopPath|TestSubmitAndCancelForTabStayBoundDuringActiveTabSwitching' -count=1 -timeout 180s
 Pop-Location
 ```
 

@@ -75,7 +75,7 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 按以下顺序推进：
 
 1. [x] 使用真实 API Key 完成最小文本对话，记录 Provider、缓存和使用量证据（见 `audits/2026-07-09-real-provider.md`）。
-2. [ ] 在原生 Wails 中完成新建会话、选择工作区、发送和停止（Desktop Submit/Cancel 多工作区桥接自动化已补，见 `audits/2026-07-09-desktop-m1-bridge.md`）。
+2. [ ] 在原生 Wails 中完成新建会话、选择工作区、发送和停止（已补 `EnsureBlankTab`/`OpenProjectTab`/`SubmitToTab`/`CancelTab` 绑定路径与 Submit/Cancel 多工作区桥接自动化，见 `audits/2026-07-09-desktop-m1-bridge.md`；仍需真实 Wails 窗口点击 smoke）。
 3. [x] 执行一次需要文件写入的任务，验证审批、补丁预览、落盘和回退（自动化锁定真实 `write_file`：审批请求 diff、ToolDispatch diff、磁盘写入、RewindCode 删除，见 `audits/2026-07-09-m1-file-write-loop.md`）。
 4. [ ] 关闭并重启应用，验证会话、待处理状态和工作区恢复（已补前端重连/reload 的 pending approval replay 自动化，以及 Desktop 后端从 `desktop-tabs.json` 恢复 classic 多 tab/默认 workbench active tab、workspace、pinned session 和 history 的自动化；见 `audits/2026-07-09-m1-reconnect-recovery.md`）。
 5. [ ] 对失败场景补自动化：断流、限流、无效密钥、权限拒绝和工具超时（已补 provider 鉴权失败 TurnDone + 审批超时阻塞写入/清 pending 的 Controller 自动化，见 `audits/2026-07-09-m1-failure-contracts.md`）。
