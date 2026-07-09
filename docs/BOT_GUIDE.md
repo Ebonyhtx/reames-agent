@@ -232,7 +232,7 @@ feishu_approvers = ["ou_approver"]
 platform `message_id` values it just sent and ignores matching echo events. If a
 platform does not echo the same message ID reliably, configure the bot's own user
 IDs under `[bot.self_user_ids]` as a second layer of loop protection. `/status`
-also includes the current queue mode and adapter health, such as
+and `/current` include the current queue mode and adapter health, such as
 `feishu-lark=running` or `weixin-weixin=degraded`.
 
 The optional `[bot.control]` section exposes a local loopback HTTP API and is
@@ -327,6 +327,7 @@ These commands work in Feishu, Lark, WeChat, and QQ.
 | --- | --- | --- |
 | `/help` | Show available commands | `/help` |
 | `/status` | Show active tasks, queue state, tool approval mode, and adapter health | `/status` |
+| `/current` | Alias for `/status`, useful for a quick mobile check-in | `/current` |
 | `/stop` | Stop the current task | `/stop` |
 | `/new` | Start a fresh session | `/new` |
 | `/reset` | Reset the current session | `/reset` |
@@ -469,7 +470,7 @@ You may need to bind again if:
 | QQ button action fails | Same as Feishu/Lark — send the text command from the card, such as `/approve <id>` or `/deny <id>`. |
 | WeChat reply `1` does nothing | Numeric shortcuts only work when an approval or Ask is pending; use the full command if needed. |
 | QQ reply `1` does nothing | Same as WeChat — numeric shortcuts only work when an approval or Ask is pending; use the full command if needed. |
-| Need to confirm the current mode | Send `/status` or `/yolo status`. |
+| Need to confirm the current mode | Send `/status`, `/current`, or `/yolo status`. |
 | Need a fresh context | Send `/new` or `/reset`. |
 | Need to stop the current task | Send `/stop`. |
 

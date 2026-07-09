@@ -90,14 +90,17 @@ func TestIsSlashBypass(t *testing.T) {
 	}{
 		{"/stop", true},
 		{"/stop  extra args", true},
+		{"/stopwatch", false},
 		{"/new", true},
 		{"/reset", true},
+		{"/current", true},
 		{"/approve", true},
 		{"/deny", true},
 		{"/yolo", true},
 		{"/yolo on", true},
 		{"/mode yolo", true},
 		{"/status", true},
+		{"/statusx", false},
 		{"/help", true},
 		{"hello", false},
 		{"/unknown", false},
@@ -110,6 +113,25 @@ func TestIsSlashBypass(t *testing.T) {
 		if got != tt.bypass {
 			t.Errorf("IsSlashBypass(%q) = %v, want %v", tt.text, got, tt.bypass)
 		}
+	}
+}
+
+func TestParseSlashCommand(t *testing.T) {
+	cmd, ok := ParseSlashCommand("/CURRENT now")
+	if !ok {
+		t.Fatal("/CURRENT should parse as a known slash command")
+	}
+	if cmd.Verb != "/current" {
+		t.Fatalf("verb = %q, want /current", cmd.Verb)
+	}
+	if len(cmd.Args) != 1 || cmd.Args[0] != "now" || cmd.RawArgs != "now" {
+		t.Fatalf("command = %+v, want one arg and raw args", cmd)
+	}
+	if _, ok := ParseSlashCommand(" /current"); ok {
+		t.Fatal("leading whitespace should keep text as a normal message")
+	}
+	if _, ok := ParseSlashCommand("/currently"); ok {
+		t.Fatal("prefix-only matches must not be parsed as commands")
 	}
 }
 

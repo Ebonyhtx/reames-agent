@@ -71,6 +71,7 @@
 | [Desktop M1 frontend failure display audit](audits/2026-07-09-desktop-m1-failure-display.md) | 前端 provider 失败、工具超时和审批拒绝的可见 warn/error 与停止态复位证据 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |
 | [Gateway service lifecycle contract audit](audits/2026-07-09-gateway-service-lifecycle.md) | 跨平台后台 gateway 生命周期命令、CLI/Gateway 隔离和防 `serve`/`bot start` 回归证据 |
+| [Gateway command contract audit](audits/2026-07-10-gateway-command-contract.md) | IM Gateway 平台无关命令解析、`/current` 状态别名和前缀误触发防回归证据 |
 | [Installer release artifact mode audit](audits/2026-07-09-installer-release-mode.md) | 安装器默认源码构建、显式 release artifact 模式与 SHA256SUMS 校验证据 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |

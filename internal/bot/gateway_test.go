@@ -963,6 +963,36 @@ func TestGatewayHelpMentionsYoloCommands(t *testing.T) {
 	if !strings.Contains(sent[0].Text, "/projects") || !strings.Contains(sent[0].Text, "/attach session") || !strings.Contains(sent[0].Text, "/search all") {
 		t.Fatalf("help = %q, want project/session commands", sent[0].Text)
 	}
+	if !strings.Contains(sent[0].Text, "/status 或 /current") {
+		t.Fatalf("help = %q, want /current status alias", sent[0].Text)
+	}
+}
+
+func TestGatewayCurrentCommandAliasesStatus(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	gw := NewGateway(GatewayConfig{Allowlist: AllowlistConfig{AllowAll: true}}, nil, logger)
+	adapter := newFakeAdapter(PlatformWeixin, "fake-weixin")
+	msg := InboundMessage{
+		Platform:     PlatformWeixin,
+		ConnectionID: "weixin-weixin",
+		ChatType:     ChatDM,
+		ChatID:       "chat",
+		UserID:       "user",
+		Text:         "/current",
+	}
+	key := BuildSessionKey(msg.Session())
+
+	gw.handleSlashCommand(context.Background(), adapter, key, msg)
+
+	sent := adapter.sentMessages()
+	if len(sent) != 1 {
+		t.Fatalf("sent count = %d, want 1", len(sent))
+	}
+	for _, want := range []string{"活跃任务数", "工具审批模式", "队列模式", "连接健康"} {
+		if !strings.Contains(sent[0].Text, want) {
+			t.Fatalf("/current text = %q, want %q", sent[0].Text, want)
+		}
+	}
 }
 
 func TestGatewayProjectCommandsListAndUseProjectOverride(t *testing.T) {

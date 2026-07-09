@@ -208,7 +208,7 @@ feishu_approvers = ["ou_approver"]
 默认启用 `ignore_self_messages = true`。网关会记录刚发出的平台
 `message_id`，并忽略平台回传的同 ID 消息；如果某个平台不会稳定回传同一
 消息 ID，可以在 `[bot.self_user_ids]` 里配置 bot 自己的用户 ID 作为第二层
-回声防护。`/status` 会显示当前会话队列模式和各连接的健康状态，例如
+回声防护。`/status` 和 `/current` 会显示当前会话队列模式和各连接的健康状态，例如
 `feishu-lark=running` 或 `weixin-weixin=degraded`。
 
 可选的 `[bot.control]` 提供本机 loopback HTTP API，默认关闭。启用后必须
@@ -300,6 +300,7 @@ sequenceDiagram
 | --- | --- | --- |
 | `/help` | 查看可用命令 | `/help` |
 | `/status` | 查看活跃任务、队列、工具审批模式和连接健康 | `/status` |
+| `/current` | `/status` 的别名，适合移动端快速确认当前状态 | `/current` |
 | `/stop` | 停止当前任务 | `/stop` |
 | `/new` | 开始新会话 | `/new` |
 | `/reset` | 重置当前会话 | `/reset` |
@@ -432,7 +433,7 @@ YOLO 的边界很重要：
 | QQ 按钮提示失败 | 与飞书/Lark 相同 —— 直接发送卡片里的命令，例如 `/approve <id>` 或 `/deny <id>`。 |
 | 微信回复 `1` 没反应 | 只有存在待审批或 Ask 时数字快捷回复才生效；也可以使用完整命令。 |
 | QQ 回复 `1` 没反应 | 与微信相同 —— 只有存在待审批或 Ask 时数字快捷回复才生效；也可以使用完整命令。 |
-| 想确认当前模式 | 发送 `/status` 或 `/yolo status`。 |
+| 想确认当前模式 | 发送 `/status`、`/current` 或 `/yolo status`。 |
 | 想重新开始上下文 | 发送 `/new` 或 `/reset`。 |
 | 想停止当前任务 | 发送 `/stop`。 |
 

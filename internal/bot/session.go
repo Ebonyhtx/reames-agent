@@ -44,6 +44,16 @@ type QueueSnapshot struct {
 	Sessions int
 }
 
+// SlashCommand is a normalized, platform-independent bot command parsed from
+// an inbound IM text message. It intentionally only recognizes a fixed command
+// verb at the start of the message; leading prose or leading whitespace stays a
+// normal user message so channels do not accidentally trigger control actions.
+type SlashCommand struct {
+	Verb    string
+	Args    []string
+	RawArgs string
+}
+
 func NormalizeQueueMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case QueueModeSteer:
@@ -129,6 +139,7 @@ var slashCommands = map[string]bool{
 	"/stop":     true,
 	"/new":      true,
 	"/reset":    true,
+	"/current":  true,
 	"/approve":  true,
 	"/deny":     true,
 	"/answer":   true,
@@ -144,19 +155,28 @@ var slashCommands = map[string]bool{
 	"/help":     true,
 }
 
+// ParseSlashCommand parses a known bot slash command. Unknown commands and
+// messages with leading whitespace are intentionally not commands.
+func ParseSlashCommand(text string) (SlashCommand, bool) {
+	if text == "" || text[0] != '/' {
+		return SlashCommand{}, false
+	}
+	parts := strings.Fields(text)
+	if len(parts) == 0 {
+		return SlashCommand{}, false
+	}
+	verb := strings.ToLower(parts[0])
+	if !slashCommands[verb] {
+		return SlashCommand{}, false
+	}
+	rawArgs := strings.TrimSpace(strings.TrimPrefix(text, parts[0]))
+	return SlashCommand{Verb: verb, Args: parts[1:], RawArgs: rawArgs}, true
+}
+
 // IsSlashBypass 判断消息是否为绕过队列的斜杠命令。
 func IsSlashBypass(text string) bool {
-	if len(text) == 0 {
-		return false
-	}
-	cmd := text
-	for i, r := range text {
-		if r == ' ' {
-			cmd = text[:i]
-			break
-		}
-	}
-	return slashCommands[cmd]
+	_, ok := ParseSlashCommand(text)
+	return ok
 }
 
 // pendingTurn 是等待执行的一轮对话。

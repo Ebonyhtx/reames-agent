@@ -1100,8 +1100,12 @@ func (gw *BotGateway) currentPendingAskIDForReply(key string) string {
 }
 
 func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, key string, msg InboundMessage) {
-	switch {
-	case strings.HasPrefix(msg.Text, "/stop"):
+	cmd, ok := ParseSlashCommand(msg.Text)
+	if !ok {
+		return
+	}
+	switch cmd.Verb {
+	case "/stop":
 		var cancel context.CancelFunc
 		gw.mu.Lock()
 		if state, ok := gw.controllers[key]; ok {
@@ -1114,7 +1118,7 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		gw.sessions.ForceRelease(key)
 		_ = gw.sendText(ctx, adapter, msg, "已停止当前任务。")
 
-	case strings.HasPrefix(msg.Text, "/new") || strings.HasPrefix(msg.Text, "/reset"):
+	case "/new", "/reset":
 		var cancel context.CancelFunc
 		gw.mu.Lock()
 		state, ok := gw.controllers[key]
@@ -1144,13 +1148,12 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		gw.sessions.ForceRelease(key)
 		_ = gw.sendText(ctx, adapter, msg, "已开始新会话。")
 
-	case strings.HasPrefix(msg.Text, "/approve"):
+	case "/approve":
 		if !gw.requireCommandRole(ctx, adapter, msg, "approver") {
 			return
 		}
 		// 从消息中解析 approval ID
-		parts := strings.Fields(msg.Text)
-		if len(parts) < 2 {
+		if len(cmd.Args) < 1 {
 			_ = gw.sendText(ctx, adapter, msg, "用法: /approve <id>")
 			return
 		}
@@ -1158,19 +1161,18 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		state, ok := gw.controllers[key]
 		gw.mu.Unlock()
 		if ok && state.ctrl != nil {
-			state.ctrl.Approve(parts[1], true, false, false)
-			gw.forgetPendingApproval(key, parts[1])
+			state.ctrl.Approve(cmd.Args[0], true, false, false)
+			gw.forgetPendingApproval(key, cmd.Args[0])
 			_ = gw.sendText(ctx, adapter, msg, "已批准。")
 		} else {
 			_ = gw.sendText(ctx, adapter, msg, "没有找到当前会话中的待审批操作，请重新触发一次操作。")
 		}
 
-	case strings.HasPrefix(msg.Text, "/deny"):
+	case "/deny":
 		if !gw.requireCommandRole(ctx, adapter, msg, "approver") {
 			return
 		}
-		parts := strings.Fields(msg.Text)
-		if len(parts) < 2 {
+		if len(cmd.Args) < 1 {
 			_ = gw.sendText(ctx, adapter, msg, "用法: /deny <id>")
 			return
 		}
@@ -1178,21 +1180,20 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		state, ok := gw.controllers[key]
 		gw.mu.Unlock()
 		if ok && state.ctrl != nil {
-			state.ctrl.Approve(parts[1], false, false, false)
-			gw.forgetPendingApproval(key, parts[1])
+			state.ctrl.Approve(cmd.Args[0], false, false, false)
+			gw.forgetPendingApproval(key, cmd.Args[0])
 			_ = gw.sendText(ctx, adapter, msg, "已拒绝。")
 		} else {
 			_ = gw.sendText(ctx, adapter, msg, "没有找到当前会话中的待审批操作，请重新触发一次操作。")
 		}
 
-	case strings.HasPrefix(msg.Text, "/answer"):
-		parts := strings.Fields(msg.Text)
-		if len(parts) < 3 {
+	case "/answer":
+		if len(cmd.Args) < 2 {
 			_ = gw.sendText(ctx, adapter, msg, "用法: /answer <id> <选项或 q1=选项;q2=选项>")
 			return
 		}
-		askID := parts[1]
-		rawAnswer := strings.TrimSpace(strings.Join(parts[2:], " "))
+		askID := cmd.Args[0]
+		rawAnswer := strings.TrimSpace(strings.Join(cmd.Args[1:], " "))
 		gw.mu.Lock()
 		state, ok := gw.controllers[key]
 		var questions []event.AskQuestion
@@ -1216,7 +1217,7 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		state.ctrl.AnswerQuestion(askID, answers)
 		_ = gw.sendText(ctx, adapter, msg, "已提交回答。")
 
-	case strings.HasPrefix(msg.Text, "/yolo") || strings.HasPrefix(msg.Text, "/mode"):
+	case "/yolo", "/mode":
 		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
 			return
 		}
@@ -1236,7 +1237,7 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		}
 		_ = gw.sendText(ctx, adapter, msg, text)
 
-	case strings.HasPrefix(msg.Text, "/queue"):
+	case "/queue":
 		mode, clear, statusOnly, ok := parseQueueCommand(msg.Text)
 		if !ok {
 			_ = gw.sendText(ctx, adapter, msg, "用法: /queue steer|followup|collect|interrupt|status|default")
@@ -1254,38 +1255,38 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		gw.sessions.SetQueueMode(key, mode)
 		_ = gw.sendText(ctx, adapter, msg, "已切换队列模式："+queueModeLabel(mode)+"。")
 
-	case slashCommandVerb(msg.Text) == "/projects":
+	case "/projects":
 		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
 			return
 		}
 		query := strings.TrimSpace(strings.TrimPrefix(msg.Text, "/projects"))
 		_ = gw.sendText(ctx, adapter, msg, formatBotProjects(gw.buildProjectIndex(), query, botProjectListLimit))
 
-	case slashCommandVerb(msg.Text) == "/use":
+	case "/use":
 		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
 			return
 		}
 		_ = gw.sendText(ctx, adapter, msg, gw.handleUseProjectCommand(key, msg.Text))
 
-	case slashCommandVerb(msg.Text) == "/sessions":
+	case "/sessions":
 		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
 			return
 		}
 		_ = gw.sendText(ctx, adapter, msg, gw.handleSessionsCommand(msg.Text))
 
-	case slashCommandVerb(msg.Text) == "/attach":
+	case "/attach":
 		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
 			return
 		}
 		_ = gw.sendText(ctx, adapter, msg, gw.handleAttachSessionCommand(key, msg.Text))
 
-	case slashCommandVerb(msg.Text) == "/search":
+	case "/search":
 		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
 			return
 		}
 		_ = gw.sendText(ctx, adapter, msg, gw.handleProjectSearchCommand(ctx, msg.Text))
 
-	case strings.HasPrefix(msg.Text, "/status"):
+	case "/status", "/current":
 		active := gw.sessions.ActiveCount()
 		pending := gw.sessions.PendingCount(key)
 		gw.mu.Lock()
@@ -1294,7 +1295,7 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		mode := gw.currentToolApprovalMode(key, msg)
 		_ = gw.sendText(ctx, adapter, msg, fmt.Sprintf("活跃任务数: %d\n保留会话数: %d\n工具审批模式: %s\n队列模式: %s\n当前会话排队: %d\n连接健康: %s", active, sessions, toolApprovalModeLabel(mode), queueModeLabel(gw.queueMode(key, msg)), pending, gw.adapterHealthSummaryText()))
 
-	case strings.HasPrefix(msg.Text, "/help"):
+	case "/help":
 		help := "可用命令:\n" +
 			"/stop - 停止当前任务\n" +
 			"/new - 开始新会话\n" +
@@ -1310,18 +1311,18 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 			"/sessions search <关键词> - 搜索可 attach 的历史会话\n" +
 			"/attach session <id|关键词> - 绑定当前远端会话到已有历史会话\n" +
 			"/search all <关键词> - 跨已索引项目检索文件内容\n" +
-			"/status - 查看状态\n" +
+			"/status 或 /current - 查看当前状态\n" +
 			"/help - 显示帮助"
 		_ = gw.sendText(ctx, adapter, msg, help)
 	}
 }
 
 func slashCommandVerb(text string) string {
-	parts := strings.Fields(strings.TrimSpace(text))
-	if len(parts) == 0 {
+	cmd, ok := ParseSlashCommand(text)
+	if !ok {
 		return ""
 	}
-	return strings.ToLower(parts[0])
+	return cmd.Verb
 }
 
 func (gw *BotGateway) handleUseProjectCommand(key, text string) string {
