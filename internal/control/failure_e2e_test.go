@@ -202,6 +202,75 @@ func TestApprovalTimeoutBlocksWriteAndClearsPendingPrompt(t *testing.T) {
 	}
 }
 
+func TestUserDeniedApprovalBlocksWriteAndClearsPendingPrompt(t *testing.T) {
+	workspace := t.TempDir()
+	rel := filepath.Join("notes", "denied.txt")
+	args, err := json.Marshal(struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}{Path: rel, Content: "should not be written\n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reg := tool.NewRegistry()
+	for _, tl := range (builtin.Workspace{Dir: workspace}).Tools("write_file") {
+		reg.Add(tl)
+	}
+	prov := &scriptedTurns{turns: [][]provider.Chunk{
+		toolCallTurn("w-denied", "write_file", string(args)),
+		textTurn("I did not write the file because permission was denied."),
+	}}
+	events := make(chan event.Event, 32)
+	approvalID := make(chan string, 1)
+	sink := event.FuncSink(func(e event.Event) {
+		events <- e
+		if e.Kind == event.ApprovalRequest && e.Approval.Tool == "write_file" {
+			approvalID <- e.Approval.ID
+		}
+	})
+	ag := agent.New(prov, reg, agent.NewSession("sys"), agent.Options{}, sink)
+	c := New(Options{
+		Runner:        ag,
+		Executor:      ag,
+		Policy:        permission.New("ask", nil, nil, nil),
+		Sink:          sink,
+		WorkspaceRoot: workspace,
+	})
+	c.EnableInteractiveApproval()
+
+	go func() { c.Approve(<-approvalID, false, false, false) }()
+	c.Submit("write the denied note")
+
+	var result event.Event
+	deadline := time.After(5 * time.Second)
+	for result.Kind == 0 {
+		select {
+		case e := <-events:
+			if e.Kind == event.ToolResult && e.Tool.ID == "w-denied" {
+				result = e
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for denied write_file ToolResult")
+		}
+	}
+	if result.Tool.Err == "" || !strings.Contains(result.Tool.Err, "permission policy") {
+		t.Fatalf("ToolResult.Err = %q, want permission denial", result.Tool.Err)
+	}
+
+	done := waitForTurnDoneEvent(t, events)
+	if done.Err != nil {
+		t.Fatalf("TurnDone.Err = %v, want nil because the model received the denied tool result", done.Err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, rel)); !os.IsNotExist(err) {
+		t.Fatalf("denied write stat err = %v, want file not created", err)
+	}
+	status := c.RuntimeStatus()
+	if status.Running || status.PendingPrompt || status.CancelRequested || status.Cancellable {
+		t.Fatalf("runtime status after approval denial = %+v, want idle", status)
+	}
+}
+
 func TestToolTimeoutEmitsToolResultAndClearsRuntimeStatus(t *testing.T) {
 	workspace := t.TempDir()
 	args, err := json.Marshal(struct {

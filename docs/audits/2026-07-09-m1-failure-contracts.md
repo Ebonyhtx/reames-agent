@@ -12,6 +12,7 @@
 - Provider 429/503：以带 HTTP 状态的可操作 `TurnDone.Err` 发给前端；Controller 运行态归零。
 - Provider 流中断恢复耗尽：保留部分响应上下文，重试耗尽后以“stream interrupted/continue”行动提示发给前端；Controller 运行态归零。
 - 写文件审批超时：`write_file` 不落盘，pending approval 被清理，阻塞原因作为 `ToolResult.Err` 反馈给模型，随后 turn 可正常结束。
+- 用户拒绝写文件审批：`write_file` 不落盘，pending approval 被清理，拒绝原因作为 `ToolResult.Err` 反馈给模型，随后 turn 可正常结束。
 - 工具运行超时：真实 `bash` 工具在 workspace timeout 下停止执行，超时原因作为 `ToolResult.Err` 反馈给模型，随后 turn 正常结束且 Controller 运行态归零。
 
 ## 本批改动
@@ -20,6 +21,7 @@
 - 新增 `TestProviderAPIErrorEmitsActionableTurnDoneAndClearsRuntimeStatus`。
 - 新增 `TestProviderStreamInterruptionExhaustionEmitsTurnDoneAndClearsRuntimeStatus`。
 - 新增 `TestApprovalTimeoutBlocksWriteAndClearsPendingPrompt`。
+- 新增 `TestUserDeniedApprovalBlocksWriteAndClearsPendingPrompt`。
 - 新增 `TestToolTimeoutEmitsToolResultAndClearsRuntimeStatus`。
 
 ## 语义边界
@@ -31,7 +33,7 @@
 ## 验证
 
 ```powershell
-go test ./internal/control -run "TestProvider(AuthError|APIError|StreamInterruption)|TestApprovalTimeoutBlocksWriteAndClearsPendingPrompt|TestToolTimeoutEmitsToolResultAndClearsRuntimeStatus" -count=1 -timeout 120s
+go test ./internal/control -run "TestProvider(AuthError|APIError|StreamInterruption)|TestApprovalTimeoutBlocksWriteAndClearsPendingPrompt|TestUserDeniedApprovalBlocksWriteAndClearsPendingPrompt|TestToolTimeoutEmitsToolResultAndClearsRuntimeStatus" -count=1 -timeout 120s
 ```
 
 结果：通过。

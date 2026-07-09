@@ -22,8 +22,8 @@ import (
 func TestDesktopReplayPendingPromptsReEmitsApprovalWithTabAndDiff(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
-	workspace := t.TempDir()
-	sessionDir := t.TempDir()
+	workspace := robustTempDir(t)
+	sessionDir := robustTempDir(t)
 	rel := filepath.Join("notes", "desktop-replay.txt")
 	args, err := json.Marshal(struct {
 		Path    string `json:"path"`
@@ -77,7 +77,7 @@ func TestDesktopReplayPendingPromptsReEmitsApprovalWithTabAndDiff(t *testing.T) 
 		Label:         "desktop-replay",
 	})
 	ctrl.EnableInteractiveApproval()
-	defer ctrl.Close()
+	t.Cleanup(ctrl.Close)
 
 	tab := &WorkspaceTab{
 		ID:            "tab-replay",
@@ -127,6 +127,7 @@ func TestDesktopReplayPendingPromptsReEmitsApprovalWithTabAndDiff(t *testing.T) 
 
 	ctrl.Approve(first.Approval.ID, false, false, false)
 	waitNotRunning(t, ctrl)
+	ctrl.Close()
 	if _, err := os.Stat(filepath.Join(workspace, rel)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("denied replay approval stat err = %v, want file not created", err)
 	}
