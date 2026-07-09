@@ -17,15 +17,15 @@ jobs:
     name: CLI snapshot (6 targets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
       - name: Verify cache contract
-        run: ./scripts/cache-guard.sh
+        run: bash scripts/cache-guard.sh
       - name: Build snapshot archives
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: latest
