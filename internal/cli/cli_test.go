@@ -17,6 +17,7 @@ import (
 	"reames-agent/internal/agent"
 	"reames-agent/internal/config"
 	"reames-agent/internal/event"
+	"reames-agent/internal/feedback"
 	"reames-agent/internal/i18n"
 	"reames-agent/internal/notify"
 	"reames-agent/internal/provider"
@@ -320,6 +321,9 @@ func TestMetadataCommandsDoNotProbeTerminalTheme(t *testing.T) {
 	if !strings.Contains(out, "reames-agent gateway run") {
 		t.Fatalf("help output missing gateway run:\n%s", out)
 	}
+	if !strings.Contains(out, "reames-agent feedback summary|draft") {
+		t.Fatalf("help output missing feedback command:\n%s", out)
+	}
 }
 
 func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
@@ -457,6 +461,67 @@ func TestGatewayInstallDryRunRejectsInvalidScope(t *testing.T) {
 	})
 	if !strings.Contains(errOut, "invalid service scope") {
 		t.Fatalf("gateway install invalid scope stderr = %q, want validation error", errOut)
+	}
+}
+
+func TestFeedbackCommandSummaryAndDraftUseSelectedHome(t *testing.T) {
+	isolateCLIConfigHome(t)
+	t.Setenv("REAMES_AGENT_HOME", "")
+	selectedHome := filepath.Join(t.TempDir(), "selected-home")
+	store := feedback.NewStore(filepath.Join(selectedHome, "feedback", "feedback.jsonl"))
+	if _, err := store.Append(feedback.ReportInput{
+		Kind:         "crash",
+		Source:       "gateway",
+		Label:        "feishu",
+		Message:      "operator alice@example.com saw api_key=sk-secret1234567890abcdef",
+		ErrorMessage: "panic Bearer abcdefghijklmnopqrstuvwxyz123456",
+		TopFrame:     `C:\Users\Alice\project\bot.go:42`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, func() {
+		if rc := Run([]string{"feedback", "summary", "--json", "--home", selectedHome}, "test-version"); rc != 0 {
+			t.Fatalf("feedback summary rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{`"total": 1`, `"kind": "crash"`, `"label": "feishu"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("feedback summary output missing %q:\n%s", want, out)
+		}
+	}
+	for _, forbidden := range []string{"alice@example.com", "sk-secret", "abcdefghijklmnopqrstuvwxyz123456", `C:\Users\Alice`} {
+		if strings.Contains(out, forbidden) {
+			t.Fatalf("feedback summary leaked %q:\n%s", forbidden, out)
+		}
+	}
+
+	out = captureStdout(t, func() {
+		if rc := Run([]string{"feedback", "draft", "--home", selectedHome, "--limit", "10"}, "test-version"); rc != 0 {
+			t.Fatalf("feedback draft rc = %d, want 0", rc)
+		}
+	})
+	if !strings.Contains(out, "feedback maintenance draft written:") || !strings.Contains(out, "records=1 groups=1") {
+		t.Fatalf("feedback draft output = %q", out)
+	}
+	matches, err := filepath.Glob(filepath.Join(selectedHome, "feedback", "drafts", "feedback-maintenance-*.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("draft files = %v, want one", matches)
+	}
+	raw, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"alice@example.com", "sk-secret", "abcdefghijklmnopqrstuvwxyz123456", `C:\Users\Alice`} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("feedback draft leaked %q:\n%s", forbidden, raw)
+		}
+	}
+	if got := os.Getenv("REAMES_AGENT_HOME"); got != "" {
+		t.Fatalf("feedback --home leaked REAMES_AGENT_HOME=%q", got)
 	}
 }
 

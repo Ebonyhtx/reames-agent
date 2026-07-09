@@ -433,6 +433,7 @@ Usage:
   reames-agent init                                         show how to generate project memory (AGENTS.md)
   reames-agent doctor [--json]                              print redacted local diagnostics
   reames-agent doctor session <branch-id> [--zip] [--out PATH]  export a session conflict diagnostic zip
+  reames-agent feedback summary|draft [--home PATH] [--json]  inspect local feedback and write maintenance drafts
   reames-agent gateway run|install|start|stop|restart|status|uninstall  IM gateway daemon/service lifecycle
   reames-agent bot start|doctor|weixin-login                legacy bot gateway commands
   reames-agent upgrade [--check] [--force]                   self-update to the latest release (also: reames-agent update)

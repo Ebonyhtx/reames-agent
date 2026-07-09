@@ -290,9 +290,12 @@ curl -X POST http://127.0.0.1:8787/api/feedback/draft \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $REAMES_AGENT_SERVE_TOKEN" \
   -d '{"limit":20}'
+
+reames-agent feedback summary --home "$REAMES_AGENT_HOME"
+reames-agent feedback draft --home "$REAMES_AGENT_HOME" --limit 20
 ```
 
-记录写入 `<Reames Agent home>/feedback/feedback.jsonl`，会先脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token，再按 fingerprint 聚合重复问题。`/api/feedback/draft` 会把聚合结果写成 `<Reames Agent home>/feedback/drafts/*.md` 本地维护草稿。这个入口不连接第三方服务，也不自动创建 Issue；后续把草稿发到 GitHub Issue 前仍需人工审阅。
+记录写入 `<Reames Agent home>/feedback/feedback.jsonl`，会先脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token，再按 fingerprint 聚合重复问题。`/api/feedback/draft` 和 `reames-agent feedback draft` 都会把聚合结果写成 `<Reames Agent home>/feedback/drafts/*.md` 本地维护草稿。HTTP API 适合 Web/API 控制面；CLI 命令适合 SSH/tmux 运维，不需要启动 `serve`。这些入口不连接第三方服务，也不自动创建 Issue；后续把草稿发到 GitHub Issue 前仍需人工审阅。
 
 ## Nginx 反向代理（SSL）
 

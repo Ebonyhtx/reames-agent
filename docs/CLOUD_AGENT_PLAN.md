@@ -49,6 +49,8 @@ Aliyun ECS / 自有服务器
 reames-agent
 reames-agent run "检查这个仓库并修复失败测试"
 tmux new -s reames
+reames-agent feedback summary --home "$REAMES_AGENT_HOME"
+reames-agent feedback draft --home "$REAMES_AGENT_HOME" --limit 20
 ```
 
 社交通道的目标形态不是占用这个 CLI 终端，而是独立后台服务：
@@ -210,12 +212,12 @@ flowchart TD
 ### C4：遥测与反馈中心
 
 - 自托管 crash/metrics/feedback endpoint。
-- 当前已具备第一阶段：`serve` 提供 `POST /api/feedback`、`GET /api/feedback/summary` 和 `POST /api/feedback/draft`，写入 `<Reames Agent home>/feedback/feedback.jsonl`，并在落盘前脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token；维护草稿写入 `<Reames Agent home>/feedback/drafts/*.md`，不自动外发。
+- 当前已具备第一阶段：`serve` 提供 `POST /api/feedback`、`GET /api/feedback/summary` 和 `POST /api/feedback/draft`，`reames-agent feedback summary|draft --home PATH` 提供 SSH/CLI 运维入口；两者都使用 `<Reames Agent home>/feedback/feedback.jsonl`，并在落盘前脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token；维护草稿写入 `<Reames Agent home>/feedback/drafts/*.md`，不自动外发。
 - 默认关闭内容上报，只收集结构化、脱敏、可解释字段。
 - 将重复失败聚类为 Issue 或维护任务。
 - 为桌面端、CLI、Server 和 Gateway 使用同一套事件 schema。
 
-完成门槛：一次真实崩溃或用户反馈可以被汇总、去重，并转为可执行维护项。当前已有本地维护草稿生成，仍缺真实桌面/Gateway 上报按钮、GitHub Issue 草稿发布流程和端到端云节点验证。
+完成门槛：一次真实崩溃或用户反馈可以被汇总、去重，并转为可执行维护项。当前已有 HTTP 和 CLI 两条本地维护草稿生成路径，仍缺真实桌面/Gateway 上报按钮、GitHub Issue 草稿发布流程和端到端云节点验证。
 
 ### C5：加固与运维
 

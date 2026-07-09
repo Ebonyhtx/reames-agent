@@ -434,6 +434,7 @@ var Chinese = Messages{
   reames-agent init                                         查看如何生成项目记忆（AGENTS.md）
   reames-agent doctor [--json]                              输出脱敏的本地诊断信息
   reames-agent doctor session <branch-id> [--zip] [--out PATH]  导出会话冲突诊断 zip
+  reames-agent feedback summary|draft [--home PATH] [--json]  查看本地反馈并生成维护草稿
   reames-agent gateway run|install|start|stop|restart|status|uninstall  IM Gateway 前台/后台服务生命周期
   reames-agent bot start|doctor|weixin-login                旧版 bot 网关命令
   reames-agent upgrade [--check] [--force]                   自更新到最新版本（也可用：reames-agent update）
