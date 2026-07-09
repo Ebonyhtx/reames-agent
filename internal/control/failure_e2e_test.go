@@ -13,6 +13,7 @@ import (
 	"reames-agent/internal/event"
 	"reames-agent/internal/permission"
 	"reames-agent/internal/provider"
+	"reames-agent/internal/sandbox"
 	"reames-agent/internal/tool"
 	"reames-agent/internal/tool/builtin"
 )
@@ -109,6 +110,68 @@ func TestApprovalTimeoutBlocksWriteAndClearsPendingPrompt(t *testing.T) {
 	if status.Running || status.PendingPrompt || status.CancelRequested || status.Cancellable {
 		t.Fatalf("runtime status after approval timeout = %+v, want idle", status)
 	}
+}
+
+func TestToolTimeoutEmitsToolResultAndClearsRuntimeStatus(t *testing.T) {
+	workspace := t.TempDir()
+	args, err := json.Marshal(struct {
+		Command string `json:"command"`
+	}{Command: failureLongSleepCommand(sandbox.ResolveShell("", "", nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reg := tool.NewRegistry()
+	for _, tl := range (builtin.Workspace{Dir: workspace, BashTimeout: 150 * time.Millisecond}).Tools("bash") {
+		reg.Add(tl)
+	}
+	prov := &scriptedTurns{turns: [][]provider.Chunk{
+		toolCallTurn("bash-timeout", "bash", string(args)),
+		textTurn("The shell command timed out; I stopped waiting."),
+	}}
+	events := make(chan event.Event, 32)
+	sink := event.FuncSink(func(e event.Event) { events <- e })
+	ag := agent.New(prov, reg, agent.NewSession("sys"), agent.Options{}, sink)
+	c := New(Options{
+		Runner:        ag,
+		Executor:      ag,
+		Sink:          sink,
+		WorkspaceRoot: workspace,
+	})
+
+	c.Submit("run a command that should time out")
+
+	var result event.Event
+	deadline := time.After(5 * time.Second)
+	for result.Kind == 0 {
+		select {
+		case e := <-events:
+			if e.Kind == event.ToolResult && e.Tool.ID == "bash-timeout" {
+				result = e
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for bash ToolResult")
+		}
+	}
+	if result.Tool.Err == "" || !strings.Contains(result.Tool.Err, "timed out") {
+		t.Fatalf("ToolResult.Err = %q, want bash timeout", result.Tool.Err)
+	}
+
+	done := waitForTurnDoneEvent(t, events)
+	if done.Err != nil {
+		t.Fatalf("TurnDone.Err = %v, want nil because the model received the timeout tool result", done.Err)
+	}
+	status := c.RuntimeStatus()
+	if status.Running || status.PendingPrompt || status.CancelRequested || status.Cancellable {
+		t.Fatalf("runtime status after tool timeout = %+v, want idle", status)
+	}
+}
+
+func failureLongSleepCommand(sh sandbox.Shell) string {
+	if sh.Kind == sandbox.ShellPowerShell {
+		return "Start-Sleep -Seconds 2"
+	}
+	return "sleep 2"
 }
 
 func waitForTurnDoneEvent(t *testing.T, events <-chan event.Event) event.Event {
