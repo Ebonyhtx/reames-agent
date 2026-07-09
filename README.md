@@ -2,7 +2,7 @@
 
 A multi-platform AI coding agent. Terminal-native CLI, desktop app, cloud-deployable server, and IM bot gateway — all from a single Go binary.
 
-**Based on DeepSeek Reasonix (MIT), informed by 8 other official reference projects and the original Reames Lite.**
+**Based on DeepSeek Reasonix (MIT), informed by 9 reference projects and the original Reames Lite.**
 
 ## Quick Start
 

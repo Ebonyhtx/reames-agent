@@ -21,6 +21,8 @@ M0 “基线可信”仍缺一项：三平台 native Desktop candidate 打包。
 
 本轮同时把 `desktop/wails.json` 的 author 从继承上游的 `esengine` 改为 `Reames Agent Contributors`。
 
+后续远端验证发现 Windows runner 虽然通过 Chocolatey 安装了 NSIS，但 `makensis` 未进入 PATH，Wails 在创建 installer 阶段失败。workflow 已显式把 `C:\Program Files (x86)\NSIS` 写入 `GITHUB_PATH` 并运行 `makensis -VERSION` 作为早失败探针；`scripts/desktop-build.sh` 也会在 Windows 下探测常见 NSIS 路径，避免本地或 CI 环境出现同类漂移。
+
 ## 明确不做
 
 该 workflow 不做以下事情：

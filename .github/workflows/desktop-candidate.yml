@@ -64,7 +64,12 @@ jobs:
       - name: Install Windows packaging dependencies
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install nsis -y --no-progress
+        run: |
+          choco install nsis -y --no-progress
+          $nsis = "C:\Program Files (x86)\NSIS"
+          $env:Path = "$nsis;$env:Path"
+          $nsis | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          makensis -VERSION
 
       - name: Install Wails and packaging tools
         shell: bash

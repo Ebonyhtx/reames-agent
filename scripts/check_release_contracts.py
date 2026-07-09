@@ -40,6 +40,7 @@ def check_desktop_candidate_workflow(failures: list[str]) -> None:
     require("darwin/universal" in workflow, "desktop candidate must include a macOS universal target.", failures)
     require("actions/upload-artifact@v4" in workflow, "desktop candidate must upload artifacts, not publish releases.", failures)
     require("retention-days: 14" in workflow, "desktop candidate artifacts should have short retention.", failures)
+    require("GITHUB_PATH" in workflow and "makensis -VERSION" in workflow, "desktop candidate must put NSIS/makensis on PATH before Wails packaging.", failures)
     forbidden = [
         "gh release create",
         "GITHUB_TOKEN:",
