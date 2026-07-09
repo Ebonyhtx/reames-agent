@@ -90,10 +90,16 @@ jobs:
       - name: Validate Unix installer dry-run
         run: |
           bash -n scripts/install.sh
-          bash scripts/install.sh --dry-run --skip-setup --gateway --channels feishu --gateway-dir /srv/reames-work
+          bash scripts/install.sh --dry-run --skip-setup --home /home/reames/.reames-agent --gateway --channels feishu --gateway-dir /srv/reames-work | tee /tmp/reames-install-dry-run.txt
+          grep -F -- '--home /home/reames/.reames-agent' /tmp/reames-install-dry-run.txt
       - name: Validate PowerShell installer dry-run
         shell: pwsh
-        run: ./scripts/install.ps1 -DryRun -SkipSetup -Gateway -Channels feishu -GatewayDir /srv/reames-work
+        run: |
+          $out = ./scripts/install.ps1 -DryRun -SkipSetup -AgentHome /home/reames/.reames-agent -Gateway -Channels feishu -GatewayDir /srv/reames-work 6>&1 | Out-String
+          $out
+          if ($out -notmatch '--home\s+/home/reames\s*/\.reames-agent') {
+            throw "PowerShell installer dry-run did not pass --home to gateway install"
+          }
 
   release-contracts:
     name: Release contracts
