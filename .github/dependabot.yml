@@ -1,10 +1,14 @@
 version: 2
+# Temporarily paused while the repository is being consolidated from the
+# Reasonix-derived baseline into Reames Agent. Set each
+# open-pull-requests-limit back to a positive value after the dependency update
+# policy is re-established.
 updates:
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       go:
         patterns: ["*"]
@@ -14,7 +18,7 @@ updates:
     directory: "/desktop"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       go:
         patterns: ["*"]
@@ -24,7 +28,7 @@ updates:
     directory: "/desktop/frontend"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       npm:
         patterns: ["*"]
@@ -34,7 +38,7 @@ updates:
     directory: "/site"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       npm:
         patterns: ["*"]
@@ -44,6 +48,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
     groups:
       actions:
         patterns: ["*"]
