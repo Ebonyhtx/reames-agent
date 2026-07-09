@@ -25,15 +25,21 @@ M0 “基线可信”仍缺一项：三平台 native Desktop candidate 打包。
 
 ## 远端验证结果
 
-修复后重新手动触发 `Desktop candidate`：
+最终修复后重新手动触发 `Desktop candidate`：
 
-- Run: https://github.com/Ebonyhtx/reames-agent/actions/runs/29015200954
-- Commit: `a860b32c3a0afa77cecfce481cfabc2408ebebd9`
-- `linux/amd64`: success，artifact `reames-agent-desktop-candidate-linux-amd64-a860b32c3a0afa77cecfce481cfabc2408ebebd9`，28,712,860 bytes。
-- `windows/amd64`: success，artifact `reames-agent-desktop-candidate-windows-amd64-a860b32c3a0afa77cecfce481cfabc2408ebebd9`，35,472,530 bytes。
-- `darwin/universal`: success，artifact `reames-agent-desktop-candidate-darwin-universal-a860b32c3a0afa77cecfce481cfabc2408ebebd9`，83,293,412 bytes。
+- Run: https://github.com/Ebonyhtx/reames-agent/actions/runs/29015844761
+- Commit: `ee34223e0b4d69422fb0c9de7e27a222b9326972`
+- `linux/amd64`: success，artifact `reames-agent-desktop-candidate-linux-amd64-ee34223e0b4d69422fb0c9de7e27a222b9326972`，28,712,191 bytes。
+- `windows/amd64`: success，artifact `reames-agent-desktop-candidate-windows-amd64-ee34223e0b4d69422fb0c9de7e27a222b9326972`，36,433,945 bytes。
+- `darwin/universal`: success，artifact `reames-agent-desktop-candidate-darwin-universal-ee34223e0b4d69422fb0c9de7e27a222b9326972`，83,294,895 bytes。
 
-这证明三平台 candidate 打包流水线已经建立并能产出短期 artifact；仍不等价于稳定 release，也尚未证明普通用户下载安装体验。
+内容级 artifact smoke：
+
+- Windows portable zip 包含 `Reames Agent.exe` 和 `reames-agent-update-helper.exe`。
+- Linux tarball 包含 `reames-agent-desktop`；Linux `.deb` 包含 `debian-binary`、`control.tar.gz`、`data.tar.gz`。
+- macOS arm64/amd64 zip 均包含 `Reames Agent.app/Contents/MacOS/reames-agent-desktop`、`Info.plist` 和 `iconfile.icns`；universal `.dmg` 存在。
+
+这证明三平台 candidate 打包流水线已经建立并能产出结构正确的短期 artifact；仍不等价于稳定 release，也尚未证明普通用户安装/启动体验。
 
 ## 明确不做
 
@@ -48,8 +54,7 @@ M0 “基线可信”仍缺一项：三平台 native Desktop candidate 打包。
 
 ## 风险与后续验证
 
-Wails Desktop 是 CGO + 原生 webview，必须在真实 runner 上验证。当前 workflow 是 candidate pipeline，不是 stable release。三平台打包流水线已在 run `29015200954` 验证通过；面向用户发布前仍需以下证据：
+Wails Desktop 是 CGO + 原生 webview，必须在真实 runner 上验证。当前 workflow 是 candidate pipeline，不是 stable release。三平台打包流水线已在 run `29015844761` 验证通过；面向用户发布前仍需以下证据：
 
-1. Linux/Windows/macOS 至少各完成一次下载解包或安装冒烟。
-2. 验证 artifact 文件内容与 `scripts/desktop-build.sh` 约定一致。
-3. 若进入 canary/stable，再补签名、notarization、校验、更新元数据和人工审批。
+1. Linux/Windows/macOS 至少各完成一次安装/启动冒烟。
+2. 若进入 canary/stable，再补签名、notarization、校验、更新元数据和人工审批。
