@@ -105,6 +105,8 @@ jobs:
           python-version: "3.12"
       - name: Validate release safety contracts
         run: python scripts/check_release_contracts.py
+      - name: Test desktop artifact checker
+        run: python -m unittest scripts.test_check_desktop_artifacts -v
 
   public-readiness:
     name: Public readiness

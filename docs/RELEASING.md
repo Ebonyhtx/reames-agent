@@ -32,6 +32,27 @@ SHA256SUMS
 
 候选工件只用于检查文件名、可执行性、校验和与跨平台构建，不进入任何公开分发渠道。
 
+## Desktop 候选工件
+
+Actions → **Desktop candidate** → **Run workflow**。
+
+该 workflow 在原生 runner 上构建 Wails 桌面候选包：
+
+```text
+linux/amd64:   tar.gz + deb
+windows/amd64: NSIS installer + portable zip
+darwin/universal: arm64 zip + amd64 zip + universal dmg
+```
+
+下载 artifact 后先做离线结构检查：
+
+```bash
+python scripts/check_desktop_artifacts.py path/to/downloaded-artifact.zip
+python scripts/check_desktop_artifacts.py path/to/expanded-artifacts/
+```
+
+这个检查会验证 Windows portable zip 包含 `reames-agent-update-helper.exe`，Linux tar/deb 和 macOS zip/dmg 的关键文件结构也符合 `scripts/desktop-build.sh` 的约定。它只证明候选包结构正确；仍需在对应系统上做安装/启动冒烟。
+
 ## 版本号来源
 
 Reames Agent 使用一个项目级版本号，格式为 SemVer 标签：

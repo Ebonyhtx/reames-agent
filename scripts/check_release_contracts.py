@@ -71,6 +71,8 @@ def check_release_docs(failures: list[str]) -> None:
         "CHANGELOG.md",
         "Unreleased",
         "SHA256SUMS",
+        "Desktop candidate",
+        "scripts/check_desktop_artifacts.py",
         "Sigstore/cosign",
         "OIDC keyless signing",
         "fail closed",
@@ -88,6 +90,7 @@ def check_release_docs(failures: list[str]) -> None:
         "darwin/universal",
         "不创建 GitHub Release",
         "不读取 signing secrets",
+        "scripts/check_desktop_artifacts.py",
     ]:
         require(token in desktop_candidate, f"desktop candidate audit must document {token!r}.", failures)
 

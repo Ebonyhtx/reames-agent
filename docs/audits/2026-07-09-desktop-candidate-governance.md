@@ -39,6 +39,8 @@ M0 “基线可信”仍缺一项：三平台 native Desktop candidate 打包。
 - Linux tarball 包含 `reames-agent-desktop`；Linux `.deb` 包含 `debian-binary`、`control.tar.gz`、`data.tar.gz`。
 - macOS arm64/amd64 zip 均包含 `Reames Agent.app/Contents/MacOS/reames-agent-desktop`、`Info.plist` 和 `iconfile.icns`；universal `.dmg` 存在。
 
+该检查已固化为 `scripts/check_desktop_artifacts.py`，并用 `scripts/test_check_desktop_artifacts.py` 覆盖 Windows update helper 缺失等回归。
+
 这证明三平台 candidate 打包流水线已经建立并能产出结构正确的短期 artifact；仍不等价于稳定 release，也尚未证明普通用户安装/启动体验。
 
 ## 明确不做
