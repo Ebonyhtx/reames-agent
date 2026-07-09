@@ -1,16 +1,66 @@
-﻿{
-  "version": 1,
+{
+  "version": 2,
   "updated_at": "2026-07-09T00:00:00Z",
   "upstreams": {
-    "reasonix": {"branch": "main-v2", "pinned": "07c65c22226e4886004215168230e1e1edad734b", "latest_seen": "07c65c22226e4886004215168230e1e1edad734b"},
-    "hermes": {"branch": "main", "pinned": "1c473bc6a6a0f62e4c264fa0c59ce58606100301", "latest_seen": "1c473bc6a6a0f62e4c264fa0c59ce58606100301"},
-    "codex": {"branch": "main", "pinned": "f6e251c3ac6573a4d6eccddea6ad12587868485f", "latest_seen": "f6e251c3ac6573a4d6eccddea6ad12587868485f"},
-    "mimo": {"branch": "main", "pinned": "ba87f5d48d7d3e77145fce6797faebf016fd23c6", "latest_seen": "ba87f5d48d7d3e77145fce6797faebf016fd23c6"},
-    "impeccable": {"branch": "main", "pinned": "7190295f3de31bc1e10ab42f740d69cf35a88ac3", "latest_seen": "7190295f3de31bc1e10ab42f740d69cf35a88ac3"},
-    "scream-code": {"branch": "main", "pinned": "946eda69896ac161223bdb830acc62e4b6c8228e", "latest_seen": "946eda69896ac161223bdb830acc62e4b6c8228e"},
-    "agentark": {"branch": "main", "pinned": "4249c32906428142fc25a68135cb8b8ab9768fef", "latest_seen": "4249c32906428142fc25a68135cb8b8ab9768fef"},
-    "claude-code": {"branch": "main", "pinned": "7930e1c82d997b013af28673501f3b95569a71cb", "latest_seen": "7930e1c82d997b013af28673501f3b95569a71cb"},
-    "kimi-code": {"branch": "main", "pinned": "f30781bb273321f3e3bbb548a9d0724ab6299fc6", "latest_seen": "f30781bb273321f3e3bbb548a9d0724ab6299fc6"},
-    "awesome-design-md": {"branch": "main", "pinned": "664b3e78fd1a298ba11973822da988483256d4b4", "latest_seen": "664b3e78fd1a298ba11973822da988483256d4b4"}
+    "reasonix": {
+      "branch": "main-v2",
+      "baseline": "07c65c22226e4886004215168230e1e1edad734b",
+      "reviewed": "07c65c22226e4886004215168230e1e1edad734b",
+      "latest_seen": "07c65c22226e4886004215168230e1e1edad734b"
+    },
+    "hermes": {
+      "branch": "main",
+      "baseline": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
+      "reviewed": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
+      "latest_seen": "1c473bc6a6a0f62e4c264fa0c59ce58606100301"
+    },
+    "codex": {
+      "branch": "main",
+      "baseline": "f6e251c3ac6573a4d6eccddea6ad12587868485f",
+      "reviewed": "f6e251c3ac6573a4d6eccddea6ad12587868485f",
+      "latest_seen": "f6e251c3ac6573a4d6eccddea6ad12587868485f"
+    },
+    "mimo": {
+      "branch": "main",
+      "baseline": "ba87f5d48d7d3e77145fce6797faebf016fd23c6",
+      "reviewed": "ba87f5d48d7d3e77145fce6797faebf016fd23c6",
+      "latest_seen": "ba87f5d48d7d3e77145fce6797faebf016fd23c6"
+    },
+    "impeccable": {
+      "branch": "main",
+      "baseline": "7190295f3de31bc1e10ab42f740d69cf35a88ac3",
+      "reviewed": "7190295f3de31bc1e10ab42f740d69cf35a88ac3",
+      "latest_seen": "7190295f3de31bc1e10ab42f740d69cf35a88ac3"
+    },
+    "scream-code": {
+      "branch": "main",
+      "baseline": "946eda69896ac161223bdb830acc62e4b6c8228e",
+      "reviewed": "946eda69896ac161223bdb830acc62e4b6c8228e",
+      "latest_seen": "946eda69896ac161223bdb830acc62e4b6c8228e"
+    },
+    "agentark": {
+      "branch": "main",
+      "baseline": "4249c32906428142fc25a68135cb8b8ab9768fef",
+      "reviewed": "4249c32906428142fc25a68135cb8b8ab9768fef",
+      "latest_seen": "4249c32906428142fc25a68135cb8b8ab9768fef"
+    },
+    "claude-code": {
+      "branch": "main",
+      "baseline": "7930e1c82d997b013af28673501f3b95569a71cb",
+      "reviewed": "7930e1c82d997b013af28673501f3b95569a71cb",
+      "latest_seen": "7930e1c82d997b013af28673501f3b95569a71cb"
+    },
+    "kimi-code": {
+      "branch": "main",
+      "baseline": "f30781bb273321f3e3bbb548a9d0724ab6299fc6",
+      "reviewed": "f30781bb273321f3e3bbb548a9d0724ab6299fc6",
+      "latest_seen": "f30781bb273321f3e3bbb548a9d0724ab6299fc6"
+    },
+    "awesome-design-md": {
+      "branch": "main",
+      "baseline": "664b3e78fd1a298ba11973822da988483256d4b4",
+      "reviewed": "664b3e78fd1a298ba11973822da988483256d4b4",
+      "latest_seen": "664b3e78fd1a298ba11973822da988483256d4b4"
+    }
   }
 }

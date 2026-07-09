@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build
+    name: Core Go
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -24,6 +24,58 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./internal/... -count=1 -timeout 300s
+
+  desktop-go:
+    name: Desktop Go
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
+      - name: Test desktop module
+        working-directory: desktop
+        run: go test . -count=1 -timeout 300s
+
+  desktop-frontend:
+    name: Desktop frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: desktop/frontend/pnpm-lock.yaml
+      - name: Install locked dependencies
+        working-directory: desktop/frontend
+        run: pnpm install --frozen-lockfile
+      - name: Test
+        working-directory: desktop/frontend
+        run: pnpm test:all
+      - name: Build
+        working-directory: desktop/frontend
+        run: pnpm build
+
+  upstream-watch-contracts:
+    name: Upstream watch contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test report and decision logic
+        run: python -m unittest scripts.test_check_upstreams -v
+      - name: Test issue reconciliation
+        run: node scripts/test_upstream_watch_issue.mjs
 
   cross:
     name: Cross-compile
