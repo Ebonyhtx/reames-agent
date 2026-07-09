@@ -12,6 +12,9 @@ This audit records the automated bridge evidence added before the manual/native 
 
 Added `TestSubmitAndCancelForTabStayBoundDuringActiveTabSwitching` and
 `TestDesktopBoundWorkspaceSessionSubmitStopPath` in `desktop/app_test.go`.
+The frontend-facing state machine is additionally covered by
+`desktop/frontend/src/__tests__/use-controller-m1-workspace-loop.test.tsx`;
+see `2026-07-09-desktop-m1-frontend-workspace-loop.md`.
 
 The first test uses real `control.Controller` instances with fake blocking runners, so no real provider key or network call is involved. It verifies:
 
