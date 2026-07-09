@@ -77,6 +77,17 @@ jobs:
       - name: Test issue reconciliation
         run: node scripts/test_upstream_watch_issue.mjs
 
+  deployment-contracts:
+    name: Deployment contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate server deployment contracts
+        run: python scripts/check_deploy_contracts.py
+
   cross:
     name: Cross-compile
     runs-on: ubuntu-latest

@@ -52,6 +52,7 @@
 - [x] 触发并核验无发布权限的六目标 CLI candidate workflow（run `29000371845`，工件 60,041,869 bytes）。
 - [ ] 建立三平台 native Desktop candidate 打包。
 - [x] 将 updater 迁移到当前 GitHub 仓库，并默认关闭无项目自有服务的遥测、指标和崩溃上传。
+- [x] 将 Docker、compose、systemd、部署命令和 `serve.token_env` 纳入 CI 部署契约检查。
 - [ ] 在仓库设置启用 GitHub Code Scanning 后恢复 CodeQL workflow。
 - [ ] 明确版本号来源、变更日志和发布签名策略。
 
