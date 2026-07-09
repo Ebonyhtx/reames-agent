@@ -62,14 +62,14 @@ func TestGenManifest(t *testing.T) {
 		"Reames Agent-linux-amd64.tar.gz",
 		"Reames Agent-linux-amd64.deb",            // human download, not the updater channel
 		"Reames Agent-linux-amd64.tar.gz.minisig", // must be skipped
-		"README.txt",                          // unmatched, must be skipped
+		"README.txt", // unmatched, must be skipped
 	}
 	for _, n := range names {
 		if err := os.WriteFile(filepath.Join(dir, n), []byte(n), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("GITHUB_REPOSITORY", "esengine/reamesAgent")
+	t.Setenv("GITHUB_REPOSITORY", "Ebonyhtx/reames-agent")
 
 	if err := genManifest(dir, "v1.2.0", "desktop-v1.2.0"); err != nil {
 		t.Fatalf("genManifest: %v", err)
@@ -85,7 +85,7 @@ func TestGenManifest(t *testing.T) {
 	if m.Version != "v1.2.0" {
 		t.Fatalf("version = %q, want v1.2.0", m.Version)
 	}
-	if m.DownloadPage != "https://reamesAgent.io/#start" {
+	if m.DownloadPage != "https://github.com/Ebonyhtx/reames-agent/releases" {
 		t.Fatalf("download_page = %q, want official install page", m.DownloadPage)
 	}
 	if len(m.Platforms) != 5 {
@@ -95,7 +95,7 @@ func TestGenManifest(t *testing.T) {
 	if !ok {
 		t.Fatal("windows-amd64 missing")
 	}
-	wantURL := "https://github.com/esengine/DeepSeek-Reames Agent/releases/download/desktop-v1.2.0/Reames Agent-windows-amd64-installer.exe"
+	wantURL := "https://github.com/Ebonyhtx/reames-agent/releases/download/desktop-v1.2.0/Reames Agent-windows-amd64-installer.exe"
 	if win.URL != wantURL {
 		t.Fatalf("windows url = %q, want %q", win.URL, wantURL)
 	}

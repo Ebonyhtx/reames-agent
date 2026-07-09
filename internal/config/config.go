@@ -97,8 +97,8 @@ type DesktopConfig struct {
 	StatusBarItems          []string `toml:"status_bar_items"`           // ordered visible desktop status bar items
 	DefaultToolApprovalMode string   `toml:"default_tool_approval_mode"` // ask|auto|yolo; default for newly-created desktop sessions
 	CheckUpdates            *bool    `toml:"check_updates"`              // startup update checks; nil keeps the default enabled
-	Telemetry               *bool    `toml:"telemetry"`                  // anonymous launch ping (install id + version + OS); nil keeps the default enabled
-	Metrics                 *bool    `toml:"metrics"`                    // aggregate desktop metrics (anonymous signal/bucket counts; no content); nil keeps the default enabled
+	Telemetry               *bool    `toml:"telemetry"`                  // anonymous launch ping (install id + version + OS); nil keeps the privacy-safe default disabled
+	Metrics                 *bool    `toml:"metrics"`                    // aggregate desktop metrics (anonymous signal/bucket counts; no content); nil keeps the privacy-safe default disabled
 	ProviderAccess          []string `toml:"provider_access"`            // desktop-only list of provider entries shown in Settings > Model > Access
 	ExpandThinking          bool     `toml:"expand_thinking"`            // true = show reasoning text expanded by default; false = collapsed
 }
@@ -435,16 +435,16 @@ func NormalizeReasoningLanguage(lang string) string {
 // It carries no conversation, key, or file data — see desktop/README.md.
 func (c *Config) DesktopTelemetry() bool {
 	if c == nil || c.Desktop.Telemetry == nil {
-		return true
+		return false
 	}
 	return *c.Desktop.Telemetry
 }
 
 // DesktopMetrics reports whether the desktop sends aggregate desktop metrics —
-// anonymous (signal, bucket) counters, never content. Default on.
+// anonymous (signal, bucket) counters, never content. Default off.
 func (c *Config) DesktopMetrics() bool {
 	if c == nil || c.Desktop.Metrics == nil {
-		return true
+		return false
 	}
 	return *c.Desktop.Metrics
 }

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"reames-agent/internal/config"
 )
 
 func readPending(t *testing.T) (crashReport, bool) {
@@ -148,12 +150,19 @@ func TestWritePendingCrashScrubsSensitiveText(t *testing.T) {
 }
 
 func TestFlushPendingCrashSendsAndClears(t *testing.T) {
+	isolateDesktopUserDirs(t)
 	oldVersion, oldEndpoint := version, crashEndpoint
 	t.Cleanup(func() {
 		version, crashEndpoint = oldVersion, oldEndpoint
 		os.Remove(pendingCrashPath())
 	})
 	version = "v9.9.9"
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	enabled := true
+	cfg.Desktop.Telemetry = &enabled
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
 
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -171,6 +180,24 @@ func TestFlushPendingCrashSendsAndClears(t *testing.T) {
 	}
 	if _, ok := readPending(t); ok {
 		t.Error("pending file should be cleared after a successful send")
+	}
+}
+
+func TestFlushPendingCrashDropsWhenEndpointUnavailable(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	oldVersion, oldEndpoint := version, crashEndpoint
+	t.Cleanup(func() {
+		version, crashEndpoint = oldVersion, oldEndpoint
+		os.Remove(pendingCrashPath())
+	})
+	version = "v9.9.9"
+	crashEndpoint = ""
+
+	writePendingCrash("flush", "boom", []byte("stack"))
+	NewApp().flushPendingCrash()
+
+	if _, ok := readPending(t); ok {
+		t.Error("pending file should be cleared when reporting is unavailable")
 	}
 }
 

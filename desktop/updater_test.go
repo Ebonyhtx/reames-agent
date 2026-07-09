@@ -95,22 +95,15 @@ func TestChannelSelectsDistinctPointers(t *testing.T) {
 			t.Errorf("stable endpoint leaks into canary: %q", u)
 		}
 	}
-	if !strings.Contains(stable[0], "/latest/latest.json") {
-		t.Errorf("stable primary = %q, want the latest/ pointer", stable[0])
+	if len(stable) != 1 || stable[0] != githubManifestStable {
+		t.Errorf("stable endpoints = %q, want current repository latest manifest", stable)
 	}
-	if stable[1] != releaseGatewayBase+"/stable/latest.json" {
-		t.Errorf("stable fallback = %q, want the release gateway", stable[1])
+	if len(canary) != 1 || canary[0] != githubManifestCanary {
+		t.Errorf("canary endpoints = %q, want current repository canary manifest", canary)
 	}
-	// GitHub is stable's explicit last resort only (#6005: both first-party
-	// endpoints share one Cloudflare zone). Stable desktop releases own the
-	// repo-wide latest release and carry latest.json directly; no other slot may
-	// lean on repository-wide latest.
-	if len(stable) != 3 || stable[2] != githubManifestFallback {
-		t.Errorf("stable endpoints = %q, want the GitHub compatibility manifest last", stable)
-	}
-	for _, u := range append(stable[:2:2], canary...) {
-		if strings.Contains(u, "/releases/latest") {
-			t.Errorf("manifest endpoint uses GitHub's repository-wide latest release: %q", u)
+	for _, u := range append(stable, canary...) {
+		if !strings.HasPrefix(u, githubReleaseBase+"/") {
+			t.Errorf("manifest endpoint leaves current repository: %q", u)
 		}
 	}
 	for _, u := range canary {
@@ -118,14 +111,8 @@ func TestChannelSelectsDistinctPointers(t *testing.T) {
 			t.Errorf("canary endpoint hits the stable latest/ pointer: %q", u)
 		}
 	}
-	if !strings.Contains(canary[0], "/canary/latest.json") {
-		t.Errorf("canary primary = %q, want the canary/ pointer", canary[0])
-	}
-	if canary[1] != releaseGatewayBase+"/canary/latest.json" {
-		t.Errorf("canary fallback = %q, want the release gateway", canary[1])
-	}
-	if strings.Contains(downloadPage(), "/releases/latest") {
-		t.Errorf("download page should not use GitHub's repository-wide latest release: %q", downloadPage())
+	if downloadPage() != githubReleaseBase {
+		t.Errorf("download page = %q, want current repository releases", downloadPage())
 	}
 }
 
@@ -151,7 +138,7 @@ func TestSaveCachedUpdateMarksEvaluateDownloaded(t *testing.T) {
 
 	data := []byte("verified artifact")
 	asset := update.Asset{
-		URL:    "https://dl.reamesAgent.io/desktop-v9.9.9/Reames Agent-linux-amd64.tar.gz",
+		URL:    "https://github.com/Ebonyhtx/reames-agent/releases/download/desktop-v9.9.9/Reames Agent-linux-amd64.tar.gz",
 		Size:   int64(len(data)),
 		SHA256: sha256Hex(data),
 	}
@@ -182,7 +169,7 @@ func TestCachedUpdateRejectsTamperedArtifact(t *testing.T) {
 
 	data := []byte("verified artifact")
 	asset := update.Asset{
-		URL:    "https://dl.reamesAgent.io/desktop-v9.9.9/Reames Agent-linux-amd64.tar.gz",
+		URL:    "https://github.com/Ebonyhtx/reames-agent/releases/download/desktop-v9.9.9/Reames Agent-linux-amd64.tar.gz",
 		Size:   int64(len(data)),
 		SHA256: sha256Hex(data),
 	}
@@ -209,7 +196,7 @@ func TestCachedUpdateRejectsDifferentChannel(t *testing.T) {
 
 	data := []byte("verified artifact")
 	asset := update.Asset{
-		URL:    "https://dl.reamesAgent.io/desktop-v9.9.9/Reames Agent-linux-amd64.tar.gz",
+		URL:    "https://github.com/Ebonyhtx/reames-agent/releases/download/desktop-v9.9.9/Reames Agent-linux-amd64.tar.gz",
 		Size:   int64(len(data)),
 		SHA256: sha256Hex(data),
 	}

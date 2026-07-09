@@ -396,7 +396,7 @@ func (a *App) startup(ctx context.Context) {
 	a.startTray()
 	a.enableDeferredRebuildRetry()
 
-	if cfg, err := config.Load(); err == nil && cfg.DesktopMetrics() && version != "dev" {
+	if cfg, err := config.Load(); err == nil && cfg.DesktopMetrics() && metricsEndpoint != "" && version != "dev" {
 		a.metrics.Store(newMetricsAggregator(config.MemoryUserDir()))
 		a.recordSettingsMetricsSnapshot(cfg)
 	}

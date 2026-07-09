@@ -89,6 +89,10 @@ func (a *App) flushPendingCrash() {
 		return
 	}
 	path := pendingCrashPath()
+	if crashEndpoint == "" {
+		_ = os.Remove(path)
+		return
+	}
 	body, err := os.ReadFile(path)
 	if err != nil {
 		return

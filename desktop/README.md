@@ -115,27 +115,19 @@ checkout). A bare `go build` without a prior `pnpm build` produces a blank windo
 
 ## Releases & auto-update
 
-Desktop releases ride their own tag namespace, `desktop-v<semver>` (plain `v*`
-tags are the CLI release). Pushing one triggers `.github/workflows/release-desktop.yml`,
-which builds on a native runner per platform (Wails can't cross-compile a
-CGO/WebKit binary), packages each artifact, signs it with minisign, generates a
-`latest.json` manifest, publishes a GitHub release, marks the desktop release as
-GitHub's repository-wide `Latest`, mirrors everything to R2, and attaches the
-current desktop manifest to the matching CLI release for old clients that still
-ask GitHub's repository-wide `latest` release for it.
+Production Desktop publishing is currently disabled while the project establishes
+its own signing identities and native candidate pipeline. Do not create a
+`desktop-v*` tag expecting it to publish.
+
+The intended pipeline builds on one native runner per platform (Wails cannot
+cross-compile a CGO/WebKit binary), signs each artifact, generates `latest.json`,
+and publishes only after a canary and explicit approval.
 The Linux artifact links against WebKitGTK 4.1 (`-tags webkit2_41`), so it needs
 `libwebkit2gtk-4.1-0` at runtime — present by default on Ubuntu 22.04+, Fedora 40+.
 
-```sh
-git tag desktop-v1.1.0 && git push origin desktop-v1.1.0
-```
-
-The app checks `latest.json` on startup (R2 first, then the
-`crash.reames-agent.io` desktop release gateway) and shows an update banner when a
-newer version is published; **Settings → Software update** has a manual check.
-The gateway resolves only the desktop `desktop-v*` release line and never uses
-GitHub's repository-wide `/releases/latest` shortcut, so updater behavior does
-not depend on homepage badge semantics. Self-update behavior by platform:
+The app checks `latest.json` only from this repository's GitHub Releases and
+shows an update banner when a newer version is published; **Settings → Software
+update** has a manual check. Self-update behavior by platform:
 
 - **Linux / Windows** — download, verify the minisign signature, then update in
   place: Linux replaces the binary and relaunches; Windows runs the per-user NSIS
@@ -256,21 +248,10 @@ desktop/
 
 ## Telemetry
 
-The desktop app sends one anonymous ping per launch to `crash.reames-agent.io`:
-a random install id (generated locally, tied to nothing), app version, OS,
-arch, and OS version. It exists solely to count active installs. It never
-includes conversations, API keys, file contents, or paths.
-
-Opt out any time: Settings > Updates > "Anonymous usage ping", or set
-`telemetry = false` under `[desktop]` in the global config. Dev builds
-never ping. Crash and performance-pressure reports are separate and only
-ever sent when the user clicks "Send report" on the diagnostic UI.
-
-Aggregate quality metrics are also enabled by default and can be disabled from
-Settings > Updates > "Share aggregate quality metrics", or by setting
-`metrics = false` under `[desktop]`. These metrics are anonymous signal/bucket
-counts and preference buckets; they never include conversations, prompts, keys,
-paths, base URLs, or file contents.
+Telemetry and aggregate metrics are disabled by default. This build has no
+project-owned reporting endpoint, so it does not upload launch, metrics, or crash
+data. The settings remain reserved for a future opt-in service with documented
+ownership and retention.
 
 When Memory v5 is enabled, the same aggregate metrics pipeline may include only
 content-free count/size buckets such as injection on/off, compiled-token bucket,

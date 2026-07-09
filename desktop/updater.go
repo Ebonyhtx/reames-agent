@@ -34,43 +34,27 @@ import (
 // has no Wails dependency so the logic is unit-tested directly; updater_app.go is
 // the thin Wails binding that wires these into App methods and progress events.
 
-// Manifest endpoints — R2 CDN first (fast, especially in CN), then the crash
-// worker release gateway, then GitHub as the stable channel's last resort. The
-// build channel picks the rolling pointer so a canary build polls the canary
-// line and a stable build polls latest; the two never cross. The gateway still
-// avoids GitHub's repository-wide /releases/latest shortcut so the app is not
-// coupled to GitHub's homepage badge semantics.
+// Update endpoints stay on infrastructure owned by this repository. Production
+// CDN/gateway endpoints can be added only after their ownership and signing
+// chain are documented.
 const (
-	r2Base             = "https://dl.reamesAgent.io"
-	releaseGatewayBase = "https://crash.reamesAgent.io/v1/desktop/releases"
-	downloadPageURL    = "https://reamesAgent.io/#start"
-	httpTimeout        = 15 * time.Second
+	githubReleaseBase = "https://github.com/Ebonyhtx/reames-agent/releases"
+	downloadPageURL   = githubReleaseBase
+	httpTimeout       = 15 * time.Second
 )
 
-// githubManifestFallback is the stable channel's last-resort manifest source.
-// dl.reamesAgent.io and crash.reamesAgent.io share one Cloudflare zone, so bot
-// protection that 403s a user's egress IP takes out both first-party endpoints
-// at once (#6005); GitHub is separate infrastructure. Stable desktop releases
-// own the repo-wide latest badge and publish latest.json directly, while
-// release.yml also keeps a desktop-manifest mirror attached to stable CLI
-// releases for older publishing windows. Canary has no GitHub release, so its
-// chain stays two-deep.
-const githubManifestFallback = "https://github.com/esengine/DeepSeek-Reames Agent/releases/latest/download/latest.json"
+const (
+	githubManifestStable = githubReleaseBase + "/latest/download/latest.json"
+	githubManifestCanary = githubReleaseBase + "/download/desktop-canary/latest.json"
+)
 
 // manifestEndpoints returns the manifest URLs for the running build's channel,
 // in the order fetchManifest tries them.
 func manifestEndpoints() []string {
 	if channel == "canary" {
-		return []string{
-			r2Base + "/canary/latest.json",
-			releaseGatewayBase + "/canary/latest.json",
-		}
+		return []string{githubManifestCanary}
 	}
-	return []string{
-		r2Base + "/latest/latest.json",
-		releaseGatewayBase + "/stable/latest.json",
-		githubManifestFallback,
-	}
+	return []string{githubManifestStable}
 }
 
 // updaterUserAgent identifies updater traffic. Go's default Go-http-client UA

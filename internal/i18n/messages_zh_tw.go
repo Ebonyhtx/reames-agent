@@ -20,7 +20,7 @@ var ChineseTraditional = Messages{
 	StepSetKey:      "設定 API key",
 
 	InitHint:       "專案記憶（AGENTS.md）在會話內由模型生成：執行 `reames-agent`，然後 `/init` —— 模型會分析程式碼庫並寫入。設定請用 `reames-agent setup`。",
-	StepSetKeyHint: "執行 `reames-agent setup`，或 export DEEPSEEK_API_KEY=…",
+	StepSetKeyHint: "執行 `reames-agent setup`，把金鑰儲存到全域憑據檔案",
 	StepChatDesc:   "互動式會話",
 	StepRunDesc:    "執行單次任務",
 	HelpFooter:     "reames-agent help · 檢視全部命令",
@@ -301,7 +301,7 @@ var ChineseTraditional = Messages{
 	SetupComplete:         "設定完成。",
 	SetupCancelled:        "設定已取消。",
 	TryHintFmt:            "試試: %s",
-	NextHint:              "下一步：設定 API key（執行 `reames-agent setup` 或 export DEEPSEEK_API_KEY=...），然後執行 `reames-agent run \"你的任務\"`。",
+	NextHint:              "下一步：執行 `reames-agent setup` 儲存 API key，然後執行 `reames-agent run \"你的任務\"`。",
 	ConfirmReconfigureFmt: "%s 已存在。重新設定並覆蓋？",
 	KeepingExisting:       "保留原設定不變。",
 	NotOverwritingFmt:     "%s 已存在，不覆蓋",
@@ -396,7 +396,7 @@ var ChineseTraditional = Messages{
 
 設定：
   優先順序：flag > ./reames-agent.toml > ~/.reames-agent/config.toml > 內建預設值
-  金鑰透過 api_key_env 從環境變數注入（如 DEEPSEEK_API_KEY）。
+  Provider 金鑰由 api_key_env 命名，並從 Reames Agent 全域 .env 載入。
   執行 'reames-agent setup' 生成設定；詳見 docs/SPEC.md。
 `,
 	RenameUsage:                "用法：/rename <新名稱>  或  /rename <序號> <新名稱>",

@@ -166,12 +166,12 @@ func signFiles(files []string) error {
 // release tag used in download URLs (e.g. "desktop-v1.1.0").
 func genManifest(dir, version, tag string) error {
 	repo := os.Getenv("GITHUB_REPOSITORY")
-	if repo == "" || repo == "esengine/reamesAgent" {
-		repo = "esengine/DeepSeek-Reames Agent"
+	if repo == "" {
+		repo = "Ebonyhtx/reames-agent"
 	}
 	m := update.Manifest{
 		Version:      version,
-		DownloadPage: "https://reamesAgent.io/#start",
+		DownloadPage: "https://github.com/" + repo + "/releases",
 		Platforms:    map[string]update.Asset{},
 	}
 	entries, err := os.ReadDir(dir)

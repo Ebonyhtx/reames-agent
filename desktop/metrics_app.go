@@ -22,9 +22,9 @@ import (
 // bucket) counters observed from the event stream and safe desktop preference
 // snapshots, POSTed once per launch. Never carries content, keys, prompts, paths,
 // or base URLs; custom provider/model identifiers are normalized into bounded
-// buckets. Gated on config desktop.metrics (default on), dev-skipped.
+// buckets. Gated on config desktop.metrics and a repository-owned endpoint.
 
-var metricsEndpoint = "https://crash.reamesAgent.io/v1/metrics"
+var metricsEndpoint = ""
 
 const metricsPendingFile = "metrics-pending.json"
 const metricsPostTimeout = 8 * time.Second
@@ -496,7 +496,7 @@ func flatten(c counters) []metricCounter {
 // clears it on success or folds it back to retry next launch. Runs at launch
 // (mirroring the ping) so the current session's counts ship next time.
 func (a *App) flushMetrics() {
-	if version == "dev" {
+	if version == "dev" || metricsEndpoint == "" {
 		return
 	}
 	cfg, err := config.Load()
@@ -524,6 +524,9 @@ func (a *App) flushMetrics() {
 }
 
 func (a *App) postMetrics(p metricsPayload) bool {
+	if metricsEndpoint == "" {
+		return false
+	}
 	body, err := json.Marshal(p)
 	if err != nil {
 		return false

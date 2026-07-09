@@ -3406,7 +3406,7 @@ function makeMockApp(): AppBindings {
     },
     async OpenDownloadPage() {
       if (typeof window !== "undefined") {
-        window.open("https://reames-agent.io/#start", "_blank", "noopener");
+        window.open("https://github.com/Ebonyhtx/reames-agent/releases", "_blank", "noopener");
       }
     },
     // Dev seam: drives the overlay flow in the browser until ConnectKey sets the

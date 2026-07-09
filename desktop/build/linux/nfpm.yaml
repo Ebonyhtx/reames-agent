@@ -13,11 +13,11 @@ platform: "linux"
 version: "${DEB_VERSION}"
 section: "utils"
 priority: "optional"
-maintainer: "esengine <esengine@users.noreply.github.com>"
+maintainer: "Reames Agent Contributors"
 description: |
   Reames Agent desktop — a Wails shell around the Go kernel.
 vendor: "Reames Agent Contributors"
-homepage: "https://github.com/esengine/DeepSeek-Reames Agent"
+homepage: "https://github.com/Ebonyhtx/reames-agent"
 license: "MIT"
 # Runtime libraries the WebKitGTK 4.1 build links against (-tags webkit2_41); apt
 # pulls them in on install. These package names ship from Ubuntu 22.04 / Debian 12 on.

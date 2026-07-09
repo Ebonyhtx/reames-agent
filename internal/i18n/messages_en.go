@@ -19,7 +19,7 @@ var English = Messages{
 	StepSetKey:      "set API key",
 
 	InitHint:       "Project memory (AGENTS.md) is generated in-session: run `reames-agent`, then `/init` — the model analyzes the codebase and writes it. For configuration, use `reames-agent setup`.",
-	StepSetKeyHint: "run `reames-agent setup`, or export DEEPSEEK_API_KEY=…",
+	StepSetKeyHint: "run `reames-agent setup` to save the key in the global credential file",
 	StepChatDesc:   "interactive session",
 	StepRunDesc:    "one-shot task",
 	HelpFooter:     "reames-agent help · all commands",
@@ -320,7 +320,7 @@ var English = Messages{
 	SetupComplete:         "Setup complete.",
 	SetupCancelled:        "setup cancelled.",
 	TryHintFmt:            "Try: %s",
-	NextHint:              "Next: set your API key (run `reames-agent setup` or export DEEPSEEK_API_KEY=...), then run `reames-agent run \"your task\"`.",
+	NextHint:              "Next: run `reames-agent setup` to save your API key, then run `reames-agent run \"your task\"`.",
 	ConfirmReconfigureFmt: "%s already exists. Reconfigure and overwrite?",
 	KeepingExisting:       "Keeping existing config.",
 	NotOverwritingFmt:     "%s already exists; not overwriting",
@@ -447,7 +447,7 @@ Examples:
 
 Configuration:
   Resolution: flag > ./reames-agent.toml > ~/.reames-agent/config.toml > built-in defaults
-  Secrets come from the environment via api_key_env (e.g. DEEPSEEK_API_KEY).
+  Provider secrets are named by api_key_env and loaded from the Reames Agent global .env.
   Run 'reames-agent setup' to scaffold a config; see docs/SPEC.md.
 `,
 }

@@ -15,7 +15,7 @@ func TestScrubUserPaths(t *testing.T) {
 	cases := map[string]string{
 		`at C:\Users\yuhua\proj\app.ts:12:3`:      `at C:\Users\_\proj\app.ts:12:3`,
 		`at c:\users\someone\x.go`:                `at c:\users\_\x.go`,
-		`/home/bob/.reames-agent/config.toml`:         `/home/_/.reames-agent/config.toml`,
+		`/home/bob/.reames-agent/config.toml`:     `/home/_/.reames-agent/config.toml`,
 		`/Users/alice/Library/Logs`:               `/Users/_/Library/Logs`,
 		`Error: ENOENT open '/home/bob/secret'`:   `Error: ENOENT open '/home/_/secret'`,
 		`no user path here: /usr/lib/node`:        `no user path here: /usr/lib/node`,
@@ -92,6 +92,17 @@ func TestReportCrashRejectsBadInput(t *testing.T) {
 	}
 	if err := app.ReportCrash("crash", ""); err == nil {
 		t.Error("empty detail should be rejected")
+	}
+}
+
+func TestReportCrashUnavailableWithoutOwnedEndpoint(t *testing.T) {
+	old := crashEndpoint
+	crashEndpoint = ""
+	t.Cleanup(func() { crashEndpoint = old })
+
+	err := NewApp().ReportCrash("crash", "boom")
+	if err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Fatalf("ReportCrash error = %v, want unavailable", err)
 	}
 }
 

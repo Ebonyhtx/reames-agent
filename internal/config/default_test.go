@@ -34,10 +34,13 @@ func TestDefaultDesktopAppearanceAutoGraphite(t *testing.T) {
 	}
 }
 
-func TestDefaultDesktopMetricsOn(t *testing.T) {
+func TestDefaultDesktopReportingOff(t *testing.T) {
 	cfg := Default()
-	if !cfg.DesktopMetrics() {
-		t.Fatal("default desktop metrics = false, want true")
+	if cfg.DesktopTelemetry() {
+		t.Fatal("default desktop telemetry = true, want false")
+	}
+	if cfg.DesktopMetrics() {
+		t.Fatal("default desktop metrics = true, want false")
 	}
 	disabled := false
 	cfg.Desktop.Metrics = &disabled
