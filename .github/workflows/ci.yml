@@ -87,6 +87,13 @@ jobs:
           python-version: "3.12"
       - name: Validate server deployment contracts
         run: python scripts/check_deploy_contracts.py
+      - name: Validate Unix installer dry-run
+        run: |
+          bash -n scripts/install.sh
+          bash scripts/install.sh --dry-run --skip-setup --gateway --channels feishu --gateway-dir /srv/reames-work
+      - name: Validate PowerShell installer dry-run
+        shell: pwsh
+        run: ./scripts/install.ps1 -DryRun -SkipSetup -Gateway -Channels feishu -GatewayDir /srv/reames-work
 
   release-contracts:
     name: Release contracts
