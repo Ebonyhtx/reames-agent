@@ -1,8 +1,8 @@
 # 下一位模型接手交接文档
 
-日期：2026-07-10  
-仓库：`F:\reames-agent`  
-远端：`https://github.com/Ebonyhtx/reames-agent.git`  
+日期：2026-07-10
+仓库：`F:\reames-agent`
+远端：`https://github.com/Ebonyhtx/reames-agent.git`
 当前主线：`main`
 
 这份文档用于让新的大模型在没有完整聊天上下文的情况下接手本项目。请把它当作“会话状态快照 + 工作协议”，但仍以当前文件、Git 状态、CI 状态和真实命令输出为最终事实。
@@ -367,4 +367,3 @@ python scripts\check_docs_contracts.py
 - “服务器部署 Agent”不是把桌面端搬上服务器，也不是所有入口都依赖 `serve`。正确形态是 CLI、Gateway、serve、Desktop 并列。
 - “遥测反馈”默认不是第三方 telemetry。当前路线是自托管、本地账本、脱敏、人工确认后再外发。
 - “完美”必须靠证据，不靠口号。完成声明要引用测试、真实交互、CI、发布 artifact 或运行日志。
-
