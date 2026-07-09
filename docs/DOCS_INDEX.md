@@ -56,6 +56,7 @@
 | `docs/superpowers/audits/` | AutoResearch 验证记录 |
 | [接管审计](audits/2026-07-09-takeover.md) | 初次代码与测试审计 |
 | [首次上游审查](audits/2026-07-09-upstream-review.md) | Upstream Watch 建立时的差异快照 |
+| [真实 Provider 最小验证](audits/2026-07-09-real-provider.md) | DeepSeek 鉴权、响应、用量与缓存命中证据 |
 
 ## 验证入口
 
