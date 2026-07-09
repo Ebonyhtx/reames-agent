@@ -60,6 +60,7 @@
 | [首次上游审查](audits/2026-07-09-upstream-review.md) | Upstream Watch 建立时的差异快照 |
 | [真实 Provider 最小验证](audits/2026-07-09-real-provider.md) | DeepSeek 鉴权、响应、用量与缓存命中证据 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
+| [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 
 ## 验证入口
 

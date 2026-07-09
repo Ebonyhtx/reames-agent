@@ -15,6 +15,7 @@
 - Added `reames-agent gateway run` as the foreground social gateway entrypoint; `reames-agent bot start` remains compatible.
 - Added `reames-agent gateway install/start/stop/restart/status/uninstall` with dry-run service plans for systemd, launchd, and Windows Scheduled Task.
 - Replaced inherited Hermes installer scripts with Reames source-build installers for Unix, PowerShell, and CMD.
+- Audited Reasonix, Hermes, and Reames install/deploy entrypoints; fixed stale Chinese README gateway and API-key examples.
 
 ### Upstream
 

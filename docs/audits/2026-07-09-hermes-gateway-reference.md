@@ -66,7 +66,7 @@ Reames 当前已有：
 
 仍然缺的 Hermes 式产品闭环：
 
-- 没有一键安装脚本把 CLI、Desktop 可选安装、gateway service 配置串起来。
+- 已有 Reames 源码构建安装脚本把 CLI 与 gateway service 配置串起来；仍缺预构建 release artifact 下载、校验和/签名验证，以及 Desktop 可选安装集成。
 - 还没有 `gateway setup` 向导把飞书/微信/QQ/Telegram 凭据、allowlist 和 workspace route 串起来。
 - 文档之前把 `serve` 写得太靠前，容易误解成云端部署主入口；现在已改为 CLI/Gateway 并列入口。
 
@@ -104,8 +104,8 @@ Reames Agent core
    - 在 macOS 验证 launchd；
    - 容器：后续 s6 或 supervisor。
 2. 一键安装：
-   - Linux/macOS：`install.sh` 安装单二进制、配置 home、可选安装 gateway service；
-   - Windows：`install.ps1` 安装 CLI、可选 Desktop、可选 Scheduled Task gateway。
+   - Linux/macOS：`install.sh` 已支持源码构建安装和可选 gateway service，下一步接入 release artifact 下载；
+   - Windows：`install.ps1` 已支持源码构建安装和可选 Scheduled Task gateway，下一步接入 release artifact 下载和 Desktop 可选安装。
 3. `gateway setup`：
    - 配置平台凭据；
    - 配置 allowlist / pairing；

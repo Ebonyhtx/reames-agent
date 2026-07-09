@@ -19,6 +19,13 @@ go build -o bin/reames-agent ./cmd/reames-agent
 ./bin/reames-agent
 ```
 
+公开稳定 release 还未开启前，可使用源码构建安装脚本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.sh | bash
+powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.ps1)"
+```
+
 ## 功能
 
 - **多模型**: DeepSeek、OpenAI 兼容、Anthropic — 配置驱动，无需硬编码
@@ -34,14 +41,18 @@ go build -o bin/reames-agent ./cmd/reames-agent
 reames-agent                        # 交互式 CLI
 reames-agent run "修复 auth 的 bug" # 单任务执行
 reames-agent serve                  # 启动 Web UI (localhost:8787)
-reames-agent gateway start --channels feishu  # 启动 IM 机器人
+reames-agent gateway run --channels feishu    # 前台运行 IM Gateway
+reames-agent gateway install --dry-run --channels feishu  # 预览后台服务安装计划
 ```
 
 ## 云端部署
 
 ```bash
 docker build -t reames-agent .
-docker run -p 8787:8787 -e DEEPSEEK_API_KEY=sk-xxx reames-agent
+docker run -p 127.0.0.1:8787:8787 \
+  -e DEEPSEEK_API_KEY=replace-with-your-key \
+  -e REAMES_AGENT_SERVE_TOKEN=change-this-long-random-token \
+  reames-agent
 ```
 
 详见 [docs/DEPLOY.md](docs/DEPLOY.md)
