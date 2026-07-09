@@ -126,6 +126,11 @@ def check() -> list[str]:
     require("Gateway credential source" in installer_tests, "installer tests must assert the Gateway credential source note.", failures)
     require("verify SHA256SUMS" in installer_tests, "installer tests must assert release checksum verification dry-runs.", failures)
 
+    gateway_smoke = read("scripts/smoke_gateway_headless.py")
+    require("gateway" in gateway_smoke and "doctor" in gateway_smoke and "--home" in gateway_smoke, "headless Gateway smoke must exercise gateway doctor --home.", failures)
+    require("install" in gateway_smoke and "--dry-run" in gateway_smoke, "headless Gateway smoke must exercise gateway install --dry-run.", failures)
+    require("service definitions do not embed secret values" in gateway_smoke, "headless Gateway smoke must guard the no-secret service contract.", failures)
+
     return failures
 
 

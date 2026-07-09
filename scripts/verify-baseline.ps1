@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $env:GOPROXY = if ($env:GOPROXY) { $env:GOPROXY } else { "https://goproxy.cn,direct" }
 $env:GOSUMDB = if ($env:GOSUMDB) { $env:GOSUMDB } else { "sum.golang.google.cn" }
+$baselineBinary = Join-Path $env:TEMP "reames-agent-check.exe"
 
 function Invoke-Native {
     param(
@@ -36,7 +37,7 @@ function Invoke-Step {
 Push-Location $RepoRoot
 try {
     Invoke-Step "Build CLI binary" {
-        Invoke-Native -FilePath "go" -Arguments @("build", "-o", (Join-Path $env:TEMP "reames-agent-check.exe"), "./cmd/reames-agent")
+        Invoke-Native -FilePath "go" -Arguments @("build", "-o", $baselineBinary, "./cmd/reames-agent")
     }
 
     Invoke-Step "Provider/agent cache-sensitive tests" {
@@ -49,6 +50,7 @@ try {
         Invoke-Native -FilePath "python" -Arguments @("scripts/check_deploy_contracts.py")
         Invoke-Native -FilePath "python" -Arguments @("scripts/check_release_contracts.py")
         Invoke-Native -FilePath "python" -Arguments @("-m", "unittest", "scripts.test_installers", "-v")
+        Invoke-Native -FilePath "python" -Arguments @("scripts/smoke_gateway_headless.py", "--binary", $baselineBinary)
         Invoke-Native -FilePath "python" -Arguments @("-m", "unittest", "scripts.test_check_upstreams", "-v")
         Invoke-Native -FilePath "node" -Arguments @("scripts/test_upstream_watch_issue.mjs")
     }

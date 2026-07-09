@@ -82,6 +82,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -96,6 +99,8 @@ jobs:
         run: |
           python -m unittest scripts.test_installers.InstallerDryRunTests.test_powershell_gateway_dry_run_preserves_home_and_credential_boundary -v
           python -m unittest scripts.test_installers.InstallerDryRunTests.test_powershell_release_dry_run_verifies_checksum -v
+      - name: Smoke headless Gateway deployment
+        run: python scripts/smoke_gateway_headless.py
 
   release-contracts:
     name: Release contracts
