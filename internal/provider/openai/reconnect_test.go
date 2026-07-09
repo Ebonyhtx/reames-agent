@@ -239,13 +239,20 @@ func TestStreamAcceptsFinishReasonWithoutDone(t *testing.T) {
 }
 
 // TestStreamDoesNotReplayAfterOutput guards against duplicated output: once a
-// token has streamed, a mid-stream reset must surface as an error rather than
+// token has streamed, a connection cut must surface as an error rather than
 // replaying the request (which would re-emit the already-shown text).
+//
+// Use a clean, incomplete SSE response instead of forcing a TCP RST here. An
+// RST is allowed to discard bytes that were written immediately before it, so
+// the client would nondeterministically see either zero output (and correctly
+// reconnect) or the partial token. The incomplete response exercises the same
+// io.ErrUnexpectedEOF reconnect path while guaranteeing the token was read.
 func TestStreamDoesNotReplayAfterOutput(t *testing.T) {
 	var reqs int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqs++
-		rstAfter(t, w, "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n")
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n")
 	}))
 	defer srv.Close()
 

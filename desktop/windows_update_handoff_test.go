@@ -42,7 +42,7 @@ func TestWindowsInstallerScriptWaitsBeforeCopyingExecutable(t *testing.T) {
 	}
 	script := string(data)
 	for _, want := range []string{
-		`!define REAMES_AGENT_UPDATE_HELPER "reamesAgent-update-helper.exe"`,
+		`!define REAMES_AGENT_UPDATE_HELPER "reames-agent-update-helper.exe"`,
 		"Function reamesAgent.waitForExecutableUnlock",
 		`FileOpen $1 "$INSTDIR\${PRODUCT_EXECUTABLE}" a`,
 		"SetErrorLevel 1618",
@@ -68,7 +68,7 @@ func TestDesktopBuildScriptCompilesAndPackagesWindowsUpdateHelper(t *testing.T) 
 	}
 	script := string(data)
 	for _, want := range []string{
-		`UPDATE_HELPER="reamesAgent-update-helper.exe"`,
+		`UPDATE_HELPER="reames-agent-update-helper.exe"`,
 		`GOOS=windows GOARCH="$arch" go build`,
 		`./cmd/update-helper`,
 		`build/windows/installer/$UPDATE_HELPER`,

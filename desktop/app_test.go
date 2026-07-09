@@ -103,6 +103,7 @@ func isolateDesktopUserDirs(t *testing.T) string {
 		}
 	}
 	t.Setenv("HOME", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", xdg)
@@ -2900,6 +2901,7 @@ func TestSetModelForTabRefreshesCarriedSystemPrompt(t *testing.T) {
 		if tab.Ctrl != nil {
 			tab.Ctrl.Close()
 		}
+		tab.releaseSessionLease()
 	})
 
 	if err := app.SetModelForTab(tab.ID, "new/new-model"); err != nil {
@@ -3442,6 +3444,7 @@ func newStaleWorkspaceBindingFixtureWithLayout(t *testing.T, suffix, layoutStyle
 		if tab.Ctrl != nil {
 			tab.Ctrl.Close()
 		}
+		tab.releaseSessionLease()
 	})
 
 	return staleWorkspaceBindingFixture{
@@ -3548,17 +3551,19 @@ func TestEnsureTabControllerWorkspaceWarnsWhenPinnedSessionSwitchesWorkspace(t *
 	assertTabRebuiltToPinnedWorkspace(t, f)
 
 	deadline := time.After(2 * time.Second)
+	var received []event.Event
 	for {
 		select {
 		case e := <-events:
+			received = append(received, e)
 			if e.Kind == event.Notice &&
 				e.Level == event.LevelWarn &&
-				strings.Contains(e.Text, f.projectA) &&
+				strings.Contains(e.Text, "project workspace") &&
 				strings.Contains(e.Text, "switched tab") {
 				return
 			}
 		case <-deadline:
-			t.Fatal("did not receive workspace switch warning notice")
+			t.Fatalf("did not receive workspace switch warning notice: %+v", received)
 		}
 	}
 }

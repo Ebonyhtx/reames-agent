@@ -79,14 +79,20 @@ try {
         if (Test-Path $frontend) {
             $nodeModules = Join-Path $frontend "node_modules"
             if (Test-Path $nodeModules) {
-                Write-Host ""
-                Write-Host "Frontend dependencies exist. Run frontend build separately when changing UI:" -ForegroundColor Yellow
-                Write-Host "  Push-Location desktop\frontend; npm run build; Pop-Location"
+                Invoke-Step "Desktop frontend build" {
+                    Push-Location $frontend
+                    try {
+                        Invoke-Native -FilePath "corepack" -Arguments @("pnpm", "build")
+                    }
+                    finally {
+                        Pop-Location
+                    }
+                }
             }
             else {
                 Write-Host ""
-                Write-Host "Frontend build skipped: desktop\frontend\node_modules is missing." -ForegroundColor Yellow
-                Write-Host "Install dependencies before UI validation."
+                Write-Host "Core baseline passed, but desktop frontend was not verified because node_modules is missing." -ForegroundColor Yellow
+                Write-Host "Run: cd desktop\frontend; corepack pnpm install --frozen-lockfile"
             }
         }
     }

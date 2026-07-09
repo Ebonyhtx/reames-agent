@@ -21,6 +21,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const appSource = readFileSync(resolve(here, "../App.tsx"), "utf8");
 const settingsSource = readFileSync(resolve(here, "../components/SettingsPanel.tsx"), "utf8");
 const markdownSource = readFileSync(resolve(here, "../components/Markdown.tsx"), "utf8");
+const wordmarkSource = readFileSync(resolve(here, "../assets/logo-wordmark.svg"), "utf8");
 
 console.log("\nbundle contract");
 
@@ -71,6 +72,12 @@ ok(
 ok(
   markdownSource.includes('import("./MarkdownRenderer")'),
   "Markdown wrapper loads markdown renderer on demand",
+);
+ok(
+  wordmarkSource.includes('data-brand="reames-agent"') &&
+    wordmarkSource.includes("<title") &&
+    wordmarkSource.includes("Reames Agent</title>"),
+  "desktop wordmark identifies the Reames Agent brand",
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

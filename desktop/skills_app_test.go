@@ -27,6 +27,8 @@ func TestNormalizeSkillPathDirectoryLayout(t *testing.T) {
 func TestSkillRootsViewCountsProjectSkills(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	project := t.TempDir()
@@ -65,6 +67,8 @@ func TestSkillRootsViewCountsProjectSkills(t *testing.T) {
 func TestSkillRootsViewMarksEnvConfiguredCustomRoot(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	project := t.TempDir()
@@ -111,6 +115,8 @@ func TestSkillRootsViewMarksEnvConfiguredCustomRoot(t *testing.T) {
 func TestSkillRootsViewDedupesConfiguredConventionRoot(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	project := t.TempDir()
@@ -156,6 +162,8 @@ func TestSkillRootsViewDedupesConfiguredConventionRoot(t *testing.T) {
 func TestSkillRootsViewDedupesConfiguredProjectConventionRoot(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	project := t.TempDir()
@@ -183,7 +191,9 @@ func TestSkillRootsViewDedupesConfiguredProjectConventionRoot(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(cfgPath, []byte("[skills]\npaths = [\""+root+"\"]\n"), 0o644); err != nil {
+	cfg := config.Default()
+	cfg.Skills.Paths = []string{root}
+	if err := cfg.SaveTo(cfgPath); err != nil {
 		t.Fatal(err)
 	}
 
@@ -209,6 +219,8 @@ func TestSkillRootsViewDedupesConfiguredProjectConventionRoot(t *testing.T) {
 func TestSkillRootsViewOmitsExcludedConventionRoot(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	project := t.TempDir()
@@ -247,6 +259,8 @@ func TestSkillRootsViewOmitsExcludedConventionRoot(t *testing.T) {
 func TestRemoveSkillPathPseudoDeletesConventionRoot(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	path := filepath.Join(home, ".agents", "skills")
@@ -264,6 +278,8 @@ func TestRemoveSkillPathPseudoDeletesConventionRoot(t *testing.T) {
 func TestAddSkillPathRestoresConventionRootWithoutCustomPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	path := filepath.Join(home, ".agents", "skills")
@@ -302,6 +318,8 @@ func TestCapabilitiesIncludesDisabledSkills(t *testing.T) {
 	defer a.activeCtrl().Close()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	cfgPath := config.UserConfigPath()
@@ -334,6 +352,8 @@ func TestCapabilitiesIncludesDisabledSkills(t *testing.T) {
 func TestSkillsSettingsRefreshInvalidatesSkillRootsCache(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, ".reames-agent"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("AppData", filepath.Join(home, "AppData"))
 	project := t.TempDir()

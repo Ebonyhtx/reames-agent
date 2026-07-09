@@ -76,11 +76,11 @@ ManifestDPIAware true
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
-!define REASONIX_DEFAULT_INSTALLDIR "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
-!define REASONIX_UPDATE_HELPER "reames-agent-update-helper.exe"
-!define REASONIX_UNLOCK_RETRIES 60
+!define REAMES_AGENT_DEFAULT_INSTALLDIR "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
+!define REAMES_AGENT_UPDATE_HELPER "reames-agent-update-helper.exe"
+!define REAMES_AGENT_UNLOCK_RETRIES 60
 InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation" # Reuse the previous install path on update; .onInit falls back to the default on first install.
-InstallDir "${REASONIX_DEFAULT_INSTALLDIR}" # Per-user install location (no admin rights required).
+InstallDir "${REAMES_AGENT_DEFAULT_INSTALLDIR}" # Per-user install location (no admin rights required).
 ShowInstDetails show # This will always show the installation details.
 
 ####
@@ -129,11 +129,11 @@ Function .onInit
    StrCmp $INSTDIR "" fallback done
 
 fallback:
-   StrCpy $INSTDIR "${REASONIX_DEFAULT_INSTALLDIR}"
+   StrCpy $INSTDIR "${REAMES_AGENT_DEFAULT_INSTALLDIR}"
 done:
 FunctionEnd
 
-Function reames-agent.waitForExecutableUnlock
+Function reamesAgent.waitForExecutableUnlock
    IfFileExists "$INSTDIR\${PRODUCT_EXECUTABLE}" 0 done
    StrCpy $0 0
 
@@ -146,7 +146,7 @@ retry:
 
 locked:
    IntOp $0 $0 + 1
-   IntCmp $0 ${REASONIX_UNLOCK_RETRIES} failed 0 0
+   IntCmp $0 ${REAMES_AGENT_UNLOCK_RETRIES} failed 0 0
    Sleep 1000
    Goto retry
 
@@ -171,15 +171,15 @@ Section
 
     !insertmacro wails.webview2runtime
 
-    Call reames-agent.waitForExecutableUnlock
+    Call reamesAgent.waitForExecutableUnlock
 
     SetOutPath $INSTDIR
 
     !insertmacro wails.files
-    !if /FileExists "${REASONIX_UPDATE_HELPER}"
-    File "/oname=${REASONIX_UPDATE_HELPER}" "${REASONIX_UPDATE_HELPER}"
+    !if /FileExists "${REAMES_AGENT_UPDATE_HELPER}"
+    File "/oname=${REAMES_AGENT_UPDATE_HELPER}" "${REAMES_AGENT_UPDATE_HELPER}"
     !else
-    !warning "${REASONIX_UPDATE_HELPER} was not found; Windows auto-update will fall back to installer-side waiting only."
+    !warning "${REAMES_AGENT_UPDATE_HELPER} was not found; Windows auto-update will fall back to installer-side waiting only."
     !endif
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -198,7 +198,7 @@ Section "uninstall"
 
     ; Precision uninstall: delete main application files
     Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
-    Delete "$INSTDIR\${REASONIX_UPDATE_HELPER}"
+    Delete "$INSTDIR\${REAMES_AGENT_UPDATE_HELPER}"
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
