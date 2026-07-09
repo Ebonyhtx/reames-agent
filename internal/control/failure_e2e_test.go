@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,6 +47,95 @@ func TestProviderAuthErrorEmitsTurnDoneAndClearsRuntimeStatus(t *testing.T) {
 	status := c.RuntimeStatus()
 	if status.Running || status.PendingPrompt || status.CancelRequested || status.Cancellable {
 		t.Fatalf("runtime status after auth failure = %+v, want idle", status)
+	}
+}
+
+func TestProviderAPIErrorEmitsActionableTurnDoneAndClearsRuntimeStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantSubstr []string
+	}{
+		{
+			name:       "rate limit",
+			err:        &provider.APIError{Provider: "deepseek", Status: 429, Body: `{"error":{"message":"slow down"}}`},
+			wantSubstr: []string{"HTTP 429"},
+		},
+		{
+			name:       "server busy",
+			err:        &provider.APIError{Provider: "deepseek", Status: 503, Body: "temporarily unavailable"},
+			wantSubstr: []string{"HTTP 503"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prov := &scriptedTurns{turns: [][]provider.Chunk{{
+				{Type: provider.ChunkError, Err: tt.err},
+			}}}
+			events := make(chan event.Event, 16)
+			ag := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.FuncSink(func(e event.Event) {
+				events <- e
+			}))
+			c := New(Options{
+				Runner:   ag,
+				Executor: ag,
+				Sink: event.FuncSink(func(e event.Event) {
+					events <- e
+				}),
+			})
+
+			c.Submit("hello")
+			done := waitForTurnDoneEvent(t, events)
+			if done.Err == nil {
+				t.Fatal("TurnDone.Err is nil, want provider API error")
+			}
+			for _, want := range tt.wantSubstr {
+				if !strings.Contains(done.Err.Error(), want) {
+					t.Fatalf("TurnDone.Err = %q, want substring %q", done.Err.Error(), want)
+				}
+			}
+			status := c.RuntimeStatus()
+			if status.Running || status.PendingPrompt || status.CancelRequested || status.Cancellable {
+				t.Fatalf("runtime status after provider API failure = %+v, want idle", status)
+			}
+		})
+	}
+}
+
+func TestProviderStreamInterruptionExhaustionEmitsTurnDoneAndClearsRuntimeStatus(t *testing.T) {
+	prov := &scriptedTurns{turns: [][]provider.Chunk{{
+		{Type: provider.ChunkText, Text: "partial answer"},
+		{Type: provider.ChunkError, Err: &provider.StreamInterruptedError{Err: errors.New("connection reset by peer")}},
+	}}}
+	events := make(chan event.Event, 32)
+	ag := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.FuncSink(func(e event.Event) {
+		events <- e
+	}))
+	c := New(Options{
+		Runner:   ag,
+		Executor: ag,
+		Sink: event.FuncSink(func(e event.Event) {
+			events <- e
+		}),
+	})
+
+	c.Submit("hello")
+	done := waitForTurnDoneEvent(t, events)
+	if done.Err == nil {
+		t.Fatal("TurnDone.Err is nil, want exhausted stream interruption")
+	}
+	errText := done.Err.Error()
+	for _, want := range []string{"model stream interrupted", "continue", "connection reset by peer"} {
+		if !strings.Contains(errText, want) {
+			t.Fatalf("TurnDone.Err = %q, want substring %q", errText, want)
+		}
+	}
+	if prov.call != 4 {
+		t.Fatalf("provider stream calls = %d, want initial call plus 3 recovery attempts", prov.call)
+	}
+	status := c.RuntimeStatus()
+	if status.Running || status.PendingPrompt || status.CancelRequested || status.Cancellable {
+		t.Fatalf("runtime status after stream interruption exhaustion = %+v, want idle", status)
 	}
 }
 
