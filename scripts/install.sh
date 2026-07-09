@@ -270,6 +270,8 @@ if [ "$RUN_SETUP" -eq 1 ]; then
 fi
 
 if [ "$INSTALL_GATEWAY" -eq 1 ]; then
+  echo "Gateway credential source: ${AGENT_HOME%/}/.env"
+  echo "Gateway service definitions pin REAMES_AGENT_HOME and do not embed secret values."
   gateway_args=("$BIN_PATH" gateway install --start-now --home "$AGENT_HOME")
   if [ -n "$GATEWAY_CHANNELS" ]; then
     gateway_args+=(--channels "$GATEWAY_CHANNELS")

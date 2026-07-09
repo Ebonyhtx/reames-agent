@@ -54,6 +54,18 @@ function Require-Command {
     }
 }
 
+function Get-ReamesEnvPath {
+    param([string]$HomePath)
+    $trimmed = $HomePath.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+        return ".env"
+    }
+    if ($trimmed.Contains("\") -and -not $trimmed.Contains("/")) {
+        return Join-Path $trimmed ".env"
+    }
+    return ($trimmed.TrimEnd("/") + "/.env")
+}
+
 function Get-ReleaseTarget {
     $processorArch = if ($env:PROCESSOR_ARCHITECTURE) {
         $env:PROCESSOR_ARCHITECTURE
@@ -169,6 +181,8 @@ if (-not $SkipSetup) {
 }
 
 if ($Gateway) {
+    Write-Host "Gateway credential source: $(Get-ReamesEnvPath $AgentHome)"
+    Write-Host "Gateway service definitions pin REAMES_AGENT_HOME and do not embed secret values."
     $gatewayArgs = @("gateway", "install", "--start-now", "--home", $AgentHome)
     if ($Channels.Trim() -ne "") {
         $gatewayArgs += @("--channels", $Channels.Trim())

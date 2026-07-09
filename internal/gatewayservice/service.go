@@ -289,7 +289,7 @@ func credentialEnvPath(home string) string {
 		return ".env"
 	}
 	if strings.Contains(home, `\`) && !strings.Contains(home, `/`) {
-		return filepath.Join(home, ".env")
+		return strings.TrimRight(home, `\`) + `\.env`
 	}
 	return strings.TrimRight(home, `/`) + "/.env"
 }

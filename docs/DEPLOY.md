@@ -42,6 +42,10 @@ scripts/install.sh --dry-run --home "$HOME/.reames-agent" --gateway --channels f
 .\scripts\install.ps1 -DryRun -AgentHome "$env:APPDATA\reames-agent" -Gateway -Channels feishu
 ```
 
+安装器 dry-run 会打印将要执行的 `gateway install --home ...` 命令、Gateway
+凭据来源 `<Reames Agent home>/.env`，并声明服务定义只绑定
+`REAMES_AGENT_HOME`、不嵌入 secret 值。
+
 未来开启稳定 GitHub Release 后，安装器已经预留“预构建产物优先”的显式路径，但默认仍保持源码构建，避免在 pre-stable 阶段给用户制造已经发布稳定二进制的错觉：
 
 ```bash

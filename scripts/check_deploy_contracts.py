@@ -115,8 +115,15 @@ def check() -> list[str]:
         require("binary-source" in installer.lower() or "binarysource" in installer.lower(), f"{path} must expose an explicit source/release binary mode.", failures)
         require("SHA256SUMS" in installer, f"{path} must verify release artifacts with SHA256SUMS.", failures)
         require("reames-agent-" in installer and "releases/download" in installer, f"{path} must know the Reames GitHub release artifact shape.", failures)
+        require(".env" in installer, f"{path} must keep the Gateway credential .env source visible.", failures)
+        require("do not embed secret values" in installer, f"{path} must state service definitions do not embed secret values.", failures)
         require("NousResearch/hermes-agent" not in installer, f"{path} must not install inherited Hermes repositories.", failures)
         require("HERMES_HOME" not in installer, f"{path} must not use inherited HERMES_HOME.", failures)
+
+    installer_tests = read("scripts/test_installers.py")
+    require("InstallerDryRunTests" in installer_tests, "scripts/test_installers.py must cover installer dry-run contracts.", failures)
+    require("Gateway credential source" in installer_tests, "installer tests must assert the Gateway credential source note.", failures)
+    require("verify SHA256SUMS" in installer_tests, "installer tests must assert release checksum verification dry-runs.", failures)
 
     return failures
 
