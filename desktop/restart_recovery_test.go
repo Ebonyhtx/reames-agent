@@ -10,6 +10,14 @@ import (
 	"reames-agent/internal/config"
 )
 
+type savedRestartTabsFixture struct {
+	projectRoot    string
+	globalTab      *WorkspaceTab
+	projectTab     *WorkspaceTab
+	globalSession  string
+	projectSession string
+}
+
 func TestRestoreOrBuildTabsRestoresSavedProjectSessionWorkspaceAndActiveTab(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	cfg := config.LoadForEdit(config.UserConfigPath())
@@ -20,6 +28,50 @@ func TestRestoreOrBuildTabsRestoresSavedProjectSessionWorkspaceAndActiveTab(t *t
 		t.Fatalf("save user config: %v", err)
 	}
 
+	fixture := saveRestartTabsFixture(t)
+	restarted := restoreSavedTabsForTest(t)
+
+	tabs := restarted.ListTabs()
+	assertTabIDs(t, tabs, fixture.globalTab.ID, fixture.projectTab.ID)
+	if !tabs[1].Active || tabs[0].Active {
+		t.Fatalf("restored active tab flags = %+v, want project tab active", tabs)
+	}
+	if got := normalizeProjectRoot(tabs[1].WorkspaceRoot); got != normalizeProjectRoot(fixture.projectRoot) {
+		t.Fatalf("project tab workspace = %q, want %q", got, normalizeProjectRoot(fixture.projectRoot))
+	}
+
+	restoredProject := waitForTabReady(t, restarted, fixture.projectTab.ID)
+	restoredGlobal := waitForTabReady(t, restarted, fixture.globalTab.ID)
+	assertRestoredRestartProjectTab(t, restarted, restoredProject, fixture)
+	if got := filepath.Clean(restoredGlobal.Ctrl.SessionPath()); got != filepath.Clean(fixture.globalSession) {
+		t.Fatalf("global session path = %q, want %q", got, fixture.globalSession)
+	}
+	globalHistory := restarted.HistoryForTab(fixture.globalTab.ID)
+	if len(globalHistory) == 0 || globalHistory[0].Content != "global restart prompt" {
+		t.Fatalf("global history = %+v, want restored global prompt", globalHistory)
+	}
+}
+
+func TestRestoreOrBuildTabsWorkbenchRestoresOnlyActiveProjectSession(t *testing.T) {
+	isolateDesktopUserDirs(t)
+
+	fixture := saveRestartTabsFixture(t)
+	restarted := restoreSavedTabsForTest(t)
+
+	tabs := restarted.ListTabs()
+	assertTabIDs(t, tabs, fixture.projectTab.ID)
+	if !tabs[0].Active {
+		t.Fatalf("workbench restored tab is not active: %+v", tabs[0])
+	}
+	if got := normalizeProjectRoot(tabs[0].WorkspaceRoot); got != normalizeProjectRoot(fixture.projectRoot) {
+		t.Fatalf("workbench project tab workspace = %q, want %q", got, normalizeProjectRoot(fixture.projectRoot))
+	}
+	restoredProject := waitForTabReady(t, restarted, fixture.projectTab.ID)
+	assertRestoredRestartProjectTab(t, restarted, restoredProject, fixture)
+}
+
+func saveRestartTabsFixture(t *testing.T) savedRestartTabsFixture {
+	t.Helper()
 	projectRoot := t.TempDir()
 	if err := addProject(projectRoot, "Restart Project"); err != nil {
 		t.Fatalf("add project: %v", err)
@@ -52,7 +104,17 @@ func TestRestoreOrBuildTabsRestoresSavedProjectSessionWorkspaceAndActiveTab(t *t
 	previous.mu.Lock()
 	previous.saveTabsLocked()
 	previous.mu.Unlock()
+	return savedRestartTabsFixture{
+		projectRoot:    projectRoot,
+		globalTab:      globalTab,
+		projectTab:     projectTab,
+		globalSession:  globalSession,
+		projectSession: projectSession,
+	}
+}
 
+func restoreSavedTabsForTest(t *testing.T) *App {
+	t.Helper()
 	restarted := NewApp()
 	restarted.ctx = context.Background()
 	restarted.readyHook = func() {}
@@ -64,34 +126,20 @@ func TestRestoreOrBuildTabsRestoresSavedProjectSessionWorkspaceAndActiveTab(t *t
 	case <-time.After(2 * time.Second):
 		t.Fatal("restoreOrBuildTabs did not mark tabs restored")
 	}
+	return restarted
+}
 
-	tabs := restarted.ListTabs()
-	assertTabIDs(t, tabs, globalTab.ID, projectTab.ID)
-	if !tabs[1].Active || tabs[0].Active {
-		t.Fatalf("restored active tab flags = %+v, want project tab active", tabs)
+func assertRestoredRestartProjectTab(t *testing.T, app *App, tab *WorkspaceTab, fixture savedRestartTabsFixture) {
+	t.Helper()
+	if got := filepath.Clean(tab.Ctrl.SessionPath()); got != filepath.Clean(fixture.projectSession) {
+		t.Fatalf("project session path = %q, want %q", got, fixture.projectSession)
 	}
-	if got := normalizeProjectRoot(tabs[1].WorkspaceRoot); got != normalizeProjectRoot(projectRoot) {
-		t.Fatalf("project tab workspace = %q, want %q", got, normalizeProjectRoot(projectRoot))
-	}
-
-	restoredProject := waitForTabReady(t, restarted, projectTab.ID)
-	restoredGlobal := waitForTabReady(t, restarted, globalTab.ID)
-	if got := filepath.Clean(restoredProject.Ctrl.SessionPath()); got != filepath.Clean(projectSession) {
-		t.Fatalf("project session path = %q, want %q", got, projectSession)
-	}
-	if got := normalizeProjectRoot(restoredProject.Ctrl.WorkspaceRoot()); got != normalizeProjectRoot(projectRoot) {
-		t.Fatalf("project controller workspace = %q, want %q", got, normalizeProjectRoot(projectRoot))
-	}
-	if got := filepath.Clean(restoredGlobal.Ctrl.SessionPath()); got != filepath.Clean(globalSession) {
-		t.Fatalf("global session path = %q, want %q", got, globalSession)
+	if got := normalizeProjectRoot(tab.Ctrl.WorkspaceRoot()); got != normalizeProjectRoot(fixture.projectRoot) {
+		t.Fatalf("project controller workspace = %q, want %q", got, normalizeProjectRoot(fixture.projectRoot))
 	}
 
-	projectHistory := restarted.HistoryForTab(projectTab.ID)
+	projectHistory := app.HistoryForTab(fixture.projectTab.ID)
 	if len(projectHistory) == 0 || projectHistory[0].Content != "project restart prompt" {
 		t.Fatalf("project history = %+v, want restored project prompt", projectHistory)
-	}
-	globalHistory := restarted.HistoryForTab(globalTab.ID)
-	if len(globalHistory) == 0 || globalHistory[0].Content != "global restart prompt" {
-		t.Fatalf("global history = %+v, want restored global prompt", globalHistory)
 	}
 }
