@@ -85,7 +85,11 @@ def check() -> list[str]:
     require("reames-agent gateway install --dry-run" in deploy, "docs/DEPLOY.md must document safe gateway service dry-run.", failures)
     require("reames-agent gateway install --start-now" in deploy, "docs/DEPLOY.md must document the Hermes-like gateway service lifecycle.", failures)
     require("--home \"$REAMES_AGENT_HOME\"" in deploy, "docs/DEPLOY.md must bind gateway services to the same REAMES_AGENT_HOME as CLI.", failures)
-    require("当前实现的前台入口" in deploy, "docs/DEPLOY.md must distinguish current foreground bot entry from target gateway service.", failures)
+    require(
+        "前台调试与后台常驻" in deploy and "gateway install/start/status" in deploy,
+        "docs/DEPLOY.md must distinguish foreground gateway debugging from the current background service lifecycle.",
+        failures,
+    )
 
     env_example = read(".env.example")
     require("REAMES_AGENT_SERVE_TOKEN" in env_example, ".env.example must include the serve token env hint.", failures)

@@ -278,17 +278,24 @@ ssh user@server "reames-agent run '修复 src/auth.go 的空指针问题'"
 echo "审查这个 PR" | ssh user@server "reames-agent run"
 ```
 
-## IM 通道连接（当前前台入口）
+## IM 通道连接（前台调试与后台常驻）
 
 ```bash
-# 启动飞书 gateway
+# 前台启动飞书 gateway，适合调试或 tmux
 reames-agent gateway run --channels feishu
 
-# 启动微信 gateway
+# 前台启动微信 gateway
 reames-agent gateway run --channels weixin
 
-# 启动多个平台
+# 前台启动多个平台
 reames-agent gateway run --channels feishu,weixin,qq
+
+# 后台常驻服务，先 dry-run 审阅计划
+reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project
+reames-agent gateway install --start-now --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project
+reames-agent gateway status
 ```
 
-注意：这一节是当前实现的前台入口；`reames-agent bot start` 仍可作为旧命名兼容入口。长期目标是独立 Gateway service 后台运行，CLI/桌面/serve 都不应该被社交通道进程占用或阻塞。
+`reames-agent bot start` 仍可作为旧命名兼容入口。推荐形态是：SSH/CLI/TUI 用于交互式任务，`gateway run` 用于前台调试，`gateway install/start/status` 管理独立后台 Gateway service。这样社交通道进程不会占用或阻塞用户 CLI、Desktop 或可选的 `serve` 入口。
+
+当前仍需在干净 Linux 服务器上补一次完整实战验证：安装二进制、配置 `REAMES_AGENT_HOME` 与真实 provider key、安装 gateway service、检查日志、发送一次真实渠道消息并完成 `/status` 或 `/current` 往返。
