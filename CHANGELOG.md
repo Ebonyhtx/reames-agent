@@ -7,6 +7,7 @@
 - Added public-readiness gates for ownership, release safety, deployment docs, and attribution.
 - Restored CodeQL workflow for Go, JavaScript/TypeScript, and GitHub Actions analysis.
 - Documented SemVer source, changelog expectations, and signing/checksum strategy before production releases.
+- Removed inherited Hermes/Python scripts from the public `scripts/` surface and added a regression gate to keep old release, live-test, Open WebUI, and WhatsApp bridge entrypoints from returning.
 
 ### Deployment
 

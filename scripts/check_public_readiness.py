@@ -127,6 +127,61 @@ def check_installers(failures: list[str]) -> None:
         require(".hermes" not in text, f"{rel} must not write inherited .hermes data paths.", failures)
 
 
+def check_script_surface(failures: list[str]) -> None:
+    removed_legacy_entries = [
+        "scripts/LIVETEST_README.md",
+        "scripts/analyze_livetest.py",
+        "scripts/benchmark_browser_eval.py",
+        "scripts/build_model_catalog.py",
+        "scripts/build_skills_index.py",
+        "scripts/check-windows-footguns.py",
+        "scripts/contributor_audit.py",
+        "scripts/discord-voice-doctor.py",
+        "scripts/docker_config_migrate.py",
+        "scripts/install_psutil_android.py",
+        "scripts/keystroke_diagnostic.py",
+        "scripts/lib/node-bootstrap.sh",
+        "scripts/profile-tui.py",
+        "scripts/release.py",
+        "scripts/run_tests.sh",
+        "scripts/run_tests_parallel.py",
+        "scripts/sample_and_compress.py",
+        "scripts/setup_open_webui.sh",
+        "scripts/tool_search_livetest.py",
+        "scripts/whatsapp-bridge",
+    ]
+    for rel in removed_legacy_entries:
+        path = ROOT / rel
+        if path.is_dir():
+            has_files = any(child.is_file() for child in path.rglob("*"))
+            require(not has_files, f"{rel} must not return to the public script surface.", failures)
+        else:
+            require(not path.exists(), f"{rel} must not return to the public script surface.", failures)
+
+    allowed_legacy_mentions = {
+        "scripts/check_public_readiness.py",
+        "scripts/check_deploy_contracts.py",
+    }
+    forbidden_tokens = [
+        "HERMES_HOME",
+        ".hermes",
+        "hermes_cli",
+        "reames_cli",
+        "NousResearch/hermes-agent",
+        "hermes-agent.nousresearch",
+        "Hermes Agent",
+    ]
+    for path in (ROOT / "scripts").rglob("*"):
+        if not path.is_file() or "__pycache__" in path.parts:
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in allowed_legacy_mentions:
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for token in forbidden_tokens:
+            require(token not in text, f"{rel} must not contain inherited script token {token!r}.", failures)
+
+
 def main() -> int:
     failures: list[str] = []
     check_required_files(failures)
@@ -137,6 +192,7 @@ def main() -> int:
         check_codeql_workflow(failures)
         check_brand_env_regressions(failures)
         check_installers(failures)
+        check_script_surface(failures)
 
     if failures:
         print("Public readiness check failed:")
