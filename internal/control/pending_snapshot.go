@@ -27,6 +27,12 @@ func pendingSnapshotPath() string {
 func (am *approvalManager) writePendingSnapshot(sessionID string) {
 	am.mu.Lock()
 	defer am.mu.Unlock()
+	am.writePendingSnapshotLocked(sessionID)
+}
+
+// writePendingSnapshotLocked persists the current prompt snapshot. The caller
+// must hold am.mu.
+func (am *approvalManager) writePendingSnapshotLocked(sessionID string) {
 	var snaps []PendingPromptSnapshot
 	now := time.Now()
 	for id, a := range am.approvals {

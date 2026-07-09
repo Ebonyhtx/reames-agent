@@ -45,7 +45,7 @@ type approvalManager struct {
 	// terminal); bot/headless frontends set it so a walked-away user can't wedge
 	// the session forever (#4626, #4402). Write-once at construction.
 	approvalTimeout time.Duration
-	sessionID     string // for pending snapshot persistence
+	sessionID       string // for pending snapshot persistence
 	// planAutoApprove auto-allows writer tool calls without prompting while a
 	// just-approved plan executes. Set by the turn loop, read by the bypass
 	// check. Plan approval is the go-ahead, so the model shouldn't re-prompt for
@@ -131,6 +131,7 @@ func (a *approvalManager) registerDecision(tool, subject, reason string, fresh b
 		autoDrain = a.autoApprovalWouldAllowLocked(tool, subject)
 	}
 	a.approvals[id] = pendingApproval{tool: tool, subject: subject, reason: reason, fresh: fresh, autoDrain: autoDrain, reply: reply}
+	a.writePendingSnapshotLocked(a.sessionID)
 	return id, reply
 }
 
@@ -166,6 +167,7 @@ func (a *approvalManager) grantPlanModeReadOnlyCommand(prefix string) {
 func (a *approvalManager) cancel(id string) {
 	a.mu.Lock()
 	delete(a.approvals, id)
+	a.writePendingSnapshotLocked(a.sessionID)
 	a.mu.Unlock()
 }
 
@@ -175,6 +177,7 @@ func (a *approvalManager) resolve(id string) pendingApproval {
 	defer a.mu.Unlock()
 	p := a.approvals[id]
 	delete(a.approvals, id)
+	a.writePendingSnapshotLocked(a.sessionID)
 	return p
 }
 
@@ -187,7 +190,7 @@ func (a *approvalManager) registerAsk(questions []event.AskQuestion) (string, ch
 	id := strconv.Itoa(a.nextID)
 	reply := make(chan []event.AskAnswer, 1)
 	a.asks[id] = pendingAsk{questions: questions, reply: reply}
-	a.writePendingSnapshot(a.sessionID)
+	a.writePendingSnapshotLocked(a.sessionID)
 	return id, reply
 }
 
@@ -195,6 +198,7 @@ func (a *approvalManager) registerAsk(questions []event.AskQuestion) (string, ch
 func (a *approvalManager) cancelAsk(id string) {
 	a.mu.Lock()
 	delete(a.asks, id)
+	a.writePendingSnapshotLocked(a.sessionID)
 	a.mu.Unlock()
 }
 
@@ -204,6 +208,7 @@ func (a *approvalManager) resolveAsk(id string) (pendingAsk, bool) {
 	defer a.mu.Unlock()
 	p, ok := a.asks[id]
 	delete(a.asks, id)
+	a.writePendingSnapshotLocked(a.sessionID)
 	return p, ok
 }
 
@@ -214,6 +219,7 @@ func (a *approvalManager) clearAll() {
 	defer a.mu.Unlock()
 	clear(a.approvals)
 	clear(a.asks)
+	a.writePendingSnapshotLocked(a.sessionID)
 }
 
 // hasPending reports whether any prompt is awaiting a user decision.
