@@ -107,6 +107,132 @@ func TestWindowsInstallPlanRendersScheduledTask(t *testing.T) {
 	}
 }
 
+func TestInstallPlansUseGatewayRunAndNeverLegacyEntrypoints(t *testing.T) {
+	tests := []struct {
+		goos string
+		opts Options
+	}{
+		{
+			goos: "linux",
+			opts: Options{
+				Action:     "install",
+				Executable: "/opt/reames/reames-agent",
+				Home:       "/home/reames/.reames-agent",
+				Channels:   "feishu,telegram",
+				Dir:        "/srv/reames work",
+				Model:      "deepseek-pro",
+				StartNow:   true,
+			},
+		},
+		{
+			goos: "darwin",
+			opts: Options{
+				Action:     "install",
+				Executable: "/Applications/Reames Agent.app/Contents/MacOS/reames-agent",
+				Home:       "/Users/reames/.reames-agent",
+				Channels:   "feishu",
+				Dir:        "/Users/reames/projects/demo",
+				Model:      "deepseek-pro",
+				StartNow:   true,
+			},
+		},
+		{
+			goos: "windows",
+			opts: Options{
+				Action:     "install",
+				Executable: `C:\Program Files\Reames Agent\reames-agent.exe`,
+				Home:       `C:\Users\reames\.reames-agent`,
+				Channels:   "feishu",
+				Dir:        `D:\work repo`,
+				Model:      "deepseek-pro",
+				StartNow:   true,
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.goos, func(t *testing.T) {
+			plan, err := BuildPlan(tc.goos, tc.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			formatted := FormatPlan(plan)
+			for _, want := range []string{"gateway", "run", "REAMES_AGENT_HOME", "feishu", "deepseek-pro"} {
+				if !strings.Contains(formatted, want) {
+					t.Fatalf("formatted service plan missing %q:\n%s", want, formatted)
+				}
+			}
+			for _, forbidden := range []string{" bot start", " serve ", " serve\"", "bot\" \"start"} {
+				if strings.Contains(formatted, forbidden) {
+					t.Fatalf("service plan regressed to legacy/serve entrypoint %q:\n%s", forbidden, formatted)
+				}
+			}
+		})
+	}
+}
+
+func TestLifecycleCommandPlansUsePlatformServiceManagers(t *testing.T) {
+	tests := []struct {
+		name string
+		goos string
+		opts Options
+		want []string
+	}{
+		{
+			name: "linux user status",
+			goos: "linux",
+			opts: Options{Action: "status", Executable: "/opt/reames/reames-agent"},
+			want: []string{`"systemctl" "--user" "status" "reames-agent-gateway.service"`},
+		},
+		{
+			name: "linux system restart",
+			goos: "linux",
+			opts: Options{Action: "restart", Scope: "system", Executable: "/opt/reames/reames-agent"},
+			want: []string{`"systemctl" "restart" "reames-agent-gateway.service"`},
+		},
+		{
+			name: "darwin status",
+			goos: "darwin",
+			opts: Options{Action: "status", Executable: "/Applications/Reames Agent.app/Contents/MacOS/reames-agent"},
+			want: []string{`"launchctl" "print"`, "com.reames-agent.reames-agent-gateway"},
+		},
+		{
+			name: "darwin restart",
+			goos: "darwin",
+			opts: Options{Action: "restart", Executable: "/Applications/Reames Agent.app/Contents/MacOS/reames-agent"},
+			want: []string{`"launchctl" "kickstart" "-k"`, "com.reames-agent.reames-agent-gateway"},
+		},
+		{
+			name: "windows status",
+			goos: "windows",
+			opts: Options{Action: "status", Executable: `C:\Program Files\Reames Agent\reames-agent.exe`},
+			want: []string{`"schtasks.exe" "/Query"`, `\\ReamesAgent\\reames-agent-gateway`, `"/FO" "LIST" "/V"`},
+		},
+		{
+			name: "windows restart",
+			goos: "windows",
+			opts: Options{Action: "restart", Executable: `C:\Program Files\Reames Agent\reames-agent.exe`},
+			want: []string{`"schtasks.exe" "/End"`, `"schtasks.exe" "/Run"`, `\\ReamesAgent\\reames-agent-gateway`},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			plan, err := BuildPlan(tc.goos, tc.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			formatted := FormatPlan(plan)
+			if len(plan.Files) != 0 || len(plan.Deletes) != 0 {
+				t.Fatalf("lifecycle action should not render file mutations: files=%#v deletes=%#v", plan.Files, plan.Deletes)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(formatted, want) {
+					t.Fatalf("formatted lifecycle plan missing %q:\n%s", want, formatted)
+				}
+			}
+		})
+	}
+}
+
 func TestInvalidScopeIsRejected(t *testing.T) {
 	if _, err := BuildPlan("linux", Options{Action: "status", Scope: "planet", Executable: "reames-agent"}); err == nil {
 		t.Fatal("BuildPlan accepted invalid scope")

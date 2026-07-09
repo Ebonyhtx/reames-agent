@@ -64,6 +64,7 @@
 | [M1 重连与恢复审计](audits/2026-07-09-m1-reconnect-recovery.md) | pending approval replay、Desktop tab 事件恢复和 pending snapshot diff 诊断证据 |
 | [M1 失败场景合同审计](audits/2026-07-09-m1-failure-contracts.md) | provider 鉴权失败、审批超时阻塞写入和运行态复位证据 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |
+| [Gateway service lifecycle contract audit](audits/2026-07-09-gateway-service-lifecycle.md) | 跨平台后台 gateway 生命周期命令、CLI/Gateway 隔离和防 `serve`/`bot start` 回归证据 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 
