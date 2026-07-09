@@ -24,7 +24,7 @@ Date: 2026-07-09
 
 - `internal/feedback`：稳定 schema、脱敏、fingerprint 和 JSONL 本地账本。
 - `serve`：`POST /api/feedback` 收集反馈，`GET /api/feedback/summary` 查询去重聚合，`POST /api/feedback/draft` 生成本地维护草稿。
-- `reames-agent feedback summary|draft --home PATH`：不启动 `serve` 时的 SSH/CLI 运维入口。
+- `reames-agent feedback submit|summary|draft --home PATH`：不启动 `serve` 时的 SSH/CLI 运维入口。
 - 默认写入 `<Reames Agent home>/feedback/feedback.jsonl`，草稿写入 `<Reames Agent home>/feedback/drafts/*.md`，不连接第三方服务，不自动创建 Issue。
 
 ## 本轮治理

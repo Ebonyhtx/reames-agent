@@ -17,7 +17,6 @@ import (
 	"reames-agent/internal/agent"
 	"reames-agent/internal/config"
 	"reames-agent/internal/event"
-	"reames-agent/internal/feedback"
 	"reames-agent/internal/i18n"
 	"reames-agent/internal/notify"
 	"reames-agent/internal/provider"
@@ -321,7 +320,7 @@ func TestMetadataCommandsDoNotProbeTerminalTheme(t *testing.T) {
 	if !strings.Contains(out, "reames-agent gateway run") {
 		t.Fatalf("help output missing gateway run:\n%s", out)
 	}
-	if !strings.Contains(out, "reames-agent feedback summary|draft") {
+	if !strings.Contains(out, "reames-agent feedback submit|summary|draft") {
 		t.Fatalf("help output missing feedback command:\n%s", out)
 	}
 }
@@ -468,19 +467,35 @@ func TestFeedbackCommandSummaryAndDraftUseSelectedHome(t *testing.T) {
 	isolateCLIConfigHome(t)
 	t.Setenv("REAMES_AGENT_HOME", "")
 	selectedHome := filepath.Join(t.TempDir(), "selected-home")
-	store := feedback.NewStore(filepath.Join(selectedHome, "feedback", "feedback.jsonl"))
-	if _, err := store.Append(feedback.ReportInput{
-		Kind:         "crash",
-		Source:       "gateway",
-		Label:        "feishu",
-		Message:      "operator alice@example.com saw api_key=sk-secret1234567890abcdef",
-		ErrorMessage: "panic Bearer abcdefghijklmnopqrstuvwxyz123456",
-		TopFrame:     `C:\Users\Alice\project\bot.go:42`,
-	}); err != nil {
-		t.Fatal(err)
-	}
 
 	out := captureStdout(t, func() {
+		if rc := Run([]string{
+			"feedback", "submit",
+			"--json",
+			"--home", selectedHome,
+			"--kind", "crash",
+			"--source", "gateway",
+			"--label", "feishu",
+			"--message", "operator alice@example.com saw api_key=sk-secret1234567890abcdef",
+			"--error-message", "panic Bearer abcdefghijklmnopqrstuvwxyz123456",
+			"--top-frame", `C:\Users\Alice\project\bot.go:42`,
+			"--metadata", "token=rk-secret1234567890abcdef",
+		}, "test-version"); rc != 0 {
+			t.Fatalf("feedback submit rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{`"kind": "crash"`, `"source": "gateway"`, `"label": "feishu"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("feedback submit output missing %q:\n%s", want, out)
+		}
+	}
+	for _, forbidden := range []string{"alice@example.com", "sk-secret", "rk-secret", "abcdefghijklmnopqrstuvwxyz123456", `C:\Users\Alice`} {
+		if strings.Contains(out, forbidden) {
+			t.Fatalf("feedback submit leaked %q:\n%s", forbidden, out)
+		}
+	}
+
+	out = captureStdout(t, func() {
 		if rc := Run([]string{"feedback", "summary", "--json", "--home", selectedHome}, "test-version"); rc != 0 {
 			t.Fatalf("feedback summary rc = %d, want 0", rc)
 		}

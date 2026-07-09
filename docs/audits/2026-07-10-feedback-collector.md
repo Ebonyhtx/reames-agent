@@ -8,7 +8,7 @@ This batch adds the first concrete C4 feedback-center primitive:
 - `POST /api/feedback`
 - `GET /api/feedback/summary`
 - `POST /api/feedback/draft`
-- `reames-agent feedback summary|draft`
+- `reames-agent feedback submit|summary|draft`
 
 The goal is a local, self-hosted feedback ledger for cloud/server nodes. It does
 not enable third-party telemetry, automatic desktop uploads, or automatic issue
@@ -54,6 +54,7 @@ rendered body. It does not call the GitHub API or create an external issue.
 The CLI command provides the same operator path without starting `serve`:
 
 ```text
+reames-agent feedback submit  [--kind feedback] --message TEXT [--home PATH]
 reames-agent feedback summary [--json] [--limit N] [--home PATH]
 reames-agent feedback draft   [--json] [--limit N] [--home PATH]
 ```
@@ -78,8 +79,8 @@ Covered behavior:
 - HTTP summary output does not leak the submitted secret-like values;
 - HTTP draft generation writes a local Markdown maintenance draft without leaking
   submitted secret-like values;
-- CLI summary/draft can inspect a selected Reames Agent home, generate the same
-  local draft, and restore `REAMES_AGENT_HOME` afterward;
+- CLI submit/summary/draft can write and inspect a selected Reames Agent home,
+  generate the same local draft, and restore `REAMES_AGENT_HOME` afterward;
 - `text/plain` feedback POSTs are rejected by the serve CSRF/content-type guard.
 
 ## Remaining gap
