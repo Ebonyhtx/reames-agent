@@ -75,7 +75,8 @@ def check() -> list[str]:
     require("--addr 0.0.0.0:8787" not in unit, "systemd unit must not expose unauthenticated serve directly.", failures)
 
     deploy = read("docs/DEPLOY.md")
-    require("reames-agent bot start --channels feishu" in deploy, "docs/DEPLOY.md must document current bot start commands.", failures)
+    require("reames-agent gateway run --channels feishu" in deploy, "docs/DEPLOY.md must document current gateway run command.", failures)
+    require("reames-agent bot start --channels feishu" in deploy, "docs/DEPLOY.md must document legacy bot start compatibility.", failures)
     require('token_env = "REAMES_AGENT_SERVE_TOKEN"' in deploy, "docs/DEPLOY.md must document serve token_env.", failures)
     require("CLI + 独立 Gateway" in deploy, "docs/DEPLOY.md must lead with separate CLI and gateway deployment shape.", failures)
     require("tmux" in deploy and "reames-agent run" in deploy, "docs/DEPLOY.md must document SSH/tmux CLI usage.", failures)

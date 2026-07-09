@@ -54,13 +54,14 @@ Reames 当前已有：
 - `internal/bot`：`BotGateway`，管理 controller、session、审批、事件渲染和 adapter。
 - `internal/botruntime`：平台启用、连接配置、路由、session mapping。
 - `internal/bot/feishu`、`internal/bot/qq`、`internal/bot/weixin`、`internal/bot/telegram` 等 adapter。
-- `reames-agent bot start`：前台启动 bot gateway。
+- `reames-agent gateway run`：前台启动 social gateway。
+- `reames-agent bot start`：兼容旧命名的前台 bot gateway 入口。
 - Desktop 内部也有 bot runtime 相关设置和状态。
 
 但 Reames 还缺 Hermes 式产品闭环：
 
 - 没有明确的 gateway service lifecycle 命令：`install/start/stop/restart/status/uninstall`。
-- `bot start` 当前是前台运行，不是“启动已安装后台服务”。
+- `gateway run` / `bot start` 当前是前台运行，不是“启动已安装后台服务”。
 - 没有跨 Linux/macOS/Windows 的 service manager 抽象。
 - 没有一键安装脚本把 CLI、Desktop 可选安装、gateway service 配置串起来。
 - 文档之前把 `serve` 写得太靠前，容易误解成云端部署主入口。
@@ -81,8 +82,8 @@ Reames Agent core
 命令语义建议：
 
 - 当前保留：`reames-agent bot start --channels feishu` 作为前台调试/兼容入口。
+- 当前新增：`reames-agent gateway run`：前台运行 gateway daemon。
 - 新增目标：
-  - `reames-agent gateway run`：前台运行 gateway daemon。
   - `reames-agent gateway install`：安装 OS 后台服务。
   - `reames-agent gateway start|stop|restart|status|uninstall`：管理后台服务。
   - `reames-agent gateway setup`：配置平台、allowlist、工作区映射和凭据。
@@ -94,7 +95,7 @@ Reames Agent core
 
 1. 先明确命令设计和兼容迁移：
    - `bot start` 保持兼容；
-   - 新增 `gateway run` 作为等价前台入口；
+   - `gateway run` 作为等价前台入口；
    - 新增 `gateway install/start/status/...` 服务生命周期。
 2. 抽象 service manager：
    - Linux：systemd user/system service；
@@ -113,7 +114,7 @@ Reames Agent core
 
 在代码实现 service manager 前，文档应明确区分：
 
-- “当前可用”：`reames-agent bot start` 前台运行 gateway。
+- “当前可用”：`reames-agent gateway run` 前台运行 gateway；`reames-agent bot start` 保持兼容。
 - “目标形态”：独立 gateway service 后台运行，与 CLI/Desktop/Serve 隔离。
 
 这比继续把 `bot start` 写成云端主路径更接近用户需求，也更接近 Hermes 的真实架构。

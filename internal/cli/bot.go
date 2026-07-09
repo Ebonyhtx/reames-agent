@@ -46,7 +46,37 @@ func botCommand(args []string, version string) int {
 }
 
 func botStart(args []string, version string) int {
-	fs := flag.NewFlagSet("bot start", flag.ContinueOnError)
+	return runGatewayForeground(args, version, "bot start", "bot")
+}
+
+func gatewayCommand(args []string, version string) int {
+	if len(args) < 1 {
+		gatewayUsage()
+		return 2
+	}
+
+	sub := args[0]
+	rest := args[1:]
+
+	switch sub {
+	case "run":
+		return gatewayRun(rest, version)
+	case "help", "--help", "-h":
+		gatewayUsage()
+		return 0
+	default:
+		fmt.Fprintf(os.Stderr, "unknown gateway subcommand %q\n\n", sub)
+		gatewayUsage()
+		return 2
+	}
+}
+
+func gatewayRun(args []string, version string) int {
+	return runGatewayForeground(args, version, "gateway run", "gateway")
+}
+
+func runGatewayForeground(args []string, version, flagSetName, displayName string) int {
+	fs := flag.NewFlagSet(flagSetName, flag.ContinueOnError)
 	channels := fs.String("channels", "", "启用的平台，逗号分隔：qq,feishu,lark,weixin")
 	dir := fs.String("dir", "", "工作目录")
 	model := fs.String("model", "", "模型名（空则用 default_model）")
@@ -65,7 +95,7 @@ func botStart(args []string, version string) int {
 	}
 
 	if !cfg.Bot.Enabled {
-		fmt.Fprintln(os.Stderr, "error: bot is not enabled in config — set [bot] enabled = true")
+		fmt.Fprintf(os.Stderr, "error: %s is not enabled in config — set [bot] enabled = true\n", displayName)
 		return 1
 	}
 	if !botruntime.BotConfigHasAccessControl(cfg.Bot) {
@@ -86,7 +116,7 @@ func botStart(args []string, version string) int {
 		fmt.Fprintf(os.Stderr, "warning: unknown channel %q\n", ch)
 	}
 	if !botruntime.HasEnabledPlatform(enabledPlatforms) {
-		fmt.Fprintln(os.Stderr, "error: no bot channels enabled — enable at least one in config")
+		fmt.Fprintf(os.Stderr, "error: no %s channels enabled — enable at least one in config\n", displayName)
 		return 1
 	}
 
@@ -164,7 +194,7 @@ func botStart(args []string, version string) int {
 		gw.Stop()
 	}()
 
-	fmt.Fprintf(os.Stderr, "reames-agent bot starting (model: %s, channels: %s)...\n", modelName, *channels)
+	fmt.Fprintf(os.Stderr, "reames-agent %s starting (model: %s, channels: %s)...\n", displayName, modelName, *channels)
 	fmt.Fprintf(os.Stderr, "version: %s\n", version)
 
 	if err := gw.Start(ctx); err != nil {
@@ -578,5 +608,24 @@ Configuration:
     [bot.weixin]     enabled / account_id / token_env / api_base
 
   All secrets are read from environment variables; never put keys in config files.
+`)
+}
+
+func gatewayUsage() {
+	fmt.Print(`reames-agent gateway — independent social-channel gateway
+
+Usage:
+  reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
+
+Subcommands:
+  run       run the gateway in the foreground; compatible with "reames-agent bot start"
+
+Planned service lifecycle:
+  gateway install/start/stop/restart/status/uninstall will manage OS background services.
+  Until then, run the foreground command under tmux, systemd, launchd, or Scheduled Task manually.
+
+Examples:
+  reames-agent gateway run --channels feishu
+  reames-agent gateway run --dir /path/to/project --model deepseek-pro
 `)
 }

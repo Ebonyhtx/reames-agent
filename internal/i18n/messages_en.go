@@ -433,7 +433,8 @@ Usage:
   reames-agent init                                         show how to generate project memory (AGENTS.md)
   reames-agent doctor [--json]                              print redacted local diagnostics
   reames-agent doctor session <branch-id> [--zip] [--out PATH]  export a session conflict diagnostic zip
-  reames-agent bot start|doctor|weixin-login                multi-channel IM bot gateway
+  reames-agent gateway run [--channels qq,feishu,lark,weixin]  run the IM gateway in the foreground
+  reames-agent bot start|doctor|weixin-login                legacy bot gateway commands
   reames-agent upgrade [--check] [--force]                   self-update to the latest release (also: reames-agent update)
   reames-agent version
   reames-agent help

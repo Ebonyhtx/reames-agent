@@ -317,6 +317,34 @@ func TestMetadataCommandsDoNotProbeTerminalTheme(t *testing.T) {
 	if !strings.Contains(out, "reames-agent run  [--model NAME] [--max-steps N] [-c|--continue] [--resume PATH] [--copy] <task>") {
 		t.Fatalf("help output missing run resume flags:\n%s", out)
 	}
+	if !strings.Contains(out, "reames-agent gateway run") {
+		t.Fatalf("help output missing gateway run:\n%s", out)
+	}
+}
+
+func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
+	isolateCLIConfigHome(t)
+
+	out := captureStdout(t, func() {
+		if rc := Run([]string{"gateway", "help"}, "test-version"); rc != 0 {
+			t.Fatalf("gateway help rc = %d, want 0", rc)
+		}
+	})
+	if !strings.Contains(out, "reames-agent gateway run") || !strings.Contains(out, "bot start") {
+		t.Fatalf("gateway help output missing run/compatibility details:\n%s", out)
+	}
+
+	errOut := captureStderr(t, func() {
+		if rc := Run([]string{"gateway", "run", "--definitely-not-a-gateway-flag"}, "test-version"); rc != 2 {
+			t.Fatalf("gateway run bad flag rc = %d, want 2", rc)
+		}
+	})
+	if strings.Contains(errOut, "unknown command") || strings.Contains(errOut, "unknown gateway subcommand") {
+		t.Fatalf("gateway run should dispatch to the run flag parser, got:\n%s", errOut)
+	}
+	if !strings.Contains(errOut, "flag provided but not defined") {
+		t.Fatalf("gateway run bad flag stderr = %q, want flag parser error", errOut)
+	}
 }
 
 func TestRunDispatchesACPLongFlagAlias(t *testing.T) {

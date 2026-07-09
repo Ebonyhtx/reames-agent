@@ -26,7 +26,7 @@
 ## What the bot does
 
 After a bot is connected, you can send Reames Agent messages from Feishu, Lark,
-WeChat, or QQ. The desktop app or `reames-agent bot start` process handles the
+WeChat, or QQ. The desktop app or `reames-agent gateway run` process handles the
 model, tools, permissions, sandboxing, and local context, then sends progress
 and results back to the IM channel.
 
@@ -51,13 +51,14 @@ There are two supported entry points:
 - **Desktop runtime**: configure bots in **Settings -> Bots**. The desktop app
   starts the gateway, keeps status in the app, persists per-connection tool
   approval mode changes, and lets you open matching local IM sessions.
-- **CLI runtime**: run `reames-agent bot start` for a headless long-lived process.
+- **CLI runtime**: run `reames-agent gateway run` for a headless long-lived process.
+  `reames-agent bot start` remains as a compatibility alias for the old naming.
   It uses the same config, allowlist, routes, queue settings, pairing store,
   adapters, and project/session index as the desktop runtime.
 
 The normal `reames-agent run` command does not automatically start the IM gateway.
 Remote bot behavior is active only while the desktop bot runtime is running or
-while a `reames-agent bot start` process is alive.
+while a `reames-agent gateway run` process is alive.
 
 ## Connect the four channels
 
@@ -148,7 +149,7 @@ runtime itself can also run as a long-lived headless gateway:
 ```sh
 reames-agent bot doctor
 reames-agent bot doctor --deep
-reames-agent bot start --channels qq,feishu,lark,weixin --dir /path/to/project
+reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
 ```
 
 Use `--channels` to choose which configured IM inputs to accept. `feishu` and
@@ -461,7 +462,7 @@ You may need to bind again if:
 | Symptom | What to check |
 | --- | --- |
 | QR code says the link expired | Generate a new QR code in Settings; QR codes expire (Feishu, Lark, WeChat only — QQ uses manual setup and has no QR code). |
-| Connected but no reply | Make sure the desktop bot runtime or `reames-agent bot start` process is running, the bot connection is enabled, and the sender ID is allowlisted, paired, or access is open. |
+| Connected but no reply | Make sure the desktop bot runtime or `reames-agent gateway run` process is running, the bot connection is enabled, and the sender ID is allowlisted, paired, or access is open. |
 | Feishu or Lark button action fails | Send the text command from the card, such as `/approve <id>` or `/deny <id>`. |
 | QQ button action fails | Same as Feishu/Lark — send the text command from the card, such as `/approve <id>` or `/deny <id>`. |
 | WeChat reply `1` does nothing | Numeric shortcuts only work when an approval or Ask is pending; use the full command if needed. |

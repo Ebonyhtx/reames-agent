@@ -46,7 +46,7 @@ def check_required_files(failures: list[str]) -> None:
 
 def check_readme(failures: list[str]) -> None:
     readme = read("README.md")
-    require("reames-agent bot start" in readme, "README.md must document current bot start command.", failures)
+    require("reames-agent gateway run" in readme, "README.md must document current gateway run command.", failures)
     require("gateway start" not in readme, "README.md must not document obsolete gateway start command.", failures)
     require("sk-xxx" not in readme, "README.md must not use sk-xxx style API-key examples.", failures)
     require("Release Status" in readme, "README.md must describe pre-stable release status.", failures)

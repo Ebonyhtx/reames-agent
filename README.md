@@ -37,7 +37,7 @@ go build -o bin/reames-agent ./cmd/reames-agent
 reames-agent                        # Interactive CLI session
 reames-agent run "fix the auth bug" # Headless single task
 reames-agent serve                  # Start web UI on localhost:8787
-reames-agent bot start --channels feishu      # Start IM bot
+reames-agent gateway run --channels feishu    # Run IM gateway in foreground
 ```
 
 ## Cloud Deployment

@@ -19,8 +19,8 @@ Aliyun ECS / 自有服务器
 │  ├─ reames-agent run
 │  └─ SSH / tmux / screen / systemd-run
 ├─ Gateway daemon
-│  ├─ 当前：reames-agent bot start --channels feishu（前台运行）
-│  ├─ 目标：reames-agent gateway run（前台运行）
+│  ├─ 当前：reames-agent gateway run --channels feishu（前台运行）
+│  ├─ 兼容：reames-agent bot start --channels feishu（前台运行）
 │  ├─ 目标：reames-agent gateway install/start/stop/status（后台服务）
 │  └─ 飞书 / Lark / 微信 / QQ / Telegram 等 adapter
 ├─ reames-agent serve
@@ -55,10 +55,10 @@ tmux new -s reames
 
 ```bash
 # 当前 Reames 可用的前台调试入口
+reames-agent gateway run --channels feishu
 reames-agent bot start --channels feishu
 
-# 目标 Hermes-like 入口
-reames-agent gateway run
+# 目标 Hermes-like 后台服务入口
 reames-agent gateway install --start-now
 reames-agent gateway status
 ```
@@ -93,7 +93,7 @@ reames-agent gateway status
 reames-agent
 reames-agent run "审查这个仓库并给出风险"
 tmux new -s reames-agent
-reames-agent bot start --channels feishu
+reames-agent gateway run --channels feishu
 reames-agent serve
 reames-agent upstream watch
 ```
@@ -175,7 +175,7 @@ flowchart TD
 - 明确 Linux amd64 构建产物、服务器用户和 `REAMES_AGENT_HOME` 配置目录。
 - 提供 SSH/CLI-first 部署说明：安装二进制、写入 `<Reames Agent home>/.env`、交互式 CLI、`run`、tmux 长任务。
 - 补齐阿里云 ECS 部署说明：安全组、systemd、Docker Compose、Nginx/TLS、日志和备份。
-- 提供 `serve` / `bot start` / `run` 三种入口的最小健康检查。
+- 提供 `serve` / `gateway run` / `run` 三种入口的最小健康检查。
 - 验证 DeepSeek API Key 只来自服务器环境变量或加密凭据，不写入仓库。
 
 完成门槛：一台干净 Linux 服务器可以启动 `serve`，SSH 可以运行 `reames-agent run`，健康检查通过。

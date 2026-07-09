@@ -5,7 +5,7 @@
 如果目标是“像 Hermes 一样把 Agent 部署到云服务器，然后随时 SSH 上去使用，同时飞书/微信/QQ/Telegram 在后台常驻”，部署形态应分成两个互不干扰的入口：
 
 1. **CLI/TUI**：用户 SSH 到服务器后直接运行 `reames-agent` 或 `reames-agent run`。
-2. **Gateway service**：后台服务独立接收社交通道消息，当前前台调试命令是 `reames-agent bot start --channels feishu`，目标是 `reames-agent gateway install/start/status` 这类服务生命周期命令。
+2. **Gateway service**：后台服务独立接收社交通道消息，当前前台调试命令是 `reames-agent gateway run --channels feishu`（`reames-agent bot start --channels feishu` 保持兼容），目标是 `reames-agent gateway install/start/status` 这类服务生命周期命令。
 
 这种形态和本机 CLI 最接近：
 
@@ -100,10 +100,11 @@ journalctl -u reames-agent-once -f
 当前 Reames 已有前台运行入口：
 
 ```bash
+reames-agent gateway run --channels feishu
 reames-agent bot start --channels feishu
 ```
 
-它适合调试、tmux 或临时运行，但还不是 Hermes 式后台服务管理面。目标形态应补齐：
+它适合调试、tmux 或临时运行；`bot start` 是兼容入口，长期推荐使用 `gateway run`。当前还不是 Hermes 式后台服务管理面，目标形态应补齐：
 
 ```bash
 reames-agent gateway run                    # 前台运行，适合调试/Docker/Termux
@@ -127,7 +128,7 @@ reames-agent gateway uninstall              # 卸载后台服务
 ```bash
 sudo -iu reames
 tmux new -s reames-gateway
-REAMES_AGENT_HOME="$HOME/.reames-agent" reames-agent bot start --channels feishu
+REAMES_AGENT_HOME="$HOME/.reames-agent" reames-agent gateway run --channels feishu
 ```
 
 如果要用 systemd 临时托管，可先写一个 user service 调用上面的前台命令。正式实现会提供跨平台 service manager，类似 Hermes 的 systemd / launchd / Windows Scheduled Task 后端。
@@ -241,14 +242,14 @@ echo "审查这个 PR" | ssh user@server "reames-agent run"
 ## IM 通道连接（当前前台入口）
 
 ```bash
-# 启动飞书 bot
-reames-agent bot start --channels feishu
+# 启动飞书 gateway
+reames-agent gateway run --channels feishu
 
-# 启动微信 bot
-reames-agent bot start --channels weixin
+# 启动微信 gateway
+reames-agent gateway run --channels weixin
 
 # 启动多个平台
-reames-agent bot start --channels feishu,weixin,qq
+reames-agent gateway run --channels feishu,weixin,qq
 ```
 
-注意：这一节是当前实现的前台入口，不代表最终部署形态。长期目标是独立 Gateway service 后台运行，CLI/桌面/serve 都不应该被社交通道进程占用或阻塞。
+注意：这一节是当前实现的前台入口；`reames-agent bot start` 仍可作为旧命名兼容入口。长期目标是独立 Gateway service 后台运行，CLI/桌面/serve 都不应该被社交通道进程占用或阻塞。

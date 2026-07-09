@@ -25,7 +25,7 @@
 ## 能做什么
 
 连接机器人后，你可以在飞书、Lark、微信或 QQ 里给 Reames Agent 发消息，让桌面端
-Reames Agent 或 `reames-agent bot start` 进程在本机执行同一套模型、工具、权限与
+Reames Agent 或 `reames-agent gateway run` 进程在本机执行同一套模型、工具、权限与
 沙盒逻辑。
 
 典型场景：
@@ -47,12 +47,12 @@ Bot gateway 是一套共享的 Go runtime。核心行为在 Windows、macOS 和 
 - **桌面端 runtime**：在 **设置 -> 机器人** 中配置。桌面端会启动 gateway，
   在应用内维护状态，持久化每个连接的工具审批模式变化，并允许打开匹配的
   本地 IM 会话。
-- **CLI runtime**：执行 `reames-agent bot start` 启动无界面长期进程。它复用
+- **CLI runtime**：执行 `reames-agent gateway run` 启动无界面长期进程。`reames-agent bot start` 保留为旧命名兼容入口。它复用
   与桌面端相同的配置、白名单、路由、队列设置、配对存储、适配器和
   项目/会话索引。
 
 普通 `reames-agent run` 不会自动启动 IM 网关。只有桌面端 bot runtime 正在运行，
-或存在一个存活的 `reames-agent bot start` 进程时，远端 IM bot 能力才会生效。
+或存在一个存活的 `reames-agent gateway run` 进程时，远端 IM bot 能力才会生效。
 
 ## 连接四个渠道
 
@@ -136,7 +136,7 @@ HTTP 调用使用带超时的 client，避免平台请求卡住后无限阻塞 g
 ```sh
 reames-agent bot doctor
 reames-agent bot doctor --deep
-reames-agent bot start --channels qq,feishu,lark,weixin --dir /path/to/project
+reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
 ```
 
 `--channels` 用来选择接受哪些已配置的 IM 输入。`feishu` 和 `lark` 会选择对应
@@ -425,7 +425,7 @@ YOLO 的边界很重要：
 | 现象 | 可以检查 |
 | --- | --- |
 | 扫码提示链接失效 | 回到设置页重新生成二维码；二维码有有效期（飞书、Lark、微信；QQ 不使用扫码，请检查手动配置）。 |
-| 已连接但没有回复 | 确认桌面端 bot runtime 或 `reames-agent bot start` 进程正在运行，Bot 连接已开启，用户 ID 在白名单内、已配对或允许所有人。 |
+| 已连接但没有回复 | 确认桌面端 bot runtime 或 `reames-agent gateway run` 进程正在运行，Bot 连接已开启，用户 ID 在白名单内、已配对或允许所有人。 |
 | 飞书或 Lark 按钮提示失败 | 直接发送卡片里的命令，例如 `/approve <id>` 或 `/deny <id>`。 |
 | QQ 按钮提示失败 | 与飞书/Lark 相同 —— 直接发送卡片里的命令，例如 `/approve <id>` 或 `/deny <id>`。 |
 | 微信回复 `1` 没反应 | 只有存在待审批或 Ask 时数字快捷回复才生效；也可以使用完整命令。 |
