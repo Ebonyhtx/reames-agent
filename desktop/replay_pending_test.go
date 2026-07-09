@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -123,8 +125,11 @@ func TestDesktopReplayPendingPromptsReEmitsApprovalWithTabAndDiff(t *testing.T) 
 		t.Fatalf("replayed approval diff = %+v, want same preview as %+v", replayed.Approval, first.Approval)
 	}
 
-	ctrl.Approve(first.Approval.ID, true, false, false)
+	ctrl.Approve(first.Approval.ID, false, false, false)
 	waitNotRunning(t, ctrl)
+	if _, err := os.Stat(filepath.Join(workspace, rel)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("denied replay approval stat err = %v, want file not created", err)
+	}
 }
 
 func waitForDesktopApproval(t *testing.T, events <-chan wireEventTab) wireEventTab {
