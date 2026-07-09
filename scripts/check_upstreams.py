@@ -37,7 +37,7 @@ AREA_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     ("provider-cache", ("internal/provider/**", "internal/agent/cache*", "**/cache*")),
     ("agent-runtime", ("internal/agent/**", "internal/control/**")),
     ("server-cloud", ("internal/serve/**", "workers/**", "deploy/**", "Dockerfile", "docker-compose*")),
-    ("gateway", ("internal/bot/**", "gateway/**", "bot/**")),
+    ("gateway", ("internal/bot/**", "internal/gatewayservice/**", "gateway/**", "bot/**")),
     ("mcp-plugin-skill", ("internal/plugin/**", "internal/pluginpkg/**", "internal/skill/**", "plugins/**", "skills/**")),
     (
         "security",

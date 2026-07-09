@@ -104,6 +104,9 @@ class AnalysisTests(unittest.TestCase):
         changed = [{**upstreams[0], "latest": "c"}]
         self.assertNotEqual(watch.report_fingerprint(upstreams), watch.report_fingerprint(changed))
 
+    def test_gateway_service_paths_are_gateway_area(self):
+        self.assertEqual(watch.classify_path("internal/gatewayservice/service.go"), "gateway")
+
 
 if __name__ == "__main__":
     unittest.main()
