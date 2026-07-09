@@ -42,6 +42,18 @@ scripts/install.sh --dry-run --home "$HOME/.reames-agent" --gateway --channels f
 .\scripts\install.ps1 -DryRun -AgentHome "$env:APPDATA\reames-agent" -Gateway -Channels feishu
 ```
 
+未来开启稳定 GitHub Release 后，安装器已经预留“预构建产物优先”的显式路径，但默认仍保持源码构建，避免在 pre-stable 阶段给用户制造已经发布稳定二进制的错觉：
+
+```bash
+scripts/install.sh --binary-source release --version v0.1.0 --home "$HOME/.reames-agent"
+```
+
+```powershell
+.\scripts\install.ps1 -BinarySource release -Version v0.1.0 -AgentHome "$env:APPDATA\reames-agent"
+```
+
+release 模式只信任当前 Reames 仓库的 GitHub Release artifact 命名：`reames-agent-linux-amd64.tar.gz`、`reames-agent-darwin-arm64.tar.gz`、`reames-agent-windows-amd64.zip` 等，并会下载 `SHA256SUMS` 做校验。没有正式 release 时不要使用该模式；服务器部署继续使用默认 source 模式或手动上传已验证的候选二进制。
+
 ### 1. 创建低权限用户
 
 ```bash

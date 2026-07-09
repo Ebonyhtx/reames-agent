@@ -92,6 +92,9 @@ jobs:
           bash -n scripts/install.sh
           bash scripts/install.sh --dry-run --skip-setup --home /home/reames/.reames-agent --gateway --channels feishu --gateway-dir /srv/reames-work | tee /tmp/reames-install-dry-run.txt
           grep -F -- '--home /home/reames/.reames-agent' /tmp/reames-install-dry-run.txt
+          bash scripts/install.sh --dry-run --skip-setup --binary-source release --version v0.1.0 | tee /tmp/reames-install-release-dry-run.txt
+          grep -F -- 'reames-agent-linux-amd64.tar.gz' /tmp/reames-install-release-dry-run.txt
+          grep -F -- 'verify SHA256SUMS' /tmp/reames-install-release-dry-run.txt
       - name: Validate PowerShell installer dry-run
         shell: pwsh
         run: |
@@ -99,6 +102,14 @@ jobs:
           $out
           if ($out -notmatch '--home\s+/home/reames\s*/\.reames-agent') {
             throw "PowerShell installer dry-run did not pass --home to gateway install"
+          }
+          $releaseOut = ./scripts/install.ps1 -DryRun -SkipSetup -BinarySource release -Version v0.1.0 6>&1 | Out-String
+          $releaseOut
+          if ($releaseOut -notmatch 'reames-agent-windows-amd64\.zip') {
+            throw "PowerShell installer release dry-run did not select the Windows release artifact"
+          }
+          if ($releaseOut -notmatch 'verify SHA256SUMS') {
+            throw "PowerShell installer release dry-run did not verify SHA256SUMS"
           }
 
   release-contracts:

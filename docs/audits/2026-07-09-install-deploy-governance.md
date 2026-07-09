@@ -101,12 +101,12 @@ Reames 的正式入口应保持四条线并列，而不是互相依赖：
 
 1. `README.zh-CN.md` 仍写着旧命令 `reames-agent gateway start --channels feishu`，已改为 `gateway run` 和 `gateway install --dry-run`。
 2. `README.zh-CN.md` 仍使用 `DEEPSEEK_API_KEY=sk-xxx` 示例，已改为 `replace-with-your-key` 并补 `REAMES_AGENT_SERVE_TOKEN`。
-3. Reames installer 已从旧 Hermes installer 替换为 Reames 源码构建安装器，但还需要未来接入 release artifact 下载。
+3. Reames installer 已从旧 Hermes installer 替换为 Reames 自有安装器；默认仍是源码构建，但已预留显式 release artifact 安装模式（`--binary-source release --version ...` / `-BinarySource release -Version ...`）并要求 `SHA256SUMS` 校验。
 4. Reasonix 上游已经比本地参考仓库前进 5 个提交，已 fast-forward 到 `0e0cb63c`。
 
 ## 下一步
 
-1. 给 Reames release 流程补“预构建二进制下载优先、源码构建 fallback”的 installer 设计。
+1. 在 stable release 打开前，继续保持 installer 默认 source 模式；release 模式只能作为显式选择和 dry-run 契约存在。
 2. 清理或隔离剩余旧 Hermes/Python 辅助脚本，避免它们被误认为正式 Reames 入口。
 3. 把 Reasonix 的 release/npm/Homebrew 治理拆成可执行 Reames 里程碑，但在 public stable 前保持发布关闭。
 4. 在干净 Linux 服务器上验证：

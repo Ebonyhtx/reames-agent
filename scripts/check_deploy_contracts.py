@@ -98,6 +98,9 @@ def check() -> list[str]:
         require("reames-agent gateway install" in installer or "gateway install" in installer, f"{path} must support installing the gateway service.", failures)
         require("--home" in installer and "REAMES_AGENT_HOME" in installer, f"{path} must bind gateway services to the selected Reames Agent home.", failures)
         require("--dry-run" in installer or "DryRun" in installer, f"{path} must support safe dry-run planning.", failures)
+        require("binary-source" in installer.lower() or "binarysource" in installer.lower(), f"{path} must expose an explicit source/release binary mode.", failures)
+        require("SHA256SUMS" in installer, f"{path} must verify release artifacts with SHA256SUMS.", failures)
+        require("reames-agent-" in installer and "releases/download" in installer, f"{path} must know the Reames GitHub release artifact shape.", failures)
         require("NousResearch/hermes-agent" not in installer, f"{path} must not install inherited Hermes repositories.", failures)
         require("HERMES_HOME" not in installer, f"{path} must not use inherited HERMES_HOME.", failures)
 
