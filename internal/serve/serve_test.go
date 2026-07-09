@@ -321,6 +321,21 @@ func TestServeIndexHandlesRetryingEvents(t *testing.T) {
 	}
 }
 
+func TestServeIndexShowsApprovalPatchPreview(t *testing.T) {
+	html := string(indexHTML)
+	for _, want := range []string{
+		"approval__diff",
+		"'patch_preview': 'Patch preview'",
+		"const diff = typeof a.diff === 'string' ? a.diff : '';",
+		"const diffHtml = diff ?",
+		"escHtml(diff)",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("serve index missing approval patch preview support %q", want)
+		}
+	}
+}
+
 func TestServeIndexPagePassesLanguagePreferenceToClient(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

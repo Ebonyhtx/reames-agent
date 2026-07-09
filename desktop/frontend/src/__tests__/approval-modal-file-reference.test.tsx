@@ -297,6 +297,35 @@ console.log("\napproval modal file references");
   });
   const { root } = await renderApproval({
     approval: {
+      id: "write-approval",
+      tool: "write_file",
+      subject: "notes/hello.txt",
+      diff: "@@ -0,0 +1,2 @@\n+hello\n+from reames\n",
+      added: 2,
+      removed: 0,
+    },
+  });
+
+  await waitFor("approval modal renders patch preview", () => document.body.textContent?.includes("Patch preview") === true);
+  const text = document.body.textContent ?? "";
+  ok(text.includes("Patch preview"), "tool approval shows patch preview heading");
+  ok(text.includes("+2 -0"), "tool approval shows patch stats");
+  ok(text.includes("hello") && text.includes("from reames"), "tool approval renders diff added lines");
+
+  await act(async () => {
+    root.unmount();
+  });
+  dom.window.close();
+}
+
+{
+  const dom = installDom();
+  mockApp({
+    ListDir: async () => [],
+    SearchFileRefs: async () => [],
+  });
+  const { root } = await renderApproval({
+    approval: {
       id: "tool-approval",
       tool: "bash",
       subject: "npm run build\n\nRun the build command to verify frontend artifacts.",

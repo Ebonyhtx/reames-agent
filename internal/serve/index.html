@@ -130,6 +130,10 @@ input,textarea{font:inherit;color:inherit}
 .approval__icon{color:var(--warning);width:16px;height:16px}
 .approval__title{font-weight:600;font-size:13px}
 .approval__subject{font-family:var(--mono);font-size:11.5px;color:var(--fg-2);padding:7px 10px;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word;max-height:100px;overflow-y:auto}
+.approval__diff{margin-bottom:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-2);overflow:hidden}
+.approval__diff-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--fg-2)}
+.approval__diff-stat{font-family:var(--mono);font-weight:500;color:var(--muted)}
+.approval__diff-body{margin:0;padding:8px 10px;max-height:180px;overflow:auto;font-family:var(--mono);font-size:11px;line-height:1.45;white-space:pre;color:var(--fg)}
 .approval__actions{display:flex;gap:6px;flex-wrap:wrap}
 .approval__btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;transition:all .18s ease;border:1px solid var(--border)}
 .approval__btn--allow{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
@@ -526,6 +530,7 @@ const __T = {
     'cmd_help': 'Help',
     'submit': 'Submit',
     'approval_title': 'Approval Required',
+    'patch_preview': 'Patch preview',
     'allow': 'Allow',
     'session': 'Allow for session',
     'session_command': 'Command for session',
@@ -894,6 +899,10 @@ function showApproval(a) {
   const prefix = a.tool === 'bash' ? bashCommandPrefix(a.subject) : '';
   const hasPrefix = prefix !== '';
   const prefixRule = hasPrefix ? 'Bash('+prefix+')' : '';
+  const diff = typeof a.diff === 'string' ? a.diff : '';
+  const added = Number.isFinite(a.added) ? a.added : 0;
+  const removed = Number.isFinite(a.removed) ? a.removed : 0;
+  const diffHtml = diff ? '<div class="approval__diff"><div class="approval__diff-head"><span>'+__('patch_preview')+'</span><span class="approval__diff-stat">+'+added+' -'+removed+'</span></div><pre class="approval__diff-body">'+escHtml(diff)+'</pre></div>' : '';
   const actions = [
     '<button class="approval__btn approval__btn--allow" data-allow="true" data-session="false"><span class="approval__key">Y</span> '+__('allow')+'</button>',
   ];
@@ -905,7 +914,7 @@ function showApproval(a) {
     actions.push('<button class="approval__btn approval__btn--allow" data-allow="true" data-session="true" data-persist="true"><span class="approval__key">P</span> '+escHtml(approvalPersistentLabel(a))+'</button>');
   }
   actions.push('<button class="approval__btn approval__btn--deny" data-allow="false"><span class="approval__key">N</span> '+__('deny')+'</button>');
-  d.innerHTML='<div class="approval__header"><svg class="approval__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span class="approval__title">'+__('approval_title')+'</span></div><div class="approval__subject">'+escHtml(a.tool)+(a.subject?' — '+escHtml(a.subject):'')+'</div><div class="approval__actions">'+actions.join('')+'</div>';
+  d.innerHTML='<div class="approval__header"><svg class="approval__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span class="approval__title">'+__('approval_title')+'</span></div><div class="approval__subject">'+escHtml(a.tool)+(a.subject?' — '+escHtml(a.subject):'')+'</div>'+diffHtml+'<div class="approval__actions">'+actions.join('')+'</div>';
   log.appendChild(d);scrollDown();
   const resolve=payload=>{post('/approve',Object.assign({id:a.id},payload));d.remove();document.removeEventListener('keydown',onkey);};
   d.querySelectorAll('.approval__btn').forEach(btn=>{btn.onclick=()=>resolve({allow:btn.dataset.allow==='true',session:btn.dataset.session==='true',persist:btn.dataset.persist==='true',scope:btn.dataset.scope||''});});

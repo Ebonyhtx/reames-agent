@@ -213,8 +213,11 @@ func TestToWireInteractionAndLifecyclePayloads(t *testing.T) {
 	}{
 		{
 			name: "approval",
-			in:   event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{ID: "a1", Tool: "bash", Subject: "rm"}},
-			want: []string{`"kind":"approval_request"`, `"approval":{"id":"a1","tool":"bash","subject":"rm"}`},
+			in: event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{
+				ID: "a1", Tool: "write_file", Subject: "a.txt",
+				FileDiff: event.FileDiff{Diff: "@@ -0,0 +1 @@\n+hello\n", Added: 1},
+			}},
+			want: []string{`"kind":"approval_request"`, `"approval":{"id":"a1","tool":"write_file","subject":"a.txt","diff":"@@ -0,0 +1 @@\n+hello\n","added":1}`},
 		},
 		{
 			name: "ask",

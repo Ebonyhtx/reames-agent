@@ -522,6 +522,7 @@ export const zhTW: Record<DictKey, string> = {
   "approval.toolPending": "允許工具呼叫",
   "approval.details": "詳情",
   "approval.hideDetails": "收起",
+  "approval.patchPreview": "補丁預覽",
   "approval.deny": "拒絕",
   "approval.allowOnce": "允許一次",
   "approval.allowSession": "本會話允許此工具",

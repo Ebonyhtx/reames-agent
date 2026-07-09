@@ -676,6 +676,7 @@ export const zh: Record<DictKey, string> = {
   "approval.toolPending": "允许工具调用",
   "approval.details": "详情",
   "approval.hideDetails": "收起",
+  "approval.patchPreview": "补丁预览",
   "approval.deny": "拒绝",
   "approval.allowOnce": "允许一次",
   "approval.allowSession": "本会话允许此工具",

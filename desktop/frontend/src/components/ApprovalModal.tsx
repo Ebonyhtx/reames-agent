@@ -5,12 +5,14 @@ import { useT, type Translator } from "../lib/i18n";
 import type { ComposerInsertRequest, DirEntry, WireApproval } from "../lib/types";
 import { PromptAction, PromptBadge, PromptHeaderAction, PromptShelf } from "./PromptShelf";
 import { DUR_FAST } from "../lib/gsapAnimations";
+import { fileDiffFromWire, summarizeFileDiff } from "../lib/tools";
 import {
   FileReferenceMenu,
   insertTextAtSelection,
   pickInlineFileReference,
   useFileReferenceMenu,
 } from "./FileReferenceMenu";
+import { DiffView } from "./DiffView";
 
 function animateShelfExit(
   el: HTMLDivElement,
@@ -140,7 +142,8 @@ export function ApprovalModal({
   const reason = localizePlanModeApprovalReason(approval.tool, localizeApprovalReason(approval.tool, approval.reason, t), t);
   const subjectSummary = subject.split(/\r?\n/).find((line) => line.trim())?.trim() ?? "";
   const toolMeta = reason || subjectSummary || approval.tool;
-  const hasToolDetails = Boolean(reason || subject);
+  const approvalFileDiff = fileDiffFromWire(approval);
+  const hasToolDetails = Boolean(reason || subject || approvalFileDiff?.diff);
   const showToolDetailsByDefault = !isPlanApproval && hasToolDetails;
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionText, setRevisionText] = useState("");
@@ -430,6 +433,15 @@ export function ApprovalModal({
             {reason && <div className="approval-reason">{reason}</div>}
             {subject && (
               <pre className="approval-subject">{subject}</pre>
+            )}
+            {approvalFileDiff?.diff && (
+              <div className="approval-diff">
+                <div className="approval-diff__header">
+                  <span>{t("approval.patchPreview")}</span>
+                  <span className="approval-diff__stats">{summarizeFileDiff(approvalFileDiff)}</span>
+                </div>
+                <DiffView diff={approvalFileDiff.diff} maxHeight={220} />
+              </div>
             )}
           </div>
         )}

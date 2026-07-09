@@ -7251,6 +7251,30 @@ body > .mermaid-diagram--fullscreen {
   max-height: 180px;
   overflow: auto;
 }
+.approval-diff {
+  display: grid;
+  gap: 6px;
+}
+.approval-diff__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--fg-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.approval-diff__stats {
+  font-family: var(--mono);
+  color: var(--fg-faint);
+  font-weight: 500;
+}
+.approval-diff .diff {
+  max-height: 220px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-soft);
+}
 .ask-shelf__crumbs {
   display: flex;
   flex-wrap: wrap;

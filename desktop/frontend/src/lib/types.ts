@@ -92,6 +92,9 @@ export interface WireApproval {
   tool: string;
   subject: string;
   reason?: string;
+  diff?: string;
+  added?: number;
+  removed?: number;
 }
 
 export interface WireGuardian {

@@ -675,6 +675,7 @@ export const en = {
   "approval.toolPending": "Allow tool call",
   "approval.details": "Details",
   "approval.hideDetails": "Hide",
+  "approval.patchPreview": "Patch preview",
   "approval.deny": "Deny",
   "approval.allowOnce": "Allow once",
   "approval.allowSession": "Allow tool for session",
