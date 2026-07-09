@@ -175,6 +175,54 @@ def check_tracked_artifacts(failures: list[str]) -> None:
             failures.append(f"{normalized} looks like a generated binary/test artifact and must not be tracked.")
 
 
+def check_telemetry_boundaries(failures: list[str]) -> None:
+    crash_app = read("desktop/crash_app.go")
+    metrics_app = read("desktop/metrics_app.go")
+    require('var crashEndpoint = ""' in crash_app, "desktop crash reporting must default to no endpoint.", failures)
+    require('var metricsEndpoint = ""' in metrics_app, "desktop metrics upload must default to no endpoint.", failures)
+    require("crash reporting is unavailable in this build" in crash_app, "desktop crash reporting must fail closed without an owned endpoint.", failures)
+    require("Gated on config desktop.metrics and a repository-owned endpoint." in metrics_app, "desktop metrics must document the owned-endpoint gate.", failures)
+
+    forbidden_tokens = [
+        "SENTRY_DSN",
+        "POSTHOG_KEY",
+        "AMPLITUDE_API_KEY",
+        "DATADOG_API_KEY",
+        "CRASH_ENDPOINT",
+        "TELEMETRY_ENDPOINT",
+        "METRICS_ENDPOINT",
+        "crashEndpoint = \"http",
+        "metricsEndpoint = \"http",
+    ]
+    scan_roots = (
+        ".github/workflows",
+        "desktop",
+        "docs",
+        "deploy",
+        "scripts",
+        "README.md",
+        "README.zh-CN.md",
+    )
+    allowed = {
+        "scripts/check_public_readiness.py",
+        "docs/PUBLIC_READINESS.md",
+        "docs/CLOUD_AGENT_PLAN.md",
+    }
+    try:
+        tracked = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        failures.append(f"could not enumerate tracked files with git ls-files: {exc}")
+        return
+    for rel in tracked:
+        normalized = rel.replace("\\", "/")
+        if normalized in allowed or not normalized.startswith(scan_roots):
+            continue
+        path = ROOT / normalized
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for token in forbidden_tokens:
+            require(token not in text, f"{normalized} must not configure telemetry/crash token {token!r}.", failures)
+
+
 def check_installers(failures: list[str]) -> None:
     for rel in ["scripts/install.sh", "scripts/install.ps1", "scripts/install.cmd"]:
         text = read(rel)
@@ -251,6 +299,7 @@ def main() -> int:
         check_brand_env_regressions(failures)
         check_root_package_metadata(failures)
         check_tracked_artifacts(failures)
+        check_telemetry_boundaries(failures)
         check_installers(failures)
         check_script_surface(failures)
 

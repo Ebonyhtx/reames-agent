@@ -10,6 +10,7 @@
 - Removed inherited Hermes/Python scripts from the public `scripts/` surface and added a regression gate to keep old release, live-test, Open WebUI, and WhatsApp bridge entrypoints from returning.
 - Rebranded the private root Node workspace metadata from inherited Hermes links to Reames and added public-readiness gates against tracked build artifacts.
 - Added a manual native Desktop candidate workflow that builds short-lived Wails artifacts without publishing or signing.
+- Added public-readiness gates for telemetry/crash-reporting boundaries so feedback upload stays disabled until a Reames-owned endpoint exists.
 
 ### Deployment
 
