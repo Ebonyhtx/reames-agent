@@ -73,6 +73,7 @@ func TestDesktopBuildScriptCompilesAndPackagesWindowsUpdateHelper(t *testing.T) 
 		`./cmd/update-helper`,
 		`build/windows/installer/$UPDATE_HELPER`,
 		`cp "$helper" "$staging/$UPDATE_HELPER"`,
+		`Compress-Archive -Force -Path '$staging_win\\*'`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("desktop-build.sh missing %q", want)

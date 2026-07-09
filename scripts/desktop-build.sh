@@ -150,9 +150,9 @@ windows)
 	if [ -f "$helper" ]; then
 		cp "$helper" "$staging/$UPDATE_HELPER"
 	fi
-	src_win=$(cygpath -w "$staging/${APPNAME}.exe")
+	staging_win=$(cygpath -w "$staging")
 	zip_win=$(cygpath -w "$ROOT/dist/${APPNAME}-windows-${arch}.zip")
-	powershell.exe -NoProfile -Command "Compress-Archive -Force -LiteralPath '$src_win' -DestinationPath '$zip_win'"
+	powershell.exe -NoProfile -Command "Compress-Archive -Force -Path '$staging_win\\*' -DestinationPath '$zip_win'"
 	rm -rf "$staging"
 	;;
 linux)
