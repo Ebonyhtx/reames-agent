@@ -126,13 +126,15 @@ jobs:
         run: python -m unittest scripts.test_check_desktop_artifacts -v
 
   public-readiness:
-    name: Public readiness
+    name: Public readiness and docs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Validate documentation contracts
+        run: python scripts/check_docs_contracts.py
       - name: Validate public repository gates
         run: python scripts/check_public_readiness.py
 

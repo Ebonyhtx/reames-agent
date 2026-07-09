@@ -58,12 +58,17 @@
 | `docs/superpowers/audits/` | AutoResearch 验证记录 |
 | [接管审计](audits/2026-07-09-takeover.md) | 初次代码与测试审计 |
 | [首次上游审查](audits/2026-07-09-upstream-review.md) | Upstream Watch 建立时的差异快照 |
+| [Desktop candidate governance audit](audits/2026-07-09-desktop-candidate-governance.md) | 三平台 Desktop candidate workflow、artifact smoke 与发布边界证据 |
+| [Legacy tree quarantine audit](audits/2026-07-09-legacy-tree-quarantine.md) | 旧 Python/Hermes 树的短期隔离规则和后续迁移队列 |
+| [Script surface cleanup audit](audits/2026-07-09-script-surface-cleanup.md) | 公开脚本入口清理、旧运行时脚本删除和防回归门禁 |
+| [Telemetry and feedback boundary audit](audits/2026-07-09-telemetry-feedback-boundary.md) | 遥测/反馈默认关闭、自托管边界和公开门禁证据 |
 | [真实 Provider 最小验证](audits/2026-07-09-real-provider.md) | DeepSeek 鉴权、响应、用量与缓存命中证据 |
 | [Desktop M1 桥接审计](audits/2026-07-09-desktop-m1-bridge.md) | Desktop Submit/Cancel 多工作区桥接自动化证据 |
 | [Desktop M1 frontend workspace loop audit](audits/2026-07-09-desktop-m1-frontend-workspace-loop.md) | 前端 workspace 选择、发送、切换和停止的 tab 绑定回归证据 |
 | [M1 文件写入闭环审计](audits/2026-07-09-m1-file-write-loop.md) | 真实 `write_file` 审批、补丁预览、落盘与 RewindCode 回退证据 |
 | [M1 重连与恢复审计](audits/2026-07-09-m1-reconnect-recovery.md) | pending approval replay、Desktop tab 事件恢复和 pending snapshot diff 诊断证据 |
 | [M1 失败场景合同审计](audits/2026-07-09-m1-failure-contracts.md) | provider 鉴权失败、审批超时阻塞写入和运行态复位证据 |
+| [Desktop M1 frontend failure display audit](audits/2026-07-09-desktop-m1-failure-display.md) | 前端 provider 失败、工具超时和审批拒绝的可见 warn/error 与停止态复位证据 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |
 | [Gateway service lifecycle contract audit](audits/2026-07-09-gateway-service-lifecycle.md) | 跨平台后台 gateway 生命周期命令、CLI/Gateway 隔离和防 `serve`/`bot start` 回归证据 |
 | [Installer release artifact mode audit](audits/2026-07-09-installer-release-mode.md) | 安装器默认源码构建、显式 release artifact 模式与 SHA256SUMS 校验证据 |

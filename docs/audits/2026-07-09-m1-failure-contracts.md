@@ -23,6 +23,7 @@
 - 新增 `TestApprovalTimeoutBlocksWriteAndClearsPendingPrompt`。
 - 新增 `TestUserDeniedApprovalBlocksWriteAndClearsPendingPrompt`。
 - 新增 `TestToolTimeoutEmitsToolResultAndClearsRuntimeStatus`。
+- 新增 `desktop/frontend/src/__tests__/use-controller-failure-display.test.ts`，锁定 Desktop 前端对 provider 失败、工具超时和审批拒绝的可见 warn/error 状态与运行态复位。
 
 ## 语义边界
 
@@ -34,12 +35,13 @@
 
 ```powershell
 go test ./internal/control -run "TestProvider(AuthError|APIError|StreamInterruption)|TestApprovalTimeoutBlocksWriteAndClearsPendingPrompt|TestUserDeniedApprovalBlocksWriteAndClearsPendingPrompt|TestToolTimeoutEmitsToolResultAndClearsRuntimeStatus" -count=1 -timeout 120s
+Push-Location desktop/frontend; corepack pnpm exec tsx src/__tests__/use-controller-failure-display.test.ts; Pop-Location
 ```
 
 结果：通过。
 
 ## 仍需后续覆盖
 
-- Desktop 原生 UI 上的错误 toast/banner 与停止按钮状态。
+- Desktop 原生窗口上的错误 toast/banner 与停止按钮状态（前端 reducer 合同已补，见 `2026-07-09-desktop-m1-failure-display.md`；仍缺真实窗口 smoke）。
 - 真实 provider 的 429/5xx/断流组合烟测（当前为 Controller 级模拟 provider 合同）。
 - 工具运行超时在 Desktop 原生 UI 上的展示合同。

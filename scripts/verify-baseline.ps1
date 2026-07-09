@@ -44,6 +44,7 @@ try {
     }
 
     Invoke-Step "Public and deployment contract checks" {
+        Invoke-Native -FilePath "python" -Arguments @("scripts/check_docs_contracts.py")
         Invoke-Native -FilePath "python" -Arguments @("scripts/check_public_readiness.py")
         Invoke-Native -FilePath "python" -Arguments @("scripts/check_deploy_contracts.py")
         Invoke-Native -FilePath "python" -Arguments @("scripts/check_release_contracts.py")
