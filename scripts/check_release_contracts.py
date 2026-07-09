@@ -30,6 +30,30 @@ def check_release_candidate_workflow(failures: list[str]) -> None:
         require(token not in workflow, f"release candidate workflow must not contain {token!r}.", failures)
 
 
+def check_desktop_candidate_workflow(failures: list[str]) -> None:
+    workflow = read(".github/workflows/desktop-candidate.yml")
+    require("workflow_dispatch:" in workflow, "desktop candidate must be manually triggered.", failures)
+    require("contents: read" in workflow, "desktop candidate workflow must not request content write permission.", failures)
+    require("scripts/desktop-build.sh" in workflow, "desktop candidate must use the shared desktop build script.", failures)
+    require("linux/amd64" in workflow, "desktop candidate must include a Linux target.", failures)
+    require("windows/amd64" in workflow, "desktop candidate must include a Windows target.", failures)
+    require("darwin/universal" in workflow, "desktop candidate must include a macOS universal target.", failures)
+    require("actions/upload-artifact@v4" in workflow, "desktop candidate must upload artifacts, not publish releases.", failures)
+    require("retention-days: 14" in workflow, "desktop candidate artifacts should have short retention.", failures)
+    forbidden = [
+        "gh release create",
+        "GITHUB_TOKEN:",
+        "secrets.",
+        "npm publish",
+        "brew tap",
+        "aws s3",
+        "wrangler deploy",
+        "goreleaser release --clean",
+    ]
+    for token in forbidden:
+        require(token not in workflow, f"desktop candidate workflow must not contain {token!r}.", failures)
+
+
 def check_goreleaser_contract(failures: list[str]) -> None:
     config = read(".goreleaser.yaml")
     require("project_name: reames-agent" in config, "GoReleaser project name must be reames-agent.", failures)
@@ -53,6 +77,19 @@ def check_release_docs(failures: list[str]) -> None:
     ]:
         require(token in releasing, f"docs/RELEASING.md must document {token!r}.", failures)
 
+    desktop_candidate = read("docs/audits/2026-07-09-desktop-candidate-governance.md")
+    for token in [
+        "Desktop candidate",
+        "workflow_dispatch",
+        "contents: read",
+        "linux/amd64",
+        "windows/amd64",
+        "darwin/universal",
+        "不创建 GitHub Release",
+        "不读取 signing secrets",
+    ]:
+        require(token in desktop_candidate, f"desktop candidate audit must document {token!r}.", failures)
+
     changelog = read("CHANGELOG.md")
     require("## Unreleased" in changelog, "CHANGELOG.md must contain an Unreleased section.", failures)
     require("## v0.1.0" in changelog, "CHANGELOG.md must retain the initial release section.", failures)
@@ -61,6 +98,7 @@ def check_release_docs(failures: list[str]) -> None:
 def main() -> int:
     failures: list[str] = []
     check_release_candidate_workflow(failures)
+    check_desktop_candidate_workflow(failures)
     check_goreleaser_contract(failures)
     check_release_docs(failures)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build and package the Wails desktop app for one platform. Wails cannot
 # cross-compile a CGO+webview binary, so this runs on a native runner per target
-# (see .github/workflows/release-desktop.yml) and is invoked once per matrix entry.
+# (see .github/workflows/desktop-candidate.yml) and is invoked once per matrix entry.
 #
 # Output lands in <repo>/dist/ with stable, platform-keyed names that
 # desktop/cmd/sign's `manifest` subcommand maps back to update.PlatformKey:

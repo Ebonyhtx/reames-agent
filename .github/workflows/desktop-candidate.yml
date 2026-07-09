@@ -1,0 +1,87 @@
+name: Desktop candidate
+
+# This workflow builds inspectable native Desktop artifacts on native runners.
+# It uploads short-lived artifacts only: no GitHub Release, updater metadata,
+# npm/Homebrew publish, signing service, or cloud bucket write is performed here.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  desktop-candidate:
+    name: Desktop candidate (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+            artifact: linux-amd64
+          - platform: windows/amd64
+            runner: windows-latest
+            artifact: windows-amd64
+          - platform: darwin/universal
+            runner: macos-latest
+            artifact: darwin-universal
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: desktop/frontend/pnpm-lock.yaml
+
+      - name: Install Linux desktop build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install macOS packaging dependencies
+        if: runner.os == 'macOS'
+        run: brew install create-dmg
+
+      - name: Install Windows packaging dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install nsis -y --no-progress
+
+      - name: Install Wails and packaging tools
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+          fi
+
+      - name: Build desktop candidate
+        shell: bash
+        run: bash scripts/desktop-build.sh "${{ matrix.platform }}" "v0.1.0-candidate.${{ github.run_number }}" candidate
+
+      - name: Upload desktop candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reames-agent-desktop-candidate-${{ matrix.artifact }}-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
