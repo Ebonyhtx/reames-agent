@@ -43,6 +43,14 @@ M0 “基线可信”仍缺一项：三平台 native Desktop candidate 打包。
 
 这证明三平台 candidate 打包流水线已经建立并能产出结构正确的短期 artifact；仍不等价于稳定 release，也尚未证明普通用户安装/启动体验。
 
+Windows portable 启动 smoke：
+
+- Artifact: `Reames Agent-windows-amd64.zip` from run `29015844761` / commit `ee34223e0b4d69422fb0c9de7e27a222b9326972`。
+- 环境：Windows，本机临时目录，隔离 `REAMES_AGENT_HOME`，并设置 `REAMES_AGENT_DESKTOP_DISABLE_WEBVIEW2_GPU=1`。
+- 结果：`Reames Agent.exe` 启动后 12 秒仍存活，未立即崩溃；随后结束 smoke 进程。
+- 证据：临时 Agent home 写入了 `desktop-tabs.json`、`desktop-window.json`、环境探测 cache 和初始 session metadata。
+- 边界：这不是安装器 smoke，也没有验证真实用户点击路径、模型调用或自动更新。
+
 ## 明确不做
 
 该 workflow 不做以下事情：
@@ -58,5 +66,6 @@ M0 “基线可信”仍缺一项：三平台 native Desktop candidate 打包。
 
 Wails Desktop 是 CGO + 原生 webview，必须在真实 runner 上验证。当前 workflow 是 candidate pipeline，不是 stable release。三平台打包流水线已在 run `29015844761` 验证通过；面向用户发布前仍需以下证据：
 
-1. Linux/Windows/macOS 至少各完成一次安装/启动冒烟。
-2. 若进入 canary/stable，再补签名、notarization、校验、更新元数据和人工审批。
+1. Linux/macOS 至少各完成一次安装/启动冒烟。
+2. Windows NSIS installer 完成一次安装/启动冒烟。
+3. 若进入 canary/stable，再补签名、notarization、校验、更新元数据和人工审批。
