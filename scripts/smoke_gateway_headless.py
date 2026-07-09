@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SMOKE_SECRET = "smoke-secret-never-print"
 
 
-def run_result(args: list[str], *, env: dict[str, str] | None = None) -> tuple[int, str]:
+def run_result(args: list[str], *, env: dict[str, str] | None = None, timeout: int = 30) -> tuple[int, str]:
     proc = subprocess.run(
         args,
         cwd=ROOT,
@@ -34,13 +34,13 @@ def run_result(args: list[str], *, env: dict[str, str] | None = None) -> tuple[i
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
-        timeout=30,
+        timeout=timeout,
     )
     return proc.returncode, proc.stdout
 
 
-def run(args: list[str], *, env: dict[str, str] | None = None) -> str:
-    code, out = run_result(args, env=env)
+def run(args: list[str], *, env: dict[str, str] | None = None, timeout: int = 30) -> str:
+    code, out = run_result(args, env=env, timeout=timeout)
     if code != 0:
         raise RuntimeError(
             f"command failed with exit code {code}: {args!r}\n{out}"
@@ -51,7 +51,7 @@ def run(args: list[str], *, env: dict[str, str] | None = None) -> str:
 def build_binary(work: Path) -> Path:
     suffix = ".exe" if platform.system() == "Windows" else ""
     binary = work / f"reames-agent-smoke{suffix}"
-    run(["go", "build", "-o", str(binary), "./cmd/reames-agent"])
+    run(["go", "build", "-o", str(binary), "./cmd/reames-agent"], timeout=180)
     return binary
 
 
