@@ -4,31 +4,31 @@
 >
 > 更新：2026-07-09
 >
-> 范围：阿里云服务器、IM 通道、远程 CLI、上游研究 Worker、遥测与反馈闭环
+> 范围：阿里云服务器、独立社交通道网关、远程 CLI、上游研究 Worker、遥测与反馈闭环
 
 ## 结论
 
 把 Reames Agent 部署到国内云服务器，并通过飞书等 IM 通道随时沟通，是可行且值得做的方向。
 
-正确形态不是“把桌面端搬到服务器”，而是在服务器上运行一个 **Reames Cloud Node**：
+正确形态不是“把桌面端搬到服务器”，也不是“先开一个 Web/serve 再让所有入口依赖它”，而是在服务器上运行一个 **Reames Cloud Node**。它应像 Hermes：CLI、社交通道 gateway、Desktop 和 Web/API 是并列入口，共享 Agent 能力，但彼此进程隔离。
 
 ```text
 Aliyun ECS / 自有服务器
-├─ reames-agent
-│  ├─ SSH 进入服务器后的交互式 CLI/TUI
-│  ├─ 与本机电脑 CLI 一样的会话、审批、工具和恢复体验
-│  └─ tmux/screen/systemd-run 承载长任务
-├─ reames-agent run
-│  ├─ SSH 一条命令触发任务
-│  └─ 管道输入 / 脚本化运维入口
+├─ CLI / TUI
+│  ├─ reames-agent
+│  ├─ reames-agent run
+│  └─ SSH / tmux / screen / systemd-run
+├─ Gateway daemon
+│  ├─ 当前：reames-agent bot start --channels feishu（前台运行）
+│  ├─ 目标：reames-agent gateway run（前台运行）
+│  ├─ 目标：reames-agent gateway install/start/stop/status（后台服务）
+│  └─ 飞书 / Lark / 微信 / QQ / Telegram 等 adapter
 ├─ reames-agent serve
 │  ├─ HTTP/SSE/Web API
 │  ├─ health/ready/metrics
-│  └─ 可选远程控制面，不是云端部署的前置条件
-├─ reames-agent bot start --channels feishu
-│  ├─ 飞书 / Lark / 微信 / QQ / Telegram
-│  ├─ 审批 / 取消 / 状态 / 会话恢复
-│  └─ 渠道 metadata 与模型 prompt 隔离
+│  └─ 可选远程控制面，不是 gateway 或 CLI 的前置条件
+├─ Desktop（电脑本地可选）
+│  └─ 本机 UI，可连接同一配置/会话能力，但不要求服务器有桌面
 ├─ upstream research worker
 │  ├─ 检测官方上游和参考项目更新
 │  ├─ 拉取差异、运行测试、生成研究报告
@@ -39,11 +39,11 @@ Aliyun ECS / 自有服务器
    └─ 聚合为自我迭代任务
 ```
 
-所有入口都应接入同一个 `internal/control` 运行边界。CLI、Server、Desktop、Bot 只负责交互和传输，不各自实现 Agent 行为。
+所有入口都应接入同一个 `internal/control` 运行边界。CLI、Server、Desktop、Gateway/Bot 只负责交互和传输，不各自实现 Agent 行为。
 
-## 形态澄清：先是服务器 CLI，再是 Web/IM
+## 形态澄清：CLI 与 Gateway 是并列入口
 
-云端部署的第一形态应该像 Hermes：把 Agent 安装到服务器后，用户 SSH 上去就能像在自己电脑上一样运行：
+云端部署应该像 Hermes：把 Agent 安装到服务器后，用户 SSH 上去可以像在自己电脑上一样运行 CLI；同时，社交通道 gateway 可以作为后台服务常驻，二者互不干扰。
 
 ```bash
 reames-agent
@@ -51,12 +51,24 @@ reames-agent run "检查这个仓库并修复失败测试"
 tmux new -s reames
 ```
 
-`serve` 不是必须入口，它只是给 Web UI、HTTP/SSE 客户端、健康检查和反向代理使用的控制面。飞书等 IM 通道也不是替代 CLI，而是移动端和异步触达入口。
+社交通道的目标形态不是占用这个 CLI 终端，而是独立后台服务：
+
+```bash
+# 当前 Reames 可用的前台调试入口
+reames-agent bot start --channels feishu
+
+# 目标 Hermes-like 入口
+reames-agent gateway run
+reames-agent gateway install --start-now
+reames-agent gateway status
+```
+
+`serve` 不是必须入口，它只是给 Web UI、HTTP/SSE 客户端、健康检查和反向代理使用的控制面。飞书等 IM 通道应由 gateway daemon 承载，而不是依赖 `serve`。
 
 因此实施优先级应是：
 
-1. **CLI-first**：单二进制、服务器用户、`REAMES_AGENT_HOME`、真实 API key、SSH/tmux 交互、`run` 命令闭环。
-2. **Bot channel**：飞书/微信/QQ/Telegram 把消息转到同一套服务器会话。
+1. **CLI/TUI**：单二进制、服务器用户、`REAMES_AGENT_HOME`、真实 API key、SSH/tmux 交互、`run` 命令闭环。
+2. **Gateway service**：飞书/微信/QQ/Telegram 等平台 adapter 在后台常驻，把消息转到同一套服务器会话。
 3. **Serve/Web**：需要浏览器控制台或外部客户端时再开启，默认只监听 loopback 并启用鉴权。
 4. **后台 Worker**：上游研究、遥测反馈、定时任务等长期自动化。
 
@@ -64,14 +76,14 @@ tmux new -s reames
 
 ### 随时随地和云端 AI 沟通
 
-用户在飞书或类似 IM 中发送消息，云服务器上的 Reames Agent 收到任务后：
+用户在飞书或类似 IM 中发送消息，云服务器上的 Reames Gateway daemon 收到任务后：
 
 1. 建立或恢复远端会话。
 2. 绑定默认工作区或用户选择的项目。
 3. 调用同一套模型、工具、权限、沙箱和证据账本。
 4. 把普通回答、工具进度、审批请求、取消结果和完成证据回传到 IM。
 
-第一优先渠道建议是飞书，因为它更适合国内使用、支持卡片交互，也与当前 `internal/bot` / `internal/botruntime` 的方向一致。
+第一优先渠道建议是飞书，因为它更适合国内使用、支持卡片交互，也与当前 `internal/bot` / `internal/botruntime` 的方向一致。这里的产品对象应叫 gateway service；`bot` 是当前实现包名和前台命令，不应限制长期命名。
 
 ### 服务器终端和 CLI 交互
 
@@ -168,12 +180,13 @@ flowchart TD
 
 完成门槛：一台干净 Linux 服务器可以启动 `serve`，SSH 可以运行 `reames-agent run`，健康检查通过。
 
-### C1：飞书通道闭环
+### C1：Gateway service 闭环
 
-- 飞书消息进入云端 Bot runtime。
+- 飞书消息进入云端 Gateway service，而不是占用用户的 CLI 终端。
 - 支持文本任务、状态查询、取消、审批和会话恢复。
 - IM 用户、群、项目 workspace 和审批角色可配置。
 - 飞书卡片只承载交互，不污染模型 prompt。
+- 建立 Linux systemd / Windows Scheduled Task / macOS launchd 的后台服务安装、启动、停止和状态查询。
 
 完成门槛：用户可在飞书中完成一次需要工具审批的真实任务，并能在服务器日志和证据账本中复核。
 
@@ -199,7 +212,7 @@ flowchart TD
 - 自托管 crash/metrics/feedback endpoint。
 - 默认关闭内容上报，只收集结构化、脱敏、可解释字段。
 - 将重复失败聚类为 Issue 或维护任务。
-- 为桌面端、CLI、Server 和 Bot 使用同一套事件 schema。
+- 为桌面端、CLI、Server 和 Gateway 使用同一套事件 schema。
 
 完成门槛：一次真实崩溃或用户反馈可以被汇总、去重，并转为可执行维护项。
 
@@ -226,7 +239,7 @@ flowchart TD
 ```text
 M1 真实任务闭环
 → M2 统一 Controller 控制面
-→ C0/C1 云端部署和飞书闭环
+→ C0/C1 云端部署和 Gateway service 闭环
 → C2/C3 后台任务与上游研究
 → C4/C5 遥测反馈和长期运维
 ```

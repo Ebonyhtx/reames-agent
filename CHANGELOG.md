@@ -11,6 +11,7 @@
 ### Deployment
 
 - Hardened cloud serve deployment contracts around token-based authentication, Docker health checks, systemd environment loading, and loopback defaults.
+- Clarified the Hermes-like deployment shape: CLI/TUI remains interactive, while social channels run through an independent background gateway service.
 
 ### Upstream
 

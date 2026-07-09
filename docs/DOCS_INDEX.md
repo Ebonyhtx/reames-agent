@@ -17,8 +17,8 @@
 |---|---|
 | [中文使用指南](GUIDE.zh-CN.md) / [English guide](GUIDE.md) | CLI、配置、会话和功能使用 |
 | [中文机器人指南](BOT_GUIDE.zh-CN.md) / [English bot guide](BOT_GUIDE.md) | IM Gateway 配置与使用 |
-| [部署指南](DEPLOY.md) | 服务器 CLI-first、Docker、systemd、nginx 与远程部署 |
-| [云端 Agent 计划](CLOUD_AGENT_PLAN.md) | 服务器 CLI、飞书通道、上游研究 Worker、遥测反馈闭环 |
+| [部署指南](DEPLOY.md) | 服务器 CLI、独立 Gateway service、Docker、systemd、nginx 与远程部署 |
+| [云端 Agent 计划](CLOUD_AGENT_PLAN.md) | 服务器 CLI、社交通道 Gateway、上游研究 Worker、遥测反馈闭环 |
 | [配置路径（中文）](CONFIG_PATHS.zh-CN.md) / [English](CONFIG_PATHS.md) | 配置、状态、缓存和迁移路径 |
 | [协作模式](COLLABORATION_MODES.zh-CN.md) | Plan、Goal 与省 token 模式 |
 | [工具审批模式](TOOL_APPROVAL_MODES.zh-CN.md) | 询问、自动和 Yolo 权限语义 |
@@ -59,6 +59,7 @@
 | [接管审计](audits/2026-07-09-takeover.md) | 初次代码与测试审计 |
 | [首次上游审查](audits/2026-07-09-upstream-review.md) | Upstream Watch 建立时的差异快照 |
 | [真实 Provider 最小验证](audits/2026-07-09-real-provider.md) | DeepSeek 鉴权、响应、用量与缓存命中证据 |
+| [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 
 ## 验证入口
 

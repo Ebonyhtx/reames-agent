@@ -1,16 +1,20 @@
 # Reames Agent — 部署指南
 
-## 推荐形态：服务器 CLI-first
+## 推荐形态：CLI + 独立 Gateway
 
-如果目标是“像 Hermes 一样把 Agent 部署到云服务器，然后随时 SSH 上去使用”，首选不是 Docker 或 Web，而是把 `reames-agent` 单二进制安装到服务器用户的 PATH 中。
+如果目标是“像 Hermes 一样把 Agent 部署到云服务器，然后随时 SSH 上去使用，同时飞书/微信/QQ/Telegram 在后台常驻”，部署形态应分成两个互不干扰的入口：
+
+1. **CLI/TUI**：用户 SSH 到服务器后直接运行 `reames-agent` 或 `reames-agent run`。
+2. **Gateway service**：后台服务独立接收社交通道消息，当前前台调试命令是 `reames-agent bot start --channels feishu`，目标是 `reames-agent gateway install/start/status` 这类服务生命周期命令。
 
 这种形态和本机 CLI 最接近：
 
 - `ssh` 进入服务器后运行 `reames-agent`，得到交互式 CLI/TUI；
 - 用 `reames-agent run "..."` 执行一次性任务；
 - 用 `tmux` / `screen` 保持长任务不断线；
+- gateway 在 systemd / Windows Scheduled Task / launchd 等后台服务中运行，不占用 CLI 终端；
 - provider key 保存在该服务器用户的 `<Reames Agent home>/.env`；
-- `serve` 和 `bot start` 是后续可选入口，不是 CLI 部署的前置条件。
+- `serve` 是后续可选 Web/API 控制面，不是 CLI 或 gateway 的前置条件。
 
 ### 1. 创建低权限用户
 
@@ -90,6 +94,43 @@ journalctl -u reames-agent-once -f
 ```
 
 这比把 `serve` 当作唯一云端入口更符合“服务器上的 CLI Agent”定位。
+
+### 6. 社交通道 Gateway 后台服务
+
+当前 Reames 已有前台运行入口：
+
+```bash
+reames-agent bot start --channels feishu
+```
+
+它适合调试、tmux 或临时运行，但还不是 Hermes 式后台服务管理面。目标形态应补齐：
+
+```bash
+reames-agent gateway run                    # 前台运行，适合调试/Docker/Termux
+reames-agent gateway install --start-now    # 安装并启动后台服务
+reames-agent gateway status                 # 查看后台服务和平台连接状态
+reames-agent gateway restart                # 重启服务，不影响用户 CLI 终端
+reames-agent gateway uninstall              # 卸载后台服务
+```
+
+后台 gateway 的职责：
+
+- 独立进程常驻，不占用用户 SSH CLI；
+- 每个平台 adapter 独立连接和重连；
+- 每个 chat/user/thread 映射到自己的 Agent session；
+- 支持审批、取消、状态、恢复和 allowlist；
+- 日志写入 Reames Agent home；
+- 与 CLI、Desktop、serve 共用配置、凭据、会话和权限模型，但进程互相隔离。
+
+实现前的临时服务器方案：
+
+```bash
+sudo -iu reames
+tmux new -s reames-gateway
+REAMES_AGENT_HOME="$HOME/.reames-agent" reames-agent bot start --channels feishu
+```
+
+如果要用 systemd 临时托管，可先写一个 user service 调用上面的前台命令。正式实现会提供跨平台 service manager，类似 Hermes 的 systemd / launchd / Windows Scheduled Task 后端。
 
 ## Docker 部署（推荐）
 
@@ -197,7 +238,7 @@ ssh user@server "reames-agent run '修复 src/auth.go 的空指针问题'"
 echo "审查这个 PR" | ssh user@server "reames-agent run"
 ```
 
-## IM 通道连接
+## IM 通道连接（当前前台入口）
 
 ```bash
 # 启动飞书 bot
@@ -209,3 +250,5 @@ reames-agent bot start --channels weixin
 # 启动多个平台
 reames-agent bot start --channels feishu,weixin,qq
 ```
+
+注意：这一节是当前实现的前台入口，不代表最终部署形态。长期目标是独立 Gateway service 后台运行，CLI/桌面/serve 都不应该被社交通道进程占用或阻塞。

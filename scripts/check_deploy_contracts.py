@@ -75,13 +75,14 @@ def check() -> list[str]:
     require("--addr 0.0.0.0:8787" not in unit, "systemd unit must not expose unauthenticated serve directly.", failures)
 
     deploy = read("docs/DEPLOY.md")
-    require("reames-agent gateway start" not in deploy, "docs/DEPLOY.md must not document obsolete gateway commands.", failures)
     require("reames-agent bot start --channels feishu" in deploy, "docs/DEPLOY.md must document current bot start commands.", failures)
     require('token_env = "REAMES_AGENT_SERVE_TOKEN"' in deploy, "docs/DEPLOY.md must document serve token_env.", failures)
-    require("服务器 CLI-first" in deploy, "docs/DEPLOY.md must lead with the server CLI-first deployment shape.", failures)
+    require("CLI + 独立 Gateway" in deploy, "docs/DEPLOY.md must lead with separate CLI and gateway deployment shape.", failures)
     require("tmux" in deploy and "reames-agent run" in deploy, "docs/DEPLOY.md must document SSH/tmux CLI usage.", failures)
     require("<Reames Agent home>/.env" in deploy, "docs/DEPLOY.md must document server user credential storage.", failures)
-    require("不是 CLI 部署的前置条件" in deploy, "docs/DEPLOY.md must state serve/bot are optional after CLI-first setup.", failures)
+    require("不是 CLI 或 gateway 的前置条件" in deploy, "docs/DEPLOY.md must state serve is optional after CLI/gateway setup.", failures)
+    require("reames-agent gateway install --start-now" in deploy, "docs/DEPLOY.md must document the planned Hermes-like gateway service lifecycle.", failures)
+    require("当前实现的前台入口" in deploy, "docs/DEPLOY.md must distinguish current foreground bot entry from target gateway service.", failures)
 
     env_example = read(".env.example")
     require("REAMES_AGENT_SERVE_TOKEN" in env_example, ".env.example must include the serve token env hint.", failures)
