@@ -55,7 +55,7 @@
 - [x] 将 Docker、compose、systemd、部署命令和 `serve.token_env` 纳入 CI 部署契约检查。
 - [x] 建立公开仓库前门禁：公开说明、所有权、许可证/NOTICE、生产发布禁用和遗留 worker 手动部署隔离。
 - [x] 公开仓库后恢复 CodeQL workflow，覆盖 Go、JavaScript/TypeScript 和 GitHub Actions；等待远端首次 run 观察。
-- [ ] 明确版本号来源、变更日志和发布签名策略。
+- [x] 明确版本号来源、变更日志和发布签名策略，并纳入 CI 发布契约检查。
 
 验收命令：
 

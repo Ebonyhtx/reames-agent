@@ -88,6 +88,17 @@ jobs:
       - name: Validate server deployment contracts
         run: python scripts/check_deploy_contracts.py
 
+  release-contracts:
+    name: Release contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate release safety contracts
+        run: python scripts/check_release_contracts.py
+
   public-readiness:
     name: Public readiness
     runs-on: ubuntu-latest

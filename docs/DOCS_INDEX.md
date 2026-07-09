@@ -65,6 +65,7 @@
 ```powershell
 .\scripts\verify-baseline.ps1
 python scripts/check_public_readiness.py
+python scripts/check_release_contracts.py
 go test ./internal/... -count=1 -timeout 300s
 Push-Location desktop; go test . -count=1 -timeout 300s; Pop-Location
 Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop-Location

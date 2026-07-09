@@ -1,5 +1,21 @@
 # Reames Agent Changelog
 
+## Unreleased
+
+### Security / Governance
+
+- Added public-readiness gates for ownership, release safety, deployment docs, and attribution.
+- Restored CodeQL workflow for Go, JavaScript/TypeScript, and GitHub Actions analysis.
+- Documented SemVer source, changelog expectations, and signing/checksum strategy before production releases.
+
+### Deployment
+
+- Hardened cloud serve deployment contracts around token-based authentication, Docker health checks, systemd environment loading, and loopback defaults.
+
+### Upstream
+
+- Kept upstream/reference tracking issue-driven; automatic discovery may propose review work but must not auto-merge upgrades.
+
 ## v0.1.0 (2026-07-08)
 
 ### Initial Release
