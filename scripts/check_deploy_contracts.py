@@ -96,6 +96,7 @@ def check() -> list[str]:
     for path in ("scripts/install.sh", "scripts/install.ps1"):
         installer = read(path)
         require("reames-agent gateway install" in installer or "gateway install" in installer, f"{path} must support installing the gateway service.", failures)
+        require("--home" in installer and "REAMES_AGENT_HOME" in installer, f"{path} must bind gateway services to the selected Reames Agent home.", failures)
         require("--dry-run" in installer or "DryRun" in installer, f"{path} must support safe dry-run planning.", failures)
         require("NousResearch/hermes-agent" not in installer, f"{path} must not install inherited Hermes repositories.", failures)
         require("HERMES_HOME" not in installer, f"{path} must not use inherited HERMES_HOME.", failures)

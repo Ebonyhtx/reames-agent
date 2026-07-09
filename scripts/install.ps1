@@ -15,6 +15,13 @@ param(
     } else {
         Join-Path $HOME ".reames-agent/bin"
     }),
+    [string]$AgentHome = $(if ($env:REAMES_AGENT_HOME) {
+        $env:REAMES_AGENT_HOME
+    } elseif ($env:APPDATA) {
+        Join-Path $env:APPDATA "reames-agent"
+    } else {
+        Join-Path $HOME ".reames-agent"
+    }),
     [switch]$SkipSetup,
     [switch]$Gateway,
     [string]$Channels = "",
@@ -53,6 +60,7 @@ Write-Host "Installing Reames Agent"
 Write-Host "  repo:   $Repo"
 Write-Host "  ref:    $Branch"
 Write-Host "  binary: $binPath"
+Write-Host "  home:   $AgentHome"
 
 Invoke-Step { Remove-Item -LiteralPath $workDir -Recurse -Force -ErrorAction SilentlyContinue } "remove $workDir"
 Invoke-Step { git clone --depth 1 --branch $Branch $Repo $workDir } "git clone --depth 1 --branch $Branch $Repo $workDir"
@@ -80,11 +88,19 @@ if (($userPath -split ';') -notcontains $InstallDir) {
 }
 
 if (-not $SkipSetup) {
-    Invoke-Step { & $binPath setup } "$binPath setup"
+    Invoke-Step {
+        $oldHome = $env:REAMES_AGENT_HOME
+        try {
+            $env:REAMES_AGENT_HOME = $AgentHome
+            & $binPath setup
+        } finally {
+            $env:REAMES_AGENT_HOME = $oldHome
+        }
+    } "REAMES_AGENT_HOME=$AgentHome $binPath setup"
 }
 
 if ($Gateway) {
-    $gatewayArgs = @("gateway", "install", "--start-now")
+    $gatewayArgs = @("gateway", "install", "--start-now", "--home", $AgentHome)
     if ($Channels.Trim() -ne "") {
         $gatewayArgs += @("--channels", $Channels.Trim())
     }

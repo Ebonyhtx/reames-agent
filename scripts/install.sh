@@ -10,6 +10,7 @@ set -euo pipefail
 REPO_URL="${REAMES_AGENT_REPO_URL:-https://github.com/Ebonyhtx/reames-agent.git}"
 BRANCH="${REAMES_AGENT_BRANCH:-main}"
 INSTALL_DIR="${REAMES_AGENT_INSTALL_DIR:-$HOME/.reames-agent/bin}"
+AGENT_HOME="${REAMES_AGENT_HOME:-$HOME/.reames-agent}"
 BIN_NAME="reames-agent"
 RUN_SETUP=1
 INSTALL_GATEWAY=0
@@ -28,6 +29,7 @@ Options:
   --repo URL             Git repository to clone (default: official Reames repo)
   --branch NAME          Git branch/tag/ref to checkout (default: main)
   --install-dir PATH     Directory for the reames-agent binary (default: ~/.reames-agent/bin)
+  --home PATH            Reames Agent home for config, credentials, and gateway services
   --skip-setup           Do not run `reames-agent setup` after install
   --gateway              Install the gateway background service after building
   --channels LIST        Gateway channels for --gateway, e.g. feishu,weixin
@@ -70,6 +72,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --install-dir)
       INSTALL_DIR="${2:?--install-dir needs a value}"
+      shift 2
+      ;;
+    --home)
+      AGENT_HOME="${2:?--home needs a value}"
       shift 2
       ;;
     --skip-setup)
@@ -122,6 +128,7 @@ echo "Installing Reames Agent"
 echo "  repo:        $REPO_URL"
 echo "  ref:         $BRANCH"
 echo "  binary:      $BIN_PATH"
+echo "  agent home:  $AGENT_HOME"
 
 run rm -rf "$WORK_DIR"
 run git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$WORK_DIR"
@@ -141,11 +148,11 @@ case ":$PATH:" in
 esac
 
 if [ "$RUN_SETUP" -eq 1 ]; then
-  run "$BIN_PATH" setup
+  run env REAMES_AGENT_HOME="$AGENT_HOME" "$BIN_PATH" setup
 fi
 
 if [ "$INSTALL_GATEWAY" -eq 1 ]; then
-  gateway_args=("$BIN_PATH" gateway install --start-now)
+  gateway_args=("$BIN_PATH" gateway install --start-now --home "$AGENT_HOME")
   if [ -n "$GATEWAY_CHANNELS" ]; then
     gateway_args+=(--channels "$GATEWAY_CHANNELS")
   fi

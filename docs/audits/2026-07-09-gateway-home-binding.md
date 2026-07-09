@@ -48,6 +48,7 @@ Automated coverage:
   - gateway help documents foreground and background entrypoints
 - `scripts/check_deploy_contracts.py`
   - deployment docs must keep `--home "$REAMES_AGENT_HOME"` in the gateway service examples
+  - source-build installers must pass the selected Reames Agent home into `gateway install`
 
 Manual boundary:
 
@@ -61,6 +62,7 @@ Recommended server flow:
 
 ```bash
 export REAMES_AGENT_HOME="$HOME/.reames-agent"
+scripts/install.sh --home "$REAMES_AGENT_HOME" --gateway --channels feishu --gateway-dir /srv/project
 reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project
 reames-agent gateway install --start-now --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project
 ```

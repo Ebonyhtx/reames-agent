@@ -22,24 +22,24 @@
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.sh | bash
-curl -fsSL https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.sh | bash -s -- --gateway --channels feishu --gateway-dir /srv/reames-work
+curl -fsSL https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.sh | bash -s -- --home "$HOME/.reames-agent" --gateway --channels feishu --gateway-dir /srv/reames-work
 ```
 
 Windows PowerShell：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.com/Ebonyhtx/reames-agent/main/scripts/install.ps1)"
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Gateway -Channels feishu -GatewayDir F:\reames-work
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -AgentHome "$env:APPDATA\reames-agent" -Gateway -Channels feishu -GatewayDir F:\reames-work
 ```
 
 所有会安装后台 gateway 的路径都建议先使用 dry-run：
 
 ```bash
-scripts/install.sh --dry-run --gateway --channels feishu
+scripts/install.sh --dry-run --home "$HOME/.reames-agent" --gateway --channels feishu
 ```
 
 ```powershell
-.\scripts\install.ps1 -DryRun -Gateway -Channels feishu
+.\scripts\install.ps1 -DryRun -AgentHome "$env:APPDATA\reames-agent" -Gateway -Channels feishu
 ```
 
 ### 1. 创建低权限用户
