@@ -21,6 +21,8 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 
 入口只负责交互和传输。会话、Agent loop、模型、工具、权限和事件语义应逐步收敛到 `internal/control` 后面的统一运行边界。
 
+云端部署形态见 [CLOUD_AGENT_PLAN.md](CLOUD_AGENT_PLAN.md)：目标是在自有服务器上同时支持 SSH/CLI、HTTP/SSE、飞书等 IM 通道、后台上游研究 Worker，以及隐私保护的遥测反馈闭环。
+
 ## 项目来源
 
 - [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) `main-v2` 是源码主上游。

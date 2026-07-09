@@ -18,6 +18,7 @@
 | [中文使用指南](GUIDE.zh-CN.md) / [English guide](GUIDE.md) | CLI、配置、会话和功能使用 |
 | [中文机器人指南](BOT_GUIDE.zh-CN.md) / [English bot guide](BOT_GUIDE.md) | IM Gateway 配置与使用 |
 | [部署指南](DEPLOY.md) | Docker、systemd、nginx 与远程部署 |
+| [云端 Agent 计划](CLOUD_AGENT_PLAN.md) | 阿里云、飞书通道、上游研究 Worker、遥测反馈闭环 |
 | [配置路径（中文）](CONFIG_PATHS.zh-CN.md) / [English](CONFIG_PATHS.md) | 配置、状态、缓存和迁移路径 |
 | [协作模式](COLLABORATION_MODES.zh-CN.md) | Plan、Goal 与省 token 模式 |
 | [工具审批模式](TOOL_APPROVAL_MODES.zh-CN.md) | 询问、自动和 Yolo 权限语义 |
