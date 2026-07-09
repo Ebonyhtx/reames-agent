@@ -23,21 +23,29 @@ ROOT = Path(__file__).resolve().parents[1]
 SMOKE_SECRET = "smoke-secret-never-print"
 
 
-def run(args: list[str], *, env: dict[str, str] | None = None) -> str:
+def run_result(args: list[str], *, env: dict[str, str] | None = None) -> tuple[int, str]:
     proc = subprocess.run(
         args,
         cwd=ROOT,
         env=env,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
+        timeout=30,
     )
-    if proc.returncode != 0:
+    return proc.returncode, proc.stdout
+
+
+def run(args: list[str], *, env: dict[str, str] | None = None) -> str:
+    code, out = run_result(args, env=env)
+    if code != 0:
         raise RuntimeError(
-            f"command failed with exit code {proc.returncode}: {args!r}\n{proc.stdout}"
+            f"command failed with exit code {code}: {args!r}\n{out}"
         )
-    return proc.stdout
+    return out
 
 
 def build_binary(work: Path) -> Path:
@@ -72,6 +80,23 @@ mode = "webhook"
     )
     (home / ".env").write_text(f"FEISHU_BOT_APP_SECRET={SMOKE_SECRET}\n", encoding="utf-8")
     return workspace
+
+
+def write_foreground_probe_home(home: Path, *, enabled: bool) -> None:
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "config.toml").write_text(
+        f"""
+language = "en"
+default_model = "deepseek-flash"
+
+[bot]
+enabled = {str(enabled).lower()}
+
+[bot.allowlist]
+allow_all = true
+""".lstrip(),
+        encoding="utf-8",
+    )
 
 
 def assert_contains(text: str, needle: str) -> None:
@@ -147,6 +172,34 @@ def smoke(binary: Path, home: Path) -> dict[str, object]:
         "documents_no_secret_embedding": "service definitions do not embed secret values" in plan,
         "secret_redacted": SMOKE_SECRET not in plan,
     }
+    ambient_home = home.parent / "ambient-home"
+    selected_home = home.parent / "selected-foreground-home"
+    write_foreground_probe_home(ambient_home, enabled=True)
+    write_foreground_probe_home(selected_home, enabled=False)
+    foreground_env = env.copy()
+    foreground_env["REAMES_AGENT_HOME"] = str(ambient_home)
+    foreground_code, foreground = run_result(
+        [
+            str(binary),
+            "gateway",
+            "run",
+            "--home",
+            str(selected_home),
+            "--channels",
+            "feishu",
+        ],
+        env=foreground_env,
+    )
+    if foreground_code != 1 or "gateway is not enabled" not in foreground:
+        raise AssertionError(
+            "gateway run --home did not bind to the selected foreground home "
+            f"(exit={foreground_code}):\n{foreground}"
+        )
+    assert_not_contains(foreground, SMOKE_SECRET)
+    foreground_contracts = {
+        "home_overrides_ambient_env": foreground_code == 1 and "gateway is not enabled" in foreground,
+        "secret_redacted": SMOKE_SECRET not in foreground,
+    }
     return {
         "status": "passed",
         "os": platform.system().lower(),
@@ -155,6 +208,7 @@ def smoke(binary: Path, home: Path) -> dict[str, object]:
         "workspace": str(workspace),
         "doctor": doctor_contracts,
         "service_plan": plan_contracts,
+        "foreground_run": foreground_contracts,
     }
 
 

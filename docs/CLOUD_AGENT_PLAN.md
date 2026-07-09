@@ -19,8 +19,8 @@ Aliyun ECS / 自有服务器
 │  ├─ reames-agent run
 │  └─ SSH / tmux / screen / systemd-run
 ├─ Gateway daemon
-│  ├─ 当前：reames-agent gateway run --channels feishu（前台运行）
-│  ├─ 兼容：reames-agent bot start --channels feishu（前台运行）
+│  ├─ 当前：reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu（前台运行）
+│  ├─ 兼容：reames-agent bot start --home "$REAMES_AGENT_HOME" --channels feishu（前台运行）
 │  ├─ 当前：reames-agent gateway install/start/stop/status（后台服务生命周期）
 │  └─ 飞书 / Lark / 微信 / QQ / Telegram 等 adapter
 ├─ reames-agent serve
@@ -55,8 +55,8 @@ tmux new -s reames
 
 ```bash
 # 当前 Reames 可用的前台调试入口
-reames-agent gateway run --channels feishu
-reames-agent bot start --channels feishu
+reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu
+reames-agent bot start --home "$REAMES_AGENT_HOME" --channels feishu
 
 # Hermes-like 后台服务入口
 reames-agent gateway install --start-now --home "$REAMES_AGENT_HOME"
@@ -93,7 +93,7 @@ reames-agent gateway status
 reames-agent
 reames-agent run "审查这个仓库并给出风险"
 tmux new -s reames-agent
-reames-agent gateway run --channels feishu
+reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu
 reames-agent serve
 reames-agent upstream watch
 ```

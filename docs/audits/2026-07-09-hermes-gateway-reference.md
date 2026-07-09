@@ -85,8 +85,8 @@ Reames Agent core
 
 命令语义建议：
 
-- 当前保留：`reames-agent bot start --channels feishu` 作为前台调试/兼容入口。
-- 当前新增：`reames-agent gateway run`：前台运行 gateway daemon。
+- 当前保留：`reames-agent bot start --home "$REAMES_AGENT_HOME" --channels feishu` 作为前台调试/兼容入口。
+- 当前新增：`reames-agent gateway run --home "$REAMES_AGENT_HOME"`：前台运行 gateway daemon。
 - 当前新增：
   - `reames-agent gateway install`：安装 OS 后台服务。
   - `reames-agent gateway start|stop|restart|status|uninstall`：管理后台服务。

@@ -5,7 +5,7 @@
 如果目标是“像 Hermes 一样把 Agent 部署到云服务器，然后随时 SSH 上去使用，同时飞书/微信/QQ/Telegram 在后台常驻”，部署形态应分成两个互不干扰的入口：
 
 1. **CLI/TUI**：用户 SSH 到服务器后直接运行 `reames-agent` 或 `reames-agent run`。
-2. **Gateway service**：后台服务独立接收社交通道消息，前台调试命令是 `reames-agent gateway run --channels feishu`（`reames-agent bot start --channels feishu` 保持兼容），后台服务生命周期命令是 `reames-agent gateway install/start/status`。
+2. **Gateway service**：后台服务独立接收社交通道消息，前台调试命令是 `reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu`（`reames-agent bot start --home "$REAMES_AGENT_HOME" --channels feishu` 保持兼容），后台服务生命周期命令是 `reames-agent gateway install/start/status`。
 
 这种形态和本机 CLI 最接近：
 
@@ -153,14 +153,14 @@ journalctl -u reames-agent-once -f
 当前 Reames 已有前台运行入口：
 
 ```bash
-reames-agent gateway run --channels feishu
-reames-agent bot start --channels feishu
+reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu
+reames-agent bot start --home "$REAMES_AGENT_HOME" --channels feishu
 ```
 
 它适合调试、tmux 或临时运行；`bot start` 是兼容入口，长期推荐使用 `gateway run`。后台服务管理面当前已提供用户级 systemd / launchd / Windows Scheduled Task 命令；生产部署前建议先用 `--dry-run` 审阅计划：
 
 ```bash
-reames-agent gateway run                    # 前台运行，适合调试/Docker/Termux
+reames-agent gateway run --home "$REAMES_AGENT_HOME"  # 前台运行，适合调试/Docker/Termux
 reames-agent gateway doctor --deep --home "$REAMES_AGENT_HOME"  # 只读检查配置、凭据 env、访问控制和连接记录
 reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project
 reames-agent gateway install --start-now --home "$REAMES_AGENT_HOME"    # 安装并启动后台服务
@@ -188,7 +188,7 @@ Scheduled Task 不会嵌入 secret 值。
 ```bash
 sudo -iu reames
 tmux new -s reames-gateway
-REAMES_AGENT_HOME="$HOME/.reames-agent" reames-agent gateway run --channels feishu
+reames-agent gateway run --home "$HOME/.reames-agent" --channels feishu
 ```
 
 正式命令会按平台选择 service manager：Linux 使用 user systemd，macOS 使用 launchd，Windows 使用 Scheduled Task。`--scope system` 只渲染计划并要求管理员/root 手动确认，避免误改系统级服务。
@@ -303,13 +303,13 @@ echo "审查这个 PR" | ssh user@server "reames-agent run"
 
 ```bash
 # 前台启动飞书 gateway，适合调试或 tmux
-reames-agent gateway run --channels feishu
+reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu
 
 # 前台启动微信 gateway
-reames-agent gateway run --channels weixin
+reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels weixin
 
 # 前台启动多个平台
-reames-agent gateway run --channels feishu,weixin,qq
+reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu,weixin,qq
 
 # 只读诊断配置、凭据 env、访问控制和连接记录
 reames-agent gateway doctor --deep --home "$REAMES_AGENT_HOME"

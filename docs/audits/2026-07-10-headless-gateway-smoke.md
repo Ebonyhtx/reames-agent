@@ -17,6 +17,7 @@ configuration and credentials `.env`, then runs the actual CLI binary through:
 
 1. `reames-agent gateway doctor --json --deep --home <home>`
 2. `reames-agent gateway install --dry-run --home <home> --channels feishu`
+3. `reames-agent gateway run --home <selected-home> --channels feishu`
 
 It asserts:
 
@@ -25,6 +26,8 @@ It asserts:
 - the rendered service plan pins `REAMES_AGENT_HOME`;
 - the rendered plan documents that service definitions do not embed secret
   values;
+- the foreground `gateway run --home` entrypoint reads the selected home even
+  when an ambient `REAMES_AGENT_HOME` points somewhere else;
 - the dummy secret value never appears in output.
 
 ## Evidence

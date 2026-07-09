@@ -140,10 +140,21 @@ func runGatewayForeground(args []string, version, flagSetName, displayName strin
 	channels := fs.String("channels", "", "启用的平台，逗号分隔：qq,feishu,lark,weixin")
 	dir := fs.String("dir", "", "工作目录")
 	model := fs.String("model", "", "模型名（空则用 default_model）")
+	home := fs.String("home", "", "REAMES_AGENT_HOME for this foreground gateway process")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(os.Stderr, "error: %s does not accept positional arguments\n", flagSetName)
+		return 2
+	}
+	restoreHome, err := setTemporaryReamesAgentHome(*home)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: set REAMES_AGENT_HOME: %v\n", err)
+		return 2
+	}
+	defer restoreHome()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -679,7 +690,7 @@ func botUsage() {
 	fmt.Print(`reames-agent bot — multi-channel IM bot gateway (QQ / Feishu / WeChat)
 
 Usage:
-  reames-agent bot start   [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
+  reames-agent bot start   [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME] [--home PATH]
   reames-agent bot doctor  [--json] [--deep] [--home PATH]
   reames-agent bot pairing list|approve|reject
   reames-agent bot weixin-login [--timeout SECONDS]
@@ -713,7 +724,7 @@ func gatewayUsage() {
 	fmt.Print(`reames-agent gateway — independent social-channel gateway
 
 Usage:
-  reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
+  reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME] [--home PATH]
   reames-agent gateway doctor [--json] [--deep] [--home PATH]
   reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--home PATH] [--channels LIST] [--dir PATH] [--model NAME]
   reames-agent gateway start|stop|restart|status|uninstall [--dry-run] [--scope user|system]
@@ -729,7 +740,7 @@ Subcommands:
   uninstall remove the installed service
 
 Examples:
-  reames-agent gateway run --channels feishu
+  reames-agent gateway run --home ~/.reames-agent --channels feishu
   reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
   reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu
   reames-agent gateway run --dir /path/to/project --model deepseek-pro

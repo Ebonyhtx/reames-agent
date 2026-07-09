@@ -75,8 +75,8 @@ def check() -> list[str]:
     require("--addr 0.0.0.0:8787" not in unit, "systemd unit must not expose unauthenticated serve directly.", failures)
 
     deploy = read("docs/DEPLOY.md")
-    require("reames-agent gateway run --channels feishu" in deploy, "docs/DEPLOY.md must document current gateway run command.", failures)
-    require("reames-agent bot start --channels feishu" in deploy, "docs/DEPLOY.md must document legacy bot start compatibility.", failures)
+    require('reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu' in deploy, "docs/DEPLOY.md must document current gateway run command bound to REAMES_AGENT_HOME.", failures)
+    require('reames-agent bot start --home "$REAMES_AGENT_HOME" --channels feishu' in deploy, "docs/DEPLOY.md must document legacy bot start compatibility bound to REAMES_AGENT_HOME.", failures)
     require('token_env = "REAMES_AGENT_SERVE_TOKEN"' in deploy, "docs/DEPLOY.md must document serve token_env.", failures)
     require("CLI + 独立 Gateway" in deploy, "docs/DEPLOY.md must lead with separate CLI and gateway deployment shape.", failures)
     require("tmux" in deploy and "reames-agent run" in deploy, "docs/DEPLOY.md must document SSH/tmux CLI usage.", failures)
@@ -129,6 +129,7 @@ def check() -> list[str]:
 
     gateway_smoke = read("scripts/smoke_gateway_headless.py")
     require("gateway" in gateway_smoke and "doctor" in gateway_smoke and "--home" in gateway_smoke, "headless Gateway smoke must exercise gateway doctor --home.", failures)
+    require("gateway" in gateway_smoke and "run" in gateway_smoke and "home_overrides_ambient_env" in gateway_smoke, "headless Gateway smoke must exercise foreground gateway run --home.", failures)
     require("install" in gateway_smoke and "--dry-run" in gateway_smoke, "headless Gateway smoke must exercise gateway install --dry-run.", failures)
     require("service definitions do not embed secret values" in gateway_smoke, "headless Gateway smoke must guard the no-secret service contract.", failures)
     require("--out" in gateway_smoke and "json.dumps" in gateway_smoke, "headless Gateway smoke must support a JSON evidence report.", failures)

@@ -487,6 +487,7 @@ func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
 		"reames-agent gateway run",
 		"reames-agent gateway install",
 		"--home PATH",
+		"gateway run --home ~/.reames-agent",
 		"reames-agent gateway start|stop|restart|status|uninstall",
 		"compatible with \"reames-agent bot start\"",
 		"systemd, launchd, or Windows Scheduled Task",
@@ -496,6 +497,38 @@ func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("gateway help output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestGatewayRunHomeOverridesAmbientHome(t *testing.T) {
+	isolateBotUserConfig(t)
+	ambientHome := filepath.Join(t.TempDir(), "ambient-home")
+	selectedHome := filepath.Join(t.TempDir(), "selected-home")
+
+	ambientCfg := config.Default()
+	ambientCfg.Bot.Enabled = true
+	ambientCfg.Bot.Allowlist.AllowAll = true
+	if err := ambientCfg.SaveTo(filepath.Join(ambientHome, "config.toml")); err != nil {
+		t.Fatalf("save ambient config: %v", err)
+	}
+	selectedCfg := config.Default()
+	selectedCfg.Bot.Enabled = false
+	if err := selectedCfg.SaveTo(filepath.Join(selectedHome, "config.toml")); err != nil {
+		t.Fatalf("save selected config: %v", err)
+	}
+
+	t.Setenv("REAMES_AGENT_HOME", ambientHome)
+	errOut := captureStderr(t, func() {
+		rc := runGatewayForeground([]string{"--home", selectedHome, "--channels", "feishu"}, "test-version", "gateway run", "gateway")
+		if rc != 1 {
+			t.Fatalf("gateway run rc = %d, want 1", rc)
+		}
+	})
+	if !strings.Contains(errOut, "gateway is not enabled") {
+		t.Fatalf("gateway run did not load the selected --home config:\n%s", errOut)
+	}
+	if got := os.Getenv("REAMES_AGENT_HOME"); got != ambientHome {
+		t.Fatalf("REAMES_AGENT_HOME = %q, want restored ambient home %q", got, ambientHome)
 	}
 }
 

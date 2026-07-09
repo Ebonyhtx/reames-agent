@@ -21,7 +21,7 @@ SSH / tmux
 └─ reames-agent / reames-agent run
 
 Background service manager
-└─ reames-agent gateway run --channels feishu
+└─ reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu
 ```
 
 That separation is the key product difference between a convenient server agent and a web-server-only deployment.
