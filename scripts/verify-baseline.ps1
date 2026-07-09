@@ -43,6 +43,13 @@ try {
         Invoke-Native -FilePath "go" -Arguments @("test", "./internal/provider/openai", "./internal/agent", "-run", "Test(Normalise|Normalize|Usage|Cache|SessionCache|SetSession|ReleaseCache|PlanModeDoesNotMutateSystemOrTools)", "-count=1")
     }
 
+    Invoke-Step "Public and deployment contract checks" {
+        Invoke-Native -FilePath "python" -Arguments @("scripts/check_public_readiness.py")
+        Invoke-Native -FilePath "python" -Arguments @("scripts/check_deploy_contracts.py")
+        Invoke-Native -FilePath "python" -Arguments @("-m", "unittest", "scripts.test_check_upstreams", "-v")
+        Invoke-Native -FilePath "node" -Arguments @("scripts/test_upstream_watch_issue.mjs")
+    }
+
     Invoke-Step "Root Go baseline package set" {
         Invoke-Native -FilePath "go" -Arguments @(
             "test",

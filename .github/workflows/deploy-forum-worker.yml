@@ -6,7 +6,9 @@ on:
     paths:
       - 'workers/forum/**'
       - '.github/workflows/deploy-forum-worker.yml'
-  workflow_dispatch:
+
+# Inherited worker deployment is intentionally not manually runnable from this
+# repository. Re-enable only after docs/RELEASING.md production gates pass.
 
 permissions:
   contents: read

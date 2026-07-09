@@ -243,13 +243,13 @@ configured connection.
 Example:
 
 ```sh
-export REASONIX_BOT_CONTROL_TOKEN="change-me"
+export REAMES_AGENT_BOT_CONTROL_TOKEN="change-me"
 
-curl -H "Authorization: Bearer $REASONIX_BOT_CONTROL_TOKEN" \
+curl -H "Authorization: Bearer $REAMES_AGENT_BOT_CONTROL_TOKEN" \
   http://127.0.0.1:37913/status
 
 curl -X POST http://127.0.0.1:37913/send \
-  -H "Authorization: Bearer $REASONIX_BOT_CONTROL_TOKEN" \
+  -H "Authorization: Bearer $REAMES_AGENT_BOT_CONTROL_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "connection_id": "feishu-lark",

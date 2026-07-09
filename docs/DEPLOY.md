@@ -10,7 +10,7 @@ docker build -t reames-agent .
 docker run -d --name reames-agent \
   -p 8787:8787 \
   -v ~/.reames-agent:/root/.reames-agent \
-  -e DEEPSEEK_API_KEY=sk-xxx \
+  -e DEEPSEEK_API_KEY=replace-with-your-key \
   -e REAMES_AGENT_SERVE_TOKEN=change-this-long-random-token \
   reames-agent
 
@@ -61,7 +61,7 @@ ssh user@server "mkdir -p /opt/reames-agent/data"
 
 # 3. 设置环境变量；/opt/reames-agent/.env 会由 systemd EnvironmentFile 读取
 ssh user@server "install -m 600 /dev/null /opt/reames-agent/.env"
-ssh user@server "printf '%s\n' 'DEEPSEEK_API_KEY=sk-xxx' 'REAMES_AGENT_SERVE_TOKEN=change-this-long-random-token' >> /opt/reames-agent/.env"
+ssh user@server "printf '%s\n' 'DEEPSEEK_API_KEY=replace-with-your-key' 'REAMES_AGENT_SERVE_TOKEN=change-this-long-random-token' >> /opt/reames-agent/.env"
 
 # 4. 安装 systemd 服务
 scp deploy/systemd/reames-agent.service user@server:/etc/systemd/system/

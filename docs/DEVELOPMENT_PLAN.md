@@ -53,6 +53,7 @@
 - [ ] 建立三平台 native Desktop candidate 打包。
 - [x] 将 updater 迁移到当前 GitHub 仓库，并默认关闭无项目自有服务的遥测、指标和崩溃上传。
 - [x] 将 Docker、compose、systemd、部署命令和 `serve.token_env` 纳入 CI 部署契约检查。
+- [x] 建立公开仓库前门禁：公开说明、所有权、许可证/NOTICE、生产发布禁用和遗留 worker 手动部署隔离。
 - [ ] 在仓库设置启用 GitHub Code Scanning 后恢复 CodeQL workflow。
 - [ ] 明确版本号来源、变更日志和发布签名策略。
 

@@ -44,6 +44,7 @@
 |---|---|
 | [参考项目治理](REFERENCE_GOVERNANCE.md) | 主上游、参考项目、许可证和吸收规则 |
 | [Upstream Watch](upstreams/README.md) | 自动发现、分类、Issue 生命周期和人工接受版本 |
+| [公开仓库前检查清单](PUBLIC_READINESS.md) | 公开前文档、所有权、发布与部署门禁 |
 | [发布流程](RELEASING.md) | 分支、canary 和稳定发布 |
 | [安全策略](../SECURITY.md) | 信任边界与漏洞报告 |
 
@@ -63,6 +64,7 @@
 
 ```powershell
 .\scripts\verify-baseline.ps1
+python scripts/check_public_readiness.py
 go test ./internal/... -count=1 -timeout 300s
 Push-Location desktop; go test . -count=1 -timeout 300s; Pop-Location
 Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop-Location

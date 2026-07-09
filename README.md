@@ -12,8 +12,8 @@ git clone https://github.com/Ebonyhtx/reames-agent.git
 cd reames-agent
 go build -o bin/reames-agent ./cmd/reames-agent
 
-# Or download prebuilt binary from releases
-# https://github.com/Ebonyhtx/reames-agent/releases
+# Stable public releases are not enabled yet.
+# Maintainer-only candidate artifacts are documented in docs/RELEASING.md.
 
 # Setup
 ./bin/reames-agent setup
@@ -37,17 +37,29 @@ go build -o bin/reames-agent ./cmd/reames-agent
 reames-agent                        # Interactive CLI session
 reames-agent run "fix the auth bug" # Headless single task
 reames-agent serve                  # Start web UI on localhost:8787
-reames-agent gateway start --channels feishu  # Start IM bot
+reames-agent bot start --channels feishu      # Start IM bot
 ```
 
 ## Cloud Deployment
 
 ```bash
 docker build -t reames-agent .
-docker run -p 8787:8787 -e DEEPSEEK_API_KEY=sk-xxx reames-agent
+docker run -p 127.0.0.1:8787:8787 \
+  -e DEEPSEEK_API_KEY=replace-with-your-key \
+  -e REAMES_AGENT_SERVE_TOKEN=change-this-long-random-token \
+  reames-agent
 ```
 
 See [docs/DEPLOY.md](docs/DEPLOY.md) for systemd, nginx, and SSH deployment guides.
+
+## Release Status
+
+This repository is still before its first public stable release. The current
+safe distribution path is source builds and maintainer-reviewed candidate
+artifacts. Production release, updater, package-manager publishing, crash
+upload, and telemetry endpoints remain disabled until the gates in
+[docs/RELEASING.md](docs/RELEASING.md) and
+[docs/PUBLIC_READINESS.md](docs/PUBLIC_READINESS.md) are satisfied.
 
 ## Documentation
 
@@ -61,6 +73,7 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for systemd, nginx, and SSH deployment guid
 ## License
 
 MIT. Based on [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix).
+See [NOTICE.md](NOTICE.md) for attribution notes.
 
 ## Development
 

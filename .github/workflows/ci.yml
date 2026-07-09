@@ -88,6 +88,17 @@ jobs:
       - name: Validate server deployment contracts
         run: python scripts/check_deploy_contracts.py
 
+  public-readiness:
+    name: Public readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate public repository gates
+        run: python scripts/check_public_readiness.py
+
   cross:
     name: Cross-compile
     runs-on: ubuntu-latest
@@ -103,4 +114,5 @@ jobs:
           GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o bin/reames-agent-darwin-amd64 ./cmd/reames-agent
           GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o bin/reames-agent-darwin-arm64 ./cmd/reames-agent
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o bin/reames-agent-windows-amd64.exe ./cmd/reames-agent
-          echo "All 5 cross-compile targets built"
+          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -o bin/reames-agent-windows-arm64.exe ./cmd/reames-agent
+          echo "All 6 cross-compile targets built"
