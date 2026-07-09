@@ -39,7 +39,106 @@ go test ./... -run '^$'
 - UI 批次必须恢复 frontend build 和浏览器/桌面截图验证；
 - full `cd desktop; go test . -count=1` 当前耗时较长，可先用 critical desktop baseline 做门禁，再逐步扩大。
 
-## 2. Phase A：文档收敛与接手入口
+## 2. 长期自动执行目标与里程碑
+
+本节是当前线程的长期执行目标落档。后续自动推进时，不再临时发散；始终按以下顺序选择最靠前且未完成的里程碑执行。
+
+### 2.1 长期目标
+
+```text
+以 Reasonix 为稳定工程底座，优先把 Reames Agent 做成 Apple-light 中文桌面 Agent；
+随后收敛工程基线、建立 Reames public boundary 与 metadata/cache guard、清理 legacy 残留；
+最后推进 Server/Web/Cloud 与 Gateway 融合。
+```
+
+执行约束：
+
+1. 每批必须能独立验证、提交、push；
+2. 桌面 UI 批次必须有截图/点击/build 至少两类证据；
+3. 不自动覆盖 Reasonix provider/cache/runtime；
+4. 不把其他参考项目整套代码无脑复制进主线；
+5. 用户界面不得展示工程自嗨文字；
+6. 如果 CI 失败，先修 CI，再继续功能推进。
+
+### 2.2 里程碑顺序
+
+| 里程碑 | 目标 | 完成标准 | 优先级 |
+|---|---|---|---|
+| M0：CI 与基线稳定 | 让 main 可持续绿灯 | `verify-baseline.ps1`、root compile-only、CI 失败包通过 | P0 |
+| M1：Desktop frontend 恢复 | 前端依赖、build、dev 可运行 | `desktop/frontend` 依赖安装，`npm run build` 通过，可打开界面 | P0 |
+| M2：桌面视觉产品化 | Apple-light 中文桌面 Agent | 主界面、设置页、审批弹窗、工作区视觉统一，有截图 | P0 |
+| M3：真实点击体验 | 用户能实际完成核心路径 | 新建会话、输入任务、设置模型、审批、查看变更可点击可理解 | P0 |
+| M4：Reames public boundary | 多入口共用边界 | Desktop/CLI/Web/Gateway 不穿透 provider；metadata/cache guard tests 通过 | P1 |
+| M5：仓库收敛清理 | 减少 legacy/Python/Hermes 混乱 | 分批归档/删除无用残留，文档入口保持清晰 | P1 |
+| M6：Server/Web/Cloud | 支持本地/局域网/云部署 | server/auth/deploy 文档和 smoke tests 可用 | P2 |
+| M7：Gateway 融合 | 多渠道入口 | 至少一个真实渠道通过 runtime boundary 接入，metadata 不进 prompt | P2 |
+| M8：Upstream 持续吸收 | 自动追踪参考项目 | upstream-watch issue/report 常态化，人工筛选吸收 | P2 |
+
+### 2.3 自动执行节奏
+
+每次自动推进时按这个循环执行：
+
+```text
+检查 git 状态
+→ 检查当前 CI/基线
+→ 选择最靠前未完成里程碑
+→ 小范围修改
+→ 本地验证
+→ 更新必要文档
+→ commit
+→ push
+→ 汇报下一步
+```
+
+默认验证组合：
+
+```powershell
+.\scripts\verify-baseline.ps1
+go test ./... -run '^$'
+```
+
+UI 批次额外验证：
+
+```powershell
+cd F:\reames-agent\desktop\frontend
+npm run build
+```
+
+Desktop Go 批次额外验证：
+
+```powershell
+cd F:\reames-agent\desktop
+go test . -run 'TestWorkspaceChangesGitStatus|TestWorkspaceChangesGitStatusFromRepoSubdirectory|TestWorkspaceChangesUntrackedDirectoryListsFiles|TestWorkspaceChangesGitBranchDetachedHead|TestParseGitStatusPorcelainZ|TestHeartbeatConfigPathUsesReamesAgentUserStateDir' -count=1
+```
+
+Upstream 批次额外验证：
+
+```powershell
+python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
+```
+
+### 2.4 暂停和降级规则
+
+遇到以下情况先暂停当前功能推进，转为修复/收敛：
+
+- CI 红灯；
+- `verify-baseline.ps1` 失败；
+- desktop frontend 无法 build；
+- provider/cache/runtime 相关差异无法判断风险；
+- UI 改动无法截图或无法点击验证；
+- 文档和实际行为明显不一致。
+
+### 2.5 当前自动执行焦点
+
+当前焦点顺序：
+
+1. **M0：CI 与基线稳定**：持续消灭 GitHub Actions 失败；
+2. **M1：Desktop frontend 恢复**：安装依赖、跑 build、启动预览；
+3. **M2：桌面视觉产品化**：Apple-light、中文、设置中心、审批弹窗、主界面；
+4. **M3：真实点击体验**：围绕用户核心路径修交互；
+5. 之后才进入 M4-M8。
+
+## 3. Phase A：文档收敛与接手入口
 
 目标：让后来接手的人不再从旧 Reames Lite、Reasonix、Hermes、桌面实验文档里猜方向。
 
@@ -67,7 +166,7 @@ go test ./... -run '^$'
 2. README 指向权威文档；
 3. 后续每批如果发现旧文档误导方向，只做“归档/标记过时/从索引移除”，不随手删。
 
-## 3. Phase B：恢复桌面前端可验证基线
+## 4. Phase B：恢复桌面前端可验证基线
 
 目标：让桌面 UI 能真实运行、截图、点击、构建，而不是只改 Go 后端。
 
@@ -127,7 +226,7 @@ wails dev
 - 前端 build；
 - desktop critical Go tests。
 
-## 4. Phase C：桌面 Agent 视觉和交互重建
+## 5. Phase C：桌面 Agent 视觉和交互重建
 
 目标：优先解决用户最不满意的问题：视觉乱、丑、不像桌面 Agent、工程文案太多。
 
@@ -208,7 +307,7 @@ P0 verification
 
 验收不是“按钮存在”，而是点击后用户能理解下一步。
 
-## 5. Phase D：Reames public boundary
+## 6. Phase D：Reames public boundary
 
 目标：把 Reames Lite 的核心优势迁成 Go 项目的边界约束，而不是复制旧 Python 内部实现。
 
@@ -244,7 +343,7 @@ internal/control facade
 - 新增中文 copy 不污染模型上下文；
 - gateway channel identity 只在 runtime envelope，不进 prompt。
 
-## 6. Phase E：清理 legacy/Hermes/Python 残留
+## 7. Phase E：清理 legacy/Hermes/Python 残留
 
 目标：让仓库结构变清楚，但不能一上来暴删导致可用能力丢失。
 
@@ -270,7 +369,7 @@ internal/control facade
 - 提交信息说明原因；
 - 不和 UI 重构混在一批。
 
-## 7. Phase F：Server/Web/Cloud
+## 8. Phase F：Server/Web/Cloud
 
 目标：像 Hermes 一样可以部署到云服务器，但不牺牲桌面体验。
 
@@ -293,7 +392,7 @@ internal/control facade
 - 只读/审批/沙箱策略；
 - Web UI 与 Desktop 共用 boundary。
 
-## 8. Phase G：Gateway
+## 9. Phase G：Gateway
 
 目标：融合 Hermes 风格多渠道入口，但保持 provider prompt 干净。
 
@@ -313,7 +412,7 @@ Gateway 规则：
 - 文件/图片/富文本先标准化为 runtime attachment；
 - 所有渠道复用同一 Reames boundary。
 
-## 9. 每批执行模板
+## 10. 每批执行模板
 
 每批开始前：
 
@@ -358,7 +457,7 @@ git commit -m "<type>: <summary>"
 git push origin main
 ```
 
-## 10. 当前下一步
+## 11. 当前下一步
 
 按优先级：
 
@@ -369,7 +468,7 @@ git push origin main
 5. **再清理 legacy 残留**：文档、Python、Hermes 混入内容分批处理；
 6. **最后推进云部署和 Gateway**：复用 server/boundary，不另起一套。
 
-## 11. 阶段完成定义
+## 12. 阶段完成定义
 
 ### 桌面 UI 阶段完成
 
