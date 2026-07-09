@@ -21,7 +21,7 @@ Aliyun ECS / 自有服务器
 ├─ Gateway daemon
 │  ├─ 当前：reames-agent gateway run --channels feishu（前台运行）
 │  ├─ 兼容：reames-agent bot start --channels feishu（前台运行）
-│  ├─ 目标：reames-agent gateway install/start/stop/status（后台服务）
+│  ├─ 当前：reames-agent gateway install/start/stop/status（后台服务生命周期）
 │  └─ 飞书 / Lark / 微信 / QQ / Telegram 等 adapter
 ├─ reames-agent serve
 │  ├─ HTTP/SSE/Web API
@@ -58,7 +58,7 @@ tmux new -s reames
 reames-agent gateway run --channels feishu
 reames-agent bot start --channels feishu
 
-# 目标 Hermes-like 后台服务入口
+# Hermes-like 后台服务入口
 reames-agent gateway install --start-now
 reames-agent gateway status
 ```

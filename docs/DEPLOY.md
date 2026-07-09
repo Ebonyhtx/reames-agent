@@ -5,7 +5,7 @@
 如果目标是“像 Hermes 一样把 Agent 部署到云服务器，然后随时 SSH 上去使用，同时飞书/微信/QQ/Telegram 在后台常驻”，部署形态应分成两个互不干扰的入口：
 
 1. **CLI/TUI**：用户 SSH 到服务器后直接运行 `reames-agent` 或 `reames-agent run`。
-2. **Gateway service**：后台服务独立接收社交通道消息，当前前台调试命令是 `reames-agent gateway run --channels feishu`（`reames-agent bot start --channels feishu` 保持兼容），目标是 `reames-agent gateway install/start/status` 这类服务生命周期命令。
+2. **Gateway service**：后台服务独立接收社交通道消息，前台调试命令是 `reames-agent gateway run --channels feishu`（`reames-agent bot start --channels feishu` 保持兼容），后台服务生命周期命令是 `reames-agent gateway install/start/status`。
 
 这种形态和本机 CLI 最接近：
 
@@ -104,10 +104,11 @@ reames-agent gateway run --channels feishu
 reames-agent bot start --channels feishu
 ```
 
-它适合调试、tmux 或临时运行；`bot start` 是兼容入口，长期推荐使用 `gateway run`。当前还不是 Hermes 式后台服务管理面，目标形态应补齐：
+它适合调试、tmux 或临时运行；`bot start` 是兼容入口，长期推荐使用 `gateway run`。后台服务管理面当前已提供用户级 systemd / launchd / Windows Scheduled Task 命令；生产部署前建议先用 `--dry-run` 审阅计划：
 
 ```bash
 reames-agent gateway run                    # 前台运行，适合调试/Docker/Termux
+reames-agent gateway install --dry-run --channels feishu --dir /srv/project
 reames-agent gateway install --start-now    # 安装并启动后台服务
 reames-agent gateway status                 # 查看后台服务和平台连接状态
 reames-agent gateway restart                # 重启服务，不影响用户 CLI 终端
@@ -131,7 +132,7 @@ tmux new -s reames-gateway
 REAMES_AGENT_HOME="$HOME/.reames-agent" reames-agent gateway run --channels feishu
 ```
 
-如果要用 systemd 临时托管，可先写一个 user service 调用上面的前台命令。正式实现会提供跨平台 service manager，类似 Hermes 的 systemd / launchd / Windows Scheduled Task 后端。
+正式命令会按平台选择 service manager：Linux 使用 user systemd，macOS 使用 launchd，Windows 使用 Scheduled Task。`--scope system` 只渲染计划并要求管理员/root 手动确认，避免误改系统级服务。
 
 ## Docker 部署（推荐）
 

@@ -382,7 +382,7 @@ var ChineseTraditional = Messages{
   reames-agent init                                         查看如何產生專案記憶（AGENTS.md）
   reames-agent doctor [--json]                              輸出脫敏的本機診斷資訊
   reames-agent doctor session <branch-id> [--zip] [--out PATH]  匯出會話衝突診斷 zip
-  reames-agent gateway run [--channels qq,feishu,lark,weixin]  前台執行 IM Gateway
+  reames-agent gateway run|install|start|stop|restart|status|uninstall  IM Gateway 前台/後台服務生命週期
   reames-agent bot start|doctor|weixin-login                舊版 bot 閘道命令
   reames-agent upgrade [--check] [--force]                   自更新至最新版本（也可用：reames-agent update）
   reames-agent version

@@ -15,6 +15,7 @@ import (
 	"reames-agent/internal/bot/weixin"
 	"reames-agent/internal/botruntime"
 	"reames-agent/internal/config"
+	"reames-agent/internal/gatewayservice"
 )
 
 func botCommand(args []string, version string) int {
@@ -61,6 +62,8 @@ func gatewayCommand(args []string, version string) int {
 	switch sub {
 	case "run":
 		return gatewayRun(rest, version)
+	case "install", "start", "stop", "restart", "status", "uninstall":
+		return gatewayService(sub, rest)
 	case "help", "--help", "-h":
 		gatewayUsage()
 		return 0
@@ -73,6 +76,58 @@ func gatewayCommand(args []string, version string) int {
 
 func gatewayRun(args []string, version string) int {
 	return runGatewayForeground(args, version, "gateway run", "gateway")
+}
+
+func gatewayService(action string, args []string) int {
+	fs := flag.NewFlagSet("gateway "+action, flag.ContinueOnError)
+	dryRun := fs.Bool("dry-run", false, "print the service-manager plan without changing the host")
+	scope := fs.String("scope", "user", "service scope: user or system")
+	name := fs.String("name", "reames-agent-gateway", "OS service name")
+	exe := fs.String("exe", "", "reames-agent executable path (default: current executable)")
+	channels := fs.String("channels", "", "gateway channels for install: qq,feishu,lark,weixin")
+	dir := fs.String("dir", "", "gateway working directory for install")
+	model := fs.String("model", "", "gateway model override for install")
+	startNow := fs.Bool("start-now", false, "install: start the service immediately")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(os.Stderr, "error: gateway %s does not accept positional arguments\n", action)
+		return 2
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	result, err := gatewayservice.Apply(ctx, gatewayservice.Options{
+		Action:     action,
+		Name:       *name,
+		Scope:      *scope,
+		Executable: *exe,
+		Channels:   *channels,
+		Dir:        *dir,
+		Model:      *model,
+		StartNow:   *startNow,
+		DryRun:     *dryRun,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		if len(result.Plan.Commands) > 0 || len(result.Plan.Files) > 0 || len(result.Plan.Deletes) > 0 {
+			fmt.Fprintln(os.Stderr, "planned operation:")
+			fmt.Fprint(os.Stderr, gatewayservice.FormatPlan(result.Plan))
+		}
+		return 1
+	}
+	if *dryRun {
+		fmt.Print(gatewayservice.FormatPlan(result.Plan))
+		return 0
+	}
+	for _, out := range result.Outputs {
+		if strings.TrimSpace(out) != "" {
+			fmt.Println(out)
+		}
+	}
+	fmt.Printf("gateway service %s completed\n", action)
+	return 0
 }
 
 func runGatewayForeground(args []string, version, flagSetName, displayName string) int {
@@ -616,16 +671,22 @@ func gatewayUsage() {
 
 Usage:
   reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
+  reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--channels LIST] [--dir PATH] [--model NAME]
+  reames-agent gateway start|stop|restart|status|uninstall [--dry-run] [--scope user|system]
 
 Subcommands:
   run       run the gateway in the foreground; compatible with "reames-agent bot start"
-
-Planned service lifecycle:
-  gateway install/start/stop/restart/status/uninstall will manage OS background services.
-  Until then, run the foreground command under tmux, systemd, launchd, or Scheduled Task manually.
+  install   install a user-level OS service (systemd, launchd, or Windows Scheduled Task)
+  start     start the installed gateway service
+  stop      stop the installed gateway service
+  restart   restart the installed gateway service
+  status    show service status
+  uninstall remove the installed service
 
 Examples:
   reames-agent gateway run --channels feishu
+  reames-agent gateway install --dry-run --channels feishu --dir /path/to/project
+  reames-agent gateway install --start-now --channels feishu
   reames-agent gateway run --dir /path/to/project --model deepseek-pro
 `)
 }

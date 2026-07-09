@@ -150,6 +150,8 @@ runtime itself can also run as a long-lived headless gateway:
 reames-agent bot doctor
 reames-agent bot doctor --deep
 reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
+reames-agent gateway install --dry-run --channels feishu --dir /path/to/project
+reames-agent gateway install --start-now --channels feishu --dir /path/to/project
 ```
 
 Use `--channels` to choose which configured IM inputs to accept. `feishu` and
@@ -267,7 +269,7 @@ curl -X POST http://127.0.0.1:37913/send \
 sequenceDiagram
   participant U as "User"
   participant IM as "Feishu / Lark / WeChat / QQ"
-  participant R as "Reames Agent desktop or bot start"
+  participant R as "Reames Agent desktop or gateway"
   participant T as "Local tools and model"
 
   U->>IM: "Send a request"

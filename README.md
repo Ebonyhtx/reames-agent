@@ -38,6 +38,7 @@ reames-agent                        # Interactive CLI session
 reames-agent run "fix the auth bug" # Headless single task
 reames-agent serve                  # Start web UI on localhost:8787
 reames-agent gateway run --channels feishu    # Run IM gateway in foreground
+reames-agent gateway install --dry-run --channels feishu  # Preview background service install
 ```
 
 ## Cloud Deployment

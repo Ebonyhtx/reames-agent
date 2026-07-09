@@ -333,6 +333,9 @@ func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
 	if !strings.Contains(out, "reames-agent gateway run") || !strings.Contains(out, "bot start") {
 		t.Fatalf("gateway help output missing run/compatibility details:\n%s", out)
 	}
+	if !strings.Contains(out, "install") || !strings.Contains(out, "--dry-run") {
+		t.Fatalf("gateway help output missing service lifecycle details:\n%s", out)
+	}
 
 	errOut := captureStderr(t, func() {
 		if rc := Run([]string{"gateway", "run", "--definitely-not-a-gateway-flag"}, "test-version"); rc != 2 {
@@ -344,6 +347,40 @@ func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "flag provided but not defined") {
 		t.Fatalf("gateway run bad flag stderr = %q, want flag parser error", errOut)
+	}
+}
+
+func TestGatewayInstallDryRunPrintsPlan(t *testing.T) {
+	isolateCLIConfigHome(t)
+
+	out := captureStdout(t, func() {
+		if rc := Run([]string{"gateway", "install", "--dry-run", "--exe", "reames-agent", "--channels", "feishu", "--dir", "F:\\work repo"}, "test-version"); rc != 0 {
+			t.Fatalf("gateway install --dry-run rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{
+		"gateway service plan:",
+		"action=install",
+		"gateway",
+		"run",
+		"feishu",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("gateway install --dry-run output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestGatewayInstallDryRunRejectsInvalidScope(t *testing.T) {
+	isolateCLIConfigHome(t)
+
+	errOut := captureStderr(t, func() {
+		if rc := Run([]string{"gateway", "install", "--dry-run", "--scope", "planet", "--exe", "reames-agent"}, "test-version"); rc != 1 {
+			t.Fatalf("gateway install invalid scope rc = %d, want 1", rc)
+		}
+	})
+	if !strings.Contains(errOut, "invalid service scope") {
+		t.Fatalf("gateway install invalid scope stderr = %q, want validation error", errOut)
 	}
 }
 

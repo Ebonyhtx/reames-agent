@@ -58,13 +58,17 @@ Reames 当前已有：
 - `reames-agent bot start`：兼容旧命名的前台 bot gateway 入口。
 - Desktop 内部也有 bot runtime 相关设置和状态。
 
-但 Reames 还缺 Hermes 式产品闭环：
+本次纠偏后，Reames 已补上第一层 Hermes 式 gateway 命令面：
 
-- 没有明确的 gateway service lifecycle 命令：`install/start/stop/restart/status/uninstall`。
-- `gateway run` / `bot start` 当前是前台运行，不是“启动已安装后台服务”。
-- 没有跨 Linux/macOS/Windows 的 service manager 抽象。
+- `reames-agent gateway run`：前台运行 gateway daemon。
+- `reames-agent gateway install/start/stop/restart/status/uninstall`：后台服务生命周期命令。
+- `internal/gatewayservice`：跨 Linux systemd、macOS launchd、Windows Scheduled Task 的 service manager 计划渲染和用户级执行。
+
+仍然缺的 Hermes 式产品闭环：
+
 - 没有一键安装脚本把 CLI、Desktop 可选安装、gateway service 配置串起来。
-- 文档之前把 `serve` 写得太靠前，容易误解成云端部署主入口。
+- 还没有 `gateway setup` 向导把飞书/微信/QQ/Telegram 凭据、allowlist 和 workspace route 串起来。
+- 文档之前把 `serve` 写得太靠前，容易误解成云端部署主入口；现在已改为 CLI/Gateway 并列入口。
 
 ## Reames 应采用的目标形态
 
@@ -83,9 +87,10 @@ Reames Agent core
 
 - 当前保留：`reames-agent bot start --channels feishu` 作为前台调试/兼容入口。
 - 当前新增：`reames-agent gateway run`：前台运行 gateway daemon。
-- 新增目标：
+- 当前新增：
   - `reames-agent gateway install`：安装 OS 后台服务。
   - `reames-agent gateway start|stop|restart|status|uninstall`：管理后台服务。
+- 新增目标：
   - `reames-agent gateway setup`：配置平台、allowlist、工作区映射和凭据。
 - 或者如果保持 `bot` 命名，则必须引入 `bot run` 与 `bot service ...`，避免 `bot start` 同时表示前台运行和服务启动。
 
@@ -93,18 +98,18 @@ Reames Agent core
 
 ## 下一步实施优先级
 
-1. 先明确命令设计和兼容迁移：
-   - `bot start` 保持兼容；
-   - `gateway run` 作为等价前台入口；
-   - 新增 `gateway install/start/status/...` 服务生命周期。
-2. 抽象 service manager：
-   - Linux：systemd user/system service；
-   - Windows：Scheduled Task，必要时 Startup folder fallback；
-   - macOS：launchd；
+1. 完成 service manager 实战验证：
+   - 在干净 Linux 服务器验证 user systemd；
+   - 在 Windows 验证 Scheduled Task；
+   - 在 macOS 验证 launchd；
    - 容器：后续 s6 或 supervisor。
-3. 一键安装：
+2. 一键安装：
    - Linux/macOS：`install.sh` 安装单二进制、配置 home、可选安装 gateway service；
    - Windows：`install.ps1` 安装 CLI、可选 Desktop、可选 Scheduled Task gateway。
+3. `gateway setup`：
+   - 配置平台凭据；
+   - 配置 allowlist / pairing；
+   - 配置默认 workspace 和 routes。
 4. 文档和 CI：
    - 部署文档必须把 CLI、Gateway service、Desktop、Serve 分开；
    - CI 增加 gateway service contract 检查；
