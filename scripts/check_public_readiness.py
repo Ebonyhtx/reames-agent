@@ -38,6 +38,7 @@ def check_required_files(failures: list[str]) -> None:
         "docs/REFERENCE_GOVERNANCE.md",
         "docs/RELEASING.md",
         "docs/PUBLIC_READINESS.md",
+        ".github/workflows/codeql.yml",
     ]
     for rel in required:
         require((ROOT / rel).is_file(), f"missing required public-facing file: {rel}", failures)
@@ -88,6 +89,16 @@ def check_release_and_deploy_controls(failures: list[str]) -> None:
     require("REAMES_AGENT_SERVE_TOKEN" in deploy, "docs/DEPLOY.md must document serve token env.", failures)
 
 
+def check_codeql_workflow(failures: list[str]) -> None:
+    codeql = read(".github/workflows/codeql.yml")
+    require("github/codeql-action/init@v4" in codeql, "CodeQL workflow must initialize CodeQL.", failures)
+    require("github/codeql-action/analyze@v4" in codeql, "CodeQL workflow must upload analysis.", failures)
+    require("security-events: write" in codeql, "CodeQL workflow must grant security-events write to the analyze job.", failures)
+    for language in ["go", "javascript-typescript", "actions"]:
+        require(language in codeql, f"CodeQL workflow must analyze {language}.", failures)
+    require("github/codeql-action/autobuild@v4" in codeql, "CodeQL workflow must autobuild compiled Go analysis.", failures)
+
+
 def check_brand_env_regressions(failures: list[str]) -> None:
     public_docs = [
         "docs/BOT_GUIDE.md",
@@ -106,6 +117,7 @@ def main() -> int:
         check_readme(failures)
         check_ownership_and_license(failures)
         check_release_and_deploy_controls(failures)
+        check_codeql_workflow(failures)
         check_brand_env_regressions(failures)
 
     if failures:
