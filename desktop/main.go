@@ -8,6 +8,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
@@ -61,6 +62,49 @@ var channel = "stable"
 // macOS release builds. Local/ad-hoc macOS builds keep the manual download path.
 var macSelfUpdate = "false"
 
+// explicitHome is set when --home <path> is passed on the command line.
+// It is empty when using the default home. singleInstanceID uses it to
+// isolate different homes, and RestartApplication forwards it automatically
+// via os.Args.
+var explicitHome string
+
+// parseHomeFlag extracts --home <path> or --home=<path> from args.
+// It returns an error for missing value, empty value, or duplicate flags.
+// Unknown flags (e.g. Wails dev flags like -devserver) are silently ignored
+// so Wails tooling remains compatible.
+func parseHomeFlag(args []string) (string, error) {
+	var home string
+	seen := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--home" {
+			if seen {
+				return "", fmt.Errorf("duplicate --home flag")
+			}
+			i++
+			if i >= len(args) || args[i] == "" {
+				return "", fmt.Errorf("missing value after --home")
+			}
+			home = args[i]
+			seen = true
+			continue
+		}
+		if strings.HasPrefix(a, "--home=") {
+			if seen {
+				return "", fmt.Errorf("duplicate --home flag")
+			}
+			v := strings.TrimPrefix(a, "--home=")
+			if v == "" {
+				return "", fmt.Errorf("--home= requires a value")
+			}
+			home = v
+			seen = true
+			continue
+		}
+	}
+	return home, nil
+}
+
 const (
 	disableWebview2GPUEnv  = "REAMES_AGENT_DESKTOP_DISABLE_WEBVIEW2_GPU"
 	linuxDRIRenderNodeGlob = "/dev/dri/renderD*"
@@ -111,6 +155,28 @@ func main() {
 		os.Exit(code)
 	}
 	sandbox.RegisterHelperDispatch()
+
+	// Parse --home before any path resolution (window state, config, migration,
+	// single-instance ID). Accepts both --home <path> and --home=<path>.
+	// Wails dev flags (e.g. -devserver) are silently passed through.
+	homeFlag, parseErr := parseHomeFlag(os.Args[1:])
+	if parseErr != nil {
+		fmt.Fprintf(os.Stderr, "desktop: --home: %v\n", parseErr)
+		os.Exit(2)
+	}
+	if homeFlag != "" {
+		if !filepath.IsAbs(homeFlag) {
+			abs, absErr := filepath.Abs(homeFlag)
+			if absErr != nil {
+				fmt.Fprintf(os.Stderr, "desktop: --home: cannot resolve %q to absolute path: %v\n", homeFlag, absErr)
+				os.Exit(2)
+			}
+			homeFlag = abs
+		}
+		homeFlag = filepath.Clean(homeFlag)
+		os.Setenv("REAMES_AGENT_HOME", homeFlag)
+		explicitHome = homeFlag
+	}
 
 	app := NewApp()
 

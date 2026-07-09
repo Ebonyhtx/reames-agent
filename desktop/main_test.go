@@ -100,3 +100,43 @@ func TestLinuxWebviewGpuPolicyKeepsOnDemandWithAccessibleRenderNode(t *testing.T
 		t.Fatalf("linuxWebviewGpuPolicy() = %v, want %v", got, linux.WebviewGpuPolicyOnDemand)
 	}
 }
+
+func TestParseHomeFlag(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    string
+		wantErr bool
+	}{
+		{name: "no home", args: nil, want: ""},
+		{name: "no home with other args", args: []string{"-devserver", "localhost:34115"}, want: ""},
+		{name: "space separated", args: []string{"--home", "/tmp/my-home"}, want: "/tmp/my-home"},
+		{name: "equals form", args: []string{"--home=/tmp/my-home"}, want: "/tmp/my-home"},
+		{name: "relative path", args: []string{"--home", "relative/path"}, want: "relative/path"},
+		{name: "wails flags before home", args: []string{"-devserver", "localhost:34115", "--home", "/tmp/home"}, want: "/tmp/home"},
+		{name: "wails flags after home", args: []string{"--home", "/tmp/home", "-devserver", "localhost:34115"}, want: "/tmp/home"},
+		{name: "duplicate flagged", args: []string{"--home", "/a", "--home", "/b"}, wantErr: true},
+		{name: "duplicate mixed forms", args: []string{"--home=/a", "--home", "/b"}, wantErr: true},
+		{name: "missing value", args: []string{"--home"}, wantErr: true},
+		{name: "empty value", args: []string{"--home="}, wantErr: true},
+		{name: "missing value at end", args: []string{"--devserver", "--home"}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseHomeFlag(tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got home=%q", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("parseHomeFlag(%v) = %q, want %q", tt.args, got, tt.want)
+			}
+		})
+	}
+}
