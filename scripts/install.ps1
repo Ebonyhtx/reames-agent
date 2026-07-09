@@ -8,7 +8,13 @@
 param(
     [string]$Repo = $(if ($env:REAMES_AGENT_REPO_URL) { $env:REAMES_AGENT_REPO_URL } else { "https://github.com/Ebonyhtx/reames-agent.git" }),
     [string]$Branch = $(if ($env:REAMES_AGENT_BRANCH) { $env:REAMES_AGENT_BRANCH } else { "main" }),
-    [string]$InstallDir = $(if ($env:REAMES_AGENT_INSTALL_DIR) { $env:REAMES_AGENT_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "ReamesAgent\bin" }),
+    [string]$InstallDir = $(if ($env:REAMES_AGENT_INSTALL_DIR) {
+        $env:REAMES_AGENT_INSTALL_DIR
+    } elseif ($env:LOCALAPPDATA) {
+        Join-Path $env:LOCALAPPDATA "ReamesAgent\bin"
+    } else {
+        Join-Path $HOME ".reames-agent/bin"
+    }),
     [switch]$SkipSetup,
     [switch]$Gateway,
     [string]$Channels = "",
