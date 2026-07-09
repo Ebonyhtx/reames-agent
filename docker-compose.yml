@@ -9,6 +9,7 @@ services:
       - reames_data:/root/.reames-agent
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - REAMES_AGENT_SERVE_TOKEN=${REAMES_AGENT_SERVE_TOKEN:-}
       - REAMES_AGENT_HOME=/root/.reames-agent
     restart: unless-stopped
     healthcheck:

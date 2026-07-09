@@ -100,6 +100,7 @@ allow = ["Bash(go test:*)"]                  # 从不询问
 [serve]
 auth_mode = "none"             # none|token|password；绑定到非 localhost 前请先开启认证
 # token = ""                   # 可选固定 token；token 模式为空时启动时自动生成
+# token_env = "REAMES_AGENT_SERVE_TOKEN" # 服务器部署推荐；缺失时 fail-closed
 # password_hash = ""           # 用 reames-agent serve --hash-password --password '...' 生成
 # behind_proxy = false         # 只在可信反向代理后方设为 true
 
@@ -170,8 +171,10 @@ reames-agent serve --addr 0.0.0.0:8787 --auth token
 reames-agent serve --auth password --password 'temporary-password'
 ```
 
-Token 模式会在终端打印带 `?token=...` 的分享链接；可通过 `--token` 或 `[serve].token`
-复用固定 token。Password 模式必须在启动时传 `--password`，或在配置里保存 bcrypt hash：
+Token 模式会在终端打印带 `?token=...` 的分享链接；可通过 `--token`、`[serve].token`
+或更推荐的 `[serve].token_env` 复用稳定 token，并避免把 secret 写进 TOML。
+如果配置了 `token_env` 但环境变量缺失，token 认证会 fail-closed，而不是生成意外的新 token。
+Password 模式必须在启动时传 `--password`，或在配置里保存 bcrypt hash：
 
 ```bash
 reames-agent serve --hash-password --password 'strong-password'

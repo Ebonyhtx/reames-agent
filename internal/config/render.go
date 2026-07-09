@@ -124,6 +124,30 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		fmt.Fprintf(&b, "approval_request = %v   # notify when a tool approval is waiting\n", c.Notifications.ApprovalRequest)
 		fmt.Fprintf(&b, "ask_request = %v   # notify when a question is waiting\n", c.Notifications.AskRequest)
 		b.WriteString("\n")
+
+		b.WriteString("[serve]\n")
+		if strings.TrimSpace(c.Serve.AuthMode) != "" {
+			fmt.Fprintf(&b, "auth_mode = %q   # none|token|password; use auth before binding beyond localhost\n", c.Serve.AuthMode)
+		} else {
+			b.WriteString("auth_mode = \"none\"   # none|token|password; use auth before binding beyond localhost\n")
+		}
+		if strings.TrimSpace(c.Serve.Token) != "" {
+			fmt.Fprintf(&b, "token = %q   # fixed token for auth_mode = \"token\"; prefer token_env for server deployments\n", c.Serve.Token)
+		} else {
+			b.WriteString("# token = \"\"   # optional fixed token; empty token mode generates one at startup unless token_env is set\n")
+		}
+		if strings.TrimSpace(c.Serve.TokenEnv) != "" {
+			fmt.Fprintf(&b, "token_env = %q   # environment variable containing the token; fail-closed if missing\n", c.Serve.TokenEnv)
+		} else {
+			b.WriteString("# token_env = \"REAMES_AGENT_SERVE_TOKEN\"   # recommended for systemd/Docker deployments\n")
+		}
+		if strings.TrimSpace(c.Serve.PasswordHash) != "" {
+			fmt.Fprintf(&b, "password_hash = %q   # bcrypt hash generated with reames-agent serve --hash-password --password '...'\n", c.Serve.PasswordHash)
+		} else {
+			b.WriteString("# password_hash = \"\"   # bcrypt hash generated with reames-agent serve --hash-password --password '...'\n")
+		}
+		fmt.Fprintf(&b, "behind_proxy = %v   # trust X-Forwarded-* only behind a trusted reverse proxy\n", c.Serve.BehindProxy)
+		b.WriteString("\n")
 	}
 
 	if shouldRenderNetwork(c, defaults, scope) {

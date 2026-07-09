@@ -107,6 +107,7 @@ allow = ["Bash(go test:*)"]                  # never prompted
 [serve]
 auth_mode = "none"             # none|token|password; use auth before binding beyond localhost
 # token = ""                   # optional fixed token; empty token mode generates one at startup
+# token_env = "REAMES_AGENT_SERVE_TOKEN" # preferred for server deployments; fail-closed if missing
 # password_hash = ""           # bcrypt hash generated with reames-agent serve --hash-password --password '...'
 # behind_proxy = false         # true only behind a trusted reverse proxy
 
@@ -195,9 +196,12 @@ reames-agent serve --addr 0.0.0.0:8787 --auth token
 reames-agent serve --auth password --password 'temporary-password'
 ```
 
-Token mode prints a share URL with `?token=...`; pass `--token` or set
-`[serve].token` to reuse a stable token. Password mode requires either
-`--password` at startup or a stored bcrypt hash:
+Token mode prints a share URL with `?token=...`; pass `--token`, set
+`[serve].token`, or preferably set `[serve].token_env` to reuse a stable token
+without storing the secret in TOML. If `token_env` is configured but the
+environment variable is missing, token auth fails closed instead of generating a
+surprise replacement. Password mode requires either `--password` at startup or a
+stored bcrypt hash:
 
 ```bash
 reames-agent serve --hash-password --password 'strong-password'

@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -141,6 +142,13 @@ func newAuthGate(cfg config.ServeConfig) *authGate {
 	case "token":
 		ag.mode = authToken
 		ag.token = strings.TrimSpace(cfg.Token)
+		if ag.token == "" && strings.TrimSpace(cfg.TokenEnv) != "" {
+			ag.token = strings.TrimSpace(os.Getenv(strings.TrimSpace(cfg.TokenEnv)))
+			if ag.token == "" {
+				ag.mode = authInvalid
+				return ag
+			}
+		}
 		if ag.token == "" {
 			ag.token = generateToken()
 		}

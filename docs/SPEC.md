@@ -596,6 +596,7 @@ ask   = []                                 # force a prompt even if otherwise al
 [serve]
 auth_mode = "none"             # none|token|password; use auth before binding beyond localhost
 # token = ""                   # optional fixed token; empty token mode generates one at startup
+# token_env = "REAMES_AGENT_SERVE_TOKEN" # preferred for server deployments; fail-closed if missing
 # password_hash = ""           # bcrypt hash generated with reames-agent serve --hash-password --password '...'
 # behind_proxy = false         # trust X-Forwarded-* only behind a trusted reverse proxy
 
@@ -625,10 +626,13 @@ cursor behavior.
 `[serve]` controls the HTTP browser frontend used by `reames-agent serve`. The
 default `auth_mode = "none"` is intended for the loopback default
 `127.0.0.1:8787`; deployments reachable from another machine must use `token` or
-`password`. Password mode requires either a startup `--password` or a stored
-bcrypt `password_hash`. `behind_proxy` must stay false unless the server is
-behind a trusted proxy that owns the `X-Forwarded-For` and `X-Forwarded-Proto`
-headers.
+`password`. Token mode accepts an explicit `token`, or preferably `token_env` so
+server deployments keep the secret in the process environment or Reames Agent
+credential file rather than TOML. If `token_env` is configured and missing,
+authentication fails closed. Password mode requires either a startup `--password`
+or a stored bcrypt `password_hash`. `behind_proxy` must stay false unless the
+server is behind a trusted proxy that owns the `X-Forwarded-For` and
+`X-Forwarded-Proto` headers.
 
 MCP servers may also be declared in a project-root `.mcp.json` using Claude
 Code's exact `mcpServers` schema (`command`/`args`/`env`, `type`/`url`/`headers`,

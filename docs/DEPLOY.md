@@ -11,6 +11,7 @@ docker run -d --name reames-agent \
   -p 8787:8787 \
   -v ~/.reames-agent:/root/.reames-agent \
   -e DEEPSEEK_API_KEY=sk-xxx \
+  -e REAMES_AGENT_SERVE_TOKEN=change-this-long-random-token \
   reames-agent
 
 # 查看日志
@@ -26,7 +27,13 @@ curl http://localhost:8787/health
 reames-agent serve --health-check
 ```
 
-默认 Docker 入口会监听容器内 `0.0.0.0:8787`。如果把端口暴露到公网，必须先在配置中启用 `[serve] auth_mode = "token"` 或 `"password"`，或只绑定到可信内网地址。
+默认 Docker 入口会监听容器内 `0.0.0.0:8787`。如果把端口暴露到公网，必须先在配置中启用 `[serve] auth_mode = "token"` 或 `"password"`，或只绑定到可信内网地址。长期部署建议使用 `token_env`，不要把 token 写进配置文件：
+
+```toml
+[serve]
+auth_mode = "token"
+token_env = "REAMES_AGENT_SERVE_TOKEN"
+```
 
 ## Docker Compose
 
@@ -54,7 +61,7 @@ ssh user@server "mkdir -p /opt/reames-agent/data"
 
 # 3. 设置环境变量；/opt/reames-agent/.env 会由 systemd EnvironmentFile 读取
 ssh user@server "install -m 600 /dev/null /opt/reames-agent/.env"
-ssh user@server "printf '%s\n' 'DEEPSEEK_API_KEY=sk-xxx' >> /opt/reames-agent/.env"
+ssh user@server "printf '%s\n' 'DEEPSEEK_API_KEY=sk-xxx' 'REAMES_AGENT_SERVE_TOKEN=change-this-long-random-token' >> /opt/reames-agent/.env"
 
 # 4. 安装 systemd 服务
 scp deploy/systemd/reames-agent.service user@server:/etc/systemd/system/
@@ -64,7 +71,14 @@ ssh user@server "systemctl daemon-reload && systemctl enable --now reames-agent"
 ssh user@server "curl http://localhost:8787/health"
 ```
 
-默认 systemd unit 只监听 `127.0.0.1:8787`，避免未配置认证时直接暴露到公网。对外访问应通过同机 Nginx/Caddy 反向代理，并在 Reames Agent 用户配置中启用 `serve.auth_mode`。
+默认 systemd unit 只监听 `127.0.0.1:8787`，避免未配置认证时直接暴露到公网。对外访问应通过同机 Nginx/Caddy 反向代理，并在 Reames Agent 用户配置中启用 `serve.auth_mode`。推荐配置：
+
+```toml
+[serve]
+auth_mode = "token"
+token_env = "REAMES_AGENT_SERVE_TOKEN"
+behind_proxy = true
+```
 
 ## Nginx 反向代理（SSL）
 

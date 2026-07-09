@@ -302,6 +302,46 @@ func TestTokenModeAutoGeneratesToken(t *testing.T) {
 	}
 }
 
+func TestTokenModeReadsTokenEnv(t *testing.T) {
+	t.Setenv("REAMES_AGENT_SERVE_TOKEN_TEST", "from-env")
+	ag := newAuthGate(config.ServeConfig{AuthMode: "token", TokenEnv: "REAMES_AGENT_SERVE_TOKEN_TEST"})
+	if ag.Mode() != "token" {
+		t.Errorf("mode = %q, want token", ag.Mode())
+	}
+	if ag.Token() != "from-env" {
+		t.Fatalf("token = %q, want env token", ag.Token())
+	}
+}
+
+func TestTokenModeExplicitTokenOverridesTokenEnv(t *testing.T) {
+	t.Setenv("REAMES_AGENT_SERVE_TOKEN_TEST", "from-env")
+	ag := newAuthGate(config.ServeConfig{AuthMode: "token", Token: "from-config", TokenEnv: "REAMES_AGENT_SERVE_TOKEN_TEST"})
+	if ag.Token() != "from-config" {
+		t.Fatalf("token = %q, want explicit token", ag.Token())
+	}
+}
+
+func TestTokenModeMissingTokenEnvFailsClosed(t *testing.T) {
+	t.Setenv("REAMES_AGENT_SERVE_TOKEN_TEST", "")
+	ag := newAuthGate(config.ServeConfig{AuthMode: "token", TokenEnv: "REAMES_AGENT_SERVE_TOKEN_TEST"})
+	if ag.Mode() != "invalid" {
+		t.Fatalf("mode = %q, want invalid", ag.Mode())
+	}
+	ts := httptest.NewServer(ag.middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Fatal("handler should not run when configured token_env is missing")
+	})))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("missing token_env status = %d, want 401", resp.StatusCode)
+	}
+}
+
 // ── Password mode tests ──
 
 func TestPasswordModeLoginPage(t *testing.T) {

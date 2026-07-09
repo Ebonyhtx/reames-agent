@@ -500,6 +500,10 @@ func runServe(args []string) int {
 		return 1
 	}
 	serveCfg.AuthMode = mode
+	if serveCfg.AuthMode == "token" && strings.TrimSpace(serveCfg.Token) == "" && strings.TrimSpace(serveCfg.TokenEnv) != "" && strings.TrimSpace(os.Getenv(strings.TrimSpace(serveCfg.TokenEnv))) == "" {
+		fmt.Fprintf(os.Stderr, "%s auth mode token requires environment variable %s to be set\n", i18n.M.ErrorPrefix, strings.TrimSpace(serveCfg.TokenEnv))
+		return 1
+	}
 	if *password != "" && serveCfg.AuthMode == "password" {
 		// Hash the password at startup so the config never stores plaintext.
 		// If a PasswordHash is already set in config, the CLI password overrides it.

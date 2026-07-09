@@ -164,6 +164,31 @@ func TestServePasswordAuthRequiresPasswordMaterial(t *testing.T) {
 	}
 }
 
+func TestServeTokenEnvMustBeSet(t *testing.T) {
+	isolateCLIConfigHome(t)
+	t.Setenv("REAMES_AGENT_SERVE_TOKEN_TEST", "")
+	os.Unsetenv("REAMES_AGENT_SERVE_TOKEN_TEST")
+	if err := os.MkdirAll(filepath.Dir(config.UserConfigPath()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.UserConfigPath(), []byte(`
+[serve]
+auth_mode = "token"
+token_env = "REAMES_AGENT_SERVE_TOKEN_TEST"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	errOut := captureStderr(t, func() {
+		if rc := runServe([]string{"--addr", "127.0.0.1:0"}); rc != 1 {
+			t.Fatalf("serve missing token_env rc = %d, want 1", rc)
+		}
+	})
+	if !strings.Contains(errOut, "REAMES_AGENT_SERVE_TOKEN_TEST") {
+		t.Fatalf("serve missing token_env stderr = %q, want env name", errOut)
+	}
+}
+
 func TestServeHealthCheckCommand(t *testing.T) {
 	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -87,6 +87,19 @@ func TestLoadDotEnvReadsGlobalCredentials(t *testing.T) {
 	}
 }
 
+func TestCredentialEnvNamesIncludesServeTokenEnv(t *testing.T) {
+	cfg := Default()
+	cfg.Serve.TokenEnv = "REAMES_AGENT_SERVE_TOKEN"
+
+	names := credentialEnvNamesFromConfig(cfg)
+	for _, name := range names {
+		if name == "REAMES_AGENT_SERVE_TOKEN" {
+			return
+		}
+	}
+	t.Fatalf("credential env names = %v, want REAMES_AGENT_SERVE_TOKEN", names)
+}
+
 func TestLoadForRootExpandsPluginAuthFromProjectDotEnv(t *testing.T) {
 	project := t.TempDir()
 	cfgHome := t.TempDir()

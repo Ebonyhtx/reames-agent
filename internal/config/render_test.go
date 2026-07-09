@@ -160,6 +160,7 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	orig.Notifications.TurnDone = true
 	orig.Notifications.ApprovalRequest = true
 	orig.Notifications.AskRequest = true
+	orig.Serve = ServeConfig{AuthMode: "token", TokenEnv: "REAMES_AGENT_SERVE_TOKEN", BehindProxy: true}
 	orig.Agent.MaxSteps = 30
 	orig.Agent.PlannerMaxSteps = 0
 	orig.Agent.AutoPlanClassifier = "deepseek-flash"
@@ -312,6 +313,9 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	}
 	if !got.Notifications.Enabled || !got.Notifications.TurnDone || !got.Notifications.ApprovalRequest || !got.Notifications.AskRequest {
 		t.Errorf("notifications not preserved: %+v", got.Notifications)
+	}
+	if got.Serve.AuthMode != "token" || got.Serve.TokenEnv != "REAMES_AGENT_SERVE_TOKEN" || !got.Serve.BehindProxy {
+		t.Errorf("serve config not preserved: %+v", got.Serve)
 	}
 	if got.Agent.MaxSteps != orig.Agent.MaxSteps {
 		t.Errorf("max_steps = %d, want %d", got.Agent.MaxSteps, orig.Agent.MaxSteps)

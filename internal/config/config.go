@@ -644,6 +644,10 @@ type ServeConfig struct {
 	// Token is a pre-shared token for auth_mode = "token". When empty, a
 	// cryptographically random token is generated at startup and printed.
 	Token string `toml:"token"`
+	// TokenEnv names an environment variable containing the pre-shared token.
+	// It is preferred for server deployments so secrets stay out of TOML and
+	// process arguments. Explicit Token still wins when both are set.
+	TokenEnv string `toml:"token_env"`
 	// PasswordHash is a bcrypt hash of the password for auth_mode = "password".
 	// Generate one with: reames-agent serve --hash-password --password '...'
 	PasswordHash string `toml:"password_hash"`

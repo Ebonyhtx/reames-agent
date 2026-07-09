@@ -172,6 +172,7 @@ func credentialEnvNamesFromConfig(cfg *Config) []string {
 	for _, p := range cfg.Providers {
 		add(p.APIKeyEnv)
 	}
+	add(cfg.Serve.TokenEnv)
 	add(cfg.Bot.QQ.AppSecretEnv)
 	add(cfg.Bot.Feishu.AppSecretEnv)
 	add(cfg.Bot.Weixin.TokenEnv)
@@ -695,7 +696,6 @@ func envFileHasClearedKey(path, key string) bool {
 }
 
 // --- Encrypted credential store (side-by-side with plaintext .env) ---
-
 
 // machineKey derives a stable machine-local encryption key for the encrypted
 // credential store. Uses hostname + username + OS as salt for Argon2id.
