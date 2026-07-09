@@ -150,8 +150,8 @@ runtime itself can also run as a long-lived headless gateway:
 reames-agent bot doctor
 reames-agent bot doctor --deep
 reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
-reames-agent gateway install --dry-run --channels feishu --dir /path/to/project
-reames-agent gateway install --start-now --channels feishu --dir /path/to/project
+reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
+reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu --dir /path/to/project
 ```
 
 Use `--channels` to choose which configured IM inputs to accept. `feishu` and

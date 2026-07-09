@@ -84,6 +84,7 @@ func gatewayService(action string, args []string) int {
 	scope := fs.String("scope", "user", "service scope: user or system")
 	name := fs.String("name", "reames-agent-gateway", "OS service name")
 	exe := fs.String("exe", "", "reames-agent executable path (default: current executable)")
+	home := fs.String("home", strings.TrimSpace(os.Getenv("REAMES_AGENT_HOME")), "REAMES_AGENT_HOME for the installed gateway service")
 	channels := fs.String("channels", "", "gateway channels for install: qq,feishu,lark,weixin")
 	dir := fs.String("dir", "", "gateway working directory for install")
 	model := fs.String("model", "", "gateway model override for install")
@@ -103,6 +104,7 @@ func gatewayService(action string, args []string) int {
 		Name:       *name,
 		Scope:      *scope,
 		Executable: *exe,
+		Home:       *home,
 		Channels:   *channels,
 		Dir:        *dir,
 		Model:      *model,
@@ -671,7 +673,7 @@ func gatewayUsage() {
 
 Usage:
   reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
-  reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--channels LIST] [--dir PATH] [--model NAME]
+  reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--home PATH] [--channels LIST] [--dir PATH] [--model NAME]
   reames-agent gateway start|stop|restart|status|uninstall [--dry-run] [--scope user|system]
 
 Subcommands:
@@ -685,8 +687,8 @@ Subcommands:
 
 Examples:
   reames-agent gateway run --channels feishu
-  reames-agent gateway install --dry-run --channels feishu --dir /path/to/project
-  reames-agent gateway install --start-now --channels feishu
+  reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
+  reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu
   reames-agent gateway run --dir /path/to/project --model deepseek-pro
 `)
 }

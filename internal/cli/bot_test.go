@@ -486,6 +486,7 @@ func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
 	for _, want := range []string{
 		"reames-agent gateway run",
 		"reames-agent gateway install",
+		"--home PATH",
 		"reames-agent gateway start|stop|restart|status|uninstall",
 		"compatible with \"reames-agent bot start\"",
 		"systemd, launchd, or Windows Scheduled Task",

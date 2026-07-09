@@ -59,7 +59,7 @@ reames-agent gateway run --channels feishu
 reames-agent bot start --channels feishu
 
 # Hermes-like 后台服务入口
-reames-agent gateway install --start-now
+reames-agent gateway install --start-now --home "$REAMES_AGENT_HOME"
 reames-agent gateway status
 ```
 

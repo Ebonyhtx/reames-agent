@@ -336,6 +336,9 @@ func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
 	if !strings.Contains(out, "install") || !strings.Contains(out, "--dry-run") {
 		t.Fatalf("gateway help output missing service lifecycle details:\n%s", out)
 	}
+	if !strings.Contains(out, "--home PATH") {
+		t.Fatalf("gateway help output missing service home binding:\n%s", out)
+	}
 
 	errOut := captureStderr(t, func() {
 		if rc := Run([]string{"gateway", "run", "--definitely-not-a-gateway-flag"}, "test-version"); rc != 2 {
@@ -352,6 +355,7 @@ func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
 
 func TestGatewayInstallDryRunPrintsPlan(t *testing.T) {
 	isolateCLIConfigHome(t)
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(t.TempDir(), "agent-home"))
 
 	out := captureStdout(t, func() {
 		if rc := Run([]string{"gateway", "install", "--dry-run", "--exe", "reames-agent", "--channels", "feishu", "--dir", "F:\\work repo"}, "test-version"); rc != 0 {
@@ -364,6 +368,7 @@ func TestGatewayInstallDryRunPrintsPlan(t *testing.T) {
 		"gateway",
 		"run",
 		"feishu",
+		"REAMES_AGENT_HOME",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("gateway install --dry-run output missing %q:\n%s", want, out)

@@ -26,6 +26,7 @@ type Options struct {
 	Name       string
 	Scope      string
 	Executable string
+	Home       string
 	Channels   string
 	Dir        string
 	Model      string
@@ -86,6 +87,9 @@ func NormalizeOptions(opts Options) (Options, error) {
 			return opts, fmt.Errorf("resolve executable: %w", err)
 		}
 		opts.Executable = exe
+	}
+	if opts.Home = strings.TrimSpace(opts.Home); opts.Home != "" {
+		opts.Home = cleanPath(opts.Home)
 	}
 	return opts, nil
 }
@@ -282,7 +286,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=` + joinQuoted(gatewayArgs(opts)) + `
-Restart=always
+` + systemdEnvironment(opts) + `Restart=always
 RestartSec=5
 WorkingDirectory=` + systemdWorkingDirectory(opts) + `
 
@@ -296,6 +300,7 @@ func launchdPlist(opts Options) string {
 	for _, a := range gatewayArgs(opts) {
 		fmt.Fprintf(&args, "    <string>%s</string>\n", html.EscapeString(a))
 	}
+	env := launchdEnvironment(opts)
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -305,7 +310,7 @@ func launchdPlist(opts Options) string {
   <key>ProgramArguments</key>
   <array>
 ` + args.String() + `  </array>
-  <key>KeepAlive</key>
+` + env + `  <key>KeepAlive</key>
   <true/>
   <key>RunAtLoad</key>
   <true/>
@@ -327,6 +332,25 @@ func linuxUnitPath(opts Options) string {
 		}
 	}
 	return filepath.Join(base, "systemd", "user", opts.Name+".service")
+}
+
+func systemdEnvironment(opts Options) string {
+	if opts.Home == "" {
+		return ""
+	}
+	return "Environment=REAMES_AGENT_HOME=" + quoteSystemd(opts.Home) + "\n"
+}
+
+func launchdEnvironment(opts Options) string {
+	if opts.Home == "" {
+		return ""
+	}
+	return `  <key>EnvironmentVariables</key>
+  <dict>
+    <key>REAMES_AGENT_HOME</key>
+    <string>` + html.EscapeString(opts.Home) + `</string>
+  </dict>
+`
 }
 
 func launchdPlistPath(opts Options) string {
@@ -366,7 +390,11 @@ func systemdWorkingDirectory(opts Options) string {
 }
 
 func windowsTaskCommand(opts Options) string {
-	return joinWindowsQuoted(gatewayArgs(opts))
+	if opts.Home == "" {
+		return joinWindowsQuoted(gatewayArgs(opts))
+	}
+	script := `set "REAMES_AGENT_HOME=` + strings.ReplaceAll(opts.Home, `"`, `\"`) + `" && ` + joinWindowsQuoted(gatewayArgs(opts))
+	return joinWindowsQuoted([]string{"cmd.exe", "/C", script})
 }
 
 func shellLine(c Command) string {
@@ -401,4 +429,18 @@ func windowsQuote(s string) string {
 		return s
 	}
 	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+}
+
+func cleanPath(path string) string {
+	path = os.ExpandEnv(path)
+	if path == "~" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			path = home
+		}
+	} else if strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			path = filepath.Join(home, path[2:])
+		}
+	}
+	return path
 }

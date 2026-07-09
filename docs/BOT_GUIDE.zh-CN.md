@@ -137,8 +137,8 @@ HTTP 调用使用带超时的 client，避免平台请求卡住后无限阻塞 g
 reames-agent bot doctor
 reames-agent bot doctor --deep
 reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
-reames-agent gateway install --dry-run --channels feishu --dir /path/to/project
-reames-agent gateway install --start-now --channels feishu --dir /path/to/project
+reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
+reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu --dir /path/to/project
 ```
 
 `--channels` 用来选择接受哪些已配置的 IM 输入。`feishu` 和 `lark` 会选择对应

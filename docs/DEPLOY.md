@@ -134,8 +134,8 @@ reames-agent bot start --channels feishu
 
 ```bash
 reames-agent gateway run                    # 前台运行，适合调试/Docker/Termux
-reames-agent gateway install --dry-run --channels feishu --dir /srv/project
-reames-agent gateway install --start-now    # 安装并启动后台服务
+reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project
+reames-agent gateway install --start-now --home "$REAMES_AGENT_HOME"    # 安装并启动后台服务
 reames-agent gateway status                 # 查看后台服务和平台连接状态
 reames-agent gateway restart                # 重启服务，不影响用户 CLI 终端
 reames-agent gateway uninstall              # 卸载后台服务

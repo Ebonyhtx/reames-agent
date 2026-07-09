@@ -9,6 +9,7 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 	plan, err := BuildPlan("linux", Options{
 		Action:     "install",
 		Executable: "/opt/reames/reames-agent",
+		Home:       "/home/reames/.reames-agent",
 		Channels:   "feishu,qq",
 		Dir:        "/srv/work repo",
 		Model:      "deepseek-pro",
@@ -27,6 +28,7 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 		`"--channels" "feishu,qq"`,
 		`"--dir" "/srv/work repo"`,
 		`"--model" "deepseek-pro"`,
+		`Environment=REAMES_AGENT_HOME="/home/reames/.reames-agent"`,
 		"Restart=always",
 	} {
 		if !strings.Contains(unit, want) {
@@ -45,6 +47,7 @@ func TestDarwinInstallPlanRendersLaunchdPlist(t *testing.T) {
 	plan, err := BuildPlan("darwin", Options{
 		Action:     "install",
 		Executable: "/Applications/Reames Agent.app/Contents/MacOS/reames-agent",
+		Home:       "/Users/reames/.reames-agent",
 		Channels:   "feishu",
 	})
 	if err != nil {
@@ -60,6 +63,9 @@ func TestDarwinInstallPlanRendersLaunchdPlist(t *testing.T) {
 		"<string>run</string>",
 		"<string>--channels</string>",
 		"<string>feishu</string>",
+		"<key>EnvironmentVariables</key>",
+		"<key>REAMES_AGENT_HOME</key>",
+		"<string>/Users/reames/.reames-agent</string>",
 		"<key>KeepAlive</key>",
 	} {
 		if !strings.Contains(plist, want) {
@@ -72,6 +78,7 @@ func TestWindowsInstallPlanRendersScheduledTask(t *testing.T) {
 	plan, err := BuildPlan("windows", Options{
 		Action:     "install",
 		Executable: `C:\Program Files\Reames Agent\reames-agent.exe`,
+		Home:       `C:\Users\reames\.reames-agent`,
 		Channels:   "feishu",
 		StartNow:   true,
 	})
@@ -90,6 +97,7 @@ func TestWindowsInstallPlanRendersScheduledTask(t *testing.T) {
 		"/Create",
 		"/SC ONLOGON",
 		`\ReamesAgent\reames-agent-gateway`,
+		"REAMES_AGENT_HOME=C:\\Users\\reames\\.reames-agent",
 		"gateway run",
 		"--channels feishu",
 	} {
