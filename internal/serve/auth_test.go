@@ -111,6 +111,34 @@ func TestTokenModeNoAuthReturns401(t *testing.T) {
 	}
 }
 
+func TestAuthModeAllowsHealthAndReadyWithoutCredentials(t *testing.T) {
+	for _, cfg := range []config.ServeConfig{
+		{AuthMode: "token", Token: "secret"},
+		{AuthMode: "password", PasswordHash: mustHash("test")},
+	} {
+		ag := newAuthGate(cfg)
+		ts := httptest.NewServer(ag.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/health", "/ready":
+				w.WriteHeader(http.StatusOK)
+			default:
+				t.Fatalf("unexpected public path %q", r.URL.Path)
+			}
+		})))
+		for _, path := range []string{"/health", "/ready"} {
+			resp, err := http.Get(ts.URL + path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("%s %s status = %d, want 200", cfg.AuthMode, path, resp.StatusCode)
+			}
+		}
+		ts.Close()
+	}
+}
+
 func TestTokenModeValidCookie(t *testing.T) {
 	ag := newAuthGate(config.ServeConfig{AuthMode: "token", Token: "secret"})
 	ts := httptest.NewServer(ag.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

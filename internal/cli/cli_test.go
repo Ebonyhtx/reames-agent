@@ -164,6 +164,29 @@ func TestServePasswordAuthRequiresPasswordMaterial(t *testing.T) {
 	}
 }
 
+func TestServeHealthCheckCommand(t *testing.T) {
+	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ok.Close()
+	if rc := runServe([]string{"--health-check", "--health-url", ok.URL}); rc != 0 {
+		t.Fatalf("serve --health-check ok rc = %d, want 0", rc)
+	}
+
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer failing.Close()
+	errOut := captureStderr(t, func() {
+		if rc := runServe([]string{"--health-check", "--health-url", failing.URL}); rc != 1 {
+			t.Fatalf("serve --health-check failing rc = %d, want 1", rc)
+		}
+	})
+	if !strings.Contains(errOut, "HTTP 503") {
+		t.Fatalf("serve --health-check stderr = %q, want HTTP status", errOut)
+	}
+}
+
 func TestReserveNativeScrollbackFrameWritesOnlyNewlines(t *testing.T) {
 	var b bytes.Buffer
 	reserveNativeScrollbackFrame(&b, 3)

@@ -6,11 +6,11 @@ After=network.target
 Type=simple
 User=reames
 WorkingDirectory=/opt/reames-agent
-ExecStart=/opt/reames-agent/bin/reames-agent serve --addr 0.0.0.0:8787
+EnvironmentFile=-/opt/reames-agent/.env
+ExecStart=/opt/reames-agent/bin/reames-agent serve --addr 127.0.0.1:8787
 Restart=always
 RestartSec=5
 Environment=REAMES_AGENT_HOME=/opt/reames-agent/data
-Environment=DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
 LimitNOFILE=65536
 
 [Install]

@@ -41,10 +41,10 @@ const (
 	cookieToken     = "reamesAgent_token"    // holds the token for token mode
 	cookieSession   = "reamesAgent_session"  // holds the HMAC-signed session for password mode
 	cookieRedirect  = "reamesAgent_redirect" // temporary: where to go after login
-	tokenByteLen    = 32                  // 256-bit random token
-	sessionDuration = 30 * 24 * time.Hour // how long a password session lasts
-	bcryptCost      = 12                  // bcrypt cost factor
-	pbkdf2Iter      = 4096                // deterministic session-key derivation from password_hash
+	tokenByteLen    = 32                     // 256-bit random token
+	sessionDuration = 30 * 24 * time.Hour    // how long a password session lasts
+	bcryptCost      = 12                     // bcrypt cost factor
+	pbkdf2Iter      = 4096                   // deterministic session-key derivation from password_hash
 )
 
 // NormalizeAuthMode normalizes and validates the serve auth mode.
@@ -211,9 +211,16 @@ func (ag *authGate) middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Health probes are intentionally public so load balancers and container
+		// runtimes can observe liveness/readiness even when the browser/API
+		// surface is protected by token or password auth.
+		if r.URL.Path == "/health" || r.URL.Path == "/ready" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		// /login and /login/ are handled directly by the auth gate — they must
 		// not pass through the CSRF guard (which rejects non-JSON POSTs).
-		if r.URL.Path == "/login" || r.URL.Path == "/login/" || r.URL.Path == "/health" || r.URL.Path == "/ready" {
+		if r.URL.Path == "/login" || r.URL.Path == "/login/" {
 			ag.handleLogin(w, r)
 			return
 		}

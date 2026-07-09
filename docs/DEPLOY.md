@@ -20,6 +20,14 @@ docker logs -f reames-agent
 curl http://localhost:8787/health
 ```
 
+镜像内置健康检查等价于：
+
+```bash
+reames-agent serve --health-check
+```
+
+默认 Docker 入口会监听容器内 `0.0.0.0:8787`。如果把端口暴露到公网，必须先在配置中启用 `[serve] auth_mode = "token"` 或 `"password"`，或只绑定到可信内网地址。
+
 ## Docker Compose
 
 ```bash
@@ -44,8 +52,9 @@ scp bin/reames-agent user@server:/opt/reames-agent/bin/
 # 2. 创建配置目录
 ssh user@server "mkdir -p /opt/reames-agent/data"
 
-# 3. 设置环境变量
-ssh user@server "echo 'DEEPSEEK_API_KEY=sk-xxx' > /opt/reames-agent/.env"
+# 3. 设置环境变量；/opt/reames-agent/.env 会由 systemd EnvironmentFile 读取
+ssh user@server "install -m 600 /dev/null /opt/reames-agent/.env"
+ssh user@server "printf '%s\n' 'DEEPSEEK_API_KEY=sk-xxx' >> /opt/reames-agent/.env"
 
 # 4. 安装 systemd 服务
 scp deploy/systemd/reames-agent.service user@server:/etc/systemd/system/
@@ -54,6 +63,8 @@ ssh user@server "systemctl daemon-reload && systemctl enable --now reames-agent"
 # 5. 验证
 ssh user@server "curl http://localhost:8787/health"
 ```
+
+默认 systemd unit 只监听 `127.0.0.1:8787`，避免未配置认证时直接暴露到公网。对外访问应通过同机 Nginx/Caddy 反向代理，并在 Reames Agent 用户配置中启用 `serve.auth_mode`。
 
 ## Nginx 反向代理（SSL）
 
@@ -85,11 +96,11 @@ echo "审查这个 PR" | ssh user@server "reames-agent run"
 
 ```bash
 # 启动飞书 bot
-reames-agent gateway start --channels feishu
+reames-agent bot start --channels feishu
 
 # 启动微信 bot
-reames-agent gateway start --channels weixin
+reames-agent bot start --channels weixin
 
 # 启动多个平台
-reames-agent gateway start --channels feishu,weixin,qq
+reames-agent bot start --channels feishu,weixin,qq
 ```

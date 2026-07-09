@@ -15,5 +15,5 @@ FROM gcr.io/distroless/static:latest
 COPY --from=builder /reames-agent /reames-agent
 EXPOSE 8787
 ENV REAMES_AGENT_HOME=/root/.reames-agent
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["/reames-agent", "serve", "--health-check"] || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["/reames-agent", "serve", "--health-check"]
 ENTRYPOINT ["/reames-agent", "serve", "--addr", "0.0.0.0:8787"]

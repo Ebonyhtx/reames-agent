@@ -526,7 +526,7 @@ compiler switch.
 
 ```toml
 default_model = "deepseek"   # provider name (→ its default model) or "provider/model"
-# language    = "zh"                # ui language tag; empty = auto-detect from $LANG / $REASONIX_LANG
+# language    = "zh"                # ui language tag; empty = auto-detect from $LANG / $REAMES_AGENT_LANG
 
 [ui]
 # shortcut_layout = "desktop"       # classic|desktop; compatibility setting

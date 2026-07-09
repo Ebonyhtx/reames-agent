@@ -346,10 +346,10 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /skills", s.skills)
 	mux.HandleFunc("GET /todos", s.todos)
 	mux.HandleFunc("POST /delete-session", s.deleteSession)
-mux.HandleFunc("GET /health", s.health)
-mux.HandleFunc("GET /ready", s.ready)
+	mux.HandleFunc("GET /health", s.health)
+	mux.HandleFunc("GET /ready", s.ready)
 	mux.HandleFunc("GET /api/board", s.boardStatus)
-mux.HandleFunc("GET /ws", s.wsEvents)
+	mux.HandleFunc("GET /ws", s.wsEvents)
 	return logMiddleware(s.auth.middleware(csrfGuard(mux)))
 }
 

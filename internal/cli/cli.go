@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -453,8 +454,14 @@ func runServe(args []string) int {
 	password := fs.String("password", "", "password for auth=password (use --hash-password to store a hash instead)")
 	hashPassword := fs.Bool("hash-password", false, "print a bcrypt hash of --password and exit")
 	behindProxy := fs.Bool("behind-proxy", false, "trust X-Forwarded-For / X-Forwarded-Proto headers from a reverse proxy")
+	healthCheck := fs.Bool("health-check", false, "probe the local serve /health endpoint and exit")
+	healthURL := fs.String("health-url", "http://127.0.0.1:8787/health", "URL used by --health-check")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+
+	if *healthCheck {
+		return serveHealthCheck(*healthURL)
 	}
 
 	// --hash-password: generate a bcrypt hash and exit.
@@ -586,6 +593,25 @@ func runServe(args []string) int {
 	defer stop()
 	if err := srv.RunGraceful(ctx, *addr); err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+		return 1
+	}
+	return 0
+}
+
+func serveHealthCheck(rawURL string) int {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		rawURL = "http://127.0.0.1:8787/health"
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(rawURL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "serve health check failed:", err)
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		fmt.Fprintf(os.Stderr, "%s serve health check returned HTTP %d\n", i18n.M.ErrorPrefix, resp.StatusCode)
 		return 1
 	}
 	return 0
