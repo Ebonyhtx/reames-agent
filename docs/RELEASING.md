@@ -1,83 +1,53 @@
-# Releasing
+# Reames Agent 发布流程
 
-How Reames Agent ships, who can ship what, and the canary-before-stable flow.
+> 状态：候选工件验证已启用；生产发布暂未启用
 
-## Branch model: trunk + tags
+## 当前安全边界
 
-- **`main-v2`** is the single development line (the v2 / 1.x trunk). Every PR merges here.
-- **Production is a tag, not a branch.** A release is a tagged snapshot of `main-v2`:
-  `v1.4.0` (CLI), `npm-v1.4.0` (npm), `desktop-v1.4.0` (desktop).
-- **`v1`** is the archived 1.0/legacy line — maintenance only.
-- **Hotfix** an already-released version by branching from its tag, fixing, and tagging again.
+仓库从 Reasonix 继承的发布流程曾绑定上游维护者、npm、Homebrew、R2、域名和签名凭据。这些目标不属于当前项目的已确认发布基础设施，因此已经移除自动 tag 发布 workflow。
 
-There is no separate "production" or "develop" branch by design — the canary channel
-provides the pre-release buffer instead of a long-lived branch.
+在完成所有权配置前：
 
-## Channels
+- 推送 `v*`、`npm-v*` 或 `desktop-v*` tag 不会发布任何内容；
+- 不向 npm、Homebrew、Cloudflare R2 或第三方更新服务写入；
+- 不创建 GitHub Release；
+- 只允许手动运行不含发布权限的候选工件构建。
 
-| Surface | Stable | Pre-release buffer |
+## CLI 候选工件
+
+Actions → **Release candidate** → **Run workflow**。
+
+该 workflow 使用 GoReleaser snapshot 构建并上传 14 天保留的候选工件：
+
+```text
+darwin/amd64
+darwin/arm64
+linux/amd64
+linux/arm64
+windows/amd64
+windows/arm64
+SHA256SUMS
+```
+
+候选工件只用于检查文件名、可执行性、校验和与跨平台构建，不进入任何公开分发渠道。
+
+## 启用生产发布前的门槛
+
+1. 确认 GitHub Releases 为当前仓库 `Ebonyhtx/reames-agent` 所有。
+2. 决定版本号来源和 CLI/Desktop/npm 是否共享版本。
+3. 创建并验证项目自己的签名密钥；私钥只进入受保护 environment。
+4. 明确 npm package、Homebrew tap、下载域名和对象存储的所有者。
+5. Desktop updater、崩溃报告和遥测不得继续指向上游基础设施。
+6. 先完成一次不发布的 native Desktop 三平台打包。
+7. 建立 canary environment 和人工审批，再允许稳定发布。
+8. 对发布后的安装、升级、回滚和校验失败执行端到端验证。
+
+## 计划中的发布通道
+
+| 通道 | 作用 | 当前状态 |
 |---|---|---|
-| npm | `latest` (current 1.x stable) | `next` (rc), `canary` (`npm i reames-agent@canary`) |
-| Desktop | R2 `latest/` pointer + release gateway | R2 `canary/` pointer + release gateway proxy (never on the GitHub releases page) |
+| Candidate | CI 工件；不公开发布 | CLI 已启用 |
+| Canary | 维护者/测试者主动安装 | 未启用 |
+| Stable | 面向普通用户 | 未启用 |
 
-A canary build is isolated: it **never** moves `latest` / `next` / desktop `latest/`.
-Testers opt in explicitly. (Desktop builds carry `-X main.channel=canary`; npm versions
-ending in `-canary.N` publish under the `canary` dist-tag.)
-
-## Who can release what
-
-| Action | Who | Mechanism |
-|---|---|---|
-| **Cut a canary** | any maintainer (write access) | `workflow_dispatch`, runs free (open `canary` environment) |
-| **Ship `next` / stable** | **esengine only** | stable publish jobs gate on the `release` environment — esengine must approve before anything goes public |
-
-So a maintainer can dispatch a canary anytime, but a stable release — even one a
-maintainer starts by pushing a tag — pauses in the Actions UI until **esengine approves**
-the `release` environment deployment.
-
-> Repo settings backing this: Environments → `release` has esengine as a required
-> reviewer; `canary` has none. (Optional hardening: a tag ruleset restricting
-> `v*`/`npm-v*`/`desktop-v*` creation to esengine, so maintainers can't even start a
-> stable release.)
-
-## The release loop
-
-1. **Develop** — PRs land on `main-v2` (branch auto-deletes on merge).
-2. **Cut a canary** before the intended release (e.g. heading for `1.4.0`):
-   - Desktop: Actions → **Release desktop** → `channel: canary`, `base_version: 1.4.0`
-   - CLI: Actions → **Release npm** → `base_version: 1.4.0`
-   - Publishes `1.4.0-canary.N` to the desktop R2 `canary/` pointer (no GitHub release) and npm `@canary`.
-3. **Test** — testers install `reames-agent@canary` (CLI) or grab the desktop canary
-   build from its R2 link, and report bugs.
-4. **Fix** on `main-v2` via PRs; re-cut the canary as needed (`canary.N` bumps).
-5. **Ship stable** when the canary is clean — push the three tags:
-   ```sh
-   git tag v1.4.0         && git push origin v1.4.0          # CLI binaries + Homebrew
-   git tag npm-v1.4.0     && git push origin npm-v1.4.0      # npm -> latest
-   git tag desktop-v1.4.0 && git push origin desktop-v1.4.0  # desktop -> R2 latest/
-   ```
-   Each stable run **waits for esengine to approve the `release` environment** before publishing.
-   A stable `npm-v*` publish moves the `latest` dist-tag automatically (build.mjs)
-   and release-npm.yml verifies it landed. **Do not skip the npm tag**: the stable
-   CLI release (release.yml) fails when the matching `npm-v*` tag was never pushed
-   — that guard exists because 1.0.0–1.17.5 shipped without stable npm tags and
-   `npm update -g` silently downgraded users to 0.53.2 (#5822). A pushed tag whose
-   publish is still awaiting approval only warns; release-npm.yml's verify step
-   owns asserting the dist-tag lands.
-6. **Next cycle** — the canary rolls on toward `1.5.0`.
-
-## Notes
-
-- Canary version numbers use the workflow `run_number`, so the desktop and CLI canary
-  numbers differ (e.g. `canary.11` vs `canary.2`). Only monotonicity per channel matters.
-- A stable `-rc` tag (e.g. `npm-v1.4.0-rc.1`) still ships under `next`, not `canary`.
-- Desktop in-app updates use R2 first, then the `crash.reames-agent.io` desktop release
-  gateway. The gateway resolves the `desktop-v*` release line directly and never uses
-  GitHub's repository-wide `/releases/latest`, because plain `v*` tags are the CLI
-  release line. Stable CLI releases also carry a compatibility `latest.json` asset so
-  older desktop builds that still use GitHub `latest` do not 404.
-- Canary uses R2 plus the same gateway proxy for the `canary/` pointer; it never
-  appears on the GitHub releases page.
-- Windows and Linux apply downloaded, minisign-verified artifacts in place. macOS
-  applies in-app only for Developer ID signed and notarized builds; ad-hoc/local
-  builds fall back to the download page.
+生产发布启用后仍遵循“小范围 canary → 验证 → 人工批准 stable”，不得仅凭 tag 自动把未经验证的构建推给用户。

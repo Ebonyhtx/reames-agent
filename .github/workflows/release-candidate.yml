@@ -1,0 +1,55 @@
+name: Release candidate
+
+# This workflow only builds inspectable CLI artifacts. It never publishes a
+# GitHub release, npm package, Homebrew cask, desktop update, or cloud asset.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cli-snapshot:
+    name: CLI snapshot (6 targets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify cache contract
+        run: ./scripts/cache-guard.sh
+      - name: Build snapshot archives
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --snapshot --clean
+      - name: Verify expected archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in \
+            darwin-amd64 darwin-arm64 \
+            linux-amd64 linux-arm64 \
+            windows-amd64 windows-arm64
+          do
+            find dist -maxdepth 1 -type f -name "reames-agent-${target}.*" -print -quit |
+              grep -q .
+          done
+          test -f dist/SHA256SUMS
+      - name: Upload candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reames-agent-cli-candidate-${{ github.sha }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14

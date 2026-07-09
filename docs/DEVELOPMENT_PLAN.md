@@ -48,7 +48,10 @@
 - [x] 收敛当前文档入口，删除失真路线图和外来文档。
 - [x] 推送当前改动并观察远端 CI（run `28998792475`：5 个 jobs 全部通过）。
 - [x] 在干净 clone 中验证 root build/vet/关键契约、Desktop 全测和前端 frozen-lockfile build。
-- [ ] 触发并核验六平台构建/发布工作流。
+- [x] 隔离继承自上游、仍绑定 `esengine`/R2/npm/Homebrew 的生产发布 workflow。
+- [ ] 触发并核验无发布权限的六目标 CLI candidate workflow。
+- [ ] 建立三平台 native Desktop candidate 打包。
+- [ ] 关闭或迁移仍指向上游域名的 updater、遥测和崩溃报告端点。
 - [ ] 明确版本号来源、变更日志和发布签名策略。
 
 验收命令：
