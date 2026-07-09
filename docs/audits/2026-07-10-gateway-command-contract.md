@@ -16,7 +16,9 @@ The Gateway CLI surface also exposes `reames-agent gateway doctor` as the
 recommended headless spelling for the existing read-only bot diagnostics, so
 server deployments can discover config, credential-env, access-control,
 connection, queue, and pairing checks without falling back to the legacy
-`bot doctor` name.
+`bot doctor` name. `gateway doctor --home PATH` binds that inspection to the
+same `REAMES_AGENT_HOME` a background service will use, without starting the
+gateway or printing secret values.
 
 ## Evidence
 
@@ -33,7 +35,9 @@ Code and tests:
   - advertises `/status 或 /current` in `/help`.
 - `internal/cli/bot.go`
   - routes `reames-agent gateway doctor` to the shared read-only diagnostics;
-  - documents the doctor command in Gateway help.
+  - documents the doctor command in Gateway help;
+  - supports `--home PATH` for one-shot diagnostics against a selected Reames
+    Agent home.
 - `internal/bot/session_test.go`
   - covers `/current`;
   - prevents `/statusx` and `/stopwatch` from being treated as control commands;

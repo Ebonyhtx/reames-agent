@@ -150,7 +150,7 @@ reames-agent bot start --channels feishu
 
 ```bash
 reames-agent gateway run                    # 前台运行，适合调试/Docker/Termux
-reames-agent gateway doctor --deep          # 只读检查配置、凭据 env、访问控制和连接记录
+reames-agent gateway doctor --deep --home "$REAMES_AGENT_HOME"  # 只读检查配置、凭据 env、访问控制和连接记录
 reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project
 reames-agent gateway install --start-now --home "$REAMES_AGENT_HOME"    # 安装并启动后台服务
 reames-agent gateway status                 # 查看后台服务和平台连接状态
@@ -301,7 +301,7 @@ reames-agent gateway run --channels weixin
 reames-agent gateway run --channels feishu,weixin,qq
 
 # 只读诊断配置、凭据 env、访问控制和连接记录
-reames-agent gateway doctor --deep
+reames-agent gateway doctor --deep --home "$REAMES_AGENT_HOME"
 
 # 后台常驻服务，先 dry-run 审阅计划
 reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -279,9 +280,21 @@ func botDoctor(args []string) int {
 	jsonOut := fs.Bool("json", false, "JSON 格式输出")
 	deep := fs.Bool("deep", false, "执行更详细的本机诊断")
 
+	home := fs.String("home", "", "REAMES_AGENT_HOME to inspect")
+
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "error: bot doctor does not accept positional arguments")
+		return 2
+	}
+	restoreHome, err := setTemporaryReamesAgentHome(*home)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: set REAMES_AGENT_HOME: %v\n", err)
+		return 2
+	}
+	defer restoreHome()
 
 	cfg, err := loadBotCommandConfig()
 	if err != nil {
@@ -301,6 +314,14 @@ func botDoctor(args []string) int {
 
 	addCheck := func(name, status, detail string) {
 		results = append(results, checkResult{Name: name, Status: status, Detail: detail})
+	}
+	if isolatedHome := config.IsolatedHomeDir(); isolatedHome != "" {
+		addCheck("bot.home", "ok", isolatedHome)
+	} else {
+		addCheck("bot.home", "default", filepath.Dir(config.UserConfigPath()))
+	}
+	if credPath := config.UserCredentialsPath(); strings.TrimSpace(credPath) != "" {
+		addCheck("bot.credentials", "ok", credPath)
 	}
 
 	// 基础检查
@@ -498,6 +519,24 @@ func botDoctor(args []string) int {
 	return 0
 }
 
+func setTemporaryReamesAgentHome(home string) (func(), error) {
+	home = strings.TrimSpace(home)
+	if home == "" {
+		return func() {}, nil
+	}
+	prev, hadPrev := os.LookupEnv("REAMES_AGENT_HOME")
+	if err := os.Setenv("REAMES_AGENT_HOME", home); err != nil {
+		return nil, err
+	}
+	return func() {
+		if hadPrev {
+			_ = os.Setenv("REAMES_AGENT_HOME", prev)
+			return
+		}
+		_ = os.Unsetenv("REAMES_AGENT_HOME")
+	}, nil
+}
+
 func botPairing(args []string) int {
 	if len(args) < 1 {
 		botPairingUsage()
@@ -641,7 +680,7 @@ func botUsage() {
 
 Usage:
   reames-agent bot start   [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
-  reames-agent bot doctor  [--json] [--deep]
+  reames-agent bot doctor  [--json] [--deep] [--home PATH]
   reames-agent bot pairing list|approve|reject
   reames-agent bot weixin-login [--timeout SECONDS]
 
@@ -675,7 +714,7 @@ func gatewayUsage() {
 
 Usage:
   reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME]
-  reames-agent gateway doctor [--json] [--deep]
+  reames-agent gateway doctor [--json] [--deep] [--home PATH]
   reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--home PATH] [--channels LIST] [--dir PATH] [--model NAME]
   reames-agent gateway start|stop|restart|status|uninstall [--dry-run] [--scope user|system]
 

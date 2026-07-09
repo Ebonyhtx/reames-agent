@@ -149,7 +149,7 @@ runtime itself can also run as a long-lived headless gateway:
 ```sh
 reames-agent bot doctor
 reames-agent bot doctor --deep
-reames-agent gateway doctor --deep
+reames-agent gateway doctor --deep --home ~/.reames-agent
 reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
 reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
 reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu --dir /path/to/project
@@ -164,7 +164,8 @@ model for this process.
 `gateway doctor` is the recommended headless spelling for the same diagnostics
 as `bot doctor`: it checks configuration, credential environment variables,
 access control, connection records, queue settings, and pairing state without
-starting the gateway or printing secret values.
+starting the gateway or printing secret values. Use `--home PATH` to inspect the
+same `REAMES_AGENT_HOME` that a background Gateway service will use.
 
 The headless gateway uses the same config records as the desktop app:
 

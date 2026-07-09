@@ -339,6 +339,9 @@ func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
 	if !strings.Contains(out, "reames-agent gateway doctor") {
 		t.Fatalf("gateway help output missing doctor diagnostics:\n%s", out)
 	}
+	if !strings.Contains(out, "gateway doctor [--json] [--deep] [--home PATH]") {
+		t.Fatalf("gateway help output missing doctor home binding:\n%s", out)
+	}
 	if !strings.Contains(out, "--home PATH") {
 		t.Fatalf("gateway help output missing service home binding:\n%s", out)
 	}
@@ -375,6 +378,47 @@ func TestGatewayDoctorAliasesBotDoctor(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("gateway doctor output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestGatewayDoctorHomeInspectsSelectedReamesAgentHome(t *testing.T) {
+	isolateCLIConfigHome(t)
+	selectedHome := filepath.Join(t.TempDir(), "selected-home")
+	if err := os.MkdirAll(selectedHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Bot.Enabled = true
+	cfg.Bot.Feishu.Enabled = true
+	cfg.Bot.Feishu.AppID = "cli-feishu"
+	cfg.Bot.Feishu.AppSecretEnv = "FEISHU_BOT_APP_SECRET"
+	if err := cfg.SaveTo(filepath.Join(selectedHome, "config.toml")); err != nil {
+		t.Fatalf("save selected config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(selectedHome, ".env"), []byte("FEISHU_BOT_APP_SECRET=secret\n"), 0o600); err != nil {
+		t.Fatalf("write selected credentials: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if rc := Run([]string{"gateway", "doctor", "--json", "--deep", "--home", selectedHome}, "test-version"); rc != 0 {
+			t.Fatalf("gateway doctor rc = %d, want 0", rc)
+		}
+	})
+	jsonPath := func(path string) string {
+		return strings.ReplaceAll(path, `\`, `\\`)
+	}
+	for _, want := range []string{
+		`"name":"bot.home","status":"ok","detail":"` + jsonPath(selectedHome),
+		`"name":"bot.credentials","status":"ok","detail":"` + jsonPath(filepath.Join(selectedHome, ".env")),
+		`"name":"bot.config.user","status":"ok","detail":"` + jsonPath(filepath.Join(selectedHome, "config.toml")),
+		`"name":"bot.feishu.app_secret","status":"ok","detail":"FEISHU_BOT_APP_SECRET is set"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("gateway doctor --home output missing %q:\n%s", want, out)
+		}
+	}
+	if got := os.Getenv("REAMES_AGENT_HOME"); got != "" {
+		t.Fatalf("gateway doctor --home leaked REAMES_AGENT_HOME=%q", got)
 	}
 }
 
