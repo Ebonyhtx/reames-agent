@@ -26,6 +26,7 @@ import (
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
 	"reames-agent/internal/event"
+	"reames-agent/internal/feedback"
 	"reames-agent/internal/jobs"
 	"reames-agent/internal/nilutil"
 	"reames-agent/internal/provider"
@@ -349,6 +350,8 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /ready", s.ready)
 	mux.HandleFunc("GET /api/board", s.boardStatus)
+	mux.HandleFunc("POST /api/feedback", s.collectFeedback)
+	mux.HandleFunc("GET /api/feedback/summary", s.feedbackSummary)
 	mux.HandleFunc("GET /ws", s.wsEvents)
 	return logMiddleware(s.auth.middleware(csrfGuard(mux)))
 }
@@ -641,6 +644,38 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 func (s *Server) context(w http.ResponseWriter, r *http.Request) {
 	used, window := s.ctl().ContextSnapshot()
 	writeJSONCached(w, r, map[string]int{"used": used, "window": window})
+}
+
+func (s *Server) collectFeedback(w http.ResponseWriter, r *http.Request) {
+	var body feedback.ReportInput
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad feedback body", http.StatusBadRequest)
+		return
+	}
+	rec, err := feedback.NewStore("").Append(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"id":          rec.ID,
+		"fingerprint": rec.Fingerprint,
+		"kind":        rec.Kind,
+		"receivedAt":  rec.ReceivedAt,
+	}); err != nil {
+		slog.Warn("serve: feedback response encode failed", "err", err)
+	}
+}
+
+func (s *Server) feedbackSummary(w http.ResponseWriter, _ *http.Request) {
+	summary, err := feedback.NewStore("").Summary(50)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, summary)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

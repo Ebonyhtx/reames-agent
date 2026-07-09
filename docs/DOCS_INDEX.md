@@ -62,6 +62,7 @@
 | [Legacy tree quarantine audit](audits/2026-07-09-legacy-tree-quarantine.md) | 旧 Python/Hermes 树的短期隔离规则和后续迁移队列 |
 | [Script surface cleanup audit](audits/2026-07-09-script-surface-cleanup.md) | 公开脚本入口清理、旧运行时脚本删除和防回归门禁 |
 | [Telemetry and feedback boundary audit](audits/2026-07-09-telemetry-feedback-boundary.md) | 遥测/反馈默认关闭、自托管边界和公开门禁证据 |
+| [Self-hosted feedback collector audit](audits/2026-07-10-feedback-collector.md) | `internal/feedback`、`serve` 本地反馈收集、脱敏、去重和 JSONL 账本证据 |
 | [真实 Provider 最小验证](audits/2026-07-09-real-provider.md) | DeepSeek 鉴权、响应、用量与缓存命中证据 |
 | [Desktop M1 桥接审计](audits/2026-07-09-desktop-m1-bridge.md) | Desktop Submit/Cancel 多工作区桥接自动化证据 |
 | [Desktop M1 frontend workspace loop audit](audits/2026-07-09-desktop-m1-frontend-workspace-loop.md) | 前端 workspace 选择、发送、切换和停止的 tab 绑定回归证据 |

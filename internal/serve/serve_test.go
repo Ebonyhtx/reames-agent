@@ -116,6 +116,124 @@ func TestServeEndpoints(t *testing.T) {
 	}
 }
 
+func TestServeFeedbackCollectsSanitizedLocalSummary(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REAMES_AGENT_HOME", home)
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	body := `{
+		"kind":"feedback",
+		"source":"gateway",
+		"label":"feishu",
+		"message":"user alice@example.com saw api_key=sk-secret1234567890abcdef in C:\\Users\\Alice\\repo",
+		"errorMessage":"connect failed with Bearer abcdefghijklmnopqrstuvwxyz123456",
+		"topFrame":"internal/bot/feishu.go:10"
+	}`
+	resp, err := http.Post(srv.URL+"/api/feedback", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		out, _ := io.ReadAll(resp.Body)
+		t.Fatalf("feedback status = %d body=%s, want 201", resp.StatusCode, out)
+	}
+	var accepted map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&accepted); err != nil {
+		t.Fatal(err)
+	}
+	if accepted["fingerprint"] == "" || accepted["id"] == "" {
+		t.Fatalf("accepted feedback missing identifiers: %+v", accepted)
+	}
+
+	resp2, err := http.Get(srv.URL + "/api/feedback/summary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("summary status = %d, want 200", resp2.StatusCode)
+	}
+	summaryBody, err := io.ReadAll(resp2.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"alice@example.com", "sk-secret", "abcdefghijklmnopqrstuvwxyz123456", `C:\\Users\\Alice`} {
+		if strings.Contains(string(summaryBody), forbidden) {
+			t.Fatalf("summary leaked %q:\n%s", forbidden, summaryBody)
+		}
+	}
+	if !strings.Contains(string(summaryBody), `"total":1`) || !strings.Contains(string(summaryBody), `"count":1`) {
+		t.Fatalf("summary did not aggregate feedback:\n%s", summaryBody)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(home, "feedback", "feedback.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"alice@example.com", "sk-secret", "abcdefghijklmnopqrstuvwxyz123456", `C:\\Users\\Alice`} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("ledger leaked %q:\n%s", forbidden, raw)
+		}
+	}
+}
+
+func TestServeFeedbackRequiresJSONContentType(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REAMES_AGENT_HOME", home)
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/feedback", "text/plain", strings.NewReader(`{"kind":"feedback","message":"hi"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Fatalf("feedback text/plain status = %d, want 415", resp.StatusCode)
+	}
+}
+
+func TestServeFeedbackRespectsTokenAuth(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REAMES_AGENT_HOME", home)
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	server := New(ctrl, bc, config.ServeConfig{AuthMode: "token", Token: "secret-token"})
+	srv := httptest.NewServer(server.Handler())
+	defer srv.Close()
+
+	body := `{"kind":"feedback","message":"hello"}`
+	resp, err := http.Post(srv.URL+"/api/feedback", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated feedback status = %d, want 401", resp.StatusCode)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/api/feedback", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "secret-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("authenticated feedback status = %d, want 201", resp.StatusCode)
+	}
+}
+
 func TestServeSubmitRejectsShellShortcut(t *testing.T) {
 	bc := NewBroadcaster()
 	got := make(chan string, 1)

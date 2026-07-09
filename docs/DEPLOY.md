@@ -273,6 +273,22 @@ token_env = "REAMES_AGENT_SERVE_TOKEN"
 behind_proxy = true
 ```
 
+## 自托管反馈收集（本地账本）
+
+`serve` 现在提供自托管反馈入口，用于把崩溃、Gateway 诊断、用户反馈或性能问题先汇总到服务器本地账本：
+
+```bash
+curl -X POST http://127.0.0.1:8787/api/feedback \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $REAMES_AGENT_SERVE_TOKEN" \
+  -d '{"kind":"feedback","source":"gateway","label":"feishu","message":"发送失败，请检查日志"}'
+
+curl -H "X-API-Key: $REAMES_AGENT_SERVE_TOKEN" \
+  http://127.0.0.1:8787/api/feedback/summary
+```
+
+记录写入 `<Reames Agent home>/feedback/feedback.jsonl`，会先脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token，再按 fingerprint 聚合重复问题。这个入口不连接第三方服务，也不自动创建 Issue；后续把聚合结果转成维护任务或 Issue 前仍需人工审阅。
+
 ## Nginx 反向代理（SSL）
 
 ```bash
