@@ -441,6 +441,61 @@ func TestBotAdapterBindingsIsolateRequestedFeishuDomain(t *testing.T) {
 	}
 }
 
+func TestGatewayInstallDryRunPrintsServiceLifecyclePlan(t *testing.T) {
+	out := captureStdout(t, func() {
+		rc := gatewayCommand([]string{
+			"install",
+			"--dry-run",
+			"--exe", "/opt/reames-agent/bin/reames-agent",
+			"--channels", "feishu",
+			"--dir", "/srv/project",
+			"--model", "deepseek-pro",
+			"--start-now",
+		}, "test-version")
+		if rc != 0 {
+			t.Fatalf("gateway install --dry-run rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{
+		"gateway service plan:",
+		"action=install",
+		"gateway",
+		"run",
+		"--channels",
+		"feishu",
+		"--dir",
+		"/srv/project",
+		"--model",
+		"deepseek-pro",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("gateway install dry-run output missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "bot start") {
+		t.Fatalf("gateway service plan must not regress to bot start:\n%s", out)
+	}
+}
+
+func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
+	out := captureStdout(t, func() {
+		if rc := gatewayCommand([]string{"help"}, "test-version"); rc != 0 {
+			t.Fatalf("gateway help rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{
+		"reames-agent gateway run",
+		"reames-agent gateway install",
+		"reames-agent gateway start|stop|restart|status|uninstall",
+		"compatible with \"reames-agent bot start\"",
+		"systemd, launchd, or Windows Scheduled Task",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("gateway help output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestRememberBotInboundUsesConnectionID(t *testing.T) {
 	isolateBotUserConfig(t)
 	cfg := config.Default()
