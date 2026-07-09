@@ -21,6 +21,10 @@ export type EventKind =
   | "retrying"
   | "steer"
   | "memory_compiler_stats"
+  | "subagent_started"
+  | "subagent_completed"
+  | "cache_updated"
+  | "mode_changed"
   | "guardian_assessment";
 
 export interface WireCompaction {

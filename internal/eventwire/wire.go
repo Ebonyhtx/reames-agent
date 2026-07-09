@@ -340,5 +340,9 @@ var kindNames = map[event.Kind]string{
 	event.Retrying:                 "retrying",
 	event.Steer:                    "steer",
 	event.MemoryCompilerStatsEvent: "memory_compiler_stats",
+	event.SubagentStarted:          "subagent_started",
+	event.SubagentCompleted:        "subagent_completed",
+	event.CacheUpdated:             "cache_updated",
+	event.ModeChanged:              "mode_changed",
 	event.GuardianAssessment:       "guardian_assessment",
 }

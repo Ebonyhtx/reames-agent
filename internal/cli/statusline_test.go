@@ -76,7 +76,7 @@ func TestModelSwitchRefreshesCustomStatusline(t *testing.T) {
 	oldCtrl := control.New(control.Options{Label: "old-model"})
 	newCtrl := control.New(control.Options{Label: "new-model"})
 	m := newChatTUI(oldCtrl, "", make(chan event.Event, 1), 80)
-	m.statuslineCmd = "cat"
+	m.statuslineCmd = statuslineEchoCommand()
 	m.statuslineOut = `{"model":"old-model"}`
 
 	_, cmd := m.Update(modelSwitchMsg{
@@ -90,6 +90,13 @@ func TestModelSwitchRefreshesCustomStatusline(t *testing.T) {
 	if !statuslineCommandHasModel(cmd, "new-model") {
 		t.Fatal("model switch did not refresh custom statusline with the new model")
 	}
+}
+
+func statuslineEchoCommand() string {
+	if runtime.GOOS == "windows" {
+		return "powershell -NoProfile -Command \"$input | Write-Output\""
+	}
+	return "cat"
 }
 
 func statuslineCommandHasModel(cmd tea.Cmd, model string) bool {

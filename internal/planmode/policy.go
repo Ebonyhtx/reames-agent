@@ -94,6 +94,7 @@ var knownBlockedTools = map[string]bool{
 	"remember":        true,
 	"forget":          true,
 	"kill_shell":      true,
+	"cronjob":         true,
 }
 
 var alwaysAllowedTools = map[string]bool{
@@ -156,7 +157,9 @@ var planSafeReadOnly = map[string]bool{
 	"grep":        true,
 	"code_index":  true,
 	"web_fetch":   true,
+	"web_search":  true,
 	"bash_output": true, // observes an already-running job's buffered output; no new side effect
+	"list_jobs":   true, // observes current background job state; cannot start, preserve, or kill processes
 	"wait":        true, // observes job status; cannot start, preserve, or kill processes
 }
 

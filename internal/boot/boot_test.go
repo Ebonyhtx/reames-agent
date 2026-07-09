@@ -1304,11 +1304,13 @@ func contractEntryNames(entries []tool.ContractEntry) []string {
 
 func defaultFullBootToolNames() []string {
 	return []string{
+		"apply_patch",
 		"ask",
 		"bash",
 		"bash_output",
 		"code_index",
 		"complete_step",
+		"cronjob",
 		"delete_range",
 		"delete_symbol",
 		"edit_file",
@@ -1320,6 +1322,7 @@ func defaultFullBootToolNames() []string {
 		"install_skill",
 		"install_source",
 		"kill_shell",
+		"list_jobs",
 		"list_sessions",
 		"ls",
 		"lsp_definition",
@@ -1346,6 +1349,7 @@ func defaultFullBootToolNames() []string {
 		"todo_write",
 		"wait",
 		"web_fetch",
+		"web_search",
 		"write_file",
 	}
 }

@@ -1,0 +1,115 @@
+﻿{
+  "version": 1,
+  "upstreams": [
+    {
+      "id": "reasonix",
+      "name": "DeepSeek Reasonix",
+      "repo": "https://github.com/esengine/DeepSeek-Reasonix.git",
+      "branch": "main-v2",
+      "tag_patterns": ["desktop-v*", "dsnix-v*", "v*"],
+      "local_reference": "F:\\code-reference\\DeepSeek-Reasonix",
+      "importance": "primary-base",
+      "policy": "advisory-report",
+      "diff": true
+    },
+    {
+      "id": "hermes",
+      "name": "Hermes Agent",
+      "repo": "https://github.com/NousResearch/hermes-agent.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\Hermes",
+      "importance": "gateway-reference",
+      "policy": "advisory-report",
+      "diff": false
+    },
+    {
+      "id": "codex",
+      "name": "OpenAI Codex",
+      "repo": "https://github.com/openai/codex.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\codex",
+      "importance": "interaction-reference",
+      "policy": "advisory-report",
+      "diff": false
+    },
+    {
+      "id": "mimo",
+      "name": "MiMo Code",
+      "repo": "https://github.com/XiaomiMiMo/MiMo-Code.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\MiMo-Code",
+      "importance": "interaction-reference",
+      "policy": "advisory-report",
+      "diff": false
+    },
+    {
+      "id": "impeccable",
+      "name": "Impeccable",
+      "repo": "https://github.com/pbakaus/impeccable.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\impeccable",
+      "importance": "design-reference",
+      "policy": "advisory-report",
+      "diff": false
+    },
+    {
+      "id": "scream-code",
+      "name": "Scream Code",
+      "repo": "https://github.com/LIUTod/scream-code.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\scream-code",
+      "importance": "agent-mechanism-reference",
+      "policy": "advisory-report",
+      "diff": false
+    },
+    {
+      "id": "agentark",
+      "name": "AgentArk",
+      "repo": "https://github.com/agentark-ai/AgentArk.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\AgentArk",
+      "importance": "security-reference",
+      "policy": "advisory-report",
+      "diff": false
+    },
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "repo": "https://github.com/anthropics/claude-code.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\claude-code",
+      "importance": "plugin-ux-reference",
+      "policy": "advisory-report",
+      "diff": false
+    },
+    {
+      "id": "kimi-code",
+      "name": "Kimi Code",
+      "repo": "https://github.com/MoonshotAI/kimi-code.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\kimi-code",
+      "importance": "shell-ux-reference",
+      "policy": "advisory-report",
+      "diff": false
+    },
+    {
+      "id": "awesome-design-md",
+      "name": "awesome-design-md",
+      "repo": "https://github.com/VoltAgent/awesome-design-md.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\awesome-design-md",
+      "importance": "design-reference",
+      "policy": "advisory-report",
+      "diff": false
+    }
+  ]
+}

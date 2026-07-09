@@ -329,6 +329,12 @@ git status --short --branch
 go test ./... -run '^$'
 ```
 
+参考项目追踪：
+
+```powershell
+python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
+```
+
 UI 批次额外验证：
 
 ```powershell

@@ -21,6 +21,7 @@
 | `docs/FUTURE_PLAN.md` | v0.1.0 到 v1.0.0 的详细路线。 |
 | `docs/REFERENCE_PORTING_ROADMAP.md` | 参考项目迁移分析。 |
 | `docs/P0_VERIFICATION_REPORT.md` | P0 移植项源码对照验证。 |
+| `docs/upstreams/README.md` | 参考项目自动追踪机制：Reasonix/Hermes/Codex 等 upstream 的检测、差异报告和人工跟进策略。 |
 
 ## 部署
 

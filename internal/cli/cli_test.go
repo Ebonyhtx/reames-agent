@@ -254,7 +254,7 @@ func TestMetadataCommandsDoNotProbeTerminalTheme(t *testing.T) {
 			t.Fatalf("version rc = %d, want 0", rc)
 		}
 	})
-	if !strings.Contains(out, "reamesAgent test-version") {
+	if !strings.Contains(out, "reames-agent test-version") {
 		t.Fatalf("version output = %q", out)
 	}
 
@@ -330,7 +330,7 @@ func TestRunNoArgsNonInteractivePrintsUsage(t *testing.T) {
 			t.Fatalf("Run(nil) rc = %d, want 0", rc)
 		}
 	})
-	if !strings.Contains(out, "reamesAgent —") || !strings.Contains(out, "reames-agent run") {
+	if !strings.Contains(out, "reames-agent") || !strings.Contains(out, "reames-agent run") {
 		t.Fatalf("non-interactive no-arg Run should print usage, got:\n%s", out)
 	}
 }
@@ -465,7 +465,7 @@ func TestRunMetadataCommandsDoNotMigrateLegacyConfig(t *testing.T) {
 			t.Fatalf("version rc = %d, want 0", rc)
 		}
 	})
-	if !strings.Contains(out, "reamesAgent test-version") {
+	if !strings.Contains(out, "reames-agent test-version") {
 		t.Fatalf("version output = %q", out)
 	}
 	if _, err := os.Stat(config.UserConfigPath()); !os.IsNotExist(err) {

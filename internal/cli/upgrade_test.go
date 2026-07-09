@@ -121,7 +121,7 @@ func TestExtractFromTarGz_Nested(t *testing.T) {
 
 	body := []byte("nested binary")
 	if err := tw.WriteHeader(&tar.Header{
-		Name: "reamesAgent-linux-amd64/reamesAgent",
+		Name: "reames-agent-linux-amd64/reames-agent",
 		Mode: 0o755,
 		Size: int64(len(body)),
 	}); err != nil {
