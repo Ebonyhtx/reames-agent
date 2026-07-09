@@ -2,18 +2,18 @@
 
 A multi-platform AI coding agent. Terminal-native CLI, desktop app, cloud-deployable server, and IM bot gateway — all from a single Go binary.
 
-**Based on DeepSeek Reasonix (MIT), enhanced with features from 8 reference projects and the original Reames Lite.**
+**Based on DeepSeek Reasonix (MIT), informed by 8 other official reference projects and the original Reames Lite.**
 
 ## Quick Start
 
 ```bash
 # Build from source (requires Go 1.25+)
-git clone https://github.com/reames-agent/reames-agent.git
+git clone https://github.com/Ebonyhtx/reames-agent.git
 cd reames-agent
 go build -o bin/reames-agent ./cmd/reames-agent
 
 # Or download prebuilt binary from releases
-# https://github.com/reames-agent/reames-agent/releases
+# https://github.com/Ebonyhtx/reames-agent/releases
 
 # Setup
 ./bin/reames-agent setup
@@ -51,13 +51,12 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for systemd, nginx, and SSH deployment guid
 
 ## Documentation
 
-- [Authoritative Handoff](docs/REAMES_AGENT_AUTHORITY.md)
-- [Execution Plan](docs/REAMES_AGENT_EXECUTION_PLAN.md)
+- [Project Direction](docs/PROJECT.md)
+- [Development Plan](docs/DEVELOPMENT_PLAN.md)
 - [Documentation Index](docs/DOCS_INDEX.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment Guide](docs/DEPLOY.md)
-- [Product Roadmap](docs/PRODUCT_ROADMAP.md)
-- [Reference Porting Roadmap](docs/REFERENCE_PORTING_ROADMAP.md)
+- [Upstream Governance](docs/REFERENCE_GOVERNANCE.md)
 
 ## License
 

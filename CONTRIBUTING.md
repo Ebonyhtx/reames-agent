@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Ebonyhtx/reames-agent.git
 cd reames-agent
 # Go 1.25+ required
 go build -o bin/reames-agent.exe ./cmd/reames-agent
@@ -19,7 +19,7 @@ export GOSUMDB=sum.golang.google.cn
 
 ## Development workflow
 
-1. **Pick a task** from `docs/FUTURE_PLAN.md` or create an issue
+1. **Pick a task** from `docs/DEVELOPMENT_PLAN.md` or an issue
 2. **Read the relevant package comment** in `internal/<package>/` 
 3. **Implement** following Go conventions
 4. **Write tests** — every new package or function needs `_test.go`
@@ -34,7 +34,7 @@ export GOSUMDB=sum.golang.google.cn
 
 ## Architecture rules
 
-- CLI/Desktop/Web must talk to core through `control.Controller` — never import `internal/agent` directly
+- New cross-surface behavior belongs behind `control.Controller`; existing direct imports are migration debt, not a pattern to extend
 - System prompt is cache-stable — dynamic state goes in user-turn compose
 - UI state, diagnostics, settings MUST NOT enter provider-visible prompt content
 - New tools register via `tool.RegisterBuiltin()` in `internal/tool/builtin/`
@@ -71,8 +71,5 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/reames-
 
 ## Release
 
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-# CI will build and publish via .goreleaser.yaml
-```
+Follow [`docs/RELEASING.md`](docs/RELEASING.md). Do not create a release tag until
+the documented canary and production gates pass.

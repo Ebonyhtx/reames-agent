@@ -184,8 +184,8 @@ session, turn, approval, and subagent marks; the plugin skips its manual
 `llm.call` and `tools.call` spans for executions that are already managed by
 NeMo Relay.
 
-For the full generic Hermes middleware contract, see
-[`docs/middleware/README.md`](../../../docs/middleware/README.md).
+This imported reference plugin targets the Hermes middleware contract and is
+not part of the current Go runtime contract.
 
 ## Canonical Local Examples
 

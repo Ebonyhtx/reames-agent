@@ -2,13 +2,13 @@
 
 多平台 AI 编程助手。终端原生 CLI、桌面应用、云端部署服务、IM 机器人网关 — 全部来自单个 Go 二进制文件。
 
-**基于 DeepSeek Reasonix (MIT)，融合 8 个参考项目和 Reames Lite 的优点。**
+**基于 DeepSeek Reasonix（MIT），吸收另外 8 个官方参考项目和 Reames Lite 的优点。**
 
 ## 快速开始
 
 ```bash
 # 从源码构建（需要 Go 1.25+）
-git clone https://github.com/reames-agent/reames-agent.git
+git clone https://github.com/Ebonyhtx/reames-agent.git
 cd reames-agent
 go build -o bin/reames-agent ./cmd/reames-agent
 
@@ -48,13 +48,12 @@ docker run -p 8787:8787 -e DEEPSEEK_API_KEY=sk-xxx reames-agent
 
 ## 文档
 
-- [权威接手文档](docs/REAMES_AGENT_AUTHORITY.md)
-- [详细执行计划](docs/REAMES_AGENT_EXECUTION_PLAN.md)
+- [项目说明](docs/PROJECT.md)
+- [发展计划](docs/DEVELOPMENT_PLAN.md)
 - [文档索引](docs/DOCS_INDEX.md)
 - [架构设计](docs/ARCHITECTURE.md)
 - [部署指南](docs/DEPLOY.md)
-- [产品路线图](docs/PRODUCT_ROADMAP.md)
-- [参考移植路线](docs/REFERENCE_PORTING_ROADMAP.md)
+- [参考项目治理](docs/REFERENCE_GOVERNANCE.md)
 
 ## 许可证
 

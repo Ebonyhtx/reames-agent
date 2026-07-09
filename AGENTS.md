@@ -37,7 +37,7 @@ desktop/          # Wails v2 桌面应用
   frontend/       # React 19 + Vite 8 + Zustand 前端
 site/             # Astro 文档站点（遗留，非核心产品）
 workers/          # Cloudflare Workers（遗留，非核心产品）
-docs/             # 架构、路线图、部署指南、移植记录
+docs/             # 项目方向、发展计划、架构、用户与运维文档
 ```
 
 ## 开发约束
@@ -71,6 +71,11 @@ grep -rn 'reasonix\|Reasonix' --include='*.go' -l | grep -v 'reames-agent' | wc 
 
 # 工具契约验证
 go test ./internal/tool -run TestBuiltinToolContractDocumentation -v
+
+# 官方上游追踪机制验证
+python -m unittest scripts.test_check_upstreams -v
+node scripts/test_upstream_watch_issue.mjs
+python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
 ```
 
 ## 代码风格
@@ -83,6 +88,8 @@ go test ./internal/tool -run TestBuiltinToolContractDocumentation -v
 - 单元测试用 `t.Fatal` 而非 `assert` 库
 
 ## 参考项目
+
+项目源流：`esengine/DeepSeek-Reasonix` 的 `main-v2` 是主源码上游；`F:\code-reference` 下其他仓库只提供机制与体验参考；`F:\Reames-Lite` 是项目前身和契约参考。详细规则见 `docs/REFERENCE_GOVERNANCE.md`。
 
 | 项目 | 路径 | 复用方向 |
 |---|---|---|
@@ -99,8 +106,7 @@ go test ./internal/tool -run TestBuiltinToolContractDocumentation -v
 
 ## 当前状态
 
-- **Phase 1-6 完成**：Fork、云部署、IM Gateway、品牌、合约迁移、验证
-- **P0 移植完成**：web_search、apply_patch、事件类型、crypto、trust
-- **P1 移植完成**：skill tags、hook glob、goal budget、cron、list_jobs、board、plugin registry、pending snapshot、错误分类器、工具状态格式化、LSP delta
-- **24 个内置工具**、**6 目标交叉编译**、**CI workflow**
-- **阻塞**：API Key 端到端验证
+- 产品方向以 `docs/PROJECT.md` 为准，执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
+- 当前处于 M0“基线可信”：核心、Desktop、前端本地基线已恢复，等待远端 CI 和干净 clone/发布验证。
+- 下一里程碑是 M1“真实任务闭环”：真实 API、原生 Desktop、工具审批、文件变更和会话恢复。
+- 已有 24 个内置工具和 6 目标交叉编译；完成声明必须以测试、真实交互或发布证据为准。
