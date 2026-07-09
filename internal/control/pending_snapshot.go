@@ -8,16 +8,18 @@ import (
 	"time"
 
 	"reames-agent/internal/config"
+	"reames-agent/internal/event"
 )
 
 type PendingPromptSnapshot struct {
-	ID        string    `json:"id"`
-	Kind      string    `json:"kind"`
-	Tool      string    `json:"tool,omitempty"`
-	Subject   string    `json:"subject,omitempty"`
-	Questions []string  `json:"questions,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	SessionID string    `json:"session_id"`
+	ID        string         `json:"id"`
+	Kind      string         `json:"kind"`
+	Tool      string         `json:"tool,omitempty"`
+	Subject   string         `json:"subject,omitempty"`
+	FileDiff  event.FileDiff `json:"file_diff,omitempty"`
+	Questions []string       `json:"questions,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	SessionID string         `json:"session_id"`
 }
 
 func pendingSnapshotPath() string {
@@ -36,7 +38,7 @@ func (am *approvalManager) writePendingSnapshotLocked(sessionID string) {
 	var snaps []PendingPromptSnapshot
 	now := time.Now()
 	for id, a := range am.approvals {
-		snaps = append(snaps, PendingPromptSnapshot{ID: id, Kind: "approval", Tool: a.tool, Subject: a.subject, CreatedAt: now, SessionID: sessionID})
+		snaps = append(snaps, PendingPromptSnapshot{ID: id, Kind: "approval", Tool: a.tool, Subject: a.subject, FileDiff: a.fileDiff, CreatedAt: now, SessionID: sessionID})
 	}
 	for id, a := range am.asks {
 		qs := make([]string, len(a.questions))

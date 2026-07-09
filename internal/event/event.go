@@ -154,9 +154,9 @@ type Tool struct {
 // call runs. Diff is the unified diff (empty for read-only tools, binary files,
 // or no-op changes); Added/Removed are its line tallies.
 type FileDiff struct {
-	Diff    string
-	Added   int
-	Removed int
+	Diff    string `json:"diff,omitempty"`
+	Added   int    `json:"added,omitempty"`
+	Removed int    `json:"removed,omitempty"`
 }
 
 // Approval identifies a pending tool-call approval for an ApprovalRequest
