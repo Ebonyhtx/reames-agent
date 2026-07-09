@@ -1,7 +1,10 @@
 # Reames Agent — 架构设计文档
 
 > 创建：2026-07-08
-> 基座：DeepSeek Reasonix main-v2，Go 1.25，MIT License
+>
+> 更新：2026-07-10
+>
+> 基座：DeepSeek Reasonix main-v2，Go 1.25+，MIT License
 
 ## 一、项目结构
 
@@ -66,15 +69,19 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
     └─────────┘ └────────────────┘
 ```
 
-## 三、界面隔离规则（铁律）
+## 三、界面隔离目标与当前约束
 
-所有界面层（CLI / Desktop / Web / IM）必须通过 `control.Controller` 访问内核：
+目标边界是所有界面层（CLI / Desktop / Web / IM / ACP）通过 `control.SessionAPI` 驱动运行时，并通过 `event.Sink` / `eventwire` 消费共享事件合同：
 
-| 允许 ✅ | 禁止 ❌ |
+| 稳定边界 | 禁止新增的耦合 |
 |---|---|
-| `ctrl.Submit(ctx, input)` | 直接 import `internal/agent` |
-| `ctrl.Cancel()` | 直接 import `internal/provider` |
-| 通过 event.Sink 消费事件 | 直接调用 `Agent.Run()` |
+| `ctrl.Submit(...)`、`ctrl.Cancel()`、`ctrl.Approve(...)` | 新增直接 import `internal/agent` |
+| `control.SessionAPI` 的分区接口 | 新增直接 import `internal/provider` |
+| `event.Sink` 与 `internal/eventwire` | 新增直接 import `internal/tool` |
+
+当前代码仍有历史直连，主要用于会话 DTO、历史迁移、渲染数据和装配注册，因此这是一项目标架构而不是已经完全满足的事实。`TestTransportRuntimeImportRatchet` 用精确 allowlist 冻结 Desktop、CLI、Serve、Bot 和 ACP 的现有直连：新增依赖会使 CI 失败，迁移删除依赖后也必须同步收缩 allowlist。Provider 与内置工具的 blank import 只允许保留在明确的装配入口。
+
+迁移按纵向路径进行：先收口提交、取消、审批、会话恢复和状态查询，再迁移设置、历史与展示 DTO；不建立第二套 runtime 或一次性搬迁全部类型。
 
 ## 四、缓存优先约束
 

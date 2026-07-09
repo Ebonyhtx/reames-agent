@@ -419,10 +419,6 @@ func TestWindowsSandboxNetworkDisabledBlocksLoopbackConnect(t *testing.T) {
 	if !Available() {
 		t.Skip("windows sandbox APIs unavailable")
 	}
-	sh := powershellArgvForTest(t, "")
-	if sh == nil {
-		t.Skip("PowerShell unavailable")
-	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Skipf("loopback listener unavailable: %v", err)
@@ -436,28 +432,44 @@ func TestWindowsSandboxNetworkDisabledBlocksLoopbackConnect(t *testing.T) {
 			accepted <- struct{}{}
 		}
 	}()
-	_, port, err := net.SplitHostPort(listener.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
 	workspace := t.TempDir()
-	script := "$client = [Net.Sockets.TcpClient]::new(); " +
-		"$async = $client.BeginConnect('127.0.0.1', " + port + ", $null, $null); " +
-		"if ($async.AsyncWaitHandle.WaitOne(1500)) { " +
-		"  try { $client.EndConnect($async); $client.Close(); exit 9 } catch { exit 0 } " +
-		"} else { $client.Close(); exit 0 }"
-	result, err := Run(Spec{WritableRoots: []string{workspace}, Network: false, Writable: false, TempPrefix: "windows-sandbox-test-"}, append(sh, script), RunOptions{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
+	result, err := Run(
+		Spec{WritableRoots: []string{workspace}, Network: false, Writable: false, TempPrefix: "windows-sandbox-test-"},
+		[]string{os.Args[0], "-test.run=^TestWindowsSandboxNetworkProbeHelper$"},
+		RunOptions{
+			Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr,
+			Env: setWindowsEnv(os.Environ(), map[string]string{
+				"REAMES_AGENT_WINSANDBOX_NETWORK_PROBE":   "1",
+				"REAMES_AGENT_WINSANDBOX_NETWORK_ADDRESS": listener.Addr().String(),
+			}),
+		},
+	)
 	if err != nil {
 		t.Fatalf("sandbox run failed: %v", err)
 	}
+	if result.ExitCode == 9 {
+		t.Fatal("network-disabled sandbox connected to loopback")
+	}
 	if result.ExitCode != 0 {
-		t.Fatalf("network-disabled sandbox connected to loopback, exit code = %d", result.ExitCode)
+		t.Fatalf("network probe failed before deciding connectivity, exit code = %d", result.ExitCode)
 	}
 	select {
 	case <-accepted:
 		t.Fatal("network-disabled sandbox reached the loopback listener")
 	default:
 	}
+}
+
+func TestWindowsSandboxNetworkProbeHelper(t *testing.T) {
+	if os.Getenv("REAMES_AGENT_WINSANDBOX_NETWORK_PROBE") != "1" {
+		return
+	}
+	conn, err := net.DialTimeout("tcp", os.Getenv("REAMES_AGENT_WINSANDBOX_NETWORK_ADDRESS"), 1500*time.Millisecond)
+	if err != nil {
+		os.Exit(0)
+	}
+	_ = conn.Close()
+	os.Exit(9)
 }
 
 func TestWindowsSandboxKillsChildProcessTreeOnReturn(t *testing.T) {
