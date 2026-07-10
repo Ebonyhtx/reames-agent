@@ -115,7 +115,7 @@ jobs:
           hdiutil detach "$mount_dir"
           trap - EXIT
           codesign --verify --deep --strict "$app"
-          lipo -verify_arch x86_64 arm64 "$app/Contents/MacOS/reames-agent-desktop"
+          lipo "$app/Contents/MacOS/reames-agent-desktop" -verify_arch x86_64 arm64
           python3 scripts/smoke_desktop_candidate.py \
             --platform darwin \
             --artifact "$dmg" \
