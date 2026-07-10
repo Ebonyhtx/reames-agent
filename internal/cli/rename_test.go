@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
 )
 
 func TestRenameSessionUpdatesCustomTitle(t *testing.T) {
@@ -67,7 +68,7 @@ func TestRenameSessionUpdatesCustomTitle(t *testing.T) {
 }
 
 func TestSessionPickerLabelPrefersCustomTitle(t *testing.T) {
-	s := agent.SessionInfo{Turns: 5, Preview: "first user message here", TopicTitle: ""}
+	s := control.SessionInfo{Turns: 5, Preview: "first user message here", TopicTitle: ""}
 	got := sessionPickerLabel(s)
 	if got == "" {
 		t.Fatal("empty label")

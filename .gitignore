@@ -66,3 +66,4 @@ benchmarks/context-maintenance-e2e/run/
 
 # Generated advisory reports
 /artifacts/upstream-watch/
+/artifacts/desktop-*-smoke*.json

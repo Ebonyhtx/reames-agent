@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
 	"reames-agent/internal/i18n"
 )
 
@@ -16,7 +16,7 @@ import (
 // the rewindPicker pattern: keys route through handleResumePickerKey and it
 // renders via renderResumePicker while m.resumePick is set.
 type resumePicker struct {
-	sessions []agent.SessionInfo
+	sessions []control.SessionInfo
 	sel      int // selected index
 	active   int // index of the currently-active session (-1 when none)
 }
@@ -82,19 +82,22 @@ func (m chatTUI) applyResumePick() (tea.Model, tea.Cmd) {
 		m.notice(i18n.M.ResumeBusy)
 		return m, nil
 	}
-	loaded, err := agent.LoadSession(target.Path)
+	var bindErr error
+	err := m.ctrl.ResumeSessionPath(target.Path, func() error {
+		// Snapshot before moving the lease: the outgoing session must be written
+		// while this process still owns it.
+		_ = m.ctrl.Snapshot()
+		bindErr = m.rebindSessionLease(target.Path)
+		return bindErr
+	})
+	if bindErr != nil {
+		m.notice("resume: " + sessionLeaseHeldNotice(bindErr))
+		return m, nil
+	}
 	if err != nil {
 		m.notice("resume: " + err.Error())
 		return m, nil
 	}
-	// Snapshot before moving the lease: the outgoing session must be written
-	// while this process still owns it.
-	_ = m.ctrl.Snapshot()
-	if err := m.rebindSessionLease(target.Path); err != nil {
-		m.notice("resume: " + sessionLeaseHeldNotice(err))
-		return m, nil
-	}
-	m.ctrl.Resume(loaded, target.Path)
 	m.replayActiveBranch(i18n.M.ResumedTitle)
 	return m, nil
 }
@@ -120,7 +123,7 @@ func (m chatTUI) renderResumePicker() string {
 
 // sessionPickerLabel is the "N turns · display title" line, truncated to fit.
 // Explicit session renames win, then topic titles, then the raw preview.
-func sessionPickerLabel(s agent.SessionInfo) string {
+func sessionPickerLabel(s control.SessionInfo) string {
 	preview := s.CustomTitle
 	if preview == "" {
 		preview = s.TopicTitle

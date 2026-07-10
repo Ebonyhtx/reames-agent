@@ -3289,6 +3289,32 @@ a[href] {
   min-width: 0;
   word-break: break-word;
 }
+.notice-line__action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 3px 7px;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.notice-line__action:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 9%, transparent);
+}
+.notice-line__action:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.notice-line__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 
 /* ── ReadOnly batch (parent fold for read/search tools) ────────────── */
 .readonly-batch {

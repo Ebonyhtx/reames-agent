@@ -72,7 +72,7 @@ python scripts/smoke_desktop_interaction.py `
 
 - Python 合同覆盖 fixture 路由、HTTP/SSE/tool-call payload、最新 user turn 分类、证据 schema 和前端 AutomationId 源码合同。
 - 前端测试覆盖结构化 error code、retry 生命周期、approval AutomationId 和失败 tool card AutomationId。
-- `desktop-candidate.yml` 已调用同一脚本；Windows candidate 会在 NSIS 静默安装后对安装后二进制执行矩阵，并上传 schema v2 JSON。
+- `desktop-candidate.yml` 已调用同一脚本；Windows candidate 会在 NSIS 静默安装后对安装后二进制执行矩阵。后续 M2 批次将证据升级为 schema v3，并增加认证设置与流中断续接的真实点击，详见 `2026-07-11-m2-error-session-control.md`。
 - 本批本地通过 root build/vet/internal 全测、Desktop 全测、前端 `test:all`/production build、工具合同和 smoke 脚本合同。
 
 ## 证据边界

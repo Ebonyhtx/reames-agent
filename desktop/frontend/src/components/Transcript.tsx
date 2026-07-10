@@ -16,6 +16,7 @@ import { useEntranceAnimation } from "../lib/useEntranceAnimation";
 import { useScrollManager } from "../lib/useScrollManager";
 import { buildStepGroups, buildTurnGroups, compactQuestionText, createWarmLayerState, lastQuestionTurn, questionAnchorId, questionTurnsById, scrollVersion, warmColdPageForTurn, warmLayerWithColdPageAtLeast, warmLayerWithExpandedTurn, warmLayerWithNextColdPage, warmPagination, warmUserPreview, type QuestionAnchor, type TurnGroup, type WarmLayerState } from "../lib/transcriptGrouping";
 import { appendTurnActionCopyText } from "../lib/turnActionCopy";
+import { RuntimeErrorNotice } from "./RuntimeErrorNotice";
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
 type AssistantItem = Extract<Item, { kind: "assistant" }>;
@@ -83,6 +84,7 @@ export function Transcript({
   tabId,
   footerHeight = 0,
   onPrompt,
+  onOpenErrorSettings,
   onEditPrompt,
   onRewind,
   checkpoints = [],
@@ -106,6 +108,7 @@ export function Transcript({
   tabId?: string;
   footerHeight?: number;
   onPrompt: (text: string) => void;
+  onOpenErrorSettings?: () => void;
   onEditPrompt?: (turn: number, displayText: string, submitText?: string) => boolean | void | Promise<boolean | void>;
   onRewind?: (turn: number, scope: string) => void;
   checkpoints?: CheckpointMeta[];
@@ -587,7 +590,7 @@ export function Transcript({
             out.push(<ToolCard key={it.id} item={it} subcalls={subcallsByParent.get(it.id)} tabId={tabId} />);
             break;
           case "phase": out.push(<PhaseCard key={it.id} text={it.text} />); break;
-          case "notice": out.push(<NoticeCard key={it.id} level={it.level} text={it.text} code={it.code} />); break;
+          case "notice": out.push(<RuntimeErrorNotice key={it.id} item={it} onRetry={onPrompt} onOpenSettings={onOpenErrorSettings} retryDisabled={running} />); break;
           case "compaction": out.push(<CompactionCard key={it.id} item={it} />); break;
         }
       }
@@ -596,7 +599,7 @@ export function Transcript({
       if (!running) pushTurnActions();
     }
     return out;
-  }, [hotStartIdx, items, openAction, actionPending, rewindDisabled, running, onEditPrompt, onRewind, subcallsByParent, userTurn, checkpointsByTurn, displayMode, stepGroups, tabId, actionHoverMenus, creationMode, lastTurn]);
+  }, [hotStartIdx, items, openAction, actionPending, rewindDisabled, running, onEditPrompt, onRewind, onPrompt, onOpenErrorSettings, subcallsByParent, userTurn, checkpointsByTurn, displayMode, stepGroups, tabId, actionHoverMenus, creationMode, lastTurn]);
 
   // ── Assemble rendered output ──────────────────────────────────────────────
   // Warm/cold zone is a separate memo'd WarmZone component so streaming tokens
@@ -642,6 +645,8 @@ export function Transcript({
               warmOnRewind={onRewind}
               warmSetOpenAction={setOpenAction}
               warmOnEdit={onEditPrompt}
+              warmOnPrompt={onPrompt}
+              warmOnOpenErrorSettings={onOpenErrorSettings}
               tabId={tabId}
               creationMode={creationMode}
               onToggleColdPage={() => setWarmLayerState((prev) => warmLayerWithNextColdPage(prev, warmLayerSessionKey))}
@@ -698,6 +703,8 @@ const WarmZone = memo(function WarmZone({
   warmOnRewind,
   warmSetOpenAction,
   warmOnEdit,
+  warmOnPrompt,
+  warmOnOpenErrorSettings,
   tabId,
   creationMode,
   onToggleColdPage,
@@ -721,6 +728,8 @@ const WarmZone = memo(function WarmZone({
   warmOnRewind: ((turn: number, scope: string) => void) | undefined;
   warmSetOpenAction: (action: OpenTurnAction | null) => void;
   warmOnEdit?: (turn: number, displayText: string, submitText?: string) => boolean | void | Promise<boolean | void>;
+  warmOnPrompt: (text: string) => void;
+  warmOnOpenErrorSettings?: () => void;
   tabId?: string;
   creationMode?: boolean;
   onToggleColdPage: () => void;
@@ -777,6 +786,8 @@ const WarmZone = memo(function WarmZone({
               onRewind={warmOnRewind}
               setOpenAction={warmSetOpenAction}
               onEdit={warmOnEdit}
+              onPrompt={warmOnPrompt}
+              onOpenErrorSettings={warmOnOpenErrorSettings}
               tabId={tabId}
               creationMode={creationMode}
               lastTurn={warmLastTurn}
@@ -825,6 +836,8 @@ function WarmTurnItems({
   onRewind,
   setOpenAction,
   onEdit,
+  onPrompt,
+  onOpenErrorSettings,
   tabId,
   creationMode = false,
   lastTurn,
@@ -842,6 +855,8 @@ function WarmTurnItems({
   onRewind: ((turn: number, scope: string) => void) | undefined;
   setOpenAction: (action: OpenTurnAction | null) => void;
   onEdit?: (turn: number, displayText: string, submitText?: string) => boolean | void | Promise<boolean | void>;
+  onPrompt: (text: string) => void;
+  onOpenErrorSettings?: () => void;
   tabId?: string;
   creationMode?: boolean;
   lastTurn?: number;
@@ -949,7 +964,7 @@ function WarmTurnItems({
         break;
       }
       case "phase": nodes.push(<PhaseCard key={it.id} text={it.text} />); break;
-      case "notice": nodes.push(<NoticeCard key={it.id} level={it.level} text={it.text} code={it.code} />); break;
+      case "notice": nodes.push(<RuntimeErrorNotice key={it.id} item={it} onRetry={onPrompt} onOpenSettings={onOpenErrorSettings} retryDisabled={rewindDisabled} />); break;
       case "compaction": nodes.push(<CompactionCard key={it.id} item={it} />); break;
     }
   }
@@ -1262,24 +1277,9 @@ function QuestionJumpBar({ questions, onJump }: { questions: QuestionAnchor[]; o
 }
 
 type CompactionItem = Extract<Item, { kind: "compaction" }>;
-type NoticeItem = Extract<Item, { kind: "notice" }>;
 
 function PhaseCard({ text }: { text: string }) {
   return <div className="phase" data-entrance="true"><ProcessPhaseIcon size={12} /><span>{text}</span></div>;
-}
-
-function NoticeCard({ level, text, code }: { level: NoticeItem["level"]; text: string; code?: string }) {
-  return (
-    <div
-      id={code ? `notice-${code}` : undefined}
-      className={`notice-line notice-line--${level}`}
-      data-entrance="true"
-      role={level === "warn" ? "alert" : "status"}
-    >
-      <span className="notice-line__icon">{level === "warn" ? "⚠ " : "ℹ "}</span>
-      <span className="notice-line__text">{text}</span>
-    </div>
-  );
 }
 
 function CompactionCard({ item }: { item: CompactionItem }) {

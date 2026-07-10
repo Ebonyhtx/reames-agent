@@ -32,7 +32,7 @@ except ModuleNotFoundError:  # direct ``python scripts/...`` execution
     import smoke_desktop_native as native  # type: ignore[no-redef]
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MIN_TIMEOUT_SECONDS = 10
 MAX_TIMEOUT_SECONDS = 180
 WORKSPACE_TITLE = "Native UI Workspace"
@@ -61,6 +61,10 @@ TIMEOUT_TOOL_CALL_ID = "native-timeout-call"
 TOOL_APPROVAL_AUTOMATION_ID = "tool-approval-dialog"
 TOOL_DENY_AUTOMATION_ID = "tool-approval-deny"
 RETRY_STATUS_PREFIX = "retrying ("
+AUTH_SETTINGS_ACTION_AUTOMATION_ID = "error-action-settings-provider_auth"
+STREAM_RETRY_ACTION_AUTOMATION_ID = "error-action-retry-stream_interrupted"
+SETTINGS_MODAL_AUTOMATION_ID = "settings-modal"
+SETTINGS_CLOSE_AUTOMATION_ID = "settings-modal-close"
 
 FAILURE_SCENARIOS = (
     "invalid_key",
@@ -118,6 +122,8 @@ class InteractionSmokeResult:
         default_factory=new_failure_scenarios
     )
     stream_partial_persisted: bool = False
+    auth_settings_opened: bool = False
+    stream_retry_invoked: bool = False
     permission_denied: bool = False
     permission_write_blocked: bool = False
     tool_timeout_error_visible: bool = False
@@ -869,6 +875,24 @@ def run_smoke(
             )
             invalid_key = result.failure_scenarios["invalid_key"]
             invalid_key.signal_visible = True
+            uia.invoke(
+                automation_id=AUTH_SETTINGS_ACTION_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
+            wait_until(
+                lambda: uia.has(automation_id=SETTINGS_MODAL_AUTOMATION_ID),
+                timeout_seconds,
+                "authentication failure action did not open model settings",
+            )
+            result.auth_settings_opened = True
+            uia.invoke(
+                automation_id=SETTINGS_CLOSE_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
+            uia.wait_absent(
+                automation_id=SETTINGS_MODAL_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
             (
                 invalid_key.idle_recovered,
                 invalid_key.followup_succeeded,
@@ -916,12 +940,35 @@ def run_smoke(
                 "partial stream output was not persisted after disconnect",
             )
             result.stream_partial_persisted = True
-            (
-                stream_interruption.idle_recovered,
-                stream_interruption.followup_succeeded,
-            ) = verify_idle_and_followup(
-                uia, home, "stream_interruption", timeout_seconds
+            uia.invoke(
+                automation_id=STREAM_RETRY_ACTION_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
             )
+            result.stream_retry_invoked = True
+            continuation_prompt = (
+                "Continue from the interrupted response without repeating completed work."
+            )
+            continuation_response = f"{LOOPBACK_RESPONSE}: {continuation_prompt}"
+            wait_until(
+                lambda: durable_session_has_message(
+                    (active_tab(home) or {}).get("sessionPath"),
+                    "assistant",
+                    continuation_response,
+                ),
+                timeout_seconds,
+                "stream continuation action did not persist a follow-up response",
+            )
+            wait_until(
+                lambda: uia.has(name=continuation_response),
+                timeout_seconds,
+                "stream continuation response was not visible",
+            )
+            uia.wait_enabled(
+                automation_id=COMPOSER_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
+            stream_interruption.idle_recovered = True
+            stream_interruption.followup_succeeded = True
 
             submit_prompt(uia, PERMISSION_DENIAL_PROMPT, timeout_seconds)
             wait_until(

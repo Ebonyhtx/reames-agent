@@ -36,6 +36,7 @@ type Lifecycle interface {
 	NewSession() error
 	ClearSession() error
 	Resume(s *agent.Session, path string)
+	ResumeSessionPath(path string, beforeResume func() error) error
 	SetSessionPath(p string)
 	SessionPath() string
 	SessionDir() string

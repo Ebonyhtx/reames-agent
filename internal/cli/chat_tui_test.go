@@ -677,7 +677,7 @@ func TestModalPanelsHideComposerBox(t *testing.T) {
 		{
 			name: "resume picker",
 			setup: func(m *chatTUI) {
-				m.resumePick = &resumePicker{sessions: []agent.SessionInfo{{
+				m.resumePick = &resumePicker{sessions: []control.SessionInfo{{
 					Path:    "one.jsonl",
 					Preview: "previous task",
 					Turns:   3,

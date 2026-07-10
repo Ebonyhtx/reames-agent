@@ -79,7 +79,7 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
 | `control.SessionAPI` 的分区接口 | 新增直接 import `internal/provider` |
 | `event.Sink` 与 `internal/eventwire` | 新增直接 import `internal/tool` |
 
-当前代码仍有历史直连，主要用于会话 DTO、历史迁移、渲染数据和装配注册，因此这是一项目标架构而不是已经完全满足的事实。`TestTransportRuntimeImportRatchet` 用精确 allowlist 冻结 Desktop、CLI、Serve、Bot 和 ACP 的现有直连：新增依赖会使 CI 失败，迁移删除依赖后也必须同步收缩 allowlist。Provider 与内置工具的 blank import 只允许保留在明确的装配入口。
+当前代码仍有历史直连，主要用于会话 DTO、历史迁移、渲染数据和装配注册，因此这是一项目标架构而不是已经完全满足的事实。`TestTransportRuntimeImportRatchet` 用精确 allowlist 冻结 Desktop、CLI、Serve、Bot 和 ACP 的现有直连：新增依赖会使 CI 失败，迁移删除依赖后也必须同步收缩 allowlist。Provider 与内置工具的 blank import 只允许保留在明确的装配入口。当前已完成两条可验证的纵向路径：共享 `ErrorInfo` 由 Desktop 按 code/category 消费；CLI `/resume` 通过 `control.SessionInfo`、`control.ListSessions` 和事务式 `ResumeSessionPath` 工作，`resume.go` 与 `resume_picker.go` 不再直接 import `internal/agent`。
 
 迁移按纵向路径进行：先收口提交、取消、审批、会话恢复和状态查询，再迁移设置、历史与展示 DTO；不建立第二套 runtime 或一次性搬迁全部类型。
 

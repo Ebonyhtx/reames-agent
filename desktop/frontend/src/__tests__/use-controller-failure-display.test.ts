@@ -53,7 +53,8 @@ console.log("\nuse controller failure display");
   eq(user?.kind === "user" && user.text, "hello", "turn_done error flushes the optimistic user message");
   eq(notice?.kind === "notice" && notice.level, "warn", "turn_done error renders a warning notice");
   eq(notice?.kind === "notice" && notice.code, "provider_auth", "turn_done notice keeps the structured error code");
-  ok(notice?.kind === "notice" && notice.text.includes("DEEPSEEK_API_KEY"), "turn_done error keeps the actionable provider hint");
+  eq(notice?.kind === "notice" && notice.text, "Authentication failed.", "structured message replaces legacy string matching");
+  eq(notice?.kind === "notice" && notice.error?.category, "auth", "turn_done notice keeps the structured error category");
   eq(failedBeforeStream.running, false, "turn_done error clears running state before stream starts");
   eq(failedBeforeStream.pendingPrompt, false, "turn_done error clears pendingPrompt");
   eq(failedBeforeStream.cancellable, false, "turn_done error clears the stop affordance");
@@ -71,14 +72,43 @@ console.log("\nuse controller failure display");
     },
   ]);
   const assistant = state.items.find((item) => item.kind === "assistant");
-  const notice = state.items.find((item) => item.kind === "notice" && item.text.includes("HTTP 429"));
+  const notice = state.items.find((item) => item.kind === "notice" && item.code === "provider_rate_limit");
   eq(assistant?.kind === "assistant" && assistant.text, "partial answer", "provider failure preserves partial assistant context");
   eq(assistant?.kind === "assistant" && assistant.streaming, false, "provider failure finalizes the assistant stream");
   eq(notice?.kind === "notice" && notice.level, "warn", "provider failure shows a warning notice");
   eq(notice?.kind === "notice" && notice.code, "provider_rate_limit", "provider failure exposes the structured rate-limit code");
+  eq(notice?.kind === "notice" && notice.retryText, undefined, "retry action is withheld when no user prompt is available");
   eq(state.running, false, "provider failure clears running state");
   eq(state.turnActive, false, "provider failure clears active turn state");
   eq(state.cancellable, false, "provider failure clears stop state");
+}
+
+{
+  const sent = reducer(initialState, { type: "user", text: "visible prompt", submitText: "provider prompt", seq: 0 });
+  const retryable = reducer(sent, {
+    type: "event",
+    e: {
+      kind: "turn_done",
+      error: { code: "provider_timeout", category: "retryable", message: "Provider timed out.", retryable: true },
+    },
+  });
+  const notice = retryable.items.find((item) => item.kind === "notice");
+  eq(notice?.kind === "notice" && notice.retryText, "provider prompt", "retryable errors retain the canonical submit prompt");
+  eq(notice?.kind === "notice" && notice.error?.code, "provider_timeout", "structured error renders without the legacy err field");
+}
+
+{
+  const sent = reducer(initialState, { type: "user", text: "stop this", seq: 0 });
+  const cancelled = reducer(sent, {
+    type: "event",
+    e: {
+      kind: "turn_done",
+      err: "context canceled",
+      error: { code: "cancelled", category: "cancelled", message: "Cancelled.", retryable: false },
+    },
+  });
+  eq(cancelled.items.some((item) => item.kind === "notice"), false, "user cancellation is not rendered as a failure");
+  eq(cancelled.running, false, "cancelled turn still clears running state");
 }
 
 {
@@ -115,3 +145,6 @@ console.log("\nuse controller failure display");
 
 console.log(`\n${passed} passed, ${failed} failed, ${passed + failed} total`);
 if (failed > 0) process.exit(1);
+// Keep the reducer and its rendered, actionable notice contract in the same
+// aggregate test entry without growing the package script's hand-maintained list.
+await import("./runtime-error-notice.test");

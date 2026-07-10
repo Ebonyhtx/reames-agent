@@ -34,6 +34,7 @@ import type {
   WireApproval,
   WireAsk,
   WireEvent,
+  WireErrorInfo,
   WireUsage,
 } from "./types";
 
@@ -53,7 +54,7 @@ export type Item =
   | { kind: "user"; id: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number }
   | { kind: "assistant"; id: string; text: string; reasoning: string; streaming: boolean; reasoningComplete?: boolean; memoryCitations?: MemoryCitation[] }
   | { kind: "phase"; id: string; text: string }
-  | { kind: "notice"; id: string; level: "info" | "warn"; text: string; code?: string }
+  | { kind: "notice"; id: string; level: "info" | "warn"; text: string; code?: string; error?: WireErrorInfo; retryText?: string }
   | {
       kind: "compaction";
       id: string;
@@ -782,7 +783,20 @@ function applyEvent(s: State, e: WireEvent): State {
         if (it.kind === "tool" && it.status === "running") return { ...it, status: "stopped" as const };
         return it;
       });
-      let items: Item[] = e.err ? [...finalized, { kind: "notice", id: `e${s.seq}`, level: "warn", text: e.err, code: e.error?.code }] : finalized;
+      const structuredError = e.error;
+      const lastUser = [...finalized].reverse().find((item): item is Extract<Item, { kind: "user" }> => item.kind === "user");
+      const shouldShowError = structuredError?.category !== "cancelled" && Boolean(structuredError || e.err);
+      let items: Item[] = shouldShowError
+        ? [...finalized, {
+            kind: "notice",
+            id: `e${s.seq}`,
+            level: structuredError?.category === "user" ? "info" : "warn",
+            text: structuredError?.message || e.err || "",
+            code: structuredError?.code,
+            error: structuredError,
+            retryText: structuredError?.retryable ? (lastUser?.submitText || lastUser?.text) : undefined,
+          }]
+        : finalized;
       // Plan approval can arrive before turn_done on some Wails event paths.
       // Keep that gate visible instead of clearing the only UI that can answer it.
       const keepPlanApproval = s.approval?.tool === "exit_plan_mode";

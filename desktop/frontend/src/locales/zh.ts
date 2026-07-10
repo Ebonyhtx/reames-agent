@@ -5,6 +5,26 @@
 import type { DictKey } from "./en";
 
 export const zh: Record<DictKey, string> = {
+  "runtimeError.unknown": "操作未能完成。",
+  "runtimeError.providerAuth": "身份验证失败，请检查所选模型的 API 密钥。",
+  "runtimeError.providerRateLimit": "已达到服务商速率限制，请稍后重试。",
+  "runtimeError.providerServerError": "服务商暂时不可用。",
+  "runtimeError.providerTimeout": "服务商请求超时。",
+  "runtimeError.streamInterrupted": "响应流已中断，已保留部分响应。",
+  "runtimeError.providerUnavailable": "无法连接服务商，请检查网络和端点。",
+  "runtimeError.toolTimeout": "工具执行超过时间限制。",
+  "runtimeError.toolPermission": "工具没有执行该操作的权限。",
+  "runtimeError.toolSandbox": "沙箱阻止了该工具操作。",
+  "runtimeError.toolNotFound": "请求的工具不可用。",
+  "runtimeError.approvalDenied": "工具请求已被拒绝。",
+  "runtimeError.approvalTimeout": "工具请求在获得答复前已超时。",
+  "runtimeError.sessionLocked": "此会话已在另一个进程中打开。",
+  "runtimeError.sessionNotFound": "请求的会话已不存在。",
+  "runtimeError.sessionClosed": "操作完成前会话已关闭。",
+  "runtimeError.cancelled": "操作已取消。",
+  "runtimeError.openModelSettings": "打开模型设置",
+  "runtimeError.continue": "继续回答",
+  "runtimeError.continuePrompt": "请从中断处继续回答，不要重复已经完成的内容。",
   // 通用动词 / 框架
   "common.close": "关闭",
   "common.cancel": "取消",

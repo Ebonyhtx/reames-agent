@@ -4,6 +4,26 @@
 // it at compile time), so adding a key here makes the build fail until zh has it.
 
 export const en = {
+  "runtimeError.unknown": "The operation could not be completed.",
+  "runtimeError.providerAuth": "Authentication failed. Check the API key for the selected model.",
+  "runtimeError.providerRateLimit": "The provider rate limit was reached. Try again shortly.",
+  "runtimeError.providerServerError": "The provider is temporarily unavailable.",
+  "runtimeError.providerTimeout": "The provider request timed out.",
+  "runtimeError.streamInterrupted": "The response stream was interrupted. The partial response was kept.",
+  "runtimeError.providerUnavailable": "The provider could not be reached. Check the network and endpoint.",
+  "runtimeError.toolTimeout": "The tool exceeded its time limit.",
+  "runtimeError.toolPermission": "The tool did not have permission to perform that action.",
+  "runtimeError.toolSandbox": "The sandbox blocked that tool action.",
+  "runtimeError.toolNotFound": "The requested tool is not available.",
+  "runtimeError.approvalDenied": "The tool request was denied.",
+  "runtimeError.approvalTimeout": "The tool request expired before it was answered.",
+  "runtimeError.sessionLocked": "This session is open in another process.",
+  "runtimeError.sessionNotFound": "The requested session no longer exists.",
+  "runtimeError.sessionClosed": "The session closed before the operation finished.",
+  "runtimeError.cancelled": "The operation was cancelled.",
+  "runtimeError.openModelSettings": "Open model settings",
+  "runtimeError.continue": "Continue response",
+  "runtimeError.continuePrompt": "Continue from the interrupted response without repeating completed work.",
   // shared verbs / chrome
   "common.close": "Close",
   "common.cancel": "Cancel",

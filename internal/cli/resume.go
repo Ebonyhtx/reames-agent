@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
 	"reames-agent/internal/i18n"
 )
 
@@ -14,11 +14,11 @@ const resumeListCap = 10
 // recentSessions returns the newest saved sessions under dir, capped so the
 // 1-based indices the list shows match what /resume <n> and its completion
 // resolve. A missing dir or read error yields an empty list.
-func recentSessions(dir string) []agent.SessionInfo {
+func recentSessions(dir string) []control.SessionInfo {
 	if dir == "" {
 		return nil
 	}
-	sessions, err := agent.ListSessions(dir)
+	sessions, err := control.ListSessions(dir)
 	if err != nil {
 		return nil
 	}
@@ -59,26 +59,28 @@ func (m *chatTUI) runResumeCommand(input string) {
 		m.notice(i18n.M.ResumeAlreadyActive)
 		return
 	}
-	loaded, err := agent.LoadSession(target.Path)
+	var bindErr error
+	err = m.ctrl.ResumeSessionPath(target.Path, func() error {
+		// Persist the conversation we're leaving before moving the lease: the
+		// outgoing session must be written while this process still owns it.
+		_ = m.ctrl.Snapshot()
+		bindErr = m.rebindSessionLease(target.Path)
+		return bindErr
+	})
+	if bindErr != nil {
+		m.notice("resume: " + sessionLeaseHeldNotice(bindErr))
+		return
+	}
 	if err != nil {
 		m.notice("resume: " + err.Error())
 		return
 	}
-	// Persist the conversation we're leaving so switching back later restores it.
-	// Snapshot before moving the lease: the outgoing session must be written
-	// while this process still owns it.
-	_ = m.ctrl.Snapshot()
-	if err := m.rebindSessionLease(target.Path); err != nil {
-		m.notice("resume: " + sessionLeaseHeldNotice(err))
-		return
-	}
-	m.ctrl.Resume(loaded, target.Path)
 	m.replayActiveBranch(i18n.M.ResumedTitle)
 }
 
 // showSessions renders the recent-session list with 1-based indices, timestamp,
 // turn count and preview, marking the one currently active.
-func (m *chatTUI) showSessions(sessions []agent.SessionInfo) {
+func (m *chatTUI) showSessions(sessions []control.SessionInfo) {
 	active := m.ctrl.SessionPath()
 	var b strings.Builder
 	b.WriteString(dim("  · " + i18n.M.ResumeListHeader + "\n"))
@@ -122,7 +124,7 @@ func (m *chatTUI) resumeArgItems(val string) ([]compItem, int, bool) {
 // sessionSummary is the "N turns · display title" line shared by the /resume
 // list and its argument completion. Explicit session renames win, then topic
 // titles, then the raw preview so the user can identify sessions at a glance.
-func sessionSummary(s agent.SessionInfo) string {
+func sessionSummary(s control.SessionInfo) string {
 	preview := s.CustomTitle
 	if preview == "" {
 		preview = s.TopicTitle

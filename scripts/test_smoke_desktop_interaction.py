@@ -26,6 +26,8 @@ class DesktopInteractionSmokeTests(unittest.TestCase):
             "assistant_response_persisted",
             "failure_scenarios",
             "stream_partial_persisted",
+            "auth_settings_opened",
+            "stream_retry_invoked",
             "permission_denied",
             "permission_write_blocked",
             "tool_timeout_error_visible",
@@ -292,7 +294,7 @@ class DesktopInteractionSmokeTests(unittest.TestCase):
         self.assertIn('id="composer-runstatus"', composer)
 
         frontend = Path(__file__).parents[1] / "desktop" / "frontend" / "src"
-        transcript = (frontend / "components" / "Transcript.tsx").read_text(
+        runtime_error = (frontend / "components" / "RuntimeErrorNotice.tsx").read_text(
             encoding="utf-8"
         )
         approval = (frontend / "components" / "ApprovalModal.tsx").read_text(
@@ -301,7 +303,14 @@ class DesktopInteractionSmokeTests(unittest.TestCase):
         tool_card = (frontend / "components" / "ToolCard.tsx").read_text(
             encoding="utf-8"
         )
-        self.assertIn("notice-${code}", transcript)
+        settings = (frontend / "components" / "SettingsPanel.tsx").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("notice-${item.code}", runtime_error)
+        self.assertIn("error-action-settings-${item.code", runtime_error)
+        self.assertIn("error-action-retry-${item.code", runtime_error)
+        self.assertIn(f'id="{smoke.SETTINGS_MODAL_AUTOMATION_ID}"', settings)
+        self.assertIn(f'id="{smoke.SETTINGS_CLOSE_AUTOMATION_ID}"', settings)
         self.assertIn(f'automationId="{smoke.TOOL_APPROVAL_AUTOMATION_ID}"', approval)
         self.assertIn(f'automationId="{smoke.TOOL_DENY_AUTOMATION_ID}"', approval)
         self.assertIn("tool-error-${item.id}", tool_card)

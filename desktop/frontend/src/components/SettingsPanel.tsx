@@ -211,11 +211,11 @@ export function SettingsPanel({
   const lazySettingsPageFallback = <div className="empty">{t("settings.loading")}</div>;
 
   return (
-    <div className="management-modal-backdrop settings-modal-backdrop" data-state={status} onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
+    <div id="settings-modal" className="management-modal-backdrop settings-modal-backdrop" data-state={status} onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
       <div className="management-modal settings-modal" data-state={status}>
         <header className="management-modal__head settings-modal__head">
           <div className="management-modal__title settings-modal__title">{t("settings.title")}</div>
-          <ModalCloseButton label={t("common.close")} onClick={requestClose} />
+          <ModalCloseButton id="settings-modal-close" label={t("common.close")} onClick={requestClose} />
         </header>
 
         <div className="settings-center">

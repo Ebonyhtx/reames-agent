@@ -35,8 +35,6 @@ var legacyTransportRuntimeImports = map[string][]string{
 	"internal/cli/chat_tui.go":      {"reames-agent/internal/agent", "reames-agent/internal/provider", "reames-agent/internal/tool"},
 	"internal/cli/cli.go":           {"reames-agent/internal/agent", "reames-agent/internal/provider", "reames-agent/internal/provider/openai"},
 	"internal/cli/rename.go":        {"reames-agent/internal/agent"},
-	"internal/cli/resume.go":        {"reames-agent/internal/agent"},
-	"internal/cli/resume_picker.go": {"reames-agent/internal/agent"},
 	"internal/cli/review.go":        {"reames-agent/internal/agent", "reames-agent/internal/tool", "reames-agent/internal/tool/builtin"},
 	"internal/cli/session_lease.go": {"reames-agent/internal/agent"},
 	"internal/cli/toolcard.go":      {"reames-agent/internal/tool"},
