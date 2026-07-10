@@ -182,3 +182,34 @@ func TestGoalStateV1RejectsFutureVersion(t *testing.T) {
 		t.Fatal("should reject future version")
 	}
 }
+
+func TestReadGoalStateForResumeV1(t *testing.T) {
+	v1 := []byte(`{"version":1,"goal":"resume test","status":"running","turns":5,"strict":true}`)
+	gs, err := ReadGoalStateForResume(v1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gs.Goal != "resume test" {
+		t.Fatalf("Goal = %q", gs.Goal)
+	}
+	if gs.Status != GoalStatusRunning {
+		t.Fatalf("Status = %q", gs.Status)
+	}
+	if !gs.Strict {
+		t.Fatal("Strict should be true")
+	}
+}
+
+func TestReadGoalStateForResumeV0Fallback(t *testing.T) {
+	v0 := []byte(`{"goal":"legacy goal","status":"blocked","block":"missing key"}`)
+	gs, err := ReadGoalStateForResume(v0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gs.Goal != "legacy goal" {
+		t.Fatalf("Goal = %q", gs.Goal)
+	}
+	if gs.Status != GoalStatusBlocked {
+		t.Fatalf("Status = %q", gs.Status)
+	}
+}

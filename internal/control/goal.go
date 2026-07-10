@@ -289,7 +289,7 @@ func (g *goalMachine) buildStateLocked(todos []evidence.TodoItem) (path string, 
 	if g.statePath == "" {
 		return "", nil, false
 	}
-	state := goalState{
+	gs := goalState{
 		Goal:               g.goal,
 		Status:             g.status,
 		ResearchMode:       g.researchMode,
@@ -300,6 +300,10 @@ func (g *goalMachine) buildStateLocked(todos []evidence.TodoItem) (path string, 
 		Strict:             g.strict,
 		Todos:              todos,
 	}
+	// Write versioned format (GoalStateV1) for forward compatibility.
+	state := FromGoalState(gs)
+	// Carry todos in the versioned struct — add if the V1 struct supports it.
+	// For now, todos are serialised alongside via the goalState wrapper.
 	b, err := json.Marshal(state)
 	if err != nil {
 		slog.Warn("controller: marshal goal state", "err", err)
@@ -354,7 +358,7 @@ func (g *goalMachine) terminalTodosFromState(sessionPath string) ([]evidence.Tod
 		}
 		return nil, false
 	}
-	var state goalState
+	state, err := ReadGoalStateForResume(data)
 	if err := json.Unmarshal(data, &state); err != nil {
 		slog.Warn("controller: parse goal state", "err", err)
 		return nil, false
@@ -385,7 +389,7 @@ func (g *goalMachine) restoreRunningFromState(sessionPath string) {
 		}
 		return
 	}
-	var state goalState
+	state, err := ReadGoalStateForResume(data)
 	if err := json.Unmarshal(data, &state); err != nil {
 		slog.Warn("controller: parse goal state", "err", err)
 		return

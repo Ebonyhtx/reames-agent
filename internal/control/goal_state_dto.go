@@ -117,7 +117,24 @@ func WriteGoalStateV1(path string, state GoalStateV1) error {
 	return os.Rename(tmp, path)
 }
 
-// ReadGoalStateV1 reads and validates a GoalStateV1 from disk.
+// ReadGoalStateForResume reads a goal state sidecar, accepting both v1
+// (versioned) and v0 (unversioned legacy) formats for backward compatibility.
+func ReadGoalStateForResume(data []byte) (goalState, error) {
+	// Try v1 first.
+	var v1 GoalStateV1
+	if err := json.Unmarshal(data, &v1); err == nil && v1.Version >= 1 {
+		if v1.Version > GoalStateVersion {
+			return goalState{}, fmt.Errorf("goal state: unsupported version %d", v1.Version)
+		}
+		return v1.ToGoalState(), nil
+	}
+	// Fall back to v0 (raw goalState without version field).
+	var gs goalState
+	if err := json.Unmarshal(data, &gs); err != nil {
+		return goalState{}, fmt.Errorf("goal state: unmarshal: %w", err)
+	}
+	return gs, nil
+}
 func ReadGoalStateV1(path string) (GoalStateV1, error) {
 	if path == "" {
 		return GoalStateV1{}, nil
