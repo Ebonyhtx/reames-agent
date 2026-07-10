@@ -40,22 +40,43 @@ func TestCancelPropagationIsIdempotent(t *testing.T) {
 }
 
 func TestCancelRequestedClearsAfterDone(t *testing.T) {
-	release := make(chan struct{})
-	c, prov, events := newCancelPropagationController()
-	prov.release = release
-	c.Submit("request")
-	waitCancelSignal(t, prov.started)
-	c.Cancel()
-	waitCancelSignal(t, prov.cancelled)
-	if !c.CancelRequested() {
-		t.Fatal("CancelRequested should remain true while the provider is unwinding")
+	runner := &cancelUnwindRunner{
+		started:   make(chan struct{}),
+		cancelled: make(chan struct{}),
+		release:   make(chan struct{}),
 	}
-	close(release)
+	events := make(chan event.Event, 8)
+	c := New(Options{Runner: runner, Sink: event.FuncSink(func(e event.Event) { events <- e })})
+	c.Send("request")
+	waitCancelSignal(t, runner.started)
+	c.Cancel()
+	waitCancelSignal(t, runner.cancelled)
+	if !c.CancelRequested() {
+		t.Fatal("CancelRequested should remain true while the turn runner is unwinding")
+	}
+	close(runner.release)
 	waitForTurnDoneEvent(t, events)
 
 	if status := c.RuntimeStatus(); status.Running || status.CancelRequested {
 		t.Fatalf("runtime status after TurnDone = %+v, want cancellation cleared", status)
 	}
+}
+
+// cancelUnwindRunner keeps Controller.runGuarded in its unwind window after it
+// observes cancellation. A provider goroutine is not a valid proxy for that
+// window: Agent.Run may return on ctx.Done before the provider worker exits.
+type cancelUnwindRunner struct {
+	started   chan struct{}
+	cancelled chan struct{}
+	release   chan struct{}
+}
+
+func (r *cancelUnwindRunner) Run(ctx context.Context, _ string) error {
+	close(r.started)
+	<-ctx.Done()
+	close(r.cancelled)
+	<-r.release
+	return ctx.Err()
 }
 
 func TestCancelPropagationAllowsNewTurn(t *testing.T) {
