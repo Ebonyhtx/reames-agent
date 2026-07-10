@@ -9,45 +9,72 @@ import (
 	"reames-agent/internal/provider"
 )
 
-// explainError maps a provider HTTP failure to an actionable, localized message
-// so the turn-done error the UI shows is never a bare status code or silent
-// failure. Unknown errors (and nil) pass through unchanged.
+// explainError maps a provider failure to a structured ErrorInfo with a stable
+// ErrorCode, so frontends can classify errors programmatically instead of
+// string-matching on the message. The returned ErrorInfo implements error and
+// is backward-compatible with all existing TurnDone.Err checks.
 func explainError(err error) error {
 	if err == nil {
 		return nil
 	}
+
+	// Stream interruption.
 	if provider.IsStreamInterrupted(err) {
-		return fmt.Errorf("model stream interrupted after recovery attempts: %s. The partial response was kept; retry or ask Reames Agent to continue", err.Error())
+		return NewErrorInfo(ErrStreamInterrupted,
+			fmt.Sprintf("model stream interrupted after recovery attempts: %s. The partial response was kept; retry or ask Reames Agent to continue", err.Error())).
+			WithDetail(err.Error())
 	}
 	if provider.IsConnReset(err) {
-		return fmt.Errorf("model stream disconnected before completion after retry attempts: %s. Check the provider/proxy connection, then retry or ask Reames Agent to continue", err.Error())
+		return NewErrorInfo(ErrStreamInterrupted,
+			fmt.Sprintf("model stream disconnected before completion after retry attempts: %s. Check the provider/proxy connection, then retry or ask Reames Agent to continue", err.Error())).
+			WithDetail(err.Error())
 	}
+
+	// API errors (429, 503, etc.).
 	var apiErr *provider.APIError
 	if errors.As(err, &apiErr) {
 		msg := i18n.M.ProviderStatusMessage(apiErr.Status)
 		if msg == "" {
-			return err
+			return NewErrorInfo(ErrUnknown, err.Error()).WithHTTPStatus(apiErr.Status)
 		}
+		code := ErrUnknown
+		switch {
+		case apiErr.Status == 429:
+			code = ErrProviderRateLimit
+		case apiErr.Status >= 500:
+			code = ErrProviderServerError
+		case apiErr.Status == 401 || apiErr.Status == 403:
+			code = ErrProviderAuth
+		}
+		ei := NewErrorInfo(code, msg).WithHTTPStatus(apiErr.Status)
 		if reason := requestErrorReason(apiErr); reason != "" {
-			return fmt.Errorf("%s\n%s", msg, reason)
+			ei = ei.WithDetail(reason)
 		}
-		return errors.New(msg)
+		return ei
 	}
+
+	// Auth errors.
 	var authErr *provider.AuthError
 	if errors.As(err, &authErr) {
 		msg := i18n.M.ProviderErrAuth
 		if authErr.HasKey {
 			msg = i18n.M.ProviderErrAuthRejected
 		}
+		detail := ""
 		if authErr.KeyEnv != "" {
 			if authErr.KeySource != "" {
-				return fmt.Errorf("%s (%s from %s)", msg, authErr.KeyEnv, authErr.KeySource)
+				detail = fmt.Sprintf("%s from %s", authErr.KeyEnv, authErr.KeySource)
+			} else {
+				detail = authErr.KeyEnv
 			}
-			return fmt.Errorf("%s (%s)", msg, authErr.KeyEnv)
 		}
-		return errors.New(msg)
+		return NewErrorInfo(ErrProviderAuth, msg).
+			WithHTTPStatus(authErr.Status).
+			WithDetail(detail)
 	}
-	return err
+
+	// Unknown — wrap in ErrorInfo so frontends always have a Code.
+	return NewErrorInfo(ErrUnknown, err.Error())
 }
 
 // requestErrorReason returns the provider's verbatim reason for request-shaped

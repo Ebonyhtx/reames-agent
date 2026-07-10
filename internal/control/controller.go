@@ -599,7 +599,7 @@ func (c *Controller) runGuarded(body func(ctx context.Context) error) {
 				c.cancel = nil
 				c.canceling = false
 				c.mu.Unlock()
-				c.sink.Emit(event.Event{Kind: event.TurnDone, Err: fmt.Errorf("internal error: %v", r)})
+				c.sink.Emit(event.Event{Kind: event.TurnDone, Err: NewErrorInfo(ErrUnknown, fmt.Sprintf("internal error: %v", r))})
 			}
 		}()
 		err := body(ctx)
