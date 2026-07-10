@@ -91,6 +91,7 @@ console.log("\ntool card error details");
   });
 
   eq(document.querySelectorAll(".code-block").length, 0, "duplicate error output is not rendered as a code block");
+  eq(document.querySelector(".tool__head")?.id, "tool-error-complete-step-error", "error tool exposes a stable automation id");
   ok(document.querySelector(".tool__err-summary")?.textContent?.includes("verification command has no matching successful receipt"), "compact error summary is visible");
   ok(!document.querySelector(".tool__err-details"), "full error details are hidden by default");
   ok(!document.body.textContent?.includes("unique-command-tail"), "long receipt list is not visible before expansion");

@@ -388,6 +388,7 @@ export function ApprovalModal({
   return (
     <div ref={shelfRef}>
       <PromptShelf
+        automationId="tool-approval-dialog"
         className="prompt-shelf--compact prompt-shelf--tool-approval"
         barRef={cardRef}
         titleId="tool-approval-title"
@@ -413,16 +414,16 @@ export function ApprovalModal({
               hasFreshSessionGrant ? (
                 <>
                   <PromptAction keyLabel="2" label={t("approval.allowSandboxEscapeSession")} onClick={() => answerWithExit(() => onAnswer(true, true, false))} selected={selectedIndex === 1} />
-                  <PromptAction keyLabel="3" label={t("approval.deny")} onClick={() => answerWithExit(() => onAnswer(false, false, false))} selected={selectedIndex === 2} />
+                  <PromptAction automationId="tool-approval-deny" keyLabel="3" label={t("approval.deny")} onClick={() => answerWithExit(() => onAnswer(false, false, false))} selected={selectedIndex === 2} />
                 </>
               ) : (
-                <PromptAction keyLabel="2" label={t("approval.deny")} onClick={() => answerWithExit(() => onAnswer(false, false, false))} selected={selectedIndex === 1} />
+                <PromptAction automationId="tool-approval-deny" keyLabel="2" label={t("approval.deny")} onClick={() => answerWithExit(() => onAnswer(false, false, false))} selected={selectedIndex === 1} />
               )
             ) : (
               <>
                 <PromptAction keyLabel="2" label={t("approval.allowRuleSession")} onClick={() => answerWithExit(() => onAnswer(true, true, false))} selected={selectedIndex === 1} />
                 <PromptAction keyLabel="3" label={t("approval.allowRulePersistent")} onClick={() => answerWithExit(() => onAnswer(true, true, true))} selected={selectedIndex === 2} />
-                <PromptAction keyLabel="4" label={t("approval.deny")} onClick={() => answerWithExit(() => onAnswer(false, false, false))} selected={selectedIndex === 3} />
+                <PromptAction automationId="tool-approval-deny" keyLabel="4" label={t("approval.deny")} onClick={() => answerWithExit(() => onAnswer(false, false, false))} selected={selectedIndex === 3} />
               </>
             )}
           </>

@@ -131,6 +131,24 @@ console.log("\napproval modal file references");
 
 {
   const dom = installDom("en-US");
+  mockApp({});
+  const { root } = await renderApproval({
+    approval: {
+      id: "write-approval",
+      tool: "write_file",
+      subject: "write native-denied.txt",
+    },
+  });
+  ok(Boolean(document.getElementById("tool-approval-dialog")), "tool approval exposes a stable dialog automation id");
+  ok(Boolean(document.getElementById("tool-approval-deny")), "tool approval exposes a stable deny automation id");
+  await act(async () => {
+    root.unmount();
+  });
+  dom.window.close();
+}
+
+{
+  const dom = installDom("en-US");
   mockApp({
     ListDir: async () => [{ name: "src", isDir: true }, { name: "README.md", isDir: false }],
     SearchFileRefs: async () => [],

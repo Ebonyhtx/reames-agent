@@ -27,15 +27,32 @@ function apply(events: WireEvent[]) {
 console.log("\nuse controller failure display");
 
 {
+  const retrying = apply([
+    { kind: "turn_started" },
+    { kind: "retrying", retryAttempt: 1, retryMax: 10 },
+    { kind: "phase", text: "waiting for provider" },
+    { kind: "notice", level: "info", text: "background status" },
+  ]);
+  eq(retrying.retry?.attempt, 1, "retry status survives non-output phase and notice events");
+  const recovered = reducer(retrying, { type: "event", e: { kind: "text", text: "recovered" } });
+  eq(recovered.retry, undefined, "provider output clears retry status");
+}
+
+{
   const sent = reducer(initialState, { type: "user", text: "hello", seq: 0 });
   const failedBeforeStream = reducer(sent, {
     type: "event",
-    e: { kind: "turn_done", err: "provider auth failed: set DEEPSEEK_API_KEY and retry" },
+    e: {
+      kind: "turn_done",
+      err: "provider auth failed: set DEEPSEEK_API_KEY and retry",
+      error: { code: "provider_auth", category: "auth", message: "Authentication failed.", retryable: false, httpStatus: 401 },
+    },
   });
   const user = failedBeforeStream.items.find((item) => item.kind === "user");
   const notice = failedBeforeStream.items.find((item) => item.kind === "notice");
   eq(user?.kind === "user" && user.text, "hello", "turn_done error flushes the optimistic user message");
   eq(notice?.kind === "notice" && notice.level, "warn", "turn_done error renders a warning notice");
+  eq(notice?.kind === "notice" && notice.code, "provider_auth", "turn_done notice keeps the structured error code");
   ok(notice?.kind === "notice" && notice.text.includes("DEEPSEEK_API_KEY"), "turn_done error keeps the actionable provider hint");
   eq(failedBeforeStream.running, false, "turn_done error clears running state before stream starts");
   eq(failedBeforeStream.pendingPrompt, false, "turn_done error clears pendingPrompt");
@@ -47,13 +64,18 @@ console.log("\nuse controller failure display");
     { kind: "turn_started" },
     { kind: "reasoning", reasoning: "thinking" },
     { kind: "message", text: "partial answer" },
-    { kind: "turn_done", err: "openai-compatible provider returned HTTP 429: rate limited; wait and retry" },
+    {
+      kind: "turn_done",
+      err: "openai-compatible provider returned HTTP 429: rate limited; wait and retry",
+      error: { code: "provider_rate_limit", category: "retryable", message: "Rate limit reached.", retryable: true, httpStatus: 429 },
+    },
   ]);
   const assistant = state.items.find((item) => item.kind === "assistant");
   const notice = state.items.find((item) => item.kind === "notice" && item.text.includes("HTTP 429"));
   eq(assistant?.kind === "assistant" && assistant.text, "partial answer", "provider failure preserves partial assistant context");
   eq(assistant?.kind === "assistant" && assistant.streaming, false, "provider failure finalizes the assistant stream");
   eq(notice?.kind === "notice" && notice.level, "warn", "provider failure shows a warning notice");
+  eq(notice?.kind === "notice" && notice.code, "provider_rate_limit", "provider failure exposes the structured rate-limit code");
   eq(state.running, false, "provider failure clears running state");
   eq(state.turnActive, false, "provider failure clears active turn state");
   eq(state.cancellable, false, "provider failure clears stop state");

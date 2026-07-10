@@ -2324,7 +2324,7 @@ export function Composer({
       )}
       {runActivity && (
         <div className="composer-toolbar composer-toolbar--status-only">
-          <div className="composer-runstatus" role="status" aria-live="polite">
+          <div id="composer-runstatus" className="composer-runstatus" role="status" aria-live="polite">
             <span className="composer-runstatus__dot" />
             <span className="composer-runstatus__text">{runActivity}</span>
             <Tooltip label={t("composer.stop")}>

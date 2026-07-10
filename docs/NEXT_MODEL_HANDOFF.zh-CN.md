@@ -2,7 +2,7 @@
 
 日期：2026-07-11
 仓库：`F:\reames-agent`
-工作分支：`agent/full-delivery-program`
+工作分支：`main`
 
 本页只记录当前接手边界。代码、`git status`、`docs/PROJECT.md`、`docs/DEVELOPMENT_PLAN.md` 和最新远端 CI 结果优先级更高。
 
@@ -28,7 +28,7 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 ## 当前项目状态
 
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 有历史远端证据。
-- M1 进行中：真实 Provider、原生新建/发送/停止、文件审批/落盘/回退、重启恢复已有证据；仍缺原生 Wails 失败提示与恢复 smoke。
+- M1 已关闭：真实 Provider、原生新建/发送/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时的原生提示和恢复均有分层证据。
 - M2 进行中：入口依赖棘轮已建立；本批让结构化 `ErrorInfo` 穿过共享 wire，但 command DTO 和前端 category 路由未完成。
 - M6 进行中：Gateway service、headless smoke 和 feedback 本地闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
@@ -36,49 +36,36 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 ## 最近批次
 
-外部 Agent 的 23 个提交已完成真实性验收。详细保留、撤回和测试证据见：
+本批关闭 M1 最后的原生失败恢复缺口，详见 `docs/audits/2026-07-11-windows-native-failure-recovery.md`：
 
-```text
-docs/audits/2026-07-11-external-agent-batch-acceptance.md
-```
-
-本批关键结果：
-
-- 撤回伪前端/Bot/Evidence/cache 测试、未接入的飞书 HMAC、半成品 plugin 安全字段、重复浅层脚本和冲突 NOTICE。
-- 修复 GoalState v1 丢 Todo、未来版本绕过、非原子生产写入。
-- 让 ErrorInfo 进入 event wire，保留旧 `err`；修复 `generate`/`author` 被误分类的宽泛字符串匹配。
-- 补强 Provider harness 请求记录/上限/脚本验证；Provider 真实验证不再保存错误正文。
-- 修复 upstream `--deep` 的直接执行崩溃与 base/head 获取，加入真实本地 Git diff 测试和 issue draft 路径清洗。
-- 更新威胁模型、项目事实、路线图和 CI Python 合同。
+- loopback OpenAI fixture 按 turn 脚本化 401、429、流截断、`write_file` tool call 和 `bash` tool call，同时继续承担成功 turn。
+- Desktop warning 使用结构化 `ErrorInfo.code` 暴露稳定 alert AutomationId；approval 和失败 tool card 增加稳定 UIA 标识。
+- 修复 retry 状态被后台 `phase/notice` 立即清除的问题；原生 UIA 实际观察到 `retrying (1/10)…`。
+- production Wails 在同一会话完成五类失败、每类后续成功 turn、长命令 Stop 和重启恢复；19 次 Provider 请求，边界变化与错误为空。
 
 ## 已通过验证
 
 ```text
 go build ./...
 go vet ./...
-go test ./internal/... -count=1 -timeout 300s
-go test -race（本批并发/取消/请求记录子集）
-desktop/go test . -count=1 -timeout 300s
+go test ./internal/... -count=1 -timeout 10m
+desktop/go test ./... -count=1 -timeout 10m
 desktop/frontend/corepack pnpm test:all
 desktop/frontend/corepack pnpm build
-文档、public readiness、deploy、release 合同
-installer/artifact/native smoke 合同
-upstream/provider verifier/issue draft Python 测试
-upstream issue Node 测试与真实远端扫描
-6 目标 CGO_ENABLED=0 交叉编译
-scripts/verify-baseline.ps1 -SkipFrontendHint（含 headless Gateway smoke）
+python -m unittest scripts.test_smoke_desktop_interaction scripts.test_smoke_desktop_native -v
+go test ./internal/tool -run TestBuiltinToolContractDocumentation -v -count=1
+python scripts/smoke_desktop_interaction.py --exe desktop/build/bin/reames-agent-desktop.exe --artifact desktop/build/bin/reames-agent-desktop.exe --out artifacts/desktop-windows-interaction-smoke-local.json --timeout-seconds 45
 ```
 
-真实远端 upstream 扫描结果为 `changed_count=9`；报告写入临时目录后已清理，没有接受或修改 lock。前端 build 仍有既有大 chunk 警告，属于 M3 性能债务。
+最终本地 Wails 证据对应 SHA-256 `9011DD5E634F601D275BE893B743335A234116F420AD4B29D8305B2832814D1F`。前端 build 仍有既有大 chunk 警告，属于 M3 性能债务。本批 push 前远端状态仍是 `f0cd4a5` 的普通 CI 8/8 与 CodeQL 3/3 通过；新提交必须重新观察。
 
 ## 尚未关闭
 
-1. 用 loopback 失败脚本驱动安装后的 Windows Wails，验证 401/429/断流/权限拒绝/工具超时的可见提示、重试和运行态恢复。
-2. 完成 ErrorInfo 前端 category 路由，并继续按 submit/cancel/approval/session/status 收缩 control DTO。
-3. 在干净 Linux/云节点验证 CLI、Gateway、feedback、日志、备份与升级回滚。
-4. 使用真实飞书/Lark 凭据完成文本、审批、取消和恢复回环。
-5. 设计并实现 plugin 权限 manifest、内容完整性和安装预览；当前没有签名/权限 enforcement。
-6. 生产发布签名、notarization、provenance 和 updater 信任链保持外部阻塞。
+1. 完成 ErrorInfo 前端 category 路由，并继续按 submit/cancel/approval/session/status 收缩 control DTO。
+2. 在干净 Linux/云节点验证 CLI、Gateway、feedback、日志、备份与升级回滚。
+3. 使用真实飞书/Lark 凭据完成文本、审批、取消和恢复回环。
+4. 设计并实现 plugin 权限 manifest、内容完整性和安装预览；当前没有签名/权限 enforcement。
+5. 生产发布签名、notarization、provenance 和 updater 信任链保持 external-blocked。
 
 ## 提交与推送
 

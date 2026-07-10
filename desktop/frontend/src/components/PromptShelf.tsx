@@ -13,6 +13,7 @@ export function PromptShelf({
   quickActions,
   headerActions,
   barRef,
+  automationId,
   role = "dialog",
 }: {
   className?: string;
@@ -27,11 +28,13 @@ export function PromptShelf({
   quickActions?: ReactNode;
   headerActions?: ReactNode;
   barRef?: RefObject<HTMLDivElement | null>;
+  automationId?: string;
   role?: "dialog" | "region";
 }) {
   return (
     <div className={["prompt-shelf", className ?? ""].filter(Boolean).join(" ")} aria-live="polite">
       <div
+        id={automationId}
         ref={barRef}
         className={["prompt-shelf__card", cardClassName ?? ""].filter(Boolean).join(" ")}
         role={role}
@@ -92,6 +95,7 @@ export function PromptAction({
   description,
   onClick,
   ariaLabel,
+  automationId,
   primary = false,
   selected = false,
   quiet = false,
@@ -102,6 +106,7 @@ export function PromptAction({
   description?: ReactNode;
   onClick: () => void;
   ariaLabel?: string;
+  automationId?: string;
   primary?: boolean;
   selected?: boolean;
   quiet?: boolean;
@@ -110,6 +115,7 @@ export function PromptAction({
   const hasCopy = description != null || (label != null && label !== "");
   return (
     <button
+      id={automationId}
       type="button"
       className={[
         "prompt-action",

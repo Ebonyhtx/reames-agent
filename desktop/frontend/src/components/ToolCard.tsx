@@ -162,6 +162,7 @@ export const ToolCard = memo(function ToolCard({ item, subcalls, tabId, displayN
   return (
     <div className={`tool${quiet ? " tool--quiet" : ""}${isSubagent ? " tool--subagent" : ""}${open && hasBody ? " tool--open" : ""}`} data-entrance={item.id}>
       <button
+        id={item.status === "error" ? `tool-error-${item.id}` : `tool-card-${item.id}`}
         type="button"
         className="tool__head"
         data-running={item.status === "running" ? "" : undefined}

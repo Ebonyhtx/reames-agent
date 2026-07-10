@@ -32,7 +32,7 @@ except ModuleNotFoundError:  # direct ``python scripts/...`` execution
     import smoke_desktop_native as native  # type: ignore[no-redef]
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MIN_TIMEOUT_SECONDS = 10
 MAX_TIMEOUT_SECONDS = 180
 WORKSPACE_TITLE = "Native UI Workspace"
@@ -43,11 +43,48 @@ ONBOARDING_AUTOMATION_ID = "onboarding-key"
 LOOPBACK_PROVIDER_NAME = "native-smoke"
 LOOPBACK_MODEL = "native-smoke-model"
 LOOPBACK_RESPONSE = "Native Desktop interaction smoke response"
+LOOPBACK_API_KEY_ENV = "REAMES_NATIVE_SMOKE_API_KEY"
+LOOPBACK_API_KEY = "invalid-local-fixture-key"
 LONG_RUNNING_COMMAND = 'python -c "import time; time.sleep(30)"'
+INVALID_KEY_PROMPT = "Native failure fixture: invalid API key"
+RATE_LIMIT_PROMPT = "Native failure fixture: rate limit then recover"
+STREAM_INTERRUPTION_PROMPT = "Native failure fixture: interrupt the response stream"
+PERMISSION_DENIAL_PROMPT = "Native failure fixture: request a denied file write"
+TOOL_TIMEOUT_PROMPT = "Native failure fixture: run a command that times out"
+STREAM_PARTIAL_RESPONSE = "Native partial response before disconnect"
+STREAM_RECOVERY_MARKER = "previous assistant response was interrupted"
+PERMISSION_DENIAL_RESPONSE = "Native permission denial handled without writing the file"
+TOOL_TIMEOUT_RESPONSE = "Native tool timeout handled after the command was stopped"
+DENIED_RELATIVE_PATH = "native-denied.txt"
+PERMISSION_TOOL_CALL_ID = "native-denied-call"
+TIMEOUT_TOOL_CALL_ID = "native-timeout-call"
+TOOL_APPROVAL_AUTOMATION_ID = "tool-approval-dialog"
+TOOL_DENY_AUTOMATION_ID = "tool-approval-deny"
+RETRY_STATUS_PREFIX = "retrying ("
+
+FAILURE_SCENARIOS = (
+    "invalid_key",
+    "rate_limit",
+    "stream_interruption",
+    "permission_denial",
+    "tool_timeout",
+)
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass
+class FailureScenarioResult:
+    provider_requests: int = 0
+    signal_visible: bool = False
+    idle_recovered: bool = False
+    followup_succeeded: bool = False
+
+
+def new_failure_scenarios() -> dict[str, FailureScenarioResult]:
+    return {name: FailureScenarioResult() for name in FAILURE_SCENARIOS}
 
 
 @dataclass
@@ -77,6 +114,13 @@ class InteractionSmokeResult:
     provider_requests: int = 0
     provider_received_marker: bool = False
     assistant_response_persisted: bool = False
+    failure_scenarios: dict[str, FailureScenarioResult] = field(
+        default_factory=new_failure_scenarios
+    )
+    stream_partial_persisted: bool = False
+    permission_denied: bool = False
+    permission_write_blocked: bool = False
+    tool_timeout_error_visible: bool = False
     stop_visible: bool = False
     stop_invoked: bool = False
     stop_completed: bool = False
@@ -129,29 +173,168 @@ default_model = "{LOOPBACK_PROVIDER_NAME}/{LOOPBACK_MODEL}"
 name = "{LOOPBACK_PROVIDER_NAME}"
 kind = "openai"
 base_url = "{base_url}"
+api_key_env = "{LOOPBACK_API_KEY_ENV}"
 models = ["{LOOPBACK_MODEL}"]
 default = "{LOOPBACK_MODEL}"
 no_proxy = true
+
+[tools]
+bash_timeout_seconds = 1
+
+[permissions]
+mode = "ask"
+allow = ["Bash(python -c:*)"]
 
 [desktop]
 close_behavior = "quit"
 check_updates = false
 onboarding_dismissed = true
 language = "en"
+default_tool_approval_mode = "ask"
 provider_access = ["{LOOPBACK_PROVIDER_NAME}"]
 '''
 
 
+def latest_user_text(payload: dict[str, object]) -> str:
+    messages = payload.get("messages")
+    if not isinstance(messages, list):
+        return ""
+    for message in reversed(messages):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = message.get("content")
+        return content if isinstance(content, str) else json.dumps(content)
+    return ""
+
+
+def last_message_role(payload: dict[str, object]) -> str:
+    messages = payload.get("messages")
+    if not isinstance(messages, list):
+        return ""
+    for message in reversed(messages):
+        if isinstance(message, dict) and isinstance(message.get("role"), str):
+            return str(message["role"])
+    return ""
+
+
+def request_scenario(payload: dict[str, object]) -> str:
+    prompt = latest_user_text(payload)
+    if STREAM_RECOVERY_MARKER in prompt.lower():
+        return "stream_interruption"
+    scenarios = {
+        INVALID_KEY_PROMPT: "invalid_key",
+        RATE_LIMIT_PROMPT: "rate_limit",
+        STREAM_INTERRUPTION_PROMPT: "stream_interruption",
+        PERMISSION_DENIAL_PROMPT: "permission_denial",
+        TOOL_TIMEOUT_PROMPT: "tool_timeout",
+    }
+    return next((name for marker, name in scenarios.items() if marker in prompt), "success")
+
+
+def success_response(payload: dict[str, object]) -> str:
+    prompt = latest_user_text(payload).strip()
+    return f"{LOOPBACK_RESPONSE}: {prompt}" if prompt else LOOPBACK_RESPONSE
+
+
+def sse_text_response(text: str) -> bytes:
+    chunks = [
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant", "content": text},
+                    "finish_reason": None,
+                }
+            ]
+        },
+        {
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 8,
+                "completion_tokens": 5,
+                "total_tokens": 13,
+            },
+        },
+    ]
+    stream = "".join(
+        f"data: {json.dumps(chunk, separators=(',', ':'))}\n\n" for chunk in chunks
+    ) + "data: [DONE]\n\n"
+    return stream.encode("utf-8")
+
+
+def sse_tool_call_response(call_id: str, name: str, arguments: dict[str, str]) -> bytes:
+    chunks = [
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": call_id,
+                                "type": "function",
+                                "function": {
+                                    "name": name,
+                                    "arguments": json.dumps(arguments, separators=(",", ":")),
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": None,
+                }
+            ]
+        },
+        {
+            "choices": [
+                {"index": 0, "delta": {}, "finish_reason": "tool_calls"}
+            ]
+        },
+    ]
+    stream = "".join(
+        f"data: {json.dumps(chunk, separators=(',', ':'))}\n\n" for chunk in chunks
+    ) + "data: [DONE]\n\n"
+    return stream.encode("utf-8")
+
+
 @contextmanager
 def local_openai_server() -> Iterator[tuple[str, list[dict[str, object]]]]:
-    """Serve one deterministic, keyless OpenAI-compatible loopback endpoint."""
+    """Serve deterministic success and failure turns on localhost only."""
 
     requests: list[dict[str, object]] = []
+    request_lock = threading.Lock()
+    rate_limit_attempts = 0
 
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
+        def send_body(
+            self,
+            status: int,
+            body: bytes,
+            content_type: str,
+            headers: dict[str, str] | None = None,
+        ) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            for key, value in (headers or {}).items():
+                self.send_header(key, value)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def send_sse(self, body: bytes) -> None:
+            self.send_body(
+                200,
+                body,
+                "text/event-stream",
+                {"Cache-Control": "no-cache"},
+            )
+
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
+            nonlocal rate_limit_attempts
             if self.path != "/v1/chat/completions":
                 self.send_error(404)
                 return
@@ -164,48 +347,94 @@ def local_openai_server() -> Iterator[tuple[str, list[dict[str, object]]]]:
                     raise ValueError("request body is not an object")
             except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
                 body = json.dumps({"error": {"message": str(exc)}}).encode("utf-8")
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.send_header("Connection", "close")
-                self.end_headers()
-                self.wfile.write(body)
+                self.send_body(400, body, "application/json")
                 return
 
-            requests.append(payload)
-            chunks = [
-                {
+            with request_lock:
+                requests.append(payload)
+            scenario = request_scenario(payload)
+
+            if scenario == "invalid_key":
+                body = json.dumps(
+                    {"error": {"message": "Incorrect API key", "code": "invalid_api_key"}}
+                ).encode("utf-8")
+                self.send_body(401, body, "application/json")
+                return
+
+            if scenario == "rate_limit":
+                with request_lock:
+                    rate_limit_attempts += 1
+                    attempt = rate_limit_attempts
+                if attempt == 1:
+                    body = json.dumps(
+                        {"error": {"message": "Rate limit reached", "type": "rate_limit_error"}}
+                    ).encode("utf-8")
+                    self.send_body(
+                        429,
+                        body,
+                        "application/json",
+                        {"Retry-After": "8"},
+                    )
+                    return
+                self.send_sse(sse_text_response(success_response(payload)))
+                return
+
+            if scenario == "stream_interruption":
+                partial = {
                     "choices": [
                         {
                             "index": 0,
-                            "delta": {"role": "assistant", "content": LOOPBACK_RESPONSE},
+                            "delta": {
+                                "role": "assistant",
+                                "content": STREAM_PARTIAL_RESPONSE,
+                            },
                             "finish_reason": None,
                         }
                     ]
-                },
-                {
-                    "choices": [
-                        {"index": 0, "delta": {}, "finish_reason": "stop"}
-                    ],
-                    "usage": {
-                        "prompt_tokens": 8,
-                        "completion_tokens": 5,
-                        "total_tokens": 13,
-                    },
-                },
-            ]
-            stream = "".join(
-                f"data: {json.dumps(chunk, separators=(',', ':'))}\n\n"
-                for chunk in chunks
-            ) + "data: [DONE]\n\n"
-            body = stream.encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Connection", "close")
-            self.end_headers()
-            self.wfile.write(body)
+                }
+                body = (
+                    f"data: {json.dumps(partial, separators=(',', ':'))}\n\n"
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(body)
+                self.wfile.flush()
+                self.close_connection = True
+                return
+
+            if scenario == "permission_denial":
+                if last_message_role(payload) == "tool":
+                    self.send_sse(sse_text_response(PERMISSION_DENIAL_RESPONSE))
+                else:
+                    self.send_sse(
+                        sse_tool_call_response(
+                            PERMISSION_TOOL_CALL_ID,
+                            "write_file",
+                            {
+                                "path": DENIED_RELATIVE_PATH,
+                                "content": "this fixture must never be written\n",
+                            },
+                        )
+                    )
+                return
+
+            if scenario == "tool_timeout":
+                if last_message_role(payload) == "tool":
+                    self.send_sse(sse_text_response(TOOL_TIMEOUT_RESPONSE))
+                else:
+                    self.send_sse(
+                        sse_tool_call_response(
+                            TIMEOUT_TOOL_CALL_ID,
+                            "bash",
+                            {"command": LONG_RUNNING_COMMAND},
+                        )
+                    )
+                return
+
+            self.send_sse(sse_text_response(success_response(payload)))
 
         def log_message(self, _format: str, *_args: object) -> None:
             return
@@ -347,6 +576,7 @@ def wait_until(
 def launch_desktop(exe: Path, home: Path) -> subprocess.Popen:
     env = os.environ.copy()
     env["REAMES_AGENT_HOME"] = str(home)
+    env[LOOPBACK_API_KEY_ENV] = LOOPBACK_API_KEY
     env.pop("REAMES_AGENT_STATE_HOME", None)
     env.pop("REAMES_AGENT_CACHE_HOME", None)
     env.pop("REAMES_AGENT_DEV", None)
@@ -365,6 +595,127 @@ def _fail(result: InteractionSmokeResult, kind: str, message: str) -> None:
         result.failure_kind = kind
     result.outcome = "failed"
     result.errors.append(message)
+
+
+def submit_prompt(uia: object, prompt: str, timeout_seconds: float) -> None:
+    uia.type_text(prompt, automation_id=COMPOSER_AUTOMATION_ID)
+    uia.wait_enabled(
+        automation_id=SEND_AUTOMATION_ID,
+        timeout_seconds=timeout_seconds,
+    )
+    uia.press_enter(
+        automation_id=COMPOSER_AUTOMATION_ID,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def verify_idle_and_followup(
+    uia: object,
+    home: Path,
+    scenario: str,
+    timeout_seconds: float,
+) -> tuple[bool, bool]:
+    uia.wait_absent(
+        automation_id=STOP_AUTOMATION_ID,
+        timeout_seconds=timeout_seconds,
+    )
+    followup = f"Native recovery check {scenario} {uuid.uuid4().hex[:8]}"
+    uia.type_text(followup, automation_id=COMPOSER_AUTOMATION_ID)
+    uia.wait_enabled(
+        automation_id=SEND_AUTOMATION_ID,
+        timeout_seconds=timeout_seconds,
+    )
+    idle_recovered = True
+    uia.press_enter(
+        automation_id=COMPOSER_AUTOMATION_ID,
+        timeout_seconds=timeout_seconds,
+    )
+    expected = f"{LOOPBACK_RESPONSE}: {followup}"
+    wait_until(
+        lambda: durable_session_has_message(
+            (active_tab(home) or {}).get("sessionPath"), "assistant", expected
+        ),
+        timeout_seconds,
+        f"{scenario} recovery turn was not persisted",
+    )
+    wait_until(
+        lambda: uia.has(name=expected),
+        timeout_seconds,
+        f"{scenario} recovery response was not visible",
+    )
+    uia.wait_absent(
+        automation_id=STOP_AUTOMATION_ID,
+        timeout_seconds=timeout_seconds,
+    )
+    return idle_recovered, True
+
+
+def wait_for_retry_signal(uia: object, timeout_seconds: float) -> None:
+    observed: dict[tuple[str, str], tuple[int, bool]] = {}
+    deadline = time.monotonic() + min(timeout_seconds, 12.0)
+    while time.monotonic() < deadline:
+        elements = uia.refresh()
+        for item in elements:
+            identity = (item.automation_id, item.name)
+            if (
+                item.automation_id
+                in {
+                    STOP_AUTOMATION_ID,
+                    "composer-runstatus",
+                }
+                or "retry" in item.name.lower()
+            ):
+                observed[identity] = (item.control_type, item.enabled)
+        if any(item.name.lower().startswith(RETRY_STATUS_PREFIX) for item in elements):
+            return
+        time.sleep(0.1)
+    raise TimeoutError(
+        "429 retry status was not visible; observed retry controls: "
+        + json.dumps(
+            [
+                {
+                    "automation_id": automation_id,
+                    "name": name,
+                    "control_type": meta[0],
+                    "enabled": meta[1],
+                }
+                for (automation_id, name), meta in observed.items()
+            ],
+            ensure_ascii=False,
+        )
+    )
+
+
+def wait_for_error_notice(
+    uia: object, error_code: str, timeout_seconds: float
+) -> None:
+    expected = f"notice-{error_code}"
+    observed: dict[tuple[str, str], tuple[int, bool]] = {}
+    deadline = time.monotonic() + min(timeout_seconds, 12.0)
+    while time.monotonic() < deadline:
+        elements = uia.refresh()
+        for item in elements:
+            identity = (item.automation_id, item.name)
+            if item.automation_id.startswith("notice-") or "interrupt" in item.name.lower():
+                observed[identity] = (item.control_type, item.enabled)
+        if any(item.automation_id == expected for item in elements):
+            return
+        time.sleep(0.1)
+    raise TimeoutError(
+        f"{error_code} warning was not visible; observed notices: "
+        + json.dumps(
+            [
+                {
+                    "automation_id": automation_id,
+                    "name": name,
+                    "control_type": meta[0],
+                    "enabled": meta[1],
+                }
+                for (automation_id, name), meta in observed.items()
+            ],
+            ensure_ascii=False,
+        )
+    )
 
 
 def run_smoke(
@@ -479,13 +830,8 @@ def run_smoke(
             tab = active_tab(home) or {}
             result.initial_session_path = str(tab.get("sessionPath") or "")
 
-            uia.type_text(result.marker, automation_id=COMPOSER_AUTOMATION_ID)
-            uia.wait_enabled(
-                name=SEND_NAMES,
-                automation_id=SEND_AUTOMATION_ID,
-                timeout_seconds=timeout_seconds,
-            )
-            uia.press_enter(automation_id=COMPOSER_AUTOMATION_ID)
+            baseline_response = f"{LOOPBACK_RESPONSE}: {result.marker}"
+            submit_prompt(uia, result.marker, timeout_seconds)
             result.message_sent = True
             wait_until(
                 lambda: durable_session_has_message(
@@ -501,7 +847,7 @@ def run_smoke(
                 lambda: durable_session_has_message(
                     (active_tab(home) or {}).get("sessionPath"),
                     "assistant",
-                    LOOPBACK_RESPONSE,
+                    baseline_response,
                 ),
                 timeout_seconds,
                 "loopback assistant response was not persisted to the active session",
@@ -514,6 +860,130 @@ def run_smoke(
                 "loopback provider did not receive the submitted marker",
             )
             result.provider_received_marker = True
+
+            submit_prompt(uia, INVALID_KEY_PROMPT, timeout_seconds)
+            wait_until(
+                lambda: uia.has(automation_id="notice-provider_auth"),
+                timeout_seconds,
+                "invalid API key warning was not visible",
+            )
+            invalid_key = result.failure_scenarios["invalid_key"]
+            invalid_key.signal_visible = True
+            (
+                invalid_key.idle_recovered,
+                invalid_key.followup_succeeded,
+            ) = verify_idle_and_followup(
+                uia, home, "invalid_key", timeout_seconds
+            )
+
+            submit_prompt(uia, RATE_LIMIT_PROMPT, timeout_seconds)
+            wait_for_retry_signal(uia, timeout_seconds)
+            rate_limit = result.failure_scenarios["rate_limit"]
+            rate_limit.signal_visible = True
+            rate_limit_response = f"{LOOPBACK_RESPONSE}: {RATE_LIMIT_PROMPT}"
+            wait_until(
+                lambda: durable_session_has_message(
+                    (active_tab(home) or {}).get("sessionPath"),
+                    "assistant",
+                    rate_limit_response,
+                ),
+                timeout_seconds,
+                "429 retry did not recover to a persisted response",
+            )
+            wait_until(
+                lambda: uia.has(name=rate_limit_response),
+                timeout_seconds,
+                "429 retry recovery response was not visible",
+            )
+            (
+                rate_limit.idle_recovered,
+                rate_limit.followup_succeeded,
+            ) = verify_idle_and_followup(
+                uia, home, "rate_limit", timeout_seconds
+            )
+
+            submit_prompt(uia, STREAM_INTERRUPTION_PROMPT, timeout_seconds)
+            wait_for_error_notice(uia, "stream_interrupted", timeout_seconds)
+            stream_interruption = result.failure_scenarios["stream_interruption"]
+            stream_interruption.signal_visible = True
+            wait_until(
+                lambda: durable_session_has_message(
+                    (active_tab(home) or {}).get("sessionPath"),
+                    "assistant",
+                    STREAM_PARTIAL_RESPONSE,
+                ),
+                timeout_seconds,
+                "partial stream output was not persisted after disconnect",
+            )
+            result.stream_partial_persisted = True
+            (
+                stream_interruption.idle_recovered,
+                stream_interruption.followup_succeeded,
+            ) = verify_idle_and_followup(
+                uia, home, "stream_interruption", timeout_seconds
+            )
+
+            submit_prompt(uia, PERMISSION_DENIAL_PROMPT, timeout_seconds)
+            wait_until(
+                lambda: uia.has(automation_id=TOOL_APPROVAL_AUTOMATION_ID),
+                timeout_seconds,
+                "write_file approval dialog was not visible",
+            )
+            permission_denial = result.failure_scenarios["permission_denial"]
+            permission_denial.signal_visible = True
+            uia.invoke(
+                automation_id=TOOL_DENY_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
+            result.permission_denied = True
+            uia.wait_absent(
+                automation_id=TOOL_APPROVAL_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
+            wait_until(
+                lambda: uia.has(
+                    automation_id=f"tool-error-{PERMISSION_TOOL_CALL_ID}"
+                ),
+                timeout_seconds,
+                "denied write_file tool error was not visible",
+            )
+            wait_until(
+                lambda: uia.has(name=PERMISSION_DENIAL_RESPONSE),
+                timeout_seconds,
+                "permission denial explanation was not visible",
+            )
+            result.permission_write_blocked = not (
+                workspace / DENIED_RELATIVE_PATH
+            ).exists()
+            if not result.permission_write_blocked:
+                raise RuntimeError("denied write_file unexpectedly modified the workspace")
+            (
+                permission_denial.idle_recovered,
+                permission_denial.followup_succeeded,
+            ) = verify_idle_and_followup(
+                uia, home, "permission_denial", timeout_seconds
+            )
+
+            submit_prompt(uia, TOOL_TIMEOUT_PROMPT, timeout_seconds)
+            wait_until(
+                lambda: uia.has(automation_id=f"tool-error-{TIMEOUT_TOOL_CALL_ID}"),
+                timeout_seconds,
+                "timed-out bash tool error was not visible",
+            )
+            tool_timeout = result.failure_scenarios["tool_timeout"]
+            tool_timeout.signal_visible = True
+            result.tool_timeout_error_visible = True
+            wait_until(
+                lambda: uia.has(name=TOOL_TIMEOUT_RESPONSE),
+                timeout_seconds,
+                "tool timeout explanation was not visible",
+            )
+            (
+                tool_timeout.idle_recovered,
+                tool_timeout.followup_succeeded,
+            ) = verify_idle_and_followup(
+                uia, home, "tool_timeout", timeout_seconds
+            )
 
             uia.type_text(
                 f"!{LONG_RUNNING_COMMAND}", automation_id=COMPOSER_AUTOMATION_ID
@@ -557,7 +1027,7 @@ def run_smoke(
             hwnd = wait_for_window(proc.pid, timeout_seconds)
             uia = WindowsUIAutomation(hwnd)
             wait_until(
-                lambda: uia.has(name=result.marker) and uia.has(name=LOOPBACK_RESPONSE),
+                lambda: uia.has(name=result.marker) and uia.has(name=baseline_response),
                 timeout_seconds,
                 "restarted Desktop did not restore the user and assistant messages",
             )
@@ -587,6 +1057,23 @@ def run_smoke(
                 all_cleanups_ok = all_cleanups_ok and ok
 
         result.provider_requests = len(provider_requests)
+        for scenario, evidence in result.failure_scenarios.items():
+            evidence.provider_requests = sum(
+                1
+                for payload in provider_requests
+                if request_scenario(payload) == scenario
+            )
+            if (
+                evidence.provider_requests == 0
+                or not evidence.signal_visible
+                or not evidence.idle_recovered
+                or not evidence.followup_succeeded
+            ):
+                _fail(
+                    result,
+                    "interaction-failure",
+                    f"failure scenario did not close its native contract: {scenario}",
+                )
         result.cleanup_ok = all_cleanups_ok
         if not result.cleanup_ok:
             _fail(result, "cleanup-failure", "one or more Desktop processes did not stop")

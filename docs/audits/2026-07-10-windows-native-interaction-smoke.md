@@ -42,7 +42,7 @@ SetIsBorderRequired failed: 不支持此接口 (0x80004002)
 
 ### 确定性 provider
 
-`scripts/smoke_desktop_interaction.py` 在测试进程内启动仅监听随机 `127.0.0.1` 端口的最小 OpenAI 兼容 SSE 服务。隔离配置显式使用该 provider，且没有 `api_key_env` 或真实 API key。
+`scripts/smoke_desktop_interaction.py` 在测试进程内启动仅监听随机 `127.0.0.1` 端口的最小 OpenAI 兼容 SSE 服务。最初基线无需 key；当前 schema v2 使用只存在于隔离 Desktop 子进程中的合成 `REAMES_NATIVE_SMOKE_API_KEY`，从而同时验证服务端拒绝非空无效 key，仍不读取或保存真实 API key。
 
 这项设计证明前端输入经过 Wails bridge、tab 绑定 controller 和 OpenAI 兼容 provider 后返回 assistant response；它不会把“远端鉴权失败产生的事件”冒充成功消息。真实公网 Provider 与使用量证据仍由 `audits/2026-07-09-real-provider.md` 单独承担。
 
@@ -93,11 +93,10 @@ GitHub Windows runner 可能由 Git Bash 而不是 PowerShell 承担 controller 
 
 ## 证据边界
 
-本审计证明 Windows 原生安装后二进制的无密钥启动、项目会话、输入、provider round-trip、持久化、停止和重启恢复路径。它不声称：
+本审计的 schema v1 证据证明 Windows 原生安装后二进制的无密钥启动、项目会话、输入、provider round-trip、持久化、停止和重启恢复路径。schema v2 已继续覆盖原生失败矩阵，见 `2026-07-11-windows-native-failure-recovery.md`。两份证据均不声称：
 
 - loopback 固定响应等于真实公网模型质量或鉴权可用性；
 - Windows 证据自动代表 Linux/macOS 的 UI 交互；
-- 已覆盖原生审批弹窗、断流、429、无效密钥等所有失败点击；
 - 候选包已经签名、发布或具备稳定版承诺。
 
-下一批应继续按提交、取消、审批、会话和状态查询纵向收缩 `control` 边界，并扩展原生失败场景，而不是重新依赖易失败的截图索引动作。
+后续应继续按提交、取消、审批、会话和状态查询纵向收缩 `control` 边界，并让 schema v2 失败矩阵持续留在 Desktop candidate workflow 中，而不是重新依赖易失败的截图索引动作。

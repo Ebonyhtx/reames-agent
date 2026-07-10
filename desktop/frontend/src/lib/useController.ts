@@ -53,7 +53,7 @@ export type Item =
   | { kind: "user"; id: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number }
   | { kind: "assistant"; id: string; text: string; reasoning: string; streaming: boolean; reasoningComplete?: boolean; memoryCitations?: MemoryCitation[] }
   | { kind: "phase"; id: string; text: string }
-  | { kind: "notice"; id: string; level: "info" | "warn"; text: string }
+  | { kind: "notice"; id: string; level: "info" | "warn"; text: string; code?: string }
   | {
       kind: "compaction";
       id: string;
@@ -591,7 +591,21 @@ function applyEvent(s: State, e: WireEvent): State {
   if (e.kind === "retrying") {
     return { ...s, retry: { attempt: e.retryAttempt ?? 0, max: e.retryMax ?? 0 } };
   }
-  if (s.retry) s = { ...s, retry: undefined };
+  if (
+    s.retry &&
+    (
+      e.kind === "reasoning" ||
+      e.kind === "text" ||
+      e.kind === "message" ||
+      e.kind === "tool_dispatch" ||
+      e.kind === "tool_result" ||
+      e.kind === "approval_request" ||
+      e.kind === "ask_request" ||
+      e.kind === "turn_done"
+    )
+  ) {
+    s = { ...s, retry: undefined };
+  }
   switch (e.kind) {
     case "turn_started": {
       // Flush the user message and pre-create an empty assistant bubble
@@ -768,7 +782,7 @@ function applyEvent(s: State, e: WireEvent): State {
         if (it.kind === "tool" && it.status === "running") return { ...it, status: "stopped" as const };
         return it;
       });
-      let items: Item[] = e.err ? [...finalized, { kind: "notice", id: `e${s.seq}`, level: "warn", text: e.err }] : finalized;
+      let items: Item[] = e.err ? [...finalized, { kind: "notice", id: `e${s.seq}`, level: "warn", text: e.err, code: e.error?.code }] : finalized;
       // Plan approval can arrive before turn_done on some Wails event paths.
       // Keep that gate visible instead of clearing the only UI that can answer it.
       const keepPlanApproval = s.approval?.tool === "exit_plan_mode";
