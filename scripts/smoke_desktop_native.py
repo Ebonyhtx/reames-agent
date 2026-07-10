@@ -14,6 +14,7 @@ import ctypes
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -30,6 +31,7 @@ MIN_OBSERVATION_SECONDS = 10
 MAX_OBSERVATION_SECONDS = 300
 POLL_INTERVAL_SECONDS = 0.5
 REQUIRED_CONSECUTIVE_RESPONSES = 3
+TEMP_CLEANUP_RETRY_SECONDS = (0.1, 0.2, 0.4, 0.8, 1.0, 1.5, 2.0, 2.0)
 SMOKE_CONFIG = """\
 [desktop]
 close_behavior = "quit"
@@ -219,8 +221,30 @@ def managed_smoke_home(
     if keep_temp:
         yield Path(tempfile.mkdtemp(prefix="home-", dir=parent))
         return
-    with tempfile.TemporaryDirectory(prefix="home-", dir=parent) as raw:
-        yield Path(raw)
+    home = Path(tempfile.mkdtemp(prefix="home-", dir=parent))
+    try:
+        yield home
+    finally:
+        remove_tree_with_retries(home)
+
+
+def remove_tree_with_retries(
+    path: Path,
+    retry_seconds: tuple[float, ...] = TEMP_CLEANUP_RETRY_SECONDS,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> None:
+    """Remove a fixture after short-lived WebView2 child locks drain."""
+
+    for delay in (*retry_seconds, None):
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            if delay is None:
+                raise
+            sleeper(delay)
 
 
 def _windows_for_pid(pid: int) -> list[int]:

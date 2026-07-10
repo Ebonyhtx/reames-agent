@@ -111,8 +111,11 @@ def managed_fixture_root(
     if keep_temp:
         yield Path(tempfile.mkdtemp(prefix="fixture-", dir=parent))
         return
-    with tempfile.TemporaryDirectory(prefix="fixture-", dir=parent) as raw:
-        yield Path(raw)
+    root = Path(tempfile.mkdtemp(prefix="fixture-", dir=parent))
+    try:
+        yield root
+    finally:
+        native.remove_tree_with_retries(root)
 
 
 def interaction_smoke_config(base_url: str) -> str:

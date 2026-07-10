@@ -87,6 +87,8 @@ python scripts/smoke_desktop_interaction.py `
 - 手动 `Desktop candidate` workflow 在 Windows 静默安装真实 NSIS 后，先运行窗口消息泵 smoke，再对安装后二进制运行完整 UIA 交互 smoke，最后静默卸载。
 - `desktop-windows-interaction-smoke.json` 随候选 artifact 上传；release contract 要求 workflow 不能移除该步骤或证据路径。
 
+WebView2 子进程在 GitHub Windows runner 上可能比 Wails 主进程晚几百毫秒释放 user-data 数据库。夹具删除因此使用总计约 8 秒的有界重试；锁释放后仍删除整个隔离 home，锁持续不释放则保持失败。该重试只处理 teardown 的短暂文件占用，不放宽 `cleanup_ok`、`temp_cleaned` 或默认状态围栏。
+
 ## 证据边界
 
 本审计证明 Windows 原生安装后二进制的无密钥启动、项目会话、输入、provider round-trip、持久化、停止和重启恢复路径。它不声称：

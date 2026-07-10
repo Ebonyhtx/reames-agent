@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import smoke_desktop_native as smoke
 
@@ -89,6 +90,24 @@ class DesktopNativeSmokeTests(unittest.TestCase):
             with smoke.managed_smoke_home(True, Path(parent)) as home:
                 saved = home
             self.assertTrue(saved.exists())
+
+    def test_remove_tree_retries_transient_webview_lock(self) -> None:
+        path = Path("locked-webview-fixture")
+        attempts: list[Path] = []
+        sleeps: list[float] = []
+
+        def remove(candidate: Path) -> None:
+            attempts.append(candidate)
+            if len(attempts) < 3:
+                raise PermissionError("WebView2 still closing")
+
+        with mock.patch.object(smoke.shutil, "rmtree", side_effect=remove):
+            smoke.remove_tree_with_retries(
+                path, retry_seconds=(0.1, 0.2), sleeper=sleeps.append
+            )
+
+        self.assertEqual(attempts, [path, path, path])
+        self.assertEqual(sleeps, [0.1, 0.2])
 
     def test_prepare_smoke_home_disables_updates_and_quits_on_close(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
