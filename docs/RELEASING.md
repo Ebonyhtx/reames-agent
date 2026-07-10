@@ -51,7 +51,9 @@ python scripts/check_desktop_artifacts.py path/to/downloaded-artifact.zip
 python scripts/check_desktop_artifacts.py path/to/expanded-artifacts/
 ```
 
-这个检查会验证 Windows portable zip 包含 `reames-agent-update-helper.exe`，Linux tar/deb 和 macOS zip/dmg 的关键文件结构也符合 `scripts/desktop-build.sh` 的约定。它只证明候选包结构正确；仍需在对应系统上做安装/启动冒烟。
+这个离线检查会验证 Windows portable zip 包含 `reames-agent-update-helper.exe`，Linux tar/deb 和 macOS zip/dmg 的关键文件结构也符合 `scripts/desktop-build.sh` 的约定。
+
+同一 workflow 随后在原生 runner 上执行安装/启动 smoke：Linux 安装实际 `.deb` 并在 Xvfb 中要求可见窗口；macOS 挂载实际 `.dmg`、复制和校验 universal `.app` 后启动；Windows 验证窗口消息泵。`scripts/smoke_desktop_candidate.py` 与 `scripts/smoke_desktop_native.py` 都使用隔离 home、检查默认状态边界，并将 `desktop-*-native-smoke.json` 随候选 artifact 上传。这些证据仍不等于签名发布、真实模型或用户点击 E2E。
 
 ## 版本号来源
 

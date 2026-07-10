@@ -41,6 +41,11 @@ def check_desktop_candidate_workflow(failures: list[str]) -> None:
     require("actions/upload-artifact@v4" in workflow, "desktop candidate must upload artifacts, not publish releases.", failures)
     require("retention-days: 14" in workflow, "desktop candidate artifacts should have short retention.", failures)
     require("GITHUB_PATH" in workflow and "makensis -VERSION" in workflow, "desktop candidate must put NSIS/makensis on PATH before Wails packaging.", failures)
+    require("sudo dpkg -i" in workflow and "xvfb-run" in workflow and "xdotool" in workflow, "desktop candidate must install and window-smoke the Linux deb.", failures)
+    require("hdiutil attach" in workflow and "codesign --verify" in workflow and "lipo -verify_arch" in workflow, "desktop candidate must mount and smoke the universal macOS dmg.", failures)
+    require("scripts/smoke_desktop_candidate.py" in workflow, "desktop candidate must run the Linux/macOS native smoke script.", failures)
+    require("scripts/smoke_desktop_native.py" in workflow, "desktop candidate must run the Windows native smoke script.", failures)
+    require("artifacts/desktop-*-native-smoke.json" in workflow, "desktop candidate must upload native smoke evidence.", failures)
     forbidden = [
         "gh release create",
         "GITHUB_TOKEN:",
@@ -73,6 +78,8 @@ def check_release_docs(failures: list[str]) -> None:
         "SHA256SUMS",
         "Desktop candidate",
         "scripts/check_desktop_artifacts.py",
+        "scripts/smoke_desktop_candidate.py",
+        "scripts/smoke_desktop_native.py",
         "Sigstore/cosign",
         "OIDC keyless signing",
         "fail closed",

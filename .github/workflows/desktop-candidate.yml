@@ -55,7 +55,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev dbus-x11 xvfb xdotool
 
       - name: Install macOS packaging dependencies
         if: runner.os == 'macOS'
@@ -83,10 +83,61 @@ jobs:
         shell: bash
         run: bash scripts/desktop-build.sh "${{ matrix.platform }}" "v0.1.0-candidate.${{ github.run_number }}" candidate
 
+      - name: Smoke installed Linux candidate
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo dpkg -i "dist/Reames Agent-linux-amd64.deb"
+          test -x /usr/bin/reames-agent-desktop
+          test -f /usr/share/applications/reames-agent.desktop
+          test -f /usr/share/pixmaps/reames-agent-desktop.png
+          mkdir -p artifacts
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" \
+            python3 scripts/smoke_desktop_candidate.py \
+              --platform linux \
+              --artifact "dist/Reames Agent-linux-amd64.deb" \
+              --exe /usr/bin/reames-agent-desktop \
+              --out artifacts/desktop-linux-native-smoke.json
+
+      - name: Smoke installed macOS candidate
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="dist/Reames Agent-darwin-universal.dmg"
+          mount_dir="$RUNNER_TEMP/reames-agent-dmg"
+          install_root="$RUNNER_TEMP/Applications"
+          app="$install_root/Reames Agent.app"
+          mkdir -p "$mount_dir" "$install_root" artifacts
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_dir"
+          trap 'hdiutil detach "$mount_dir" || true' EXIT
+          ditto "$mount_dir/Reames Agent.app" "$app"
+          hdiutil detach "$mount_dir"
+          trap - EXIT
+          codesign --verify --deep --strict "$app"
+          lipo -verify_arch x86_64 arm64 "$app/Contents/MacOS/reames-agent-desktop"
+          python3 scripts/smoke_desktop_candidate.py \
+            --platform darwin \
+            --artifact "$dmg" \
+            --exe "$app/Contents/MacOS/reames-agent-desktop" \
+            --out artifacts/desktop-darwin-native-smoke.json
+
+      - name: Smoke Windows candidate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          python scripts/smoke_desktop_native.py `
+            --exe desktop/build/bin/reames-agent-desktop.exe `
+            --out artifacts/desktop-windows-native-smoke.json
+
       - name: Upload desktop candidate artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: reames-agent-desktop-candidate-${{ matrix.artifact }}-${{ github.sha }}
-          path: dist/*
+          path: |
+            dist/*
+            artifacts/desktop-*-native-smoke.json
           if-no-files-found: error
           retention-days: 14
