@@ -31,7 +31,19 @@ MIN_OBSERVATION_SECONDS = 10
 MAX_OBSERVATION_SECONDS = 300
 POLL_INTERVAL_SECONDS = 0.5
 REQUIRED_CONSECUTIVE_RESPONSES = 3
-TEMP_CLEANUP_RETRY_SECONDS = (0.1, 0.2, 0.4, 0.8, 1.0, 1.5, 2.0, 2.0)
+TEMP_CLEANUP_RETRY_SECONDS = (
+    0.1,
+    0.2,
+    0.4,
+    0.8,
+    1.0,
+    1.5,
+    2.0,
+    2.0,
+    3.0,
+    4.0,
+    5.0,
+)
 SMOKE_CONFIG = """\
 [desktop]
 close_behavior = "quit"

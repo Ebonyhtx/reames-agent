@@ -109,6 +109,11 @@ class DesktopNativeSmokeTests(unittest.TestCase):
         self.assertEqual(attempts, [path, path, path])
         self.assertEqual(sleeps, [0.1, 0.2])
 
+    def test_default_cleanup_retry_budget_covers_slow_windows_runners(self) -> None:
+        budget = sum(smoke.TEMP_CLEANUP_RETRY_SECONDS)
+        self.assertGreaterEqual(budget, 20.0)
+        self.assertLessEqual(budget, 30.0)
+
     def test_prepare_smoke_home_disables_updates_and_quits_on_close(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             home = Path(raw) / "home"

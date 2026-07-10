@@ -87,7 +87,7 @@ python scripts/smoke_desktop_interaction.py `
 - 手动 `Desktop candidate` workflow 在 Windows 静默安装真实 NSIS 后，先运行窗口消息泵 smoke，再对安装后二进制运行完整 UIA 交互 smoke，最后静默卸载。
 - `desktop-windows-interaction-smoke.json` 随候选 artifact 上传；release contract 要求 workflow 不能移除该步骤或证据路径。
 
-WebView2 子进程在 GitHub Windows runner 上可能比 Wails 主进程晚几百毫秒释放 user-data 数据库。夹具删除因此使用总计约 8 秒的有界重试；锁释放后仍删除整个隔离 home，锁持续不释放则保持失败。该重试只处理 teardown 的短暂文件占用，不放宽 `cleanup_ok`、`temp_cleaned` 或默认状态围栏。
+WebView2 子进程在 GitHub Windows runner 上可能比 Wails 主进程更晚释放 user-data 数据库；真实安装后交互曾在功能链路全部通过后仍超过 8 秒才释放锁。夹具删除因此使用总计 20 秒的有界退避重试；锁释放后仍删除整个隔离 home，锁持续不释放则保持失败。该重试只处理 teardown 的短暂文件占用，不放宽 `cleanup_ok`、`temp_cleaned` 或默认状态围栏。
 
 GitHub Windows runner 可能由 Git Bash 而不是 PowerShell 承担 controller shell。交互 smoke 因此不使用 PowerShell 专有的 `Start-Sleep`；长命令由 runner 已必备的 Python 执行，在两种 shell 中保持同一取消语义。非交互 runner 也不依赖前台桌面的全局 `SendInput`：`ValuePattern` 与焦点窗口消息是主路径，`SendInput` 仅保留为显式回退。
 
