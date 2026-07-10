@@ -110,12 +110,32 @@ def check_release_docs(failures: list[str]) -> None:
     require("## v0.1.0" in changelog, "CHANGELOG.md must retain the initial release section.", failures)
 
 
+def check_harness_not_in_production(failures: list[str]) -> None:
+    """Ensure the test harness is never imported by non-test production code."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "grep", "-n", "provider/harness", "--", "*.go"],
+            cwd=ROOT, text=True, capture_output=True,
+        )
+        for line in result.stdout.splitlines():
+            file_path = line.split(":", 1)[0]
+            if not file_path.endswith("_test.go") and "harness" not in file_path:
+                failures.append(
+                    f"{file_path} imports provider/harness in non-test code; "
+                    f"harness is for testing only"
+                )
+    except (OSError, subprocess.CalledProcessError):
+        pass
+
+
 def main() -> int:
     failures: list[str] = []
     check_release_candidate_workflow(failures)
     check_desktop_candidate_workflow(failures)
     check_goreleaser_contract(failures)
     check_release_docs(failures)
+    check_harness_not_in_production(failures)
 
     if failures:
         print("Release contract check failed:")
