@@ -124,6 +124,7 @@ jobs:
         run: |
           python -m unittest scripts.test_smoke_desktop_candidate -v
           python -m unittest scripts.test_smoke_desktop_native -v
+          python -m unittest scripts.test_smoke_desktop_interaction -v
 
   public-readiness:
     name: Public readiness and docs

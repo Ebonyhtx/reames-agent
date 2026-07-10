@@ -8710,7 +8710,19 @@ func (a *App) ConfirmAction(req NativeConfirmRequest) (bool, error) {
 }
 
 func (a *App) NeedsOnboarding() bool {
-	return !config.CredentialStored(onboardingKeyEnv)
+	if config.CredentialStored(onboardingKeyEnv) {
+		return false
+	}
+	cfg := config.LoadForEditWithoutCredentials(config.UserConfigPath())
+	return !cfg.DesktopOnboardingDismissed()
+}
+
+// DismissOnboarding persists the user's explicit choice to continue without a
+// provider key. It never writes a credential or changes the active controller.
+func (a *App) DismissOnboarding() error {
+	return a.applyConfigOnly(func(c *config.Config) error {
+		return c.SetDesktopOnboardingDismissed(true)
+	})
 }
 
 // ConnectKey validates apiKey against the balance endpoint, persists it to

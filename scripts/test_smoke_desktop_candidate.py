@@ -64,6 +64,9 @@ class CandidateSmokeTests(unittest.TestCase):
             config = (home / "config.toml").read_text(encoding="utf-8")
             self.assertIn('close_behavior = "quit"', config)
             self.assertIn("check_updates = false", config)
+            self.assertIn("onboarding_dismissed = true", config)
+            self.assertIn('language = "en"', config)
+            self.assertNotIn("key", config.lower())
 
     def test_snapshot_reports_metadata_only(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

@@ -178,3 +178,23 @@ func TestConfigureDesktopHomeWithoutFlagPreservesEnvironment(t *testing.T) {
 		t.Fatalf("REAMES_AGENT_HOME = %q, want preserved %q", env, want)
 	}
 }
+
+func TestWindowsWebviewUserDataPathUsesIsolatedHome(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "isolated")
+	t.Setenv("REAMES_AGENT_HOME", home)
+	if got, want := windowsWebviewUserDataPath(""), filepath.Join(home, "webview2"); got != want {
+		t.Fatalf("windowsWebviewUserDataPath() = %q, want %q", got, want)
+	}
+
+	override := filepath.Join(t.TempDir(), "override")
+	if got, want := windowsWebviewUserDataPath(override), filepath.Join(override, "webview2"); got != want {
+		t.Fatalf("windowsWebviewUserDataPath(override) = %q, want %q", got, want)
+	}
+}
+
+func TestWindowsWebviewUserDataPathKeepsDefaultForNormalLaunch(t *testing.T) {
+	t.Setenv("REAMES_AGENT_HOME", "")
+	if got := windowsWebviewUserDataPath(""); got != "" {
+		t.Fatalf("windowsWebviewUserDataPath() = %q, want Wails default", got)
+	}
+}

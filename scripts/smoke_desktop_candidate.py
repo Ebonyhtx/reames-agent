@@ -33,6 +33,8 @@ SMOKE_CONFIG = """\
 [desktop]
 close_behavior = "quit"
 check_updates = false
+onboarding_dismissed = true
+language = "en"
 """
 
 

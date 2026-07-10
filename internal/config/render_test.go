@@ -998,6 +998,24 @@ func TestRenderTOMLPreservesDesktopDisplayMode(t *testing.T) {
 	}
 }
 
+func TestRenderTOMLPreservesDesktopOnboardingDismissal(t *testing.T) {
+	c := Default()
+	if err := c.SetDesktopOnboardingDismissed(true); err != nil {
+		t.Fatalf("SetDesktopOnboardingDismissed: %v", err)
+	}
+	rendered := RenderTOMLForScope(c, RenderScopeUser)
+	if !strings.Contains(rendered, "onboarding_dismissed = true") {
+		t.Fatalf("rendered user config missing onboarding dismissal:\n%s", rendered)
+	}
+	var got Config
+	if _, err := toml.Decode(rendered, &got); err != nil {
+		t.Fatalf("rendered TOML does not parse: %v\n---\n%s", err, rendered)
+	}
+	if !got.DesktopOnboardingDismissed() {
+		t.Fatal("onboarding dismissal was lost after TOML round trip")
+	}
+}
+
 func TestRenderTOMLDefaultStepsCommentedOut(t *testing.T) {
 	isolateUserConfigHome(t)
 	out := RenderTOML(Default())

@@ -320,6 +320,13 @@ func (c *Config) SetDesktopCheckUpdates(enabled bool) error {
 	return nil
 }
 
+// SetDesktopOnboardingDismissed persists the user's explicit choice to
+// continue without configuring a provider during first-run onboarding.
+func (c *Config) SetDesktopOnboardingDismissed(dismissed bool) error {
+	c.Desktop.OnboardingDismissed = dismissed
+	return nil
+}
+
 // SetColdResumePrune toggles auto-elision of stale tool results on cold resume.
 func (c *Config) SetColdResumePrune(enabled bool) error {
 	c.Agent.ColdResumePrune = &enabled

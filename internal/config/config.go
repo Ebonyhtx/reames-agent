@@ -88,6 +88,7 @@ type UIConfig struct {
 // language, terminal colours, or provider-visible prompt/request data.
 type DesktopConfig struct {
 	Language                string   `toml:"language"`                   // auto|en|zh; empty/auto = browser/OS auto-detect
+	OnboardingDismissed     bool     `toml:"onboarding_dismissed"`       // true after the user explicitly skips the first-run provider prompt
 	LayoutStyle             string   `toml:"layout_style"`               // classic|workbench|creation; desktop layout style
 	Theme                   string   `toml:"theme"`                      // auto|dark|light; empty resolves to auto
 	ThemeStyle              string   `toml:"theme_style"`                // graphite|aurora|slate|carbon|nocturne|amber and legacy aliases
@@ -213,6 +214,13 @@ func (c *Config) DesktopLanguage() string {
 	default:
 		return ""
 	}
+}
+
+// DesktopOnboardingDismissed reports whether the user explicitly chose to
+// continue without configuring the default provider. It is separate from
+// credential presence so a skip never creates or implies a provider secret.
+func (c *Config) DesktopOnboardingDismissed() bool {
+	return c != nil && c.Desktop.OnboardingDismissed
 }
 
 // DesktopTheme normalizes desktop.theme. New desktop users default to the OS

@@ -45,3 +45,7 @@ SetIsBorderRequired failed: 不支持此接口 (0x80004002)
 后续尝试确认 Windows UI Automation 可以读取当前 WebView 的完整可访问性树，包括新建会话、项目、输入框、发送、模式和模型控件；但截图仍因上述接口失败，索引主动作又要求有效截图缓存，UIA `set_value` 还会因缺少 CacheRequest 属性失败。因此该通道目前只提供被动文本证据，不能可靠执行点击。
 
 本次没有执行新建会话、选择工作区、发送、停止或恢复点击流，不能将 M1 原生点击项标记为完成。后续需使用支持 frameless WebView2 的捕获/点击通道、独立 UIA InvokePattern 驱动，或记录 commit、步骤、结果和不含密钥截图的人工验证。
+
+## 后续解阻
+
+同日后续批次已实现独立、截图无关的 Windows UIA 驱动，并用隔离 home 与 keyless loopback provider 完成新建项目会话、输入/发送、Stop、canonical 事件账本持久化和重启恢复。本页保留首次尝试的事实与边界；后续成功证据见 [Windows 原生 Desktop 交互 smoke 审计](2026-07-10-windows-native-interaction-smoke.md)。

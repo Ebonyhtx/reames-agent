@@ -71,7 +71,8 @@
 | [M1 重连与恢复审计](audits/2026-07-09-m1-reconnect-recovery.md) | pending approval replay、Desktop tab 事件恢复和 pending snapshot diff 诊断证据 |
 | [M1 失败场景合同审计](audits/2026-07-09-m1-failure-contracts.md) | provider 鉴权失败、审批超时阻塞写入和运行态复位证据 |
 | [Desktop M1 frontend failure display audit](audits/2026-07-09-desktop-m1-failure-display.md) | 前端 provider 失败、工具超时和审批拒绝的可见 warn/error 与停止态复位证据 |
-| [Windows native Desktop smoke attempt](audits/2026-07-10-windows-native-smoke-attempt.md) | 当前源码 Windows Wails 构建、启动响应与 frameless 捕获阻断证据 |
+| [Windows native Desktop smoke attempt](audits/2026-07-10-windows-native-smoke-attempt.md) | Windows Wails 启动响应与 frameless 截图通道的初始阻断证据 |
+| [Windows native Desktop interaction smoke](audits/2026-07-10-windows-native-interaction-smoke.md) | 截图无关 UIA 的新建、工作区、发送、停止、事件账本和重启恢复证据 |
 | [Control transport boundary ratchet audit](audits/2026-07-10-control-boundary-ratchet.md) | Desktop/CLI/Serve/Bot/ACP 对 runtime 内部直连的精确依赖基线和 CI 收缩棘轮 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |
 | [Gateway service lifecycle contract audit](audits/2026-07-09-gateway-service-lifecycle.md) | 跨平台后台 gateway 生命周期命令、CLI/Gateway 隔离和防 `serve`/`bot start` 回归证据 |

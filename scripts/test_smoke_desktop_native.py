@@ -97,7 +97,32 @@ class DesktopNativeSmokeTests(unittest.TestCase):
             config = (home / "config.toml").read_text(encoding="utf-8")
             self.assertIn('close_behavior = "quit"', config)
             self.assertIn("check_updates = false", config)
+            self.assertIn("onboarding_dismissed = true", config)
+            self.assertIn('language = "en"', config)
             self.assertNotIn("key", config.lower())
+
+    def test_boundary_roots_include_default_webview2_store(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            old_appdata = smoke.os.environ.get("APPDATA")
+            old_localappdata = smoke.os.environ.get("LOCALAPPDATA")
+            try:
+                smoke.os.environ["APPDATA"] = str(Path(raw) / "roaming")
+                smoke.os.environ["LOCALAPPDATA"] = str(Path(raw) / "local")
+                roots = smoke.default_boundary_roots(
+                    Path(raw) / "isolated", "candidate.exe"
+                )
+            finally:
+                if old_appdata is None:
+                    smoke.os.environ.pop("APPDATA", None)
+                else:
+                    smoke.os.environ["APPDATA"] = old_appdata
+                if old_localappdata is None:
+                    smoke.os.environ.pop("LOCALAPPDATA", None)
+                else:
+                    smoke.os.environ["LOCALAPPDATA"] = old_localappdata
+            self.assertEqual(
+                roots["WEBVIEW2"], (Path(raw) / "roaming" / "candidate.exe").resolve()
+            )
 
     def test_snapshot_reports_only_metadata_changes(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

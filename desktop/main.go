@@ -23,6 +23,7 @@ import (
 
 	// Blank imports wire compile-time built-ins into their registries, exactly as
 	// cmd/reamesAgent does — boot.Build resolves providers/tools from these registries.
+	"reames-agent/internal/config"
 	_ "reames-agent/internal/provider/anthropic"
 	_ "reames-agent/internal/provider/openai"
 	"reames-agent/internal/sandbox"
@@ -145,6 +146,25 @@ func windowsWebview2GPUDisabled() bool {
 	return channel == "canary"
 }
 
+// windowsWebviewUserDataPath keeps WebView2 localStorage, cookies, and caches
+// inside an explicitly isolated Reames Agent home. Normal launches retain the
+// Wails default path so existing users do not lose their browser-backed state.
+func windowsWebviewUserDataPath(homeOverride string) string {
+	home := strings.TrimSpace(homeOverride)
+	if home == "" {
+		home = config.IsolatedHomeDir()
+	}
+	if home == "" {
+		return ""
+	}
+	if !filepath.IsAbs(home) {
+		if absolute, err := filepath.Abs(home); err == nil {
+			home = absolute
+		}
+	}
+	return filepath.Join(filepath.Clean(home), "webview2")
+}
+
 func linuxWebviewGpuPolicy(pattern string) linux.WebviewGpuPolicy {
 	matches, err := filepath.Glob(pattern)
 	if err == nil {
@@ -173,7 +193,7 @@ func main() {
 	// Parse --home before any path resolution (window state, config, migration,
 	// single-instance ID). Accepts both --home <path> and --home=<path>.
 	// Wails dev flags (e.g. -devserver) are silently passed through.
-	_, parseErr := configureDesktopHome(os.Args[1:])
+	homeOverride, parseErr := configureDesktopHome(os.Args[1:])
 	if parseErr != nil {
 		fmt.Fprintf(os.Stderr, "desktop: --home: %v\n", parseErr)
 		os.Exit(2)
@@ -243,6 +263,7 @@ func main() {
 			Theme:                windows.SystemDefault,
 			ZoomFactor:           zoomFactor,
 			WebviewGpuIsDisabled: windowsWebview2GPUDisabled(),
+			WebviewUserDataPath:  windowsWebviewUserDataPath(homeOverride),
 		},
 		Linux: &linux.Options{
 			ProgramName: "Reames Agent",

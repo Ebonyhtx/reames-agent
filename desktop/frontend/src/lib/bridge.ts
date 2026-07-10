@@ -350,6 +350,7 @@ export interface AppBindings {
   ApplyUpdate(): Promise<void>;
   OpenDownloadPage(): Promise<void>;
   NeedsOnboarding(): Promise<boolean>;
+  DismissOnboarding(): Promise<void>;
   ConnectKey(apiKey: string): Promise<string>;
   // Crash overlay "Send report" (desktop/crash_app.go): scrubs user paths, attaches
   // version/os/arch, POSTs to the collection endpoint. Only ever sent on user click.
@@ -622,7 +623,7 @@ function bridgeBreadcrumb(method: string): string {
     return `turn ${method}`;
   if (/^(SetModel|SetEffort|SetTokenMode|SetDefaultModel|SetPlannerModel|SetSubagentModel|SetSubagentEffort|SetMaxSubagentDepth)/.test(method))
     return `model ${method}`;
-  if (/^(SetDesktop|SetCloseBehavior|SetDisplayMode|SetStatusBar|SetExpandThinking|SetAutoPlan|SetDefaultToolApprovalMode|SetMemoryCompilerEnabled|SetReasoningLanguage)/.test(method))
+  if (/^(SetDesktop|SetCloseBehavior|SetDisplayMode|SetStatusBar|SetExpandThinking|SetAutoPlan|SetDefaultToolApprovalMode|SetMemoryCompilerEnabled|SetReasoningLanguage|DismissOnboarding)/.test(method))
     return `settings ${method}`;
   if (/^(SaveProvider|AddOfficialProviderAccess|AddProviderPresetAccess|ResetProviderPresetAccess|RemoveProviderAccess|DeleteProvider|SaveProviderKey|SetProviderKey|ClearProviderKey|FetchProviderModels|ConnectKey)/.test(method))
     return `provider ${method}`;
@@ -888,6 +889,7 @@ function makeMockApp(): AppBindings {
   let cancelled = false;
   let pendingAskPreview = false;
   let pendingApprovalPreview = false;
+  let onboardingDismissed = false;
   const globalWorkspaceRoot = "~/Library/Application Support/reames-agent/global-workspace";
   let cwd = freshMock ? globalWorkspaceRoot : "~/projects/joyquant-db"; // mutable so PickWorkspace is visible in dev
   let workspaces = freshMock ? [] : ["~/projects/joyquant-db", "~/projects/joyquant-sys", "~/projects/reames-agent", "~/projects/blade"];
@@ -3412,7 +3414,10 @@ function makeMockApp(): AppBindings {
     // Dev seam: drives the overlay flow in the browser until ConnectKey sets the
     // key. Matches ConnectKey on apiKeyEnv so the two stay in sync.
     async NeedsOnboarding() {
-      return !settings.providers.find((p) => p.apiKeyEnv === "DEEPSEEK_API_KEY")?.keySet;
+      return !onboardingDismissed && !settings.providers.find((p) => p.apiKeyEnv === "DEEPSEEK_API_KEY")?.keySet;
+    },
+    async DismissOnboarding() {
+      onboardingDismissed = true;
     },
     async ConnectKey(apiKey: string) {
       if (!apiKey.trim()) throw new Error("key is required");

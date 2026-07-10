@@ -9,6 +9,7 @@ export function OnboardingOverlay({ onComplete }: { onComplete: () => void }) {
   const t = useT();
   const [value, setValue] = useState("");
   const [state, setState] = useState<"idle" | "validating" | "error">("idle");
+  const [skipping, setSkipping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -40,6 +41,23 @@ export function OnboardingOverlay({ onComplete }: { onComplete: () => void }) {
     }
   }, [t, value, onComplete]);
 
+  const skip = useCallback(async () => {
+    setSkipping(true);
+    setError(null);
+    try {
+      await app.DismissOnboarding();
+      onComplete();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg || t("onboarding.error.unknown", { msg: "" }));
+      setState("error");
+    } finally {
+      setSkipping(false);
+    }
+  }, [t, onComplete]);
+
+  const busy = state === "validating" || skipping;
+
   return (
     <div className="onboarding">
       <div className="onboarding__card">
@@ -69,7 +87,7 @@ export function OnboardingOverlay({ onComplete }: { onComplete: () => void }) {
               void submit();
             }
           }}
-          disabled={state === "validating"}
+          disabled={busy}
         />
 
         {state === "error" && error && (
@@ -81,7 +99,7 @@ export function OnboardingOverlay({ onComplete }: { onComplete: () => void }) {
         <button
           className="onboarding__submit"
           onClick={() => void submit()}
-          disabled={state === "validating"}
+          disabled={busy}
         >
           {state === "validating" ? (
             <>
@@ -108,8 +126,8 @@ export function OnboardingOverlay({ onComplete }: { onComplete: () => void }) {
         <button
           type="button"
           className="onboarding__skip"
-          onClick={onComplete}
-          disabled={state === "validating"}
+          onClick={() => void skip()}
+          disabled={busy}
         >
           {t("onboarding.skip")}
         </button>

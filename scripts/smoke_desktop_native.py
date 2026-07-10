@@ -34,6 +34,8 @@ SMOKE_CONFIG = """\
 [desktop]
 close_behavior = "quit"
 check_updates = false
+onboarding_dismissed = true
+language = "en"
 """
 
 
@@ -116,12 +118,21 @@ def validate_observation_seconds(value: int) -> int:
 def list_home_files(home: Path) -> list[str]:
     """List relative state metadata without reading file contents."""
     files: list[str] = []
+    webview_files = 0
+    webview_bytes = 0
     if not home.exists():
         return files
     for path in sorted(home.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(home).as_posix()
+        if rel.startswith("webview2/"):
+            webview_files += 1
+            try:
+                webview_bytes += path.stat().st_size
+            except OSError:
+                pass
+            continue
         if path.name == ".env" or "credential" in path.name.lower():
             files.append(f"{rel} [REDACTED]")
             continue
@@ -129,6 +140,10 @@ def list_home_files(home: Path) -> list[str]:
             files.append(f"{rel} ({path.stat().st_size} bytes)")
         except OSError:
             files.append(rel)
+    if webview_files:
+        files.append(
+            f"webview2/ [{webview_files} files, {webview_bytes} bytes; contents not read]"
+        )
     return files
 
 
@@ -138,18 +153,25 @@ def prepare_smoke_home(home: Path) -> None:
     (home / "config.toml").write_text(SMOKE_CONFIG, encoding="utf-8")
 
 
-def default_boundary_roots(home: Path) -> dict[str, Path]:
+def default_boundary_roots(
+    home: Path, executable_name: str = "reames-agent-desktop.exe"
+) -> dict[str, Path]:
     """Return user roots that an isolated launch must leave unchanged."""
     roots: dict[str, Path] = {}
+    appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
     candidates = {
-        "APPDATA": os.environ.get("APPDATA", ""),
-        "LOCALAPPDATA": os.environ.get("LOCALAPPDATA", ""),
+        "APPDATA": Path(appdata) / "reames-agent" if appdata else None,
+        "LOCALAPPDATA": Path(localappdata) / "reames-agent" if localappdata else None,
+        "WEBVIEW2": Path(appdata) / executable_name
+        if appdata and executable_name
+        else None,
     }
     home_resolved = home.resolve(strict=False)
-    for label, raw in candidates.items():
-        if not raw:
+    for label, candidate in candidates.items():
+        if candidate is None:
             continue
-        root = (Path(raw) / "reames-agent").resolve(strict=False)
+        root = candidate.resolve(strict=False)
         if root == home_resolved:
             continue
         roots[label] = root
@@ -416,7 +438,7 @@ def run_smoke(
         home = managed_home
         result.home_dir = str(home)
         prepare_smoke_home(home)
-        boundary_roots = default_boundary_roots(home)
+        boundary_roots = default_boundary_roots(home, exe.name)
         boundary_before = snapshot_roots(boundary_roots)
         env = os.environ.copy()
         env["REAMES_AGENT_HOME"] = str(home)

@@ -149,6 +149,11 @@ jobs:
               --exe $exe `
               --out artifacts/desktop-windows-native-smoke.json
             if ($LASTEXITCODE -ne 0) { throw "installed Desktop smoke failed with exit code $LASTEXITCODE" }
+            python scripts/smoke_desktop_interaction.py `
+              --artifact $installer `
+              --exe $exe `
+              --out artifacts/desktop-windows-interaction-smoke.json
+            if ($LASTEXITCODE -ne 0) { throw "installed Desktop interaction smoke failed with exit code $LASTEXITCODE" }
           } finally {
             if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
               $uninstall = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
@@ -173,5 +178,6 @@ jobs:
           path: |
             dist/*
             artifacts/desktop-*-native-smoke.json
+            artifacts/desktop-*-interaction-smoke.json
           if-no-files-found: error
           retention-days: 14

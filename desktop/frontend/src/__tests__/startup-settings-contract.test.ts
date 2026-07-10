@@ -20,6 +20,7 @@ function ok(cond: boolean, label: string) {
 const here = dirname(fileURLToPath(import.meta.url));
 const appSource = readFileSync(resolve(here, "../App.tsx"), "utf8");
 const bridgeSource = readFileSync(resolve(here, "../lib/bridge.ts"), "utf8");
+const onboardingSource = readFileSync(resolve(here, "../components/OnboardingOverlay.tsx"), "utf8");
 
 console.log("\nstartup settings contract");
 
@@ -38,6 +39,18 @@ ok(
 ok(
   !/const\s+syncDesktopPreferences[\s\S]*?app\.Settings\(\)[\s\S]*?\};/.test(appSource),
   "startup preference sync avoids rebuilding the full Settings payload",
+);
+ok(
+  bridgeSource.includes("DismissOnboarding(): Promise<void>"),
+  "bridge exposes a persistent onboarding dismissal command",
+);
+ok(
+  onboardingSource.includes("await app.DismissOnboarding()"),
+  "skip waits for onboarding dismissal to persist before closing the overlay",
+);
+ok(
+  /await app\.DismissOnboarding\(\)[\s\S]*?onComplete\(\)[\s\S]*?catch/.test(onboardingSource),
+  "onboarding remains visible when persistence fails",
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

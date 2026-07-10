@@ -126,6 +126,9 @@ func TestDesktopPreferencesAreSeparateFromCLI(t *testing.T) {
 	if err := c.SetDesktopLanguage("en"); err != nil {
 		t.Fatalf("SetDesktopLanguage: %v", err)
 	}
+	if err := c.SetDesktopOnboardingDismissed(true); err != nil {
+		t.Fatalf("SetDesktopOnboardingDismissed: %v", err)
+	}
 	if err := c.SetDesktopAppearance("dark", "graphite"); err != nil {
 		t.Fatalf("SetDesktopAppearance: %v", err)
 	}
@@ -150,6 +153,9 @@ func TestDesktopPreferencesAreSeparateFromCLI(t *testing.T) {
 	}
 	if got := c.DesktopLanguage(); got != "en" {
 		t.Fatalf("desktop language = %q, want en", got)
+	}
+	if !c.DesktopOnboardingDismissed() {
+		t.Fatal("desktop onboarding dismissal was not retained")
 	}
 	if got := c.DesktopTheme(); got != "dark" {
 		t.Fatalf("desktop theme = %q, want dark", got)

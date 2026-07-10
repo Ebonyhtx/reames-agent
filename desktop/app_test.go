@@ -172,6 +172,27 @@ func TestNeedsOnboardingTreatsBlankSavedKeyAsMissing(t *testing.T) {
 	}
 }
 
+func TestDismissOnboardingPersistsWithoutCredential(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	app := NewApp()
+	if !app.NeedsOnboarding() {
+		t.Fatal("fresh isolated home should require onboarding")
+	}
+	if err := app.DismissOnboarding(); err != nil {
+		t.Fatalf("DismissOnboarding: %v", err)
+	}
+	if app.NeedsOnboarding() {
+		t.Fatal("dismissed onboarding should stay dismissed")
+	}
+	if config.CredentialStored(onboardingKeyEnv) {
+		t.Fatal("dismissing onboarding must not persist a provider credential")
+	}
+	loaded := config.LoadForEditWithoutCredentials(config.UserConfigPath())
+	if !loaded.DesktopOnboardingDismissed() {
+		t.Fatal("dismissed onboarding was not written to user config")
+	}
+}
+
 func providerNamesFromView(providers []ProviderView) []string {
 	out := make([]string, 0, len(providers))
 	for _, p := range providers {
