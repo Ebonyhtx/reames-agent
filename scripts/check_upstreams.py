@@ -196,7 +196,7 @@ def lock_points(lock_entry: dict[str, Any]) -> tuple[str, str]:
     return baseline, reviewed
 
 
-def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any]) -> dict[str, Any]:
+def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool = False) -> dict[str, Any]:
     branch = up["branch"]
     baseline, reviewed = lock_points(lock_entry)
     try:
@@ -221,6 +221,7 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any]) -> dict[str
             "decision": decision_for(up, False, "unknown", error),
             "error": error,
             "recommendation": "Upstream check failed; inspect network, repository, and branch configuration.",
+        "deep": None,
         }
 
     branch_ref = f"refs/heads/{branch}"
@@ -236,6 +237,9 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any]) -> dict[str
     files: list[dict[str, str]] = []
     if changed and up.get("diff", False):
         files = diff_changed_files(up["repo"], branch, reviewed, latest)
+    deep_info: dict[str, str] = {}
+    if deep and changed and up.get("diff", False):
+        deep_info = deep_diff_content(up["repo"], branch, reviewed, latest)
     areas = Counter(classify_path(f["path"]) for f in files if not f["path"].startswith("<diff unavailable"))
     risk = risk_from_areas(areas, changed)
     return {
@@ -255,6 +259,7 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any]) -> dict[str
         "risk": "unknown" if error else risk,
         "decision": decision_for(up, changed, risk, error),
         "error": error,
+        "deep": deep_info if deep else None,
         "recommendation": (
             "Upstream check failed; inspect network, repository, and branch configuration."
             if error
@@ -360,6 +365,7 @@ def main() -> int:
     parser.add_argument("--accept", action="append", default=[], metavar="ID", help="Mark one upstream revision as reviewed; repeat for multiple IDs.")
     parser.add_argument("--accept-all", action="store_true", help="Mark every successfully checked upstream revision as reviewed.")
     parser.add_argument("--update-lock", action="store_true", help=argparse.SUPPRESS)  # legacy alias for --accept-all
+    parser.add_argument("--deep", action="store_true", help="Fetch actual diff content and commit messages (slower, more network I/O).")
     args = parser.parse_args()
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8-sig"))
@@ -369,7 +375,7 @@ def main() -> int:
 
     upstreams = []
     for up in manifest["upstreams"]:
-        upstreams.append(analyze_upstream(up, lock_entries.get(up["id"], {})))
+        upstreams.append(analyze_upstream(up, lock_entries.get(up["id"], {}), deep=args.deep))
 
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     accepted_ids = set(args.accept)
@@ -418,3 +424,31 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+def deep_diff_content(repo: str, branch: str, base_sha: str, head_sha: str) -> dict[str, str]:
+    """Fetch actual diff content and commit log between two refs.
+    Returns a dict with 'commits' (one-line log) and 'diff' (unified diff, truncated to 50KB).
+    """
+    if not base_sha or not head_sha or base_sha == head_sha:
+        return {}
+    with tempfile.TemporaryDirectory(prefix="reames-upstream-deep-") as tmp:
+        work = Path(tmp)
+        run(["git", "init", "-q"], cwd=work)
+        run(["git", "remote", "add", "origin", repo], cwd=work)
+        fetch = run(["git", "fetch", "--depth=300", "origin", branch], cwd=work, check=False)
+        if fetch.returncode != 0:
+            return {"error": f"fetch failed: {fetch.stderr.strip()[:200]}"}
+        log = run(
+            ["git", "log", "--oneline", "--no-merges", f"{base_sha}..{head_sha}"],
+            cwd=work, check=False,
+        )
+        diff = run(
+            ["git", "diff", "--patch", "--stat", base_sha, head_sha],
+            cwd=work, check=False,
+        )
+        result: dict[str, str] = {}
+        if log.returncode == 0:
+            result["commits"] = log.stdout.strip()[:10000]
+        if diff.returncode == 0:
+            result["diff"] = diff.stdout.strip()[:50000]
+        return result
