@@ -40,6 +40,7 @@ class DesktopNativeSmokeTests(unittest.TestCase):
         for field in (
             "schema_version",
             "platform",
+            "artifact_sha256",
             "executable_sha256",
             "observation_seconds",
             "responding",
@@ -59,6 +60,16 @@ class DesktopNativeSmokeTests(unittest.TestCase):
                 smoke.sha256_file(path),
                 hashlib.sha256(b"desktop candidate").hexdigest().upper(),
             )
+
+    def test_missing_artifact_is_startup_failure_on_windows(self) -> None:
+        if smoke.sys.platform != "win32":
+            self.skipTest("Windows-only native smoke")
+        with tempfile.TemporaryDirectory() as raw:
+            exe = Path(raw) / "desktop.exe"
+            exe.write_bytes(b"candidate")
+            result = smoke.run_smoke(str(exe), artifact_path="missing-installer.exe")
+        self.assertEqual(result.failure_kind, "startup-failure")
+        self.assertIn("artifact not found", result.errors[0])
 
     def test_observation_duration_contract(self) -> None:
         self.assertEqual(smoke.validate_observation_seconds(12), 12)

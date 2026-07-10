@@ -45,6 +45,7 @@ def check_desktop_candidate_workflow(failures: list[str]) -> None:
     require("hdiutil attach" in workflow and "codesign --verify" in workflow and "lipo " in workflow and "-verify_arch x86_64 arm64" in workflow, "desktop candidate must mount and smoke the universal macOS dmg.", failures)
     require("scripts/smoke_desktop_candidate.py" in workflow, "desktop candidate must run the Linux/macOS native smoke script.", failures)
     require("scripts/smoke_desktop_native.py" in workflow, "desktop candidate must run the Windows native smoke script.", failures)
+    require("Start-Process -FilePath $installer" in workflow and "uninstall.exe" in workflow and "InstallLocation" in workflow, "desktop candidate must install, smoke, and uninstall the Windows NSIS package.", failures)
     require("artifacts/desktop-*-native-smoke.json" in workflow, "desktop candidate must upload native smoke evidence.", failures)
     forbidden = [
         "gh release create",

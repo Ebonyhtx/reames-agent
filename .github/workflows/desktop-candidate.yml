@@ -122,14 +122,48 @@ jobs:
             --exe "$app/Contents/MacOS/reames-agent-desktop" \
             --out artifacts/desktop-darwin-native-smoke.json
 
-      - name: Smoke Windows candidate
+      - name: Smoke installed Windows candidate
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = (Resolve-Path 'dist/Reames Agent-windows-amd64-installer.exe').Path
+          $installRoot = Join-Path $env:RUNNER_TEMP 'ReamesAgentCandidateInstall'
+          $exe = Join-Path $installRoot 'reames-agent-desktop.exe'
+          $helper = Join-Path $installRoot 'reames-agent-update-helper.exe'
+          $uninstaller = Join-Path $installRoot 'uninstall.exe'
+          $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
           New-Item -ItemType Directory -Force artifacts | Out-Null
-          python scripts/smoke_desktop_native.py `
-            --exe desktop/build/bin/reames-agent-desktop.exe `
-            --out artifacts/desktop-windows-native-smoke.json
+          try {
+            $install = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+            if ($install.ExitCode -ne 0) { throw "NSIS install failed with exit code $($install.ExitCode)" }
+            foreach ($path in @($exe, $helper, $uninstaller)) {
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "installed file missing: $path" }
+            }
+            $registration = Get-ChildItem $uninstallKey | Get-ItemProperty | Where-Object {
+              $_.DisplayName -eq 'Reames Agent' -and $_.InstallLocation -eq $installRoot
+            }
+            if (-not $registration) { throw 'per-user NSIS uninstall registration is missing or points to the wrong location' }
+            python scripts/smoke_desktop_native.py `
+              --artifact $installer `
+              --exe $exe `
+              --out artifacts/desktop-windows-native-smoke.json
+            if ($LASTEXITCODE -ne 0) { throw "installed Desktop smoke failed with exit code $LASTEXITCODE" }
+          } finally {
+            if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
+              $uninstall = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
+              if ($uninstall.ExitCode -ne 0) { throw "NSIS uninstall failed with exit code $($uninstall.ExitCode)" }
+            }
+          }
+          for ($attempt = 0; $attempt -lt 20 -and (Test-Path -LiteralPath $exe); $attempt++) {
+            Start-Sleep -Milliseconds 250
+          }
+          if (Test-Path -LiteralPath $exe) { throw "uninstall left the Desktop executable behind: $exe" }
+          if (Test-Path -LiteralPath $helper) { throw "uninstall left the update helper behind: $helper" }
+          $registration = Get-ChildItem $uninstallKey | Get-ItemProperty | Where-Object {
+            $_.DisplayName -eq 'Reames Agent' -and $_.InstallLocation -eq $installRoot
+          }
+          if ($registration) { throw 'uninstall left the per-user registration behind' }
 
       - name: Upload desktop candidate artifacts
         uses: actions/upload-artifact@v4

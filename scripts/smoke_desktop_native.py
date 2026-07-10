@@ -68,6 +68,9 @@ class SmokeResult:
     finished_at: str = ""
     outcome: str = "unknown"
     failure_kind: str | None = None
+    artifact_name: str = ""
+    artifact_sha256: str = ""
+    artifact_size: int = 0
     executable_name: str = ""
     executable_sha256: str = ""
     executable_size: int = 0
@@ -361,6 +364,7 @@ def run_smoke(
     exe_path: str,
     observation_seconds: int = 12,
     keep_temp: bool = False,
+    artifact_path: str | None = None,
 ) -> SmokeResult:
     result = SmokeResult(
         platform=sys.platform,
@@ -388,9 +392,21 @@ def run_smoke(
         result.finished_at = utc_now()
         return result
 
+    artifact: Path | None = None
+    if artifact_path:
+        artifact = Path(artifact_path).resolve(strict=False)
+        result.artifact_name = artifact.name
+        if not artifact.is_file():
+            _fail(result, "startup-failure", f"artifact not found: {artifact}")
+            result.finished_at = utc_now()
+            return result
+
     try:
         result.executable_size = exe.stat().st_size
         result.executable_sha256 = sha256_file(exe)
+        if artifact is not None:
+            result.artifact_size = artifact.stat().st_size
+            result.artifact_sha256 = sha256_file(artifact)
     except OSError as exc:
         _fail(result, "startup-failure", f"inspect executable: {exc}")
         result.finished_at = utc_now()
@@ -477,6 +493,7 @@ def run_smoke(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exe", required=True, help="Path to the Desktop executable")
+    parser.add_argument("--artifact", help="Candidate package that installed the executable")
     parser.add_argument("--out", help="Write JSON evidence to this path")
     parser.add_argument(
         "--observation-seconds",
@@ -499,6 +516,7 @@ def main(argv: list[str] | None = None) -> int:
         args.exe,
         observation_seconds=args.observation_seconds,
         keep_temp=args.keep_temp,
+        artifact_path=args.artifact,
     )
     evidence = result.to_dict()
     if args.out:
