@@ -5777,8 +5777,10 @@ func TestTrashTopicWithStuckJobReturnsAfterSingleGrace(t *testing.T) {
 				disabledMCP:   map[string]ServerView{},
 			},
 		},
-		tabOrder:    []string{"stuck", "keep"},
-		activeTabID: "stuck",
+		tabOrder: []string{"stuck", "keep"},
+		// Keep the target inactive so this timing assertion measures teardown
+		// only, not construction of a replacement runtime after topic removal.
+		activeTabID: "keep",
 	}
 
 	start := time.Now()
