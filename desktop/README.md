@@ -116,9 +116,11 @@ python scripts/smoke_desktop_native.py `
 
 The smoke waits for the process's visible native window to answer bounded
 message-pump probes, verifies that the default AppData roots did not change, and
-stops the process with a bounded fallback if `WM_CLOSE` does not exit. It proves
-startup and state confinement only; it does not prove graceful shutdown or
-replace the M1 Wails click workflow. Use `--keep-temp` only for local debugging.
+seeds the isolated config with update checks disabled and close behavior set to
+`quit` before requesting `WM_CLOSE`. A bounded terminate/kill fallback is still
+available and recorded in the JSON evidence. The smoke proves startup, state
+confinement, and shutdown only; it does not replace the M1 Wails click workflow.
+Use `--keep-temp` only for local debugging.
 
 **Linux on WebKitGTK 4.1 only** (Fedora 40+, Ubuntu 24.04+, Arch — no
 `webkit2gtk-4.0` package): pass the Wails build tag so cgo links against 4.1.

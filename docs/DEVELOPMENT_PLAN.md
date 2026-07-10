@@ -78,7 +78,7 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 按以下顺序推进：
 
 1. [x] 使用真实 API Key 完成最小文本对话，记录 Provider、缓存和使用量证据（见 `audits/2026-07-09-real-provider.md`）。
-2. [ ] 在原生 Wails 中完成新建会话、选择工作区、发送和停止（已补 `EnsureBlankTab`/`OpenProjectTab`/`SubmitToTab`/`CancelTab` 绑定路径、Submit/Cancel 多工作区桥接自动化和前端 workspace loop 状态机回归，见 `audits/2026-07-09-desktop-m1-bridge.md`、`audits/2026-07-09-desktop-m1-frontend-workspace-loop.md`；2026-07-10 当前源码 Windows 构建和启动响应通过，但 frameless 窗口捕获接口返回 `0x80004002`，未形成点击证据，见 `audits/2026-07-10-windows-native-smoke-attempt.md`）。
+2. [ ] 在原生 Wails 中完成新建会话、选择工作区、发送和停止（已补 `EnsureBlankTab`/`OpenProjectTab`/`SubmitToTab`/`CancelTab` 绑定路径、Submit/Cancel 多工作区桥接自动化和前端 workspace loop 状态机回归，见 `audits/2026-07-09-desktop-m1-bridge.md`、`audits/2026-07-09-desktop-m1-frontend-workspace-loop.md`；2026-07-10 当前源码 Windows 构建、响应、状态隔离和 `WM_CLOSE` 退出通过。frameless 窗口捕获仍返回 `0x80004002`；UIA 可读取 WebView 元素树，但索引主动作依赖失败的截图缓存，尚未形成点击证据，见 `audits/2026-07-10-windows-native-smoke-attempt.md`）。
 3. [x] 执行一次需要文件写入的任务，验证审批、补丁预览、落盘和回退（自动化锁定真实 `write_file`：审批请求 diff、ToolDispatch diff、磁盘写入、RewindCode 删除，见 `audits/2026-07-09-m1-file-write-loop.md`）。
 4. [ ] 关闭并重启应用，验证会话、待处理状态和工作区恢复（已补前端重连/reload 的 pending approval replay 自动化，以及 Desktop 后端从 `desktop-tabs.json` 恢复 classic 多 tab/默认 workbench active tab、workspace、pinned session 和 history 的自动化；见 `audits/2026-07-09-m1-reconnect-recovery.md`）。
 5. [ ] 对失败场景补自动化：断流、限流、无效密钥、权限拒绝和工具超时（已补 provider 鉴权失败/429/503/流中断恢复耗尽 TurnDone、审批超时与用户拒绝阻塞写入/清 pending、真实 bash 工具超时 ToolResult + 运行态归零的 Controller 自动化，以及 Desktop 前端可见 warn/error 与停止态复位合同；见 `audits/2026-07-09-m1-failure-contracts.md`、`audits/2026-07-09-desktop-m1-failure-display.md`；仍需真实原生窗口失败 smoke）。

@@ -30,6 +30,11 @@ MIN_OBSERVATION_SECONDS = 10
 MAX_OBSERVATION_SECONDS = 300
 POLL_INTERVAL_SECONDS = 0.5
 REQUIRED_CONSECUTIVE_RESPONSES = 3
+SMOKE_CONFIG = """\
+[desktop]
+close_behavior = "quit"
+check_updates = false
+"""
 
 
 def utc_now() -> str:
@@ -122,6 +127,12 @@ def list_home_files(home: Path) -> list[str]:
         except OSError:
             files.append(rel)
     return files
+
+
+def prepare_smoke_home(home: Path) -> None:
+    """Seed deterministic Desktop behavior without credentials or user state."""
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "config.toml").write_text(SMOKE_CONFIG, encoding="utf-8")
 
 
 def default_boundary_roots(home: Path) -> dict[str, Path]:
@@ -388,6 +399,7 @@ def run_smoke(
     with managed_smoke_home(keep_temp) as managed_home:
         home = managed_home
         result.home_dir = str(home)
+        prepare_smoke_home(home)
         boundary_roots = default_boundary_roots(home)
         boundary_before = snapshot_roots(boundary_roots)
         env = os.environ.copy()

@@ -79,6 +79,15 @@ class DesktopNativeSmokeTests(unittest.TestCase):
                 saved = home
             self.assertTrue(saved.exists())
 
+    def test_prepare_smoke_home_disables_updates_and_quits_on_close(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            home = Path(raw) / "home"
+            smoke.prepare_smoke_home(home)
+            config = (home / "config.toml").read_text(encoding="utf-8")
+            self.assertIn('close_behavior = "quit"', config)
+            self.assertIn("check_updates = false", config)
+            self.assertNotIn("key", config.lower())
+
     def test_snapshot_reports_only_metadata_changes(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
