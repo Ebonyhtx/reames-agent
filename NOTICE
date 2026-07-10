@@ -1,0 +1,10 @@
+Reames Agent
+Copyright (c) 2024-2026 Reames Agent Contributors
+
+This project is licensed under the MIT License.
+See the LICENSE file for the full license text.
+
+Third-party dependencies and their licenses are listed in go.sum
+(Go module dependency graph) and package.json (frontend dependencies).
+For a machine-readable SBOM, run:
+  go version -m bin/reames-agent.exe
