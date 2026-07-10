@@ -159,6 +159,17 @@ export interface MemoryCompilerStats {
   learningCount: number;
 }
 
+export type WireErrorCategory = "auth" | "retryable" | "fatal" | "user" | "cancelled";
+
+export interface WireErrorInfo {
+  code: string;
+  category: WireErrorCategory;
+  message: string;
+  detail?: string;
+  retryable: boolean;
+  httpStatus?: number;
+}
+
 export interface WireEvent {
   kind: EventKind;
   text?: string;
@@ -173,6 +184,7 @@ export interface WireEvent {
   compaction?: WireCompaction;
   guardian?: WireGuardian;
   err?: string;
+  error?: WireErrorInfo;
   retryAttempt?: number;
   retryMax?: number;
   // Tab routing: set by the Go-side tabEventSink so multi-tab frontends

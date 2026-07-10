@@ -73,7 +73,12 @@ jobs:
         with:
           node-version: "22"
       - name: Test report and decision logic
-        run: python -m unittest scripts.test_check_upstreams -v
+        run: >-
+          python -m unittest
+          scripts.test_check_upstreams
+          scripts.test_verify_real_provider
+          scripts.test_gen_upstream_issue_drafts
+          -v
       - name: Test issue reconciliation
         run: node scripts/test_upstream_watch_issue.mjs
 

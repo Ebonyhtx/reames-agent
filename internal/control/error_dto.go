@@ -1,9 +1,10 @@
 // Package control defines transport-agnostic DTOs for errors surfaced to
-// frontends. Frontends MUST use Code and Category for classification, not
-// string-matching on Message or Detail.
+// frontends. New consumers can classify by Code and Category while legacy
+// consumers continue to display the error string.
 package control
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -37,7 +38,7 @@ const (
 	ErrApprovalTimeout ErrorCode = "approval_timeout" // no response within deadline
 
 	// --- Session / lifecycle errors ---
-	ErrSessionLocked   ErrorCode = "session_locked"   // another process holds the lease
+	ErrSessionLocked   ErrorCode = "session_locked"    // another process holds the lease
 	ErrSessionNotFound ErrorCode = "session_not_found" // session path does not exist
 	ErrSessionClosed   ErrorCode = "session_closed"    // session was closed mid-operation
 
@@ -77,17 +78,16 @@ func categoryFor(code ErrorCode) ErrorCategory {
 	}
 }
 
-// ErrorInfo is the structured error DTO surfaced to transport layers.
-// Frontends classify errors via Code/Category, not by string-matching Message
-// or Detail. The Message field is safe to display to users; Detail is optional
-// and may contain technical context.
+// ErrorInfo is the structured error DTO surfaced to transport layers. New
+// frontends can classify errors via Code/Category instead of string-matching
+// Message or Detail. Message is safe to display; Detail is technical context.
 type ErrorInfo struct {
-	Code     ErrorCode     `json:"code"`
-	Category ErrorCategory `json:"category"`
-	Message  string        `json:"message"`           // user-facing summary
-	Detail   string        `json:"detail,omitempty"`  // optional technical context
-	Retryable bool         `json:"retryable"`         // derived from Category
-	HTTPStatus int         `json:"http_status,omitempty"` // original HTTP status, if applicable
+	Code       ErrorCode     `json:"code"`
+	Category   ErrorCategory `json:"category"`
+	Message    string        `json:"message"`              // user-facing summary
+	Detail     string        `json:"detail,omitempty"`     // optional technical context
+	Retryable  bool          `json:"retryable"`            // derived from Category
+	HTTPStatus int           `json:"httpStatus,omitempty"` // original HTTP status, if applicable
 }
 
 // IsZero reports whether e is the zero value (no error).
@@ -96,10 +96,10 @@ func (e ErrorInfo) IsZero() bool { return e.Code == "" }
 // Error implements the error interface so ErrorInfo can be passed where
 // errors are expected.
 func (e ErrorInfo) Error() string {
-	if e.Detail != "" {
-		return fmt.Sprintf("[%s] %s: %s", e.Code, e.Message, e.Detail)
+	if e.Detail != "" && !strings.Contains(e.Message, e.Detail) {
+		return fmt.Sprintf("%s\n%s", e.Message, e.Detail)
 	}
-	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
+	return e.Message
 }
 
 // NewErrorInfo creates an ErrorInfo from an error code and message.
@@ -133,46 +133,57 @@ func ClassifyError(err error) ErrorInfo {
 	}
 
 	// Check for our own ErrorInfo first (round-trip).
+	var ptr *ErrorInfo
+	if errors.As(err, &ptr) && ptr != nil {
+		return *ptr
+	}
 	var ei ErrorInfo
 	if errors.As(err, &ei) {
 		return ei
 	}
 
 	msg := err.Error()
+	lower := strings.ToLower(msg)
 
 	// Auth errors.
-	if strings.Contains(msg, "401") || strings.Contains(msg, "auth") ||
-		strings.Contains(msg, "invalid_api_key") || strings.Contains(msg, "Incorrect API key") {
+	if errorContainsAny(lower, "http 401", "status 401", "invalid_api_key", "incorrect api key", "authentication failed", "unauthorized") {
 		return NewErrorInfo(ErrProviderAuth, "Authentication failed. Check your API key.")
 	}
 
 	// Rate limit.
-	if strings.Contains(msg, "429") || strings.Contains(msg, "rate") {
+	if errorContainsAny(lower, "http 429", "status 429", "rate limit", "rate_limit") {
 		return NewErrorInfo(ErrProviderRateLimit, "Rate limit reached. Retry after a short wait.")
 	}
 
 	// Server errors.
-	if strings.Contains(msg, "503") || strings.Contains(msg, "500") ||
-		strings.Contains(msg, "overloaded") || strings.Contains(msg, "server error") {
+	if errorContainsAny(lower, "http 500", "status 500", "http 503", "status 503", "overloaded", "server error") {
 		return NewErrorInfo(ErrProviderServerError, "Provider server error. The service may be temporarily unavailable.")
 	}
 
+	// Timeout must be checked before generic context cancellation.
+	if errors.Is(err, context.DeadlineExceeded) || errorContainsAny(lower, "timeout", "timed out", "deadline exceeded") {
+		return NewErrorInfo(ErrProviderTimeout, "Request timed out. The provider may be slow or unreachable.")
+	}
+
 	// Stream interruption.
-	if strings.Contains(msg, "stream") || strings.Contains(msg, "interrupt") ||
-		strings.Contains(msg, "EOF") || strings.Contains(msg, "connection") {
+	if errorContainsAny(lower, "stream interrupted", "unexpected eof", "connection reset", "broken pipe") {
 		return NewErrorInfo(ErrStreamInterrupted, "Connection to provider was interrupted.")
 	}
 
 	// Cancellation.
-	if strings.Contains(msg, "cancel") || strings.Contains(msg, "context") {
+	if errors.Is(err, context.Canceled) || errorContainsAny(lower, "context canceled", "context cancelled", "operation was canceled", "operation was cancelled") {
 		return NewErrorInfo(ErrCancelled, "Operation was cancelled.")
-	}
-
-	// Timeout.
-	if strings.Contains(msg, "timeout") || strings.Contains(msg, "deadline") {
-		return NewErrorInfo(ErrProviderTimeout, "Request timed out. The provider may be slow or unreachable.")
 	}
 
 	// Default: unknown.
 	return NewErrorInfo(ErrUnknown, msg)
+}
+
+func errorContainsAny(s string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(s, needle) {
+			return true
+		}
+	}
+	return false
 }

@@ -48,6 +48,7 @@
 | [公开仓库前检查清单](PUBLIC_READINESS.md) | 公开前文档、所有权、发布与部署门禁 |
 | [发布流程](RELEASING.md) | 分支、canary 和稳定发布 |
 | [安全策略](../SECURITY.md) | 信任边界与漏洞报告 |
+| [威胁模型](THREAT_MODEL.md) | 当前安全控制、已知缺口与外部阻塞项 |
 
 ## 实现记录
 
@@ -73,6 +74,7 @@
 | [Desktop M1 frontend failure display audit](audits/2026-07-09-desktop-m1-failure-display.md) | 前端 provider 失败、工具超时和审批拒绝的可见 warn/error 与停止态复位证据 |
 | [Windows native Desktop smoke attempt](audits/2026-07-10-windows-native-smoke-attempt.md) | Windows Wails 启动响应与 frameless 截图通道的初始阻断证据 |
 | [Windows native Desktop interaction smoke](audits/2026-07-10-windows-native-interaction-smoke.md) | 截图无关 UIA 的新建、工作区、发送、停止、事件账本和重启恢复证据 |
+| [外部 Agent 批次验收](audits/2026-07-11-external-agent-batch-acceptance.md) | 大批提交的保留/撤回范围、真实性修复和全量本地验证 |
 | [Control transport boundary ratchet audit](audits/2026-07-10-control-boundary-ratchet.md) | Desktop/CLI/Serve/Bot/ACP 对 runtime 内部直连的精确依赖基线和 CI 收缩棘轮 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |
 | [Gateway service lifecycle contract audit](audits/2026-07-09-gateway-service-lifecycle.md) | 跨平台后台 gateway 生命周期命令、CLI/Gateway 隔离和防 `serve`/`bot start` 回归证据 |

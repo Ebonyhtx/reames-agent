@@ -17,7 +17,7 @@ import (
 // server speaking the OpenAI protocol via the real openai provider.
 func newHarnessController(t *testing.T, script harness.Script) (*Controller, *harness.Server) {
 	t.Helper()
-	srv := harness.New(script)
+	srv := harness.MustNew(script)
 
 	prov, err := openai.New(provider.Config{
 		Name:    "harness",

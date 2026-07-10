@@ -2,16 +2,20 @@ package pluginpkg
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 )
+
+func mustUpsertPlugin(t *testing.T, home string, plugin InstalledPlugin) {
+	t.Helper()
+	if err := Upsert(home, plugin); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestPluginLifecycle_Install(t *testing.T) {
 	home := t.TempDir()
 	p := InstalledPlugin{Name: "superpowers", Version: "1.0.0", Root: "p/superpowers", Enabled: true}
-	if err := Upsert(home, p); err != nil {
-		t.Fatal(err)
-	}
+	mustUpsertPlugin(t, home, p)
 	st, _ := LoadState(home)
 	if len(st.Plugins) != 1 || st.Plugins[0].Name != "superpowers" || st.Plugins[0].Version != "1.0.0" || !st.Plugins[0].Enabled {
 		t.Fatalf("install failed: %+v", st.Plugins)
@@ -20,8 +24,8 @@ func TestPluginLifecycle_Install(t *testing.T) {
 
 func TestPluginLifecycle_Update(t *testing.T) {
 	home := t.TempDir()
-	Upsert(home, InstalledPlugin{Name: "ci-tools", Version: "1.0", Root: "p/ci-tools", Enabled: true})
-	Upsert(home, InstalledPlugin{Name: "ci-tools", Version: "2.0", Root: "p/ci-tools-v2", Enabled: true})
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "ci-tools", Version: "1.0", Root: "p/ci-tools", Enabled: true})
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "ci-tools", Version: "2.0", Root: "p/ci-tools-v2", Enabled: true})
 	st, _ := LoadState(home)
 	if len(st.Plugins) != 1 || st.Plugins[0].Version != "2.0" {
 		t.Fatalf("update failed: %+v", st.Plugins)
@@ -30,7 +34,7 @@ func TestPluginLifecycle_Update(t *testing.T) {
 
 func TestPluginLifecycle_Disable(t *testing.T) {
 	home := t.TempDir()
-	Upsert(home, InstalledPlugin{Name: "test-plugin", Version: "1.0", Root: "p/test", Enabled: true})
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "test-plugin", Version: "1.0", Root: "p/test", Enabled: true})
 	if err := SetEnabled(home, "test-plugin", false); err != nil {
 		t.Fatal(err)
 	}
@@ -42,9 +46,13 @@ func TestPluginLifecycle_Disable(t *testing.T) {
 
 func TestPluginLifecycle_ReEnable(t *testing.T) {
 	home := t.TempDir()
-	Upsert(home, InstalledPlugin{Name: "test-plugin", Version: "1.0", Root: "p/test", Enabled: true})
-	SetEnabled(home, "test-plugin", false)
-	SetEnabled(home, "test-plugin", true)
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "test-plugin", Version: "1.0", Root: "p/test", Enabled: true})
+	if err := SetEnabled(home, "test-plugin", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetEnabled(home, "test-plugin", true); err != nil {
+		t.Fatal(err)
+	}
 	st, _ := LoadState(home)
 	if !st.Plugins[0].Enabled {
 		t.Fatal("should be re-enabled")
@@ -53,7 +61,7 @@ func TestPluginLifecycle_ReEnable(t *testing.T) {
 
 func TestPluginLifecycle_Remove(t *testing.T) {
 	home := t.TempDir()
-	Upsert(home, InstalledPlugin{Name: "to-remove", Version: "1.0", Root: "p/remove", Enabled: true})
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "to-remove", Version: "1.0", Root: "p/remove", Enabled: true})
 	removed, found, _ := Remove(home, "to-remove")
 	if !found || removed.Name != "to-remove" {
 		t.Fatal("remove failed")
@@ -70,9 +78,9 @@ func TestPluginLifecycle_Remove(t *testing.T) {
 
 func TestPluginLifecycle_MultiplePlugins(t *testing.T) {
 	home := t.TempDir()
-	Upsert(home, InstalledPlugin{Name: "plugin-a", Version: "1.0", Root: "p/a", Enabled: true})
-	Upsert(home, InstalledPlugin{Name: "plugin-b", Version: "2.0", Root: "p/b", Enabled: true})
-	Upsert(home, InstalledPlugin{Name: "plugin-c", Version: "1.0", Root: "p/c", Enabled: false})
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "plugin-a", Version: "1.0", Root: "p/a", Enabled: true})
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "plugin-b", Version: "2.0", Root: "p/b", Enabled: true})
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "plugin-c", Version: "1.0", Root: "p/c", Enabled: false})
 	st, _ := LoadState(home)
 	if len(st.Plugins) != 3 {
 		t.Fatalf("plugins = %d", len(st.Plugins))
@@ -100,7 +108,7 @@ func TestPluginLifecycle_InvalidName(t *testing.T) {
 
 func TestPluginLifecycle_StatePersistsAcrossLoads(t *testing.T) {
 	home := t.TempDir()
-	Upsert(home, InstalledPlugin{Name: "persist", Version: "1.0", Root: "p/p", Enabled: true})
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "persist", Version: "1.0", Root: "p/p", Enabled: true})
 	st1, _ := LoadState(home)
 	st2, _ := LoadState(home)
 	if st1.Plugins[0].Name != st2.Plugins[0].Name {
@@ -113,7 +121,7 @@ func TestPluginLifecycle_StateFileCreatedOnFirstUse(t *testing.T) {
 	if _, err := os.Stat(StatePath(home)); err == nil {
 		t.Fatal("should not exist before Upsert")
 	}
-	Upsert(home, InstalledPlugin{Name: "first", Version: "1.0", Root: "p/first", Enabled: true})
+	mustUpsertPlugin(t, home, InstalledPlugin{Name: "first", Version: "1.0", Root: "p/first", Enabled: true})
 	if _, err := os.Stat(StatePath(home)); err != nil {
 		t.Fatal("should exist after Upsert")
 	}
@@ -127,15 +135,16 @@ func TestPluginLifecycle_SetEnabledUnknown(t *testing.T) {
 
 func TestPluginLifecycle_ConcurrentUpsert(t *testing.T) {
 	home := t.TempDir()
-	done := make(chan struct{})
+	done := make(chan error, 10)
 	for i := 0; i < 10; i++ {
 		go func() {
-			Upsert(home, InstalledPlugin{Name: "concurrent", Version: "1.0", Root: filepath.Join("p", "c"), Enabled: true})
-			done <- struct{}{}
+			done <- Upsert(home, InstalledPlugin{Name: "concurrent", Version: "1.0", Root: "p/c", Enabled: true})
 		}()
 	}
 	for i := 0; i < 10; i++ {
-		<-done
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
 	}
 	st, _ := LoadState(home)
 	if len(st.Plugins) != 1 {

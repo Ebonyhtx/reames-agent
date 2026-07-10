@@ -120,25 +120,77 @@ def risk_from_areas(areas: Counter[str], changed: bool) -> str:
     return "medium"
 
 
-def diff_changed_files(repo: str, branch: str, base_sha: str, head_sha: str) -> list[dict[str, str]]:
+def fetch_comparison_refs(work: Path, repo: str, branch: str, base_sha: str, head_sha: str) -> str:
+    """Initialize a temporary repository and fetch both comparison commits."""
+    run(["git", "init", "-q"], cwd=work)
+    run(["git", "remote", "add", "origin", repo], cwd=work)
+    branch_fetch = run(["git", "fetch", "--no-tags", "--depth=300", "origin", branch], cwd=work, check=False)
+    if branch_fetch.returncode != 0:
+        return f"fetch failed: {branch_fetch.stderr.strip()[:200]}"
+    for sha in dict.fromkeys((base_sha, head_sha)):
+        present = run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd=work, check=False)
+        if present.returncode == 0:
+            continue
+        fetched = run(["git", "fetch", "--no-tags", "--depth=1", "origin", sha], cwd=work, check=False)
+        if fetched.returncode != 0:
+            return f"commit {sha[:12]} unavailable: {fetched.stderr.strip()[:160]}"
+    return ""
+
+
+def comparison_evidence(
+    repo: str, branch: str, base_sha: str, head_sha: str, deep: bool = False
+) -> tuple[list[dict[str, str]], dict[str, str]]:
     if not base_sha or not head_sha or base_sha == head_sha:
-        return []
+        return [], {}
     with tempfile.TemporaryDirectory(prefix="reames-upstream-") as tmp:
         work = Path(tmp)
-        run(["git", "init", "-q"], cwd=work)
-        run(["git", "remote", "add", "origin", repo], cwd=work)
-        fetch = run(["git", "fetch", "--depth=300", "origin", branch], cwd=work, check=False)
-        if fetch.returncode != 0:
-            return [{"status": "?", "path": f"<diff unavailable: {fetch.stderr.strip()}>"}]
-        diff = run(["git", "diff", "--name-status", base_sha, head_sha], cwd=work, check=False)
-        if diff.returncode != 0:
-            return [{"status": "?", "path": "<diff unavailable: base not found in shallow fetch>"}]
-        out: list[dict[str, str]] = []
-        for line in diff.stdout.splitlines():
+        fetch_error = fetch_comparison_refs(work, repo, branch, base_sha, head_sha)
+        if fetch_error:
+            unavailable = [{"status": "?", "path": f"<diff unavailable: {fetch_error}>"}]
+            return unavailable, {"error": fetch_error} if deep else {}
+
+        names = run(["git", "diff", "--name-status", base_sha, head_sha], cwd=work, check=False)
+        if names.returncode != 0:
+            error = f"diff failed: {names.stderr.strip()[:200]}"
+            unavailable = [{"status": "?", "path": f"<diff unavailable: {error}>"}]
+            return unavailable, {"error": error} if deep else {}
+        files: list[dict[str, str]] = []
+        for line in names.stdout.splitlines():
             parts = line.split("\t")
             if len(parts) >= 2:
-                out.append({"status": parts[0], "path": parts[-1]})
-        return out
+                files.append({"status": parts[0], "path": parts[-1]})
+        if not deep:
+            return files, {}
+
+        log = run(
+            ["git", "log", "--oneline", "--no-merges", f"{base_sha}..{head_sha}"],
+            cwd=work, check=False,
+        )
+        patch = run(
+            ["git", "diff", "--patch", "--stat", base_sha, head_sha],
+            cwd=work, check=False,
+        )
+        result: dict[str, str] = {}
+        if log.returncode == 0:
+            result["commits"] = log.stdout.strip()[:10000]
+        else:
+            result["error"] = f"log failed: {log.stderr.strip()[:200]}"
+        if patch.returncode == 0:
+            result["diff"] = patch.stdout.strip()[:50000]
+        elif "error" not in result:
+            result["error"] = f"diff failed: {patch.stderr.strip()[:200]}"
+        return files, result
+
+
+def diff_changed_files(repo: str, branch: str, base_sha: str, head_sha: str) -> list[dict[str, str]]:
+    files, _ = comparison_evidence(repo, branch, base_sha, head_sha)
+    return files
+
+
+def deep_diff_content(repo: str, branch: str, base_sha: str, head_sha: str) -> dict[str, str]:
+    """Return bounded commit-log and patch evidence for two upstream revisions."""
+    _, deep = comparison_evidence(repo, branch, base_sha, head_sha, deep=True)
+    return deep
 
 
 def recommendation(up: dict[str, Any], changed: bool, risk: str, areas: Counter[str]) -> str:
@@ -221,7 +273,7 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool 
             "decision": decision_for(up, False, "unknown", error),
             "error": error,
             "recommendation": "Upstream check failed; inspect network, repository, and branch configuration.",
-        "deep": None,
+            "deep": None,
         }
 
     branch_ref = f"refs/heads/{branch}"
@@ -235,11 +287,11 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool 
             tag_reports.append(tag)
 
     files: list[dict[str, str]] = []
-    if changed and up.get("diff", False):
-        files = diff_changed_files(up["repo"], branch, reviewed, latest)
     deep_info: dict[str, str] = {}
     if deep and changed and up.get("diff", False):
-        deep_info = deep_diff_content(up["repo"], branch, reviewed, latest)
+        files, deep_info = comparison_evidence(up["repo"], branch, reviewed, latest, deep=True)
+    elif changed and up.get("diff", False):
+        files = diff_changed_files(up["repo"], branch, reviewed, latest)
     areas = Counter(classify_path(f["path"]) for f in files if not f["path"].startswith("<diff unavailable"))
     risk = risk_from_areas(areas, changed)
     return {
@@ -424,31 +476,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-def deep_diff_content(repo: str, branch: str, base_sha: str, head_sha: str) -> dict[str, str]:
-    """Fetch actual diff content and commit log between two refs.
-    Returns a dict with 'commits' (one-line log) and 'diff' (unified diff, truncated to 50KB).
-    """
-    if not base_sha or not head_sha or base_sha == head_sha:
-        return {}
-    with tempfile.TemporaryDirectory(prefix="reames-upstream-deep-") as tmp:
-        work = Path(tmp)
-        run(["git", "init", "-q"], cwd=work)
-        run(["git", "remote", "add", "origin", repo], cwd=work)
-        fetch = run(["git", "fetch", "--depth=300", "origin", branch], cwd=work, check=False)
-        if fetch.returncode != 0:
-            return {"error": f"fetch failed: {fetch.stderr.strip()[:200]}"}
-        log = run(
-            ["git", "log", "--oneline", "--no-merges", f"{base_sha}..{head_sha}"],
-            cwd=work, check=False,
-        )
-        diff = run(
-            ["git", "diff", "--patch", "--stat", base_sha, head_sha],
-            cwd=work, check=False,
-        )
-        result: dict[str, str] = {}
-        if log.returncode == 0:
-            result["commits"] = log.stdout.strip()[:10000]
-        if diff.returncode == 0:
-            result["diff"] = diff.stdout.strip()[:50000]
-        return result

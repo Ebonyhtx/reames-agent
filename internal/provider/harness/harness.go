@@ -6,7 +6,7 @@
 //
 // Typical use:
 //
-//	srv := harness.New(harness.Script{
+//	srv := harness.MustNew(harness.Script{
 //	    {Status: 200, Chunks: []harness.Chunk{{Text: "Hello"}}},
 //	    {Status: 401, Body: `{"error":{"message":"Invalid API Key"}}`},
 //	})
@@ -16,13 +16,17 @@ package harness
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"time"
 )
+
+const maxRequestBodyBytes = 1 << 20
 
 // Chunk represents one SSE data payload to emit.
 type Chunk struct {
@@ -77,16 +81,29 @@ type Server struct {
 
 // RequestRecord captures one incoming request for later inspection.
 type RequestRecord struct {
-	Body     []byte `json:"body"`
-	Auth     string `json:"auth"`
-	Stream   bool   `json:"stream"`
+	Body   []byte `json:"body"`
+	Auth   string `json:"auth"`
+	Stream bool   `json:"stream"`
 }
 
-// New creates and starts a new harness server with the given script.
-func New(script Script) *Server {
+// New creates and starts a harness server. Empty scripts are rejected because
+// there is no deterministic response to replay.
+func New(script Script) (*Server, error) {
+	if err := validateScript(script); err != nil {
+		return nil, err
+	}
 	s := &Server{script: script}
 	s.srv = httptest.NewServer(s)
 	s.baseURL = s.srv.URL
+	return s, nil
+}
+
+// MustNew is a test convenience that panics when the script is invalid.
+func MustNew(script Script) *Server {
+	s, err := New(script)
+	if err != nil {
+		panic(err)
+	}
 	return s
 }
 
@@ -101,26 +118,61 @@ func (s *Server) Requests() []RequestRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]RequestRecord, len(s.reqs))
-	copy(out, s.reqs)
+	for i, req := range s.reqs {
+		out[i] = req
+		out[i].Body = append([]byte(nil), req.Body...)
+	}
 	return out
 }
 
 // Reset restarts the script and clears recorded requests.
-func (s *Server) Reset(script Script) {
+func (s *Server) Reset(script Script) error {
+	if err := validateScript(script); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.script = script
 	s.seen = 0
 	s.reqs = nil
+	return nil
+}
+
+func validateScript(script Script) error {
+	if len(script) == 0 {
+		return errors.New("provider harness: script must contain at least one step")
+	}
+	for i, step := range script {
+		if step.Status < 100 || step.Status > 599 {
+			return fmt.Errorf("provider harness: step %d has invalid HTTP status %d", i+1, step.Status)
+		}
+	}
+	return nil
 }
 
 // ServeHTTP implements http.Handler for the OpenAI chat completions endpoint.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Record the request.
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodyBytes+1))
+	if err != nil {
+		http.Error(w, "could not read request body", http.StatusBadRequest)
+		return
+	}
+	if len(body) > maxRequestBodyBytes {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+
 	rec := RequestRecord{
-		Auth:   r.Header.Get("Authorization"),
+		Body: body,
+		Auth: r.Header.Get("Authorization"),
 		Stream: strings.Contains(r.URL.Query().Get("stream"), "true") ||
 			strings.Contains(r.URL.Path, "stream"),
+	}
+	var payload struct {
+		Stream bool `json:"stream"`
+	}
+	if json.Unmarshal(body, &payload) == nil {
+		rec.Stream = rec.Stream || payload.Stream
 	}
 
 	s.mu.Lock()

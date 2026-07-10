@@ -12,6 +12,7 @@ Real issue creation requires explicit human authorisation.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,6 +40,14 @@ RISK_LABELS = {
     "none": "⚪ none",
     "unknown": "❓ unknown",
 }
+
+
+def safe_slug(value: str) -> str:
+    """Return a bounded filename component for a report-controlled id."""
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("._-")
+    if not slug:
+        raise ValueError("upstream id does not contain a safe filename component")
+    return slug[:80]
 
 
 def generate_issue_draft(upstream: dict) -> str:
@@ -133,7 +142,7 @@ def main() -> int:
     DRAFT_DIR.mkdir(parents=True, exist_ok=True)
 
     for u in changed:
-        slug = u["id"].replace("/", "-").replace(" ", "-")
+        slug = safe_slug(str(u["id"]))
         draft = generate_issue_draft(u)
         path = DRAFT_DIR / f"{slug}.md"
         path.write_text(draft, encoding="utf-8")

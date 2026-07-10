@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"unicode"
 
 	"reames-agent/internal/evidence"
+	"reames-agent/internal/fileutil"
 	"reames-agent/internal/store"
 )
 
@@ -301,10 +301,7 @@ func (g *goalMachine) buildStateLocked(todos []evidence.TodoItem) (path string, 
 		Todos:              todos,
 	}
 	// Write versioned format (GoalStateV1) for forward compatibility.
-	state := FromGoalState(gs)
-	// Carry todos in the versioned struct — add if the V1 struct supports it.
-	// For now, todos are serialised alongside via the goalState wrapper.
-	b, err := json.Marshal(state)
+	b, err := json.Marshal(FromGoalState(gs))
 	if err != nil {
 		slog.Warn("controller: marshal goal state", "err", err)
 		return "", nil, false
@@ -321,11 +318,7 @@ func (g *goalMachine) writeState(path string, data []byte) {
 	}
 	g.writeMu.Lock()
 	defer g.writeMu.Unlock()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		slog.Warn("controller: goal state dir", "err", err)
-		return
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := fileutil.AtomicWriteFile(path, data, 0o644); err != nil {
 		slog.Warn("controller: write goal state", "err", err)
 	}
 }
@@ -359,7 +352,7 @@ func (g *goalMachine) terminalTodosFromState(sessionPath string) ([]evidence.Tod
 		return nil, false
 	}
 	state, err := ReadGoalStateForResume(data)
-	if err := json.Unmarshal(data, &state); err != nil {
+	if err != nil {
 		slog.Warn("controller: parse goal state", "err", err)
 		return nil, false
 	}
@@ -390,7 +383,7 @@ func (g *goalMachine) restoreRunningFromState(sessionPath string) {
 		return
 	}
 	state, err := ReadGoalStateForResume(data)
-	if err := json.Unmarshal(data, &state); err != nil {
+	if err != nil {
 		slog.Warn("controller: parse goal state", "err", err)
 		return
 	}

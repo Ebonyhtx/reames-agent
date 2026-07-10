@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"reames-agent/internal/control"
 	"reames-agent/internal/event"
 	"reames-agent/internal/provider"
 )
@@ -60,6 +61,8 @@ func TestDesktopWireEventTypeCoversSharedPayloadFields(t *testing.T) {
 		"prefixChanged: boolean;",
 		"prefixChangeReasons?: string[];",
 		"toolSchemaTokens: number;",
+		"error?: WireErrorInfo;",
+		"export interface WireErrorInfo",
 	} {
 		if !strings.Contains(ts, want) {
 			t.Fatalf("desktop WireEvent types are missing %q", want)
@@ -240,7 +243,12 @@ func TestToWireInteractionAndLifecyclePayloads(t *testing.T) {
 		{
 			name: "turn done error",
 			in:   event.Event{Kind: event.TurnDone, Err: errors.New("boom")},
-			want: []string{`"kind":"turn_done"`, `"err":"boom"`},
+			want: []string{`"kind":"turn_done"`, `"err":"boom"`, `"error":{"code":"unknown"`, `"message":"boom"`},
+		},
+		{
+			name: "structured turn done error",
+			in:   event.Event{Kind: event.TurnDone, Err: newErrorInfoForWireTest()},
+			want: []string{`"err":"bad key"`, `"error":{"code":"provider_auth"`, `"category":"auth"`, `"httpStatus":401`},
 		},
 		{
 			name: "steer",
@@ -262,4 +270,8 @@ func TestToWireInteractionAndLifecyclePayloads(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newErrorInfoForWireTest() error {
+	return control.NewErrorInfo(control.ErrProviderAuth, "bad key").WithHTTPStatus(401)
 }

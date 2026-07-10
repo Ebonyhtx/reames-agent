@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -12,164 +11,113 @@ import (
 	"reames-agent/internal/tool"
 )
 
-// TestCancelPropagation_StopsProviderStream verifies that Cancel()
-// propagates context cancellation to the provider, causing the stream
-// to terminate and the runtime status to clear.
-func TestCancelPropagation_StopsProviderStream(t *testing.T) {
-	// Use a slow provider that blocks until context is cancelled.
-	prov := &slowProvider{delay: 10 * time.Second}
-	ag := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.FuncSink(func(e event.Event) {}))
-	c := New(Options{Runner: ag, Executor: ag, Sink: event.FuncSink(func(e event.Event) {})})
-
-	events := make(chan event.Event, 32)
-	c.mu.Lock()
-	c.sink = event.FuncSink(func(e event.Event) { events <- e })
-	c.mu.Unlock()
-
-	// Start a turn.
+func TestCancelPropagationStopsProviderStream(t *testing.T) {
+	c, prov, events := newCancelPropagationController()
 	c.Submit("slow request")
-
-	// Give it a moment to start, then cancel.
-	time.Sleep(50 * time.Millisecond)
+	waitCancelSignal(t, prov.started)
 	c.Cancel()
+	waitCancelSignal(t, prov.cancelled)
+	waitForTurnDoneEvent(t, events)
 
-	// Wait for the turn to finish.
-	select {
-	case e := <-events:
-		if e.Kind != event.TurnDone {
-			t.Fatalf("expected TurnDone after cancel, got %v", e.Kind)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for TurnDone after cancel")
-	}
-
-	if c.RuntimeStatus().Running {
-		t.Fatal("runtime should not be running after cancel")
+	if status := c.RuntimeStatus(); status.Running || status.CancelRequested || status.Cancellable {
+		t.Fatalf("runtime status after cancel = %+v, want idle", status)
 	}
 }
 
-// TestCancelPropagation_Idempotent verifies that calling Cancel()
-// multiple times does not panic or corrupt state.
-func TestCancelPropagation_Idempotent(t *testing.T) {
-	prov := &slowProvider{delay: 5 * time.Second}
-	ag := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.FuncSink(func(e event.Event) {}))
-	c := New(Options{Runner: ag, Executor: ag, Sink: event.FuncSink(func(e event.Event) {})})
-
-	events := make(chan event.Event, 32)
-	c.mu.Lock()
-	c.sink = event.FuncSink(func(e event.Event) { events <- e })
-	c.mu.Unlock()
-
+func TestCancelPropagationIsIdempotent(t *testing.T) {
+	c, prov, events := newCancelPropagationController()
 	c.Submit("request")
-	time.Sleep(20 * time.Millisecond)
-
-	// Cancel multiple times — should not panic.
+	waitCancelSignal(t, prov.started)
 	c.Cancel()
 	c.Cancel()
 	c.Cancel()
-
-	// Wait for TurnDone.
-	select {
-	case <-events:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out after cancel")
-	}
+	waitCancelSignal(t, prov.cancelled)
+	waitForTurnDoneEvent(t, events)
 
 	if c.RuntimeStatus().Running {
-		t.Fatal("runtime should not be running after cancel")
+		t.Fatal("runtime should not be running after repeated cancellation")
 	}
 }
 
-// TestCancelPropagation_ClearsCancelFlagAfterDone verifies that
-// CancelRequested resets to false after the turn completes.
-func TestCancelPropagation_ClearsCancelFlagAfterDone(t *testing.T) {
-	prov := &slowProvider{delay: 3 * time.Second}
-	ag := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.FuncSink(func(e event.Event) {}))
-	c := New(Options{Runner: ag, Executor: ag, Sink: event.FuncSink(func(e event.Event) {})})
-
-	events := make(chan event.Event, 32)
-	c.mu.Lock()
-	c.sink = event.FuncSink(func(e event.Event) { events <- e })
-	c.mu.Unlock()
-
+func TestCancelRequestedClearsAfterDone(t *testing.T) {
+	release := make(chan struct{})
+	c, prov, events := newCancelPropagationController()
+	prov.release = release
 	c.Submit("request")
-	time.Sleep(20 * time.Millisecond)
+	waitCancelSignal(t, prov.started)
 	c.Cancel()
-
+	waitCancelSignal(t, prov.cancelled)
 	if !c.CancelRequested() {
-		t.Fatal("CancelRequested should be true after Cancel()")
+		t.Fatal("CancelRequested should remain true while the provider is unwinding")
 	}
+	close(release)
+	waitForTurnDoneEvent(t, events)
 
-	// Wait for turn to finish.
-	select {
-	case <-events:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out")
-	}
-
-	if c.CancelRequested() {
-		t.Fatal("CancelRequested should be false after TurnDone")
-	}
-	if c.RuntimeStatus().Running {
-		t.Fatal("runtime should not be running")
+	if status := c.RuntimeStatus(); status.Running || status.CancelRequested {
+		t.Fatalf("runtime status after TurnDone = %+v, want cancellation cleared", status)
 	}
 }
 
-// TestCancelPropagation_AllowsNewTurnAfterCancel verifies that
-// a new turn can be submitted after cancellation completes.
-func TestCancelPropagation_AllowsNewTurnAfterCancel(t *testing.T) {
-	prov := &slowProvider{delay: 3 * time.Second}
-	ag := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.FuncSink(func(e event.Event) {}))
-	c := New(Options{Runner: ag, Executor: ag, Sink: event.FuncSink(func(e event.Event) {})})
+func TestCancelPropagationAllowsNewTurn(t *testing.T) {
+	c, prov, events := newCancelPropagationController()
 
-	events := make(chan event.Event, 32)
-	c.mu.Lock()
-	c.sink = event.FuncSink(func(e event.Event) { events <- e })
-	c.mu.Unlock()
-
-	// First turn — cancel it.
 	c.Submit("first")
-	time.Sleep(20 * time.Millisecond)
+	waitCancelSignal(t, prov.started)
 	c.Cancel()
-	<-events // drain TurnDone
+	waitCancelSignal(t, prov.cancelled)
+	waitForTurnDoneEvent(t, events)
 
-	time.Sleep(20 * time.Millisecond)
-
-	// Second turn — should work.
 	c.Submit("second")
+	waitCancelSignal(t, prov.started)
 	c.Cancel()
-	<-events
+	waitCancelSignal(t, prov.cancelled)
+	waitForTurnDoneEvent(t, events)
 
 	if c.RuntimeStatus().Running {
-		t.Fatal("runtime should not be running after second cancel")
+		t.Fatal("runtime should not be running after second cancellation")
 	}
 }
 
-// --- slow provider that respects context cancellation ---
-
-type slowProvider struct {
-	mu    sync.Mutex
-	delay time.Duration
-	calls int
+func newCancelPropagationController() (*Controller, *blockingProvider, <-chan event.Event) {
+	prov := &blockingProvider{
+		started:   make(chan struct{}, 2),
+		cancelled: make(chan struct{}, 2),
+	}
+	events := make(chan event.Event, 32)
+	sink := event.FuncSink(func(e event.Event) { events <- e })
+	ag := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, sink)
+	c := New(Options{Runner: ag, Executor: ag, Sink: sink})
+	return c, prov, events
 }
 
-func (p *slowProvider) Name() string { return "slow" }
+func waitCancelSignal(t *testing.T, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for provider synchronization signal")
+	}
+}
 
-func (p *slowProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
-	p.mu.Lock()
-	p.calls++
-	p.mu.Unlock()
+type blockingProvider struct {
+	started   chan struct{}
+	cancelled chan struct{}
+	release   <-chan struct{}
+}
 
+func (p *blockingProvider) Name() string { return "blocking" }
+
+func (p *blockingProvider) Stream(ctx context.Context, _ provider.Request) (<-chan provider.Chunk, error) {
+	p.started <- struct{}{}
 	ch := make(chan provider.Chunk, 1)
 	go func() {
 		defer close(ch)
-		select {
-		case <-ctx.Done():
-			ch <- provider.Chunk{Type: provider.ChunkError, Err: ctx.Err()}
-		case <-time.After(p.delay):
-			ch <- provider.Chunk{Type: provider.ChunkText, Text: "done"}
-			ch <- provider.Chunk{Type: provider.ChunkDone}
+		<-ctx.Done()
+		p.cancelled <- struct{}{}
+		if p.release != nil {
+			<-p.release
 		}
+		ch <- provider.Chunk{Type: provider.ChunkError, Err: ctx.Err()}
 	}()
 	return ch, nil
 }

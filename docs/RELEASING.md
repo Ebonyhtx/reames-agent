@@ -32,14 +32,6 @@ SHA256SUMS
 
 候选工件只用于检查文件名、可执行性、校验和与跨平台构建，不进入任何公开分发渠道。
 
-构建 provenance（SLSA L1）可通过 Go module graph（go.sum）和 GitHub Actions OIDC attestation 生成：
-
-```bash
-go version -m bin/reames-agent.exe  # 内嵌 module graph
-```
-
-签名与 notarization 见威胁模型（docs/THREAT_MODEL.md），目前为 external-blocked。
-
 ## Desktop 候选工件
 
 Actions → **Desktop candidate** → **Run workflow**。

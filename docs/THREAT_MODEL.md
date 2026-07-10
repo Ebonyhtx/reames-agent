@@ -1,75 +1,55 @@
-# Reames Agent Threat Model
+# Reames Agent 威胁模型
 
-> 状态：当前安全边界说明
-> 更新：2026-07-10
+> 状态：描述当前代码边界，不把路线图当作已实现能力
+> 更新：2026-07-11
 
-## 1. 信任边界
+## 范围与假设
+
+Reames Agent 是单用户本地/自托管 Agent。模型输出、网页/工具返回、IM 消息和插件内容均视为不可信；本机用户显式安装的 MCP、Hook、LSP 和 shell 命令属于高权限扩展。`yolo`、关闭 sandbox、`serve.auth = "none"` 或 `allow_all` 都会主动降低防护，不能作为默认安全证据。
+
+主要边界：
 
 ```text
-用户工作站 / 服务器
-├─ Reames Agent 进程（单用户、单 home）
-│  ├─ Agent Loop（prompt → model → tool → result）
-│  ├─ Controller（session、approval、checkpoint）
-│  ├─ Plugin Host（MCP 子进程、hook 脚本）
-│  └─ Sandbox（OS 级隔离：Windows job object、macOS sandbox、Linux landlock）
-├─ Provider API（DeepSeek / Anthropic / OpenAI 等外部服务）
-├─ IM Gateway（飞书 WebSocket/Webhook、QQ WS、微信 iLink）
-└─ Desktop WebView（Wails WebView2 / WebKitGTK）
+本机用户 / Desktop / CLI
+          │
+          ▼
+Controller ── Agent loop ── Provider API
+    │              │
+    │              ├─ built-in tools / shell sandbox
+    │              └─ MCP / Hook / LSP 子进程
+    ├─ session / checkpoint / credential state
+    └─ Serve / Gateway ── 浏览器或 IM 用户
 ```
 
-## 2. 凭据安全 (Credential Security)
+## 控制现状
 
-- Provider API key 仅存储在 `<Reames Agent home>/.env`，不在 config.toml 中
-- 运行时不读取 shell 环境变量、项目 `.env` 或系统 keyring 中的 provider key
-- 凭据文件以受限权限写入（Unix 0o600, Windows ACL）
-- 日志、错误消息、事件流和诊断输出中屏蔽密钥值
-- **external-blocked**：真实签名/notarization 需要代码签名证书
+| 领域 | 状态 | 当前实现 | 尚未覆盖或限制 |
+|---|---|---|---|
+| Provider 凭据 | 部分实现 | Provider key 名写入配置，值从 Reames Agent 全局 `.env` 或进程环境解析；项目 `.env` 不作为 Provider key 来源；Unix 写入权限收紧为 `0600`；有可选 AES-256-GCM 存储原语 | 进程环境仍是有效来源；加密文件使用机器属性派生密钥，不等同 OS keyring/硬件保护；日志与第三方错误的脱敏是 best-effort，需持续回归 |
+| 工具审批 | 已实现核心路径 | `internal/permission` 按工具、subject、只读属性和 allow/ask/deny 规则决策；文件写入审批可携带 diff，拒绝/超时路径有不落盘测试 | `yolo`/显式 allow 会绕过交互；所有新工具、远程入口和扩展必须持续做集成覆盖，不能只依赖工具自报 `readOnly` |
+| Shell 隔离 | 部分实现 | `sandbox.mode = enforce` 时使用 Linux bubblewrap、macOS Seatbelt、Windows AppContainer/低完整性 token 与 Job Object；后端不可用时 enforce 模式 fail closed | sandbox 可被配置为 off，零值也不隔离；平台能力不完全等价；MCP、Hook、LSP 不是自动置于同一 shell sandbox 中 |
+| 不可信内容 | 部分实现 | 有 untrusted envelope、HTML 文本化和常见 token 正则脱敏；system prompt/tool schema 采用稳定前缀约束 | 不能保证模型不受 prompt injection 影响；正则无法识别所有私有凭据；工具/插件/网页内容仍必须依赖权限边界限制副作用 |
+| HTTP Serve | 部分实现 | 支持 `none`/token/password，token 常量时间比较、密码 session HMAC、登录速率限制、JSON-only POST CSRF guard、默认无 CORS、显式单 origin CORS | WebSocket `CheckOrigin` 当前放行并依赖外层鉴权；`auth=none` 依赖 loopback/same-origin 部署假设；请求体、WS frame 和全局请求速率限制仍需系统化审计 |
+| IM Gateway | 部分实现 | 用户/群 allowlist、admin/approver 角色、operator 身份检查和各渠道传输适配已存在 | 当前没有通用飞书 webhook HMAC/重放验证实现；真实飞书/QQ/微信回环需要外部应用凭据与网络环境，未验证前不得声明完成 |
+| 插件与 Hook | 部分实现 | 插件路径/名称/manifest 基础校验、启停状态、MCP 启动/调用超时、项目 Hook trust gate 和 Hook 超时已存在 | manifest 尚无被安装器执行的权限声明、兼容版本、内容哈希或签名验证；“用户安装即信任”仍是主要边界 |
+| 状态与恢复 | 部分实现 | session JSONL、lease/recovery、checkpoint/rewind、版本化 Goal sidecar 和 Todo 恢复均有测试 | 并非所有 sidecar 都使用同一种原子写协议；崩溃时跨多个文件的一致性没有事务保证，需按写路径验证 |
+| 构建与发布 | 部分实现 | Go 依赖哈希、六目标 candidate、SHA256SUMS、三平台 Desktop candidate、CodeQL 和发布契约检查已建立 | 生产发布仍禁用；CLI/Windows/macOS 工件签名、notarization、provenance attestation 和可信 updater 发布链未完成 |
 
-## 3. Prompt 注入 (Prompt Injection)
+## 优先风险
 
-- 系统 prompt 和 tool schema 在会话期间不可变，走缓存优先
-- UI/渠道 metadata 永不注入 provider prompt（缓存前缀回归测试保护）
-- 用户输入中的控制标记（`[goal:complete]`、`[goal:blocked]`）仅在结构化解析后生效
-- 工具输出在追加到对话历史前进行脱敏
-- 项目 `.env` 和 `.reames-agent/` 中的 `${VAR}` 展开受 allowlist 限制
+1. **远程副作用**：Serve/IM 一旦暴露到非 loopback，鉴权、Origin、CSRF、角色与审批必须同时成立。
+2. **扩展供应链**：插件、MCP、Hook 和 LSP 能启动本机进程；在签名和权限 manifest 完成前，只应安装可审计来源。
+3. **凭据外泄**：Provider/IM token 可能经错误正文、工具输出、日志或第三方扩展泄露；证据脚本不得保存原始 HTTP 错误正文。
+4. **沙箱误解**：权限批准不等于 OS 隔离，sandbox 配置为 off 也不等于安全执行。
+5. **恢复一致性**：session、Goal、Todo、checkpoint 和 lease 跨文件更新时必须防止旧状态复活或终态丢失。
 
-## 4. 工具权限
+## 外部阻塞与可本地推进
 
-- 所有工具调用经 `internal/permission` 门控（ask/auto/yolo 模式）
-- 文件写入：先审批（含 diff 预览），允许后落盘，拒绝/超时不落盘
-- Shell 命令：经 `internal/sandbox` 隔离，超时终止，输出大小限制
-- 网络请求：经 `internal/netclient` 代理和超时控制
-- 审批模式：ask（每次询问）、auto（会话授权）、yolo（跳过，仅开发用）
+没有真实 API key、IM 应用或云服务器时，仍可使用 localhost Provider harness、假凭据、隔离 home、原生安装包和本地反向代理完成确定性合同与失败路径。以下证据必须保持 `external-blocked`，不能用 mock 替代完成声明：
 
-## 5. 插件供应链
+- 真实 Provider 的鉴权、计费/用量和供应商网络行为；
+- 真实 IM 平台的身份、回调/WebSocket、审批与重连回环；
+- 公网 TLS、反向代理、安全组、备份和升级回滚；
+- Windows/macOS 代码签名、Apple notarization、OIDC provenance 与公开 updater 链。
 
-- 插件 manifest 含 TrustLevel（community/verified/signed）、权限声明、兼容范围
-- 安装前预览来源、文件、命令、网络和敏感权限
-- MCP 子进程有启动超时、tool timeout、输出大小限制和崩溃隔离
-- Hook 脚本在 allowlist 环境和超时限制下执行
-- 插件故障不得拖垮主 Agent 进程
-- **external-blocked**：签名验证需 minisign/SSH 公钥基础设施
-
-## 6. 远程入口
-
-- Serve（HTTP/SSE）：鉴权（token/oauth）、CSRF、Origin 检查、速率限制、租约
-- Gateway service：独立进程，凭据仅通过 `REAMES_AGENT_HOME/.env` 引用
-- IM 渠道：飞书 webhook 签名验证（HMAC-SHA256 + 时间戳防重放）、消息去重
-- 桌面 WebView：仅绑定 localhost，不暴露远程调试端口
-- **external-blocked**：真实飞书/QQ/微信回环需应用凭据和公网回调 URL
-
-## 7. 状态与恢复
-
-- 会话状态序列化到 JSONL，版本化管理，原子写入（tmp + rename）
-- Checkpoint 保存文件快照，支持 rewind 恢复
-- 崩溃恢复通过租约（lease）和 recovery branch 处理并发冲突
-- 临时目录在会话结束时清理
-- 记忆数据可解释、可关闭、可删除
-
-## 8. 构建与发布
-
-- CGO_ENABLED=0 单二进制，6 目标交叉编译
-- go.sum 锁定依赖哈希
-- SHA256SUMS + SBOM（Go module graph）用于工件验证
-- CI：go vet、CodeQL（Go + JS/TS + Actions）、契约检查
-- **external-blocked**：Sigstore/cosign 签名需 OIDC 身份、Apple notarization 需 Developer ID
+漏洞报告流程和支持边界见 [SECURITY.md](../SECURITY.md)。发布启用门槛见 [RELEASING.md](RELEASING.md)。

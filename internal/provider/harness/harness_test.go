@@ -9,7 +9,7 @@ import (
 )
 
 func TestTextResponse(t *testing.T) {
-	srv := New(Script{
+	srv := MustNew(Script{
 		TextChunk("Hello, world!"),
 	})
 	defer srv.Close()
@@ -33,7 +33,7 @@ func TestTextResponse(t *testing.T) {
 }
 
 func TestAuthError401(t *testing.T) {
-	srv := New(Script{
+	srv := MustNew(Script{
 		AuthError401("DEEPSEEK_API_KEY"),
 	})
 	defer srv.Close()
@@ -54,7 +54,7 @@ func TestAuthError401(t *testing.T) {
 }
 
 func TestRateLimit429(t *testing.T) {
-	srv := New(Script{
+	srv := MustNew(Script{
 		RateLimit429(),
 	})
 	defer srv.Close()
@@ -71,7 +71,7 @@ func TestRateLimit429(t *testing.T) {
 }
 
 func TestServerError503(t *testing.T) {
-	srv := New(Script{
+	srv := MustNew(Script{
 		ServerError503(),
 	})
 	defer srv.Close()
@@ -88,7 +88,7 @@ func TestServerError503(t *testing.T) {
 }
 
 func TestMultipleSteps(t *testing.T) {
-	srv := New(Script{
+	srv := MustNew(Script{
 		TextChunk("first"),
 		AuthError401("KEY"),
 		TextChunk("third"),
@@ -122,7 +122,7 @@ func TestMultipleSteps(t *testing.T) {
 }
 
 func TestDelayBefore(t *testing.T) {
-	srv := New(Script{
+	srv := MustNew(Script{
 		{Status: 200, Chunks: []Chunk{{Text: "delayed"}}, DelayBefore: 200 * time.Millisecond},
 	})
 	defer srv.Close()
@@ -141,7 +141,7 @@ func TestDelayBefore(t *testing.T) {
 }
 
 func TestStreamDisconnect(t *testing.T) {
-	srv := New(Script{
+	srv := MustNew(Script{
 		StreamDisconnect("partial"),
 	})
 	defer srv.Close()
@@ -166,15 +166,20 @@ func TestStreamDisconnect(t *testing.T) {
 }
 
 func TestRequestsAreRecorded(t *testing.T) {
-	srv := New(Script{
+	srv := MustNew(Script{
 		TextChunk("a"),
 		TextChunk("b"),
 	})
 	defer srv.Close()
 
-	req, _ := http.NewRequest("GET", srv.URL()+"/chat/completions", nil)
+	req, _ := http.NewRequest("POST", srv.URL()+"/chat/completions", strings.NewReader(`{"stream":true,"messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer test-key")
-	http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
 
 	reqs := srv.Requests()
 	if len(reqs) != 1 {
@@ -183,10 +188,43 @@ func TestRequestsAreRecorded(t *testing.T) {
 	if reqs[0].Auth != "Bearer test-key" {
 		t.Fatalf("auth = %q, want 'Bearer test-key'", reqs[0].Auth)
 	}
+	if !reqs[0].Stream || !strings.Contains(string(reqs[0].Body), `"messages":[]`) {
+		t.Fatalf("recorded request = %+v, want JSON body and stream=true", reqs[0])
+	}
+	reqs[0].Body[0] = 'X'
+	if got := srv.Requests()[0].Body[0]; got == 'X' {
+		t.Fatal("Requests returned mutable server-owned body")
+	}
+}
+
+func TestRejectsEmptyScriptAndOversizedBody(t *testing.T) {
+	if _, err := New(nil); err == nil {
+		t.Fatal("New should reject an empty script")
+	}
+	if _, err := New(Script{{Status: 0}}); err == nil {
+		t.Fatal("New should reject an invalid HTTP status")
+	}
+
+	srv := MustNew(Script{TextChunk("ok")})
+	defer srv.Close()
+	resp, err := http.Post(srv.URL()+"/chat/completions", "application/json", strings.NewReader(strings.Repeat("x", maxRequestBodyBytes+1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusRequestEntityTooLarge)
+	}
+	if len(srv.Requests()) != 0 {
+		t.Fatal("oversized request should not be recorded")
+	}
+	if err := srv.Reset(nil); err == nil {
+		t.Fatal("Reset should reject an empty script")
+	}
 }
 
 func TestReset(t *testing.T) {
-	srv := New(Script{
+	srv := MustNew(Script{
 		TextChunk("first-script"),
 	})
 	defer srv.Close()
@@ -195,9 +233,11 @@ func TestReset(t *testing.T) {
 	resp, _ := http.Get(srv.URL() + "/chat/completions")
 	resp.Body.Close()
 
-	srv.Reset(Script{
+	if err := srv.Reset(Script{
 		AuthError401("NEW_KEY"),
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	resp, _ = http.Get(srv.URL() + "/chat/completions")
 	if resp.StatusCode != 401 {

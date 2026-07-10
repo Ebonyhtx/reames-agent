@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
+
+	"reames-agent/internal/evidence"
+	"reames-agent/internal/fileutil"
 )
 
 // GoalStateVersion is incremented when the on-disk goal state format changes
@@ -14,15 +16,16 @@ const GoalStateVersion = 1
 // GoalStateV1 is the versioned, JSON-serializable goal state persisted as a
 // sidecar file alongside the session.
 type GoalStateV1 struct {
-	Version            int              `json:"version"`
-	Goal               string           `json:"goal,omitempty"`
-	Status             string           `json:"status,omitempty"`
-	ResearchMode       GoalResearchMode `json:"researchMode,omitempty"`
-	AutoResearchTaskID string           `json:"autoResearchTaskID,omitempty"`
-	Turns              int              `json:"turns,omitempty"`
-	Blocks             int              `json:"blocks,omitempty"`
-	Block              string           `json:"block,omitempty"`
-	Strict             bool             `json:"strict"`
+	Version            int                 `json:"version"`
+	Goal               string              `json:"goal,omitempty"`
+	Status             string              `json:"status,omitempty"`
+	ResearchMode       GoalResearchMode    `json:"researchMode,omitempty"`
+	AutoResearchTaskID string              `json:"autoResearchTaskID,omitempty"`
+	Turns              int                 `json:"turns,omitempty"`
+	Blocks             int                 `json:"blocks,omitempty"`
+	Block              string              `json:"block,omitempty"`
+	Strict             bool                `json:"strict"`
+	Todos              []evidence.TodoItem `json:"todos,omitempty"`
 }
 
 // FromGoalState converts the internal goalState to GoalStateV1.
@@ -37,6 +40,7 @@ func FromGoalState(gs goalState) GoalStateV1 {
 		Blocks:             gs.Blocks,
 		Block:              gs.Block,
 		Strict:             gs.Strict,
+		Todos:              append([]evidence.TodoItem(nil), gs.Todos...),
 	}
 }
 
@@ -51,49 +55,8 @@ func (v GoalStateV1) ToGoalState() goalState {
 		Blocks:             v.Blocks,
 		Block:              v.Block,
 		Strict:             v.Strict,
+		Todos:              append([]evidence.TodoItem(nil), v.Todos...),
 	}
-}
-
-// GoalTransition describes an allowed state change.
-type GoalTransition struct {
-	From   string
-	To     string
-	Reason string
-}
-
-// AllowedGoalTransitions is the exhaustive table of permitted goal state
-// transitions. Every status change in the codebase must appear here.
-var AllowedGoalTransitions = []GoalTransition{
-	{From: "", To: GoalStatusRunning, Reason: "SetGoal initialises a new goal"},
-	{From: GoalStatusStopped, To: GoalStatusRunning, Reason: "restarting a stopped goal"},
-	{From: GoalStatusBlocked, To: GoalStatusRunning, Reason: "resuming a blocked goal"},
-	{From: GoalStatusRunning, To: GoalStatusComplete, Reason: "model emitted [goal:complete]"},
-	{From: GoalStatusRunning, To: GoalStatusBlocked, Reason: "model emitted [goal:blocked]"},
-	{From: GoalStatusRunning, To: GoalStatusStopped, Reason: "user called Stop/Cancel"},
-	{From: GoalStatusBlocked, To: GoalStatusStopped, Reason: "user stopped a blocked goal"},
-	{From: GoalStatusComplete, To: "", Reason: "ClearGoal"},
-	{From: GoalStatusBlocked, To: "", Reason: "ClearGoal"},
-	{From: GoalStatusStopped, To: "", Reason: "ClearGoal"},
-}
-
-// IsTerminalGoalStatus reports whether the status is terminal.
-func IsTerminalGoalStatus(status string) bool {
-	switch status {
-	case GoalStatusComplete, GoalStatusBlocked, GoalStatusStopped:
-		return true
-	default:
-		return false
-	}
-}
-
-// ValidateGoalTransition checks whether a transition is allowed.
-func ValidateGoalTransition(from, to string) error {
-	for _, t := range AllowedGoalTransitions {
-		if t.From == from && t.To == to {
-			return nil
-		}
-	}
-	return fmt.Errorf("goal transition %q → %q is not allowed", from, to)
 }
 
 // WriteGoalStateV1 persists a GoalStateV1 to disk atomically.
@@ -106,29 +69,38 @@ func WriteGoalStateV1(path string, state GoalStateV1) error {
 	if err != nil {
 		return fmt.Errorf("goal state: marshal: %w", err)
 	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("goal state: mkdir: %w", err)
+	if err := fileutil.AtomicWriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("goal state: write: %w", err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("goal state: write tmp: %w", err)
-	}
-	return os.Rename(tmp, path)
+	return nil
 }
 
 // ReadGoalStateForResume reads a goal state sidecar, accepting both v1
 // (versioned) and v0 (unversioned legacy) formats for backward compatibility.
 func ReadGoalStateForResume(data []byte) (goalState, error) {
-	// Try v1 first.
-	var v1 GoalStateV1
-	if err := json.Unmarshal(data, &v1); err == nil && v1.Version >= 1 {
-		if v1.Version > GoalStateVersion {
-			return goalState{}, fmt.Errorf("goal state: unsupported version %d", v1.Version)
-		}
-		return v1.ToGoalState(), nil
+	var header struct {
+		Version json.RawMessage `json:"version"`
 	}
-	// Fall back to v0 (raw goalState without version field).
+	if err := json.Unmarshal(data, &header); err != nil {
+		return goalState{}, fmt.Errorf("goal state: unmarshal: %w", err)
+	}
+	if len(header.Version) > 0 {
+		var version int
+		if err := json.Unmarshal(header.Version, &version); err != nil {
+			return goalState{}, fmt.Errorf("goal state: invalid version: %w", err)
+		}
+		if version < 0 || version > GoalStateVersion {
+			return goalState{}, fmt.Errorf("goal state: unsupported version %d", version)
+		}
+		if version >= 1 {
+			var v1 GoalStateV1
+			if err := json.Unmarshal(data, &v1); err != nil {
+				return goalState{}, fmt.Errorf("goal state: unmarshal v%d: %w", version, err)
+			}
+			return v1.ToGoalState(), nil
+		}
+	}
+	// Fall back to v0 (raw goalState without a positive version field).
 	var gs goalState
 	if err := json.Unmarshal(data, &gs); err != nil {
 		return goalState{}, fmt.Errorf("goal state: unmarshal: %w", err)
@@ -150,7 +122,7 @@ func ReadGoalStateV1(path string) (GoalStateV1, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return GoalStateV1{}, fmt.Errorf("goal state: unmarshal: %w", err)
 	}
-	if state.Version > GoalStateVersion {
+	if state.Version < 0 || state.Version > GoalStateVersion {
 		return GoalStateV1{}, fmt.Errorf("goal state: unsupported version %d (max %d)", state.Version, GoalStateVersion)
 	}
 	return state, nil

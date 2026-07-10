@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -40,6 +41,10 @@ func TestErrorInfoJSONRoundTrip(t *testing.T) {
 	if restored.Retryable {
 		t.Fatal("auth errors should not be retryable")
 	}
+	encoded := string(b)
+	if !strings.Contains(encoded, `"httpStatus":401`) || strings.Contains(encoded, "http_status") {
+		t.Fatalf("ErrorInfo JSON field naming = %s, want frontend-compatible httpStatus", encoded)
+	}
 }
 
 func TestErrorInfoIsZero(t *testing.T) {
@@ -67,6 +72,9 @@ func TestClassifyError(t *testing.T) {
 		{"stream interrupt", errors.New("stream interrupted: EOF"), ErrStreamInterrupted},
 		{"cancel", errors.New("context canceled"), ErrCancelled},
 		{"timeout", errors.New("request timeout"), ErrProviderTimeout},
+		{"context deadline", context.DeadlineExceeded, ErrProviderTimeout},
+		{"ambiguous generate", errors.New("failed to generate output"), ErrUnknown},
+		{"ambiguous author", errors.New("author metadata missing"), ErrUnknown},
 		{"unknown", errors.New("something unexpected happened"), ErrUnknown},
 	}
 
@@ -96,6 +104,10 @@ func TestErrorInfoRoundTripViaErrorInterface(t *testing.T) {
 	}
 	if !strings.Contains(restored.Message, "timed out") {
 		t.Fatalf("round-tripped Message = %q", restored.Message)
+	}
+	ptrRestored := ClassifyError(&original)
+	if ptrRestored.Code != ErrToolTimeout {
+		t.Fatalf("pointer round-trip Code = %q", ptrRestored.Code)
 	}
 }
 
@@ -135,8 +147,8 @@ func TestErrorInfoErrorMethod(t *testing.T) {
 	ei := NewErrorInfo(ErrProviderAuth, "Invalid API key").
 		WithDetail("check DEEPSEEK_API_KEY")
 	s := ei.Error()
-	if !strings.Contains(s, string(ErrProviderAuth)) {
-		t.Fatalf("Error() should contain code: %s", s)
+	if strings.Contains(s, string(ErrProviderAuth)) {
+		t.Fatalf("Error() should remain user-readable without a code prefix: %s", s)
 	}
 	if !strings.Contains(s, "Invalid API key") {
 		t.Fatalf("Error() should contain message: %s", s)

@@ -2,27 +2,29 @@
 package eventwire
 
 import (
+	"reames-agent/internal/control"
 	"reames-agent/internal/event"
 	"reames-agent/internal/provider"
 )
 
 // Event is the JSON-friendly form shared by event frontends.
 type Event struct {
-	Kind            string           `json:"kind"`
-	Text            string           `json:"text,omitempty"`
-	Reasoning       string           `json:"reasoning,omitempty"`
-	MemoryCitations []MemoryCitation `json:"memoryCitations,omitempty"`
-	MemoryCompiler  *MemoryCompiler  `json:"memoryCompiler,omitempty"`
-	Level           string           `json:"level,omitempty"`
-	Tool            *Tool            `json:"tool,omitempty"`
-	Usage           *Usage           `json:"usage,omitempty"`
-	Approval        *Approval        `json:"approval,omitempty"`
-	Ask             *Ask             `json:"ask,omitempty"`
-	Compaction      *Compaction      `json:"compaction,omitempty"`
-	Guardian        *Guardian        `json:"guardian,omitempty"`
-	Err             string           `json:"err,omitempty"`
-	RetryAttempt    int              `json:"retryAttempt,omitempty"`
-	RetryMax        int              `json:"retryMax,omitempty"`
+	Kind            string             `json:"kind"`
+	Text            string             `json:"text,omitempty"`
+	Reasoning       string             `json:"reasoning,omitempty"`
+	MemoryCitations []MemoryCitation   `json:"memoryCitations,omitempty"`
+	MemoryCompiler  *MemoryCompiler    `json:"memoryCompiler,omitempty"`
+	Level           string             `json:"level,omitempty"`
+	Tool            *Tool              `json:"tool,omitempty"`
+	Usage           *Usage             `json:"usage,omitempty"`
+	Approval        *Approval          `json:"approval,omitempty"`
+	Ask             *Ask               `json:"ask,omitempty"`
+	Compaction      *Compaction        `json:"compaction,omitempty"`
+	Guardian        *Guardian          `json:"guardian,omitempty"`
+	Err             string             `json:"err,omitempty"`
+	Error           *control.ErrorInfo `json:"error,omitempty"`
+	RetryAttempt    int                `json:"retryAttempt,omitempty"`
+	RetryMax        int                `json:"retryMax,omitempty"`
 }
 
 // ToWire converts a typed runtime event into the shared frontend JSON contract.
@@ -106,6 +108,8 @@ func ToWire(e event.Event) Event {
 	case event.TurnDone:
 		if e.Err != nil {
 			w.Err = e.Err.Error()
+			info := control.ClassifyError(e.Err)
+			w.Error = &info
 		}
 	case event.Retrying:
 		w.RetryAttempt = e.RetryAttempt

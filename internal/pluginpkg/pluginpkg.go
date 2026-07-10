@@ -69,58 +69,15 @@ type MCPServerRef struct {
 }
 
 // Manifest is the normalized manifest shape used by Reames Agent.
-// Version 1 adds trust, permissions, compatibility, and integrity fields.
 type Manifest struct {
-	Name           string   `json:"name"`
-	Version        string   `json:"version"`
-	Description    string   `json:"description,omitempty"`
-	Homepage       string   `json:"homepage,omitempty"`
-	Repository     string   `json:"repository,omitempty"`
-	License        string   `json:"license,omitempty"`
-	Skills         []string `json:"skills,omitempty"`
-	Hooks          map[string][]Hook      `json:"hooks,omitempty"`
-	MCPServers     map[string]MCPServer   `json:"mcpServers,omitempty"`
-
-	// --- v1 additions: security and supply-chain fields ---
-
-	// TrustLevel declares the minimum trust required: "community", "verified",
-	// or "signed". The installer gates on this.
-	TrustLevel string `json:"trustLevel,omitempty"`
-
-	// Permissions lists the sensitive capabilities this plugin requests.
-	// Each entry is a dot-separated scope (e.g. "file.write", "network.outbound",
-	// "exec.shell"). The installer shows these before confirming.
-	Permissions []string `json:"permissions,omitempty"`
-
-	// MinReamesVersion and MaxReamesVersion declare the compatible Reames Agent
-	// version range. SemVer comparison with the running version gates install.
-	MinReamesVersion string `json:"minReamesVersion,omitempty"`
-	MaxReamesVersion string `json:"maxReamesVersion,omitempty"`
-
-	// Integrity holds optional content verification fields.
-	Integrity *ManifestIntegrity `json:"integrity,omitempty"`
-}
-
-// ManifestIntegrity holds optional content verification fields for supply-chain
-// security. At least one field should be present for signed/verified plugins.
-type ManifestIntegrity struct {
-	// SHA256 of the plugin archive or root directory contents.
-	SHA256 string `json:"sha256,omitempty"`
-	// Signatures is a list of detached signatures (e.g. minisign, SSH, GPG)
-	// that cover the manifest or archive.
-	Signatures []ManifestSignature `json:"signatures,omitempty"`
-	// Provenance is a URL to a build-provenance attestation (SLSA, in-toto).
-	Provenance string `json:"provenance,omitempty"`
-}
-
-// ManifestSignature is one detached signature covering the plugin contents.
-type ManifestSignature struct {
-	// Algorithm is the signature scheme (e.g. "minisign", "ssh-ed25519", "pgp").
-	Algorithm string `json:"algorithm"`
-	// KeyID identifies the signing key (fingerprint, minisign key ID, etc.).
-	KeyID string `json:"keyId,omitempty"`
-	// Signature is the base64-encoded signature bytes.
-	Signature string `json:"signature"`
+	Name        string
+	Version     string
+	Description string
+	Homepage    string
+	Repository  string
+	Skills      []string
+	Hooks       map[string][]Hook
+	MCPServers  map[string]MCPServer
 }
 
 type Hook struct {
@@ -168,61 +125,6 @@ type InstalledPackage struct {
 }
 
 func IsValidName(name string) bool { return validName.MatchString(strings.TrimSpace(name)) }
-
-// --- Exported manifest validation ---
-
-// KnownPermissions is the allowlist of permission scopes that plugins can request.
-var KnownPermissions = map[string]bool{
-	"file.read":     true,
-	"file.write":    true,
-	"exec.shell":    true,
-	"network.local": true,
-	"network.any":   true,
-	"env.read":      true,
-	"env.write":     true,
-}
-
-// ValidateManifest checks a Manifest for structural correctness (exported wrapper).
-func ValidateManifest(m *Manifest) error {
-	if m == nil {
-		return fmt.Errorf("manifest is nil")
-	}
-	if !IsValidName(m.Name) {
-		return fmt.Errorf("manifest: invalid name %q", m.Name)
-	}
-	if m.Version == "" {
-		return fmt.Errorf("manifest: version is required for %q", m.Name)
-	}
-	if m.TrustLevel != "" {
-		switch m.TrustLevel {
-		case "community", "verified", "signed":
-		default:
-			return fmt.Errorf("manifest: unknown trustLevel %q for %q", m.TrustLevel, m.Name)
-		}
-	}
-	return nil
-}
-
-// UnknownPermissions returns permission scopes not in KnownPermissions.
-func UnknownPermissions(m *Manifest) []string {
-	var unknown []string
-	for _, p := range m.Permissions {
-		if !KnownPermissions[p] {
-			unknown = append(unknown, p)
-		}
-	}
-	return unknown
-}
-
-// HasPermission reports whether the manifest requests the given scope.
-func (m *Manifest) HasPermission(scope string) bool {
-	for _, p := range m.Permissions {
-		if p == scope {
-			return true
-		}
-	}
-	return false
-}
 
 func StatePath(reamesAgentHome string) string {
 	return filepath.Join(reamesAgentHome, StateFilename)

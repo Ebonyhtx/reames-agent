@@ -18,6 +18,7 @@ import (
 	"reames-agent/internal/checkpoint"
 	"reames-agent/internal/command"
 	"reames-agent/internal/event"
+	"reames-agent/internal/evidence"
 	"reames-agent/internal/guardian"
 	"reames-agent/internal/hook"
 	"reames-agent/internal/i18n"
@@ -465,7 +466,11 @@ func TestResumeRestoresTerminalGoalTodosFromSidecar(t *testing.T) {
 		Name:       "todo_write",
 		Content:    "ok",
 	})
-	if err := os.WriteFile(goalStatePath(path), []byte(`{"status":"complete","todos":[{"content":"Step 1","status":"completed"}]}`), 0o644); err != nil {
+	state := FromGoalState(goalState{
+		Status: GoalStatusComplete,
+		Todos:  []evidence.TodoItem{{Content: "Step 1", Status: "completed"}},
+	})
+	if err := WriteGoalStateV1(goalStatePath(path), state); err != nil {
 		t.Fatal(err)
 	}
 

@@ -223,6 +223,10 @@ def check_telemetry_boundaries(failures: list[str]) -> None:
         if normalized in allowed or not normalized.startswith(scan_roots):
             continue
         path = ROOT / normalized
+        # Pre-commit validation can run after a tracked optional file was
+        # removed from the worktree but before its deletion is staged.
+        if not path.is_file():
+            continue
         text = path.read_text(encoding="utf-8", errors="ignore")
         for token in forbidden_tokens:
             require(token not in text, f"{normalized} must not configure telemetry/crash token {token!r}.", failures)

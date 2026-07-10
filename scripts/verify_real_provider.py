@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -40,11 +41,20 @@ ROOT = Path(__file__).resolve().parents[1]
 MAX_SNIPPET_LEN = 80
 
 # Max total response tokens allowed in evidence.
-MAX_RESPONSE_TOKENS = 50
+MAX_RESPONSE_TOKENS = 10
+
+# Bound provider responses before JSON parsing so this verifier cannot be used
+# to exhaust memory with a hostile or misconfigured endpoint.
+MAX_RESPONSE_BYTES = 1 << 20
 
 
-def redact(text: str) -> str:
-    """Truncate text to a short, non-sensitive snippet for evidence."""
+def redact(text: str, secrets: tuple[str, ...] = ()) -> str:
+    """Remove credential-shaped values, then truncate evidence text."""
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "[REDACTED]")
+    text = re.sub(r"(?i)bearer\s+[a-z0-9._~+/=-]+", "Bearer [REDACTED]", text)
+    text = re.sub(r"(?i)\bsk-[a-z0-9_-]{8,}\b", "[REDACTED]", text)
     if len(text) > MAX_SNIPPET_LEN:
         return text[:MAX_SNIPPET_LEN] + "..."
     return text
@@ -60,6 +70,7 @@ def build_evidence(
     prompt_tokens: int | None,
     completion_tokens: int | None,
     snippets: list[str],
+    secrets: tuple[str, ...] = (),
 ) -> dict:
     """Construct a redacted, machine-readable evidence record."""
     return {
@@ -69,15 +80,15 @@ def build_evidence(
         "model": model,
         "outcome": outcome,  # "passed" | "blocked" | "failed"
         "status_code": status_code,
-        "error": redact(error) if error else None,
+        "error": redact(error, secrets) if error else None,
         "latency_ms": latency_ms,
         "usage": {
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
         },
-        "snippets": [redact(s) for s in snippets],
+        "snippets": [redact(s, secrets) for s in snippets],
         "redacted": True,
-        "note": "All content fields are truncated to <=%d chars. Secrets are never included." % MAX_SNIPPET_LEN,
+        "note": "Content fields are credential-sanitized and truncated to <=%d chars." % MAX_SNIPPET_LEN,
     }
 
 
@@ -96,7 +107,7 @@ def verify_deepseek(model: str) -> dict:
     payload = json.dumps({
         "model": model,
         "messages": [{"role": "user", "content": "Say 'OK' and nothing else."}],
-        "max_tokens": 10,
+        "max_tokens": MAX_RESPONSE_TOKENS,
         "temperature": 0,
         "stream": False,
     }).encode("utf-8")
@@ -114,10 +125,17 @@ def verify_deepseek(model: str) -> dict:
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             status = resp.status
-            body = resp.read().decode("utf-8")
+            raw_body = resp.read(MAX_RESPONSE_BYTES + 1)
             elapsed_ms = int((time.monotonic() - start) * 1000)
 
-            data = json.loads(body)
+            if len(raw_body) > MAX_RESPONSE_BYTES:
+                return build_evidence(
+                    "deepseek", model, "failed", status,
+                    f"HTTP {status}: response exceeded {MAX_RESPONSE_BYTES}-byte limit",
+                    elapsed_ms, None, None, [], (api_key,),
+                )
+
+            data = json.loads(raw_body.decode("utf-8"))
             choices = data.get("choices", [])
             usage = data.get("usage", {})
 
@@ -130,24 +148,23 @@ def verify_deepseek(model: str) -> dict:
             return build_evidence(
                 "deepseek", model, "passed", status, None, elapsed_ms,
                 usage.get("prompt_tokens"), usage.get("completion_tokens"),
-                snippets,
+                snippets, (api_key,),
             )
     except urllib.error.HTTPError as exc:
         elapsed_ms = int((time.monotonic() - start) * 1000)
-        body = ""
-        try:
-            body = exc.read().decode("utf-8")
-        except Exception:
-            pass
+        # Provider error bodies are intentionally omitted: some gateways echo
+        # Authorization values or request headers in diagnostic responses.
         return build_evidence(
             "deepseek", model, "failed", exc.code,
-            f"HTTP {exc.code}: {body}", elapsed_ms, None, None, []
+            f"HTTP {exc.code}: provider rejected request", elapsed_ms, None, None, [],
+            (api_key,),
         )
     except Exception as exc:
         elapsed_ms = int((time.monotonic() - start) * 1000)
         return build_evidence(
             "deepseek", model, "failed", None,
-            str(exc), elapsed_ms, None, None, []
+            f"{type(exc).__name__}: provider request failed", elapsed_ms, None, None, [],
+            (api_key,),
         )
 
 
@@ -190,7 +207,7 @@ def main() -> int:
         print("\nBLOCKED: set DEEPSEEK_API_KEY in your process environment and retry.")
         print("Example:  set DEEPSEEK_API_KEY=sk-...")
         print("          python scripts/verify_real_provider.py --provider deepseek")
-        return 0  # "blocked" is not an error — it means external resource needed
+        return 2  # Distinct from both verified success (0) and failed request (1).
 
     return 0 if evidence["outcome"] == "passed" else 1
 

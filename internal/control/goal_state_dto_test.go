@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"reames-agent/internal/evidence"
 )
 
 func TestGoalStateV1RoundTrip(t *testing.T) {
@@ -17,6 +19,7 @@ func TestGoalStateV1RoundTrip(t *testing.T) {
 		Turns:              5,
 		Blocks:             0,
 		Strict:             true,
+		Todos:              []evidence.TodoItem{{Content: "verify persistence", Status: "completed"}},
 	}
 
 	data, err := json.Marshal(original)
@@ -41,6 +44,9 @@ func TestGoalStateV1RoundTrip(t *testing.T) {
 	if restored.Strict != true {
 		t.Fatal("Strict should be true")
 	}
+	if len(restored.Todos) != 1 || restored.Todos[0].Content != "verify persistence" {
+		t.Fatalf("Todos = %+v, want persisted todo", restored.Todos)
+	}
 }
 
 func TestGoalStateV1ToGoalStateAndBack(t *testing.T) {
@@ -52,6 +58,7 @@ func TestGoalStateV1ToGoalStateAndBack(t *testing.T) {
 		Blocks:       2,
 		Block:        "missing API key",
 		Strict:       false,
+		Todos:        []evidence.TodoItem{{Content: "provide key", Status: "pending"}},
 	}
 
 	gs := v1.ToGoalState()
@@ -66,45 +73,8 @@ func TestGoalStateV1ToGoalStateAndBack(t *testing.T) {
 	if back.Block != v1.Block {
 		t.Fatalf("Block round-trip: %q → %q", v1.Block, back.Block)
 	}
-}
-
-func TestAllowedGoalTransitions(t *testing.T) {
-	// Every allowed transition should validate.
-	for _, tr := range AllowedGoalTransitions {
-		t.Run(tr.From+"→"+tr.To, func(t *testing.T) {
-			if err := ValidateGoalTransition(tr.From, tr.To); err != nil {
-				t.Fatalf("allowed transition %q→%q should pass: %v", tr.From, tr.To, err)
-			}
-		})
-	}
-
-	// Disallowed transitions should fail.
-	disallowed := []struct{ from, to string }{
-		{GoalStatusComplete, GoalStatusRunning}, // terminal → running should not happen
-		{GoalStatusRunning, GoalStatusRunning},  // no-op
-		{"", GoalStatusComplete},                // can't go from empty to complete directly
-		{GoalStatusComplete, GoalStatusBlocked}, // terminal → blocked
-	}
-	for _, d := range disallowed {
-		t.Run("deny-"+d.from+"→"+d.to, func(t *testing.T) {
-			if err := ValidateGoalTransition(d.from, d.to); err == nil {
-				t.Fatalf("disallowed transition %q→%q should fail", d.from, d.to)
-			}
-		})
-	}
-}
-
-func TestIsTerminalGoalStatus(t *testing.T) {
-	for _, s := range []string{GoalStatusComplete, GoalStatusBlocked, GoalStatusStopped} {
-		if !IsTerminalGoalStatus(s) {
-			t.Fatalf("%q should be terminal", s)
-		}
-	}
-	if IsTerminalGoalStatus(GoalStatusRunning) {
-		t.Fatal("running should not be terminal")
-	}
-	if IsTerminalGoalStatus("") {
-		t.Fatal("empty should not be terminal")
+	if len(back.Todos) != 1 || back.Todos[0].Status != "pending" {
+		t.Fatalf("Todos round-trip: %+v", back.Todos)
 	}
 }
 
@@ -183,8 +153,43 @@ func TestGoalStateV1RejectsFutureVersion(t *testing.T) {
 	}
 }
 
+func TestReadGoalStateForResumeRejectsFutureVersion(t *testing.T) {
+	_, err := ReadGoalStateForResume([]byte(`{"version":999,"goal":"future","status":"running"}`))
+	if err == nil {
+		t.Fatal("resume reader should reject future version")
+	}
+}
+
+func TestReadGoalStateForResumeRejectsMalformedVersion(t *testing.T) {
+	for _, data := range []string{
+		`{"version":"1","goal":"future","status":"running"}`,
+		`{"version":-1,"goal":"future","status":"running"}`,
+	} {
+		if _, err := ReadGoalStateForResume([]byte(data)); err == nil {
+			t.Fatalf("resume reader accepted malformed version in %s", data)
+		}
+	}
+}
+
+func TestGoalMachineDoesNotRestoreFutureVersion(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	if err := os.WriteFile(goalStatePath(sessionPath), []byte(`{"version":999,"goal":"future","status":"running","todos":[{"content":"future","status":"completed"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var machine goalMachine
+	machine.restoreRunningFromState(sessionPath)
+	if machine.active() {
+		t.Fatal("future goal-state version must not restore a running goal")
+	}
+	if todos, ok := machine.terminalTodosFromState(sessionPath); ok || len(todos) != 0 {
+		t.Fatalf("future goal-state version restored terminal todos: %+v", todos)
+	}
+}
+
 func TestReadGoalStateForResumeV1(t *testing.T) {
-	v1 := []byte(`{"version":1,"goal":"resume test","status":"running","turns":5,"strict":true}`)
+	v1 := []byte(`{"version":1,"goal":"resume test","status":"running","turns":5,"strict":true,"todos":[{"content":"ship","status":"completed"}]}`)
 	gs, err := ReadGoalStateForResume(v1)
 	if err != nil {
 		t.Fatal(err)
@@ -197,6 +202,9 @@ func TestReadGoalStateForResumeV1(t *testing.T) {
 	}
 	if !gs.Strict {
 		t.Fatal("Strict should be true")
+	}
+	if len(gs.Todos) != 1 || gs.Todos[0].Status != "completed" {
+		t.Fatalf("Todos = %+v, want completed todo", gs.Todos)
 	}
 }
 
