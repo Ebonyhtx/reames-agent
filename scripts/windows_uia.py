@@ -27,9 +27,11 @@ STOP_NAMES = ("Stop (Esc)", "Stop", "停止（Esc）", "停止")
 
 class GUID(ctypes.Structure):
     _fields_ = [
-        ("Data1", ctypes.c_ulong),
-        ("Data2", ctypes.c_ushort),
-        ("Data3", ctypes.c_ushort),
+        # Use fixed-width Windows ABI types even when the contract tests import
+        # this module on Linux, where ctypes.c_ulong is 64-bit.
+        ("Data1", ctypes.c_uint32),
+        ("Data2", ctypes.c_uint16),
+        ("Data3", ctypes.c_uint16),
         ("Data4", ctypes.c_ubyte * 8),
     ]
 

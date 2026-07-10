@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import json
 import sys
 import tempfile
@@ -158,6 +159,7 @@ class DesktopInteractionSmokeTests(unittest.TestCase):
                 smoke.validate_timeout(invalid)
 
     def test_uia_labels_cover_english_and_chinese(self) -> None:
+        self.assertEqual(ctypes.sizeof(windows_uia.GUID), 16)
         self.assertIn("New session", windows_uia.NEW_SESSION_NAMES)
         self.assertIn("新建会话", windows_uia.NEW_SESSION_NAMES)
         self.assertIn("Stop", windows_uia.STOP_NAMES)
