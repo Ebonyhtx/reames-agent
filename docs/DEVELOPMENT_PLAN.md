@@ -84,14 +84,14 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 2. [x] 在原生 Wails 中完成新建会话、选择工作区、发送和停止（截图无关的 Windows UIA 驱动通过 `InvokePattern`、`ValuePattern`、稳定 AutomationId 和焦点窗口消息操作真实 WebView，`SendInput` 仅作回退；隔离 home 内的 loopback OpenAI 兼容端点收到 marker，用户/助手消息进入 canonical 事件账本；跨 Git Bash/PowerShell 的 Python 长命令出现 Stop 并被取消，见 `audits/2026-07-10-windows-native-interaction-smoke.md`）。
 3. [x] 执行一次需要文件写入的任务，验证审批、补丁预览、落盘和回退（自动化锁定真实 `write_file`：审批请求 diff、ToolDispatch diff、磁盘写入、RewindCode 删除，见 `audits/2026-07-09-m1-file-write-loop.md`）。
 4. [x] 关闭并重启应用，验证会话、待处理状态和工作区恢复（前端/后端自动化覆盖 pending approval replay、tab/workspace/pinned session/history；Windows 原生 smoke 进一步关闭并重启同一安装后二进制，确认同一项目、同一 session path、用户 marker 和 assistant response 均恢复，见 `audits/2026-07-09-m1-reconnect-recovery.md`、`audits/2026-07-10-windows-native-interaction-smoke.md`）。
-5. [ ] 对失败场景补自动化：断流、限流、无效密钥、权限拒绝和工具超时（已补 provider 鉴权失败/429/503/流中断恢复耗尽 TurnDone、审批超时与用户拒绝阻塞写入/清 pending、真实 bash 工具超时 ToolResult + 运行态归零的 Controller 自动化，以及 Desktop 前端可见 warn/error 与停止态复位合同；见 `audits/2026-07-09-m1-failure-contracts.md`、`audits/2026-07-09-desktop-m1-failure-display.md`；仍需真实原生窗口失败 smoke）。
+5. [x] 对失败场景补自动化：断流、限流、无效密钥、权限拒绝和工具超时（已补 provider 鉴权失败/429/503/流中断恢复耗尽 TurnDone、审批超时与用户拒绝阻塞写入/清 pending、真实 bash 工具超时 ToolResult + 运行态归零的 Controller 自动化，以及 Desktop 前端可见 warn/error 与停止态复位合同；新增 `internal/provider/harness` 可复用 SSE 测试服务器（9 测试）和 control 层真实 HTTP 集成测试（3 测试），以及凭据门控 `scripts/verify_real_provider.py`；见 `audits/2026-07-09-m1-failure-contracts.md`、`audits/2026-07-09-desktop-m1-failure-display.md`）。
 
 真实密钥不得写入仓库、测试日志或截图。没有可用密钥时，先完成可自动化的原生桥接与失败路径，密钥 E2E 保持显式阻塞。
 
 ## M2：统一控制面
 
 - [x] 用 Go AST 依赖守卫冻结 Desktop、CLI、Serve、Bot 和 ACP 对 `agent/provider/tool` 的现有直连，禁止依赖面继续增长（见 `audits/2026-07-10-control-boundary-ratchet.md`）。
-- [ ] 定义稳定的 command/event/error DTO，避免前端依赖 Agent 内部结构。
+- [x] 定义稳定的 ErrorInfo DTO：ErrorCode（16 个稳定码：provider_auth/rate_limit/server_error/timeout/stream_interrupted/tool_timeout/approval_denied/cancelled 等）、ErrorCategory（auth/retryable/fatal/user/cancelled）、ClassifyError 错误分类器、JSON round-trip。前端必须通过 Code/Category 分类错误，禁止字符串匹配（见 `internal/control/error_dto.go`）。
 - [ ] 先收口提交、取消、审批、会话和状态查询，再处理装配与设置。
 - [ ] 保持 provider prompt 与 UI/渠道 metadata 分离，并增加缓存前缀回归测试。
 - [ ] 按可验证的纵向路径收缩依赖 allowlist，不做一次性大搬家。
