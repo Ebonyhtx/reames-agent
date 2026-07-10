@@ -60,10 +60,11 @@ const eventChannel = "agent:event"
 const singleInstanceIDPrefix = "com.reames-agent.desktop"
 
 // singleInstanceID is used by Wails to route a second desktop launch back to the
-// running instance. It is stable for a given binary path + explicit home, while
+// running instance. It is stable for a given binary path + isolated home, while
 // allowing a dev build and an installed release at different paths to run side by
-// side. When --home is specified, the home path is hashed into the ID so two
-// instances with different homes do not share the single-instance lock.
+// side. When REAMES_AGENT_HOME is explicit (including through --home), the
+// normalized home path is hashed into the ID so isolated instances do not share
+// the single-instance lock.
 func singleInstanceID() string {
 	abs, err := os.Executable()
 	if err != nil {
@@ -75,8 +76,8 @@ func singleInstanceID() string {
 		abs = fallback
 	}
 	payload := abs
-	if explicitHome != "" {
-		payload += "\x00" + explicitHome
+	if home := config.IsolatedHomeDir(); home != "" {
+		payload += "\x00" + home
 	}
 	sum := sha256.Sum256([]byte(payload))
 	return singleInstanceIDPrefix + "." + hex.EncodeToString(sum[:8])

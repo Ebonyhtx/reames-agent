@@ -62,12 +62,6 @@ var channel = "stable"
 // macOS release builds. Local/ad-hoc macOS builds keep the manual download path.
 var macSelfUpdate = "false"
 
-// explicitHome is set when --home <path> is passed on the command line.
-// It is empty when using the default home. singleInstanceID uses it to
-// isolate different homes, and RestartApplication forwards it automatically
-// via os.Args.
-var explicitHome string
-
 // parseHomeFlag extracts --home <path> or --home=<path> from args.
 // It returns an error for missing value, empty value, or duplicate flags.
 // Unknown flags (e.g. Wails dev flags like -devserver) are silently ignored
@@ -82,7 +76,7 @@ func parseHomeFlag(args []string) (string, error) {
 				return "", fmt.Errorf("duplicate --home flag")
 			}
 			i++
-			if i >= len(args) || args[i] == "" {
+			if i >= len(args) || strings.TrimSpace(args[i]) == "" || strings.HasPrefix(args[i], "--") {
 				return "", fmt.Errorf("missing value after --home")
 			}
 			home = args[i]
@@ -94,13 +88,33 @@ func parseHomeFlag(args []string) (string, error) {
 				return "", fmt.Errorf("duplicate --home flag")
 			}
 			v := strings.TrimPrefix(a, "--home=")
-			if v == "" {
+			if strings.TrimSpace(v) == "" {
 				return "", fmt.Errorf("--home= requires a value")
 			}
 			home = v
 			seen = true
 			continue
 		}
+	}
+	return home, nil
+}
+
+// configureDesktopHome applies the command-line home override before any
+// config, state, migration, or single-instance path is resolved.
+func configureDesktopHome(args []string) (string, error) {
+	home, err := parseHomeFlag(args)
+	if err != nil || home == "" {
+		return home, err
+	}
+	if !filepath.IsAbs(home) {
+		home, err = filepath.Abs(home)
+		if err != nil {
+			return "", fmt.Errorf("resolve %q to an absolute path: %w", home, err)
+		}
+	}
+	home = filepath.Clean(home)
+	if err := os.Setenv("REAMES_AGENT_HOME", home); err != nil {
+		return "", fmt.Errorf("set REAMES_AGENT_HOME: %w", err)
 	}
 	return home, nil
 }
@@ -159,23 +173,10 @@ func main() {
 	// Parse --home before any path resolution (window state, config, migration,
 	// single-instance ID). Accepts both --home <path> and --home=<path>.
 	// Wails dev flags (e.g. -devserver) are silently passed through.
-	homeFlag, parseErr := parseHomeFlag(os.Args[1:])
+	_, parseErr := configureDesktopHome(os.Args[1:])
 	if parseErr != nil {
 		fmt.Fprintf(os.Stderr, "desktop: --home: %v\n", parseErr)
 		os.Exit(2)
-	}
-	if homeFlag != "" {
-		if !filepath.IsAbs(homeFlag) {
-			abs, absErr := filepath.Abs(homeFlag)
-			if absErr != nil {
-				fmt.Fprintf(os.Stderr, "desktop: --home: cannot resolve %q to absolute path: %v\n", homeFlag, absErr)
-				os.Exit(2)
-			}
-			homeFlag = abs
-		}
-		homeFlag = filepath.Clean(homeFlag)
-		os.Setenv("REAMES_AGENT_HOME", homeFlag)
-		explicitHome = homeFlag
 	}
 
 	app := NewApp()

@@ -936,7 +936,7 @@ function defaultBotSettings(): BotSettingsView {
     control: {
       enabled: false,
       addr: "127.0.0.1:37913",
-      tokenEnv: "REASONIX_BOT_CONTROL_TOKEN",
+      tokenEnv: "REAMES_AGENT_BOT_CONTROL_TOKEN",
     },
     pairing: {
       enabled: true,

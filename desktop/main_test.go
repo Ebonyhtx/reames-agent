@@ -119,6 +119,9 @@ func TestParseHomeFlag(t *testing.T) {
 		{name: "duplicate mixed forms", args: []string{"--home=/a", "--home", "/b"}, wantErr: true},
 		{name: "missing value", args: []string{"--home"}, wantErr: true},
 		{name: "empty value", args: []string{"--home="}, wantErr: true},
+		{name: "blank separated value", args: []string{"--home", "   "}, wantErr: true},
+		{name: "blank equals value", args: []string{"--home=   "}, wantErr: true},
+		{name: "next long flag is not a value", args: []string{"--home", "--devserver", "localhost:34115"}, wantErr: true},
 		{name: "missing value at end", args: []string{"--devserver", "--home"}, wantErr: true},
 	}
 
@@ -138,5 +141,40 @@ func TestParseHomeFlag(t *testing.T) {
 				t.Fatalf("parseHomeFlag(%v) = %q, want %q", tt.args, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestConfigureDesktopHomeOverridesEnvironmentAndResolvesRelativePath(t *testing.T) {
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(t.TempDir(), "old"))
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := configureDesktopHome([]string{"--home", filepath.Join("relative", "home")})
+	if err != nil {
+		t.Fatalf("configureDesktopHome: %v", err)
+	}
+	want := filepath.Join(cwd, "relative", "home")
+	if got != want {
+		t.Fatalf("configured home = %q, want %q", got, want)
+	}
+	if env := os.Getenv("REAMES_AGENT_HOME"); env != want {
+		t.Fatalf("REAMES_AGENT_HOME = %q, want %q", env, want)
+	}
+}
+
+func TestConfigureDesktopHomeWithoutFlagPreservesEnvironment(t *testing.T) {
+	want := filepath.Join(t.TempDir(), "existing")
+	t.Setenv("REAMES_AGENT_HOME", want)
+	got, err := configureDesktopHome([]string{"-devserver", "localhost:34115"})
+	if err != nil {
+		t.Fatalf("configureDesktopHome: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("configured home = %q, want no command-line override", got)
+	}
+	if env := os.Getenv("REAMES_AGENT_HOME"); env != want {
+		t.Fatalf("REAMES_AGENT_HOME = %q, want preserved %q", env, want)
 	}
 }

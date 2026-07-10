@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -36,31 +38,30 @@ func TestSingleInstanceLockSkipsInDevMode(t *testing.T) {
 }
 
 func TestSingleInstanceIDDifferentHomesYieldDifferentIDs(t *testing.T) {
-	oldHome := explicitHome
-	t.Cleanup(func() { explicitHome = oldHome })
-
-	// Without explicit home, the ID depends only on executable path.
-	explicitHome = ""
+	// Without an isolated home, the ID depends only on executable path.
+	t.Setenv("REAMES_AGENT_HOME", "")
 	id1 := singleInstanceID()
 
-	// With explicit home, the home path is mixed into the ID.
-	explicitHome = "/tmp/home-a"
+	// With an isolated home, the normalized home path is mixed into the ID.
+	homeA := t.TempDir()
+	t.Setenv("REAMES_AGENT_HOME", homeA)
 	id2 := singleInstanceID()
 
 	if id1 == id2 {
-		t.Fatalf("singleInstanceID with explicitHome=%q should differ from default: both are %q", explicitHome, id1)
+		t.Fatalf("singleInstanceID with REAMES_AGENT_HOME=%q should differ from default: both are %q", homeA, id1)
 	}
 
 	// Different homes should yield different IDs.
-	explicitHome = "/tmp/home-b"
+	t.Setenv("REAMES_AGENT_HOME", t.TempDir())
 	id3 := singleInstanceID()
 	if id2 == id3 {
 		t.Fatalf("singleInstanceID for home-a and home-b should differ: both are %q", id2)
 	}
 
-	// Same home should be stable.
+	// Equivalent spellings of the same home should be stable.
+	t.Setenv("REAMES_AGENT_HOME", homeA+string(os.PathSeparator)+".")
 	id4 := singleInstanceID()
-	if id3 != id4 {
-		t.Fatalf("singleInstanceID for same home should be stable: %q vs %q", id3, id4)
+	if id2 != id4 {
+		t.Fatalf("singleInstanceID for equivalent home paths should be stable: %q vs %q (%s)", id2, id4, filepath.Clean(homeA))
 	}
 }

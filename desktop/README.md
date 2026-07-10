@@ -99,6 +99,27 @@ cd desktop
 wails build          # → build/bin/Reames Agent(.app/.exe)
 ```
 
+### Isolated native startup smoke
+
+Desktop accepts `--home <path>` and `--home=<path>`. The override is applied
+before config, migration, window-state, and single-instance paths are resolved;
+different isolated homes therefore run independently. This is intended for CI,
+portable setups, and smoke tests rather than normal interactive launches.
+
+On Windows, build the current frontend and native executable, then run:
+
+```powershell
+python scripts/smoke_desktop_native.py `
+  --exe desktop/build/bin/reames-agent-desktop.exe `
+  --out artifacts/desktop-native-smoke.json
+```
+
+The smoke waits for the process's visible native window to answer bounded
+message-pump probes, verifies that the default AppData roots did not change, and
+stops the process with a bounded fallback if `WM_CLOSE` does not exit. It proves
+startup and state confinement only; it does not prove graceful shutdown or
+replace the M1 Wails click workflow. Use `--keep-temp` only for local debugging.
+
 **Linux on WebKitGTK 4.1 only** (Fedora 40+, Ubuntu 24.04+, Arch — no
 `webkit2gtk-4.0` package): pass the Wails build tag so cgo links against 4.1.
 
@@ -214,8 +235,8 @@ handled here, and what to reach for if a target misbehaves:
 - **Windows / WebView2** — `Theme: SystemDefault` follows the OS light/dark
   setting; the installer embeds the WebView2 bootstrapper. Canary builds disable
   WebView2 GPU acceleration by default to smoke-test blank-window reports; set
-  `REASONIX_DESKTOP_DISABLE_WEBVIEW2_GPU=1` or `0` to force the fallback on or
-  off.
+  `REAMES_AGENT_DESKTOP_DISABLE_WEBVIEW2_GPU=1` or `0` to force the fallback on
+  or off.
 - **macOS / WebKit** — inset/hidden title bar (`TitleBarHiddenInset`); the CSS
   marks the top bar as an OS drag region (`--wails-draggable: drag`) and leaves
   room for the traffic lights.

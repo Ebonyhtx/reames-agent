@@ -28,20 +28,50 @@ _OLD_ENV_PATTERNS = [
     (re.compile(r"\bREASONIX_STATE_HOME\b"), "REAMES_AGENT_STATE_HOME"),
     (re.compile(r"\bREASONIX_CACHE_HOME\b"), "REAMES_AGENT_CACHE_HOME"),
     (re.compile(r"\bREASONIX_DISABLE_MOUSE\b"), "REAMES_AGENT_DISABLE_MOUSE"),
+    (re.compile(r"\bREASONIX_LANG\b"), "REAMES_AGENT_LANG"),
+    (re.compile(r"\bREASONIX_THEME\b"), "REAMES_AGENT_THEME"),
+    (re.compile(r"\bREASONIX_THEME_STYLE\b"), "REAMES_AGENT_THEME_STYLE"),
     (re.compile(r"\bREASONIX_PLUGIN_ROOT\b"), "REAMES_AGENT_PLUGIN_ROOT"),
     (re.compile(r"\bREASONIX_PLUGIN_NAME\b"), "REAMES_AGENT_PLUGIN_NAME"),
     (re.compile(r"\bREASONIX_PLUGIN_VERSION\b"), "REAMES_AGENT_PLUGIN_VERSION"),
     (re.compile(r"\bREASONIX_WORKSPACE_ROOT\b"), "REAMES_AGENT_WORKSPACE_ROOT"),
+    (
+        re.compile(r"\bREASONIX_MEMORY_COMPILER_LLM_CLASSIFICATION\b"),
+        "REAMES_AGENT_MEMORY_COMPILER_LLM_CLASSIFICATION",
+    ),
+    (re.compile(r"\bREASONIX_BOT_CONTROL_TOKEN\b"), "REAMES_AGENT_BOT_CONTROL_TOKEN"),
+    (
+        re.compile(r"\bREASONIX_DESKTOP_DISABLE_WEBVIEW2_GPU\b"),
+        "REAMES_AGENT_DESKTOP_DISABLE_WEBVIEW2_GPU",
+    ),
+    (re.compile(r"\bREASONIX_DESKTOP_VITE_PORT\b"), "REAMES_AGENT_DESKTOP_VITE_PORT"),
+    (re.compile(r"\bREASONIX_DESKTOP_WAILS_PORT\b"), "REAMES_AGENT_DESKTOP_WAILS_PORT"),
+    (re.compile(r"\bREASONIX_DEV\b"), "REAMES_AGENT_DEV"),
+    (re.compile(r"\bREASONIX_COMMIT\b"), "REAMES_AGENT_COMMIT"),
+    (re.compile(r"\bREASONIX_CHANNEL\b"), "REAMES_AGENT_CHANNEL"),
+    (
+        re.compile(r"\bREASONIX_RELEASE_CACHE_GUARD\b"),
+        "REAMES_AGENT_RELEASE_CACHE_GUARD",
+    ),
 ]
 
-# Docs that serve as the current configuration/plugin contract.
+# Files that serve as current configuration, development, or plugin contracts.
 # Legacy migration, audit, and upstream-reference docs are exempt.
 _CURRENT_CONTRACT_GLOBS = [
     "docs/CONFIG_PATHS.md",
     "docs/CONFIG_PATHS.zh-CN.md",
     "docs/GUIDE.md",
+    "docs/GUIDE.zh-CN.md",
     "docs/PLUGIN_PACKAGES.md",
     "docs/PLUGIN_PACKAGES.zh-CN.md",
+    "desktop/README.md",
+    "desktop/frontend/vite.config.ts",
+    "desktop/frontend/src/lib/bridge.ts",
+    "desktop/frontend/src/components/SettingsPanel.tsx",
+    "desktop/frontend/src/__tests__/settings-refresh-snapshot.test.tsx",
+    "dev",
+    "reames-agent.example.toml",
+    "scripts/cache-guard.sh",
 ]
 
 
@@ -129,7 +159,7 @@ def check_audit_references_exist(failures: list[str]) -> None:
 
 
 def check_no_old_env_vars_in_current_contracts(failures: list[str]) -> None:
-    """Ensure current-contract docs do not reference old REASONIX_* env var names."""
+    """Ensure current-contract files do not reference old REASONIX_* env names."""
     for pattern, replacement in _OLD_ENV_PATTERNS:
         for glob_pattern in _CURRENT_CONTRACT_GLOBS:
             for path in sorted(tracked_files(glob_pattern)):

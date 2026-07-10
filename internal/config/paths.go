@@ -214,11 +214,11 @@ func IsolatedHomeDir() string {
 
 // userConfigDisplayPath is userConfigPath collapsed to a ~-relative form for
 // comments rendered into the user's own config.toml, so Windows users see the
-// real location instead of a hardcoded ~/.reamesAgent path.
+// real location instead of a hardcoded ~/.reames-agent path.
 func userConfigDisplayPath() string {
 	p := userConfigPath()
 	if p == "" {
-		return "<os-config-dir>/reamesAgent/config.toml"
+		return "<os-config-dir>/reames-agent/config.toml"
 	}
 	if home, err := osUserHomeDir(); err == nil && home != "" {
 		if rel, err := filepath.Rel(home, p); err == nil && !strings.HasPrefix(rel, "..") {
@@ -230,8 +230,8 @@ func userConfigDisplayPath() string {
 
 // UserConfigPath is the user-global config.toml. It lives under Reames Agent home:
 // REAMES_AGENT_HOME/config.toml, then ~/.reames-agent/config.toml on Unix-like systems,
-// or %AppData%/reamesAgent/config.toml on Windows. If %AppData% is unavailable on
-// Windows, it falls back to %USERPROFILE%/AppData/Roaming/reamesAgent/config.toml.
+// or %AppData%/reames-agent/config.toml on Windows. If %AppData% is unavailable on
+// Windows, it falls back to %USERPROFILE%/AppData/Roaming/reames-agent/config.toml.
 // "" when the user config dir can't be resolved.
 func UserConfigPath() string { return userConfigPath() }
 
@@ -264,12 +264,12 @@ func LegacyUserConfigPaths() []string {
 }
 
 // ReamesAgentHomeDir is the current Reames Agent home directory. It honors
-// REAMES_AGENT_HOME, then uses ~/.reamesAgent on macOS/Linux or %APPDATA%/reamesAgent on
+// REAMES_AGENT_HOME, then uses ~/.reames-agent on macOS/Linux or %APPDATA%/reames-agent on
 // Windows, with a %USERPROFILE%/AppData/Roaming fallback when %APPDATA% is
 // unavailable.
 func ReamesAgentHomeDir() string { return reamesAgentHomeDir() }
 
-// UserCredentialsPath is the reamesAgent-owned global .env file under Reames Agent
+// UserCredentialsPath is the Reames Agent-owned global .env file under Reames Agent
 // home. It is the single source for provider credentials saved by Reames Agent, so
 // stale shell, Windows, project, or home env vars cannot silently override keys
 // the user saved through setup or settings. "" when Reames Agent home can't be
@@ -294,7 +294,7 @@ func ArchiveDir() string {
 }
 
 // SessionDir is where chat sessions are persisted (one .jsonl per session).
-// Used by `reamesAgent --continue` / `--resume` to find the recent ones. Empty
+// Used by `reames-agent --continue` / `--resume` to find the recent ones. Empty
 // if the user state dir can't be resolved — sessions then aren't saved.
 func SessionDir() string {
 	dir := userSupportDir()
@@ -358,7 +358,7 @@ func CacheDir() string {
 	return dir
 }
 
-// MemoryUserDir returns the reamesAgent user state root (…/reamesAgent), under which
+// MemoryUserDir returns the Reames Agent user state root (…/reames-agent), under which
 // the user-global REASONIX.md and the per-project auto-memory store live. Empty
 // when the user state dir can't be resolved, which disables user-scoped memory.
 func MemoryUserDir() string {
@@ -366,7 +366,7 @@ func MemoryUserDir() string {
 }
 
 // ConventionDirs are the parent directories scanned for agent assets (skills,
-// commands), in canonical-first order. .reamesAgent is ours; .agents / .agent /
+// commands), in canonical-first order. .reames-agent is ours; .agents / .agent /
 // .claude let users drop in assets authored for other agent tools without moving
 // files. Shared so skills (internal/skill) and commands (CommandDirs) discover
 // the same set. Note: hooks are NOT scanned across these — a .claude/settings.json
@@ -375,7 +375,7 @@ func MemoryUserDir() string {
 var ConventionDirs = []string{".reames-agent", ".agents", ".agent", ".claude"}
 
 // conventionSubdirsAsc joins sub under each ConventionDir of base, in ascending
-// priority (reverse of ConventionDirs) so the canonical .reamesAgent ends up the
+// priority (reverse of ConventionDirs) so the canonical .reames-agent ends up the
 // highest-priority entry — command.Load lets a later directory win on a clash.
 func conventionSubdirsAsc(base, sub string) []string {
 	out := make([]string, 0, len(ConventionDirs))

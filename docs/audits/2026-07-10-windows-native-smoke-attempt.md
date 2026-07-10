@@ -1,40 +1,45 @@
-# Windows 原生 Desktop smoke 尝试
+# Windows 原生 Desktop smoke 证据
 
 日期：2026-07-10
 
-基线提交：`92d79ae`
+验证源码：本审计随附提交（基于远端基线 `8f749dc`）
 
 ## 已取得证据
 
-1. `corepack pnpm test:all` 与 `corepack pnpm build` 通过。
-2. 使用固定版本 Wails CLI `v2.12.0` 从当前源码生成绑定并构建 Windows amd64 应用。
-3. 构建产物为 `desktop/build/bin/reames-agent-desktop.exe`，大小 47,870,464 bytes，SHA-256 为 `A94B687006A7E1D25A6B96F99A68F25B4A2E21A1140666E71DF39396A0AB4CDE`。
-4. 原生进程成功启动并保持 `Responding=True`，未发生启动崩溃；验证后已关闭进程。
+1. `corepack pnpm build` 通过，随后使用固定版本 Wails CLI `v2.12.0` 从当前源码生成绑定并构建 Windows amd64 应用。
+2. 构建产物为 `desktop/build/bin/reames-agent-desktop.exe`，大小 47,873,024 bytes，SHA-256 为 `E6B93A81487E745A492A94D586D8F630241343785A2B10EC58396670942EC12E`。
+3. `scripts/smoke_desktop_native.py` 使用独立临时 home 启动该产物，连续观察 12 秒。目标 PID 始终存活，最多发现 1 个可见窗口，完成 24 次窗口检查和 23 次成功的 `SendMessageTimeoutW(WM_NULL)` 消息泵响应检查，最终检查仍可响应。
+4. 隔离 home 内产生 `desktop-projects-legacy-recovered`、`desktop-tabs.json`、`desktop-window.json` 及会话元数据；对 `%APPDATA%/reames-agent` 和 `%LOCALAPPDATA%/reames-agent` 的前后元数据快照没有发现新增、删除或修改。
+5. 验证结束后脚本先请求 `WM_CLOSE`；窗口在 8 秒内没有自行退出，脚本使用 `terminate` 回退停止进程，记录的退出码为 1、`cleanup_method` 为 `terminate`。这只证明测试进程可被有界清理，不是优雅关闭证据。临时 home 已删除，未留下运行态文件。
+6. JSON 证据的 `outcome` 为 `passed`、`responding` 为 `true`、`cleanup_ok` 为 `true`、`temp_cleaned` 为 `true`、`boundary_changes` 与 `errors` 均为空。
 
-构建命令：
+构建与验证命令：
 
 ```powershell
 Push-Location desktop/frontend
 corepack pnpm build
 Pop-Location
 
-$env:GOPROXY = 'https://goproxy.cn,direct'
-$env:GOCACHE = '<workspace>/.tmp/wails-go-cache'
 Push-Location desktop
+$env:GOPROXY = 'https://goproxy.cn,direct'
 go run github.com/wailsapp/wails/v2/cmd/wails@v2.12.0 build -clean -s
 Pop-Location
+
+python scripts/smoke_desktop_native.py `
+  --exe desktop/build/bin/reames-agent-desktop.exe `
+  --out artifacts/desktop-native-smoke.json
 ```
 
-`-s` 只跳过 Wails 对裸 `pnpm` 的再次调用；嵌入的 `frontend/dist` 来自前一步已通过的 production build。
+`-s` 只跳过 Wails 对裸 `pnpm` 的再次调用；嵌入的 `frontend/dist` 来自前一步已通过的 production build。JSON 证据是本地验证产物，不纳入 Git。
 
-## 未取得的证据
+## 证据边界
 
-Windows 自动化在激活和被动捕获 frameless Wails 窗口时均返回：
+本次验证证明当前 Windows 原生候选能够启动、维持可响应的可见窗口、将状态限制在显式 home，并在观察后被有界停止。它不读取用户状态内容，也不证明优雅关闭、Wails command bridge、真实模型调用或用户点击流程。
+
+frameless Wails 窗口的既有捕获/输入自动化仍返回：
 
 ```text
 SetIsBorderRequired failed: 不支持此接口 (0x80004002)
 ```
 
-按验证安全规则，第二次捕获失败后停止了所有窗口输入。因此本次没有执行新建会话、选择工作区、发送、停止或恢复点击流，也不能将 M1 原生点击项标记为完成。
-
-应用没有独立的 `--home` 启动参数；本次启动读取并刷新了用户级 Desktop 状态文件。后续原生 smoke 应优先提供可隔离进程环境的启动方式，并使用支持 frameless WebView2 的捕获/点击通道；若改为人工验证，需记录 commit、步骤、结果和不含密钥的截图。
+因此本次没有执行新建会话、选择工作区、发送、停止或恢复点击流，不能将 M1 原生点击项标记为完成。后续需使用支持 frameless WebView2 的捕获/点击通道，或记录 commit、步骤、结果和不含密钥截图的人工验证。

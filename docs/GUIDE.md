@@ -149,7 +149,7 @@ described above. The variables below are process-level advanced switches; set
 them before launching Reames Agent. Project `.env` files are not a runtime source for
 Reames Agent control variables.
 
-`REASONIX_MEMORY_COMPILER_LLM_CLASSIFICATION=true` enables the optional LLM
+`REAMES_AGENT_MEMORY_COMPILER_LLM_CLASSIFICATION=true` enables the optional LLM
 task/chat classifier for Memory v5. By default it is disabled, and Reames Agent uses
 the local heuristic classifier without extra provider calls. When enabled, cache
 misses may send a small classifier request through the configured provider before
@@ -159,13 +159,13 @@ per session for a short time. Only the exact trimmed value `true` enables it;
 unset, `false`, `1`, and `TRUE` keep the default heuristic path.
 
 ```bash
-REASONIX_MEMORY_COMPILER_LLM_CLASSIFICATION=true reames-agent
+REAMES_AGENT_MEMORY_COMPILER_LLM_CLASSIFICATION=true reames-agent
 ```
 
 For development runs, prefix the command that starts the process, for example:
 
 ```bash
-REASONIX_MEMORY_COMPILER_LLM_CLASSIFICATION=true wails dev -forcebuild
+REAMES_AGENT_MEMORY_COMPILER_LLM_CLASSIFICATION=true wails dev -forcebuild
 ```
 
 Packaged desktop apps launched from the OS app launcher may not inherit variables

@@ -77,7 +77,7 @@ function baseSettings(displayMode: "standard" | "compact" = "standard"): Setting
 	      queueDrop: "summarize",
 	      ignoreSelfMessages: true,
 	      selfUserIds: { qq: [], feishu: [], weixin: [] },
-	      control: { enabled: false, addr: "127.0.0.1:37913", tokenEnv: "REASONIX_BOT_CONTROL_TOKEN" },
+	      control: { enabled: false, addr: "127.0.0.1:37913", tokenEnv: "REAMES_AGENT_BOT_CONTROL_TOKEN" },
 	      pairing: { enabled: true, requestTtlMinutes: 60, maxPendingPerPlatform: 3 },
 	      routes: [],
 	      allowlist: {
