@@ -252,7 +252,14 @@ def remove_tree_with_retries(
             shutil.rmtree(path)
             return
         except FileNotFoundError:
-            return
+            # WebView2 may delete a child between rmtree's directory scan and
+            # unlink. Treat that race as success only when the fixture root is
+            # actually gone; otherwise keep draining the same bounded budget.
+            if not path.exists():
+                return
+            if delay is None:
+                raise
+            sleeper(delay)
         except OSError:
             if delay is None:
                 raise

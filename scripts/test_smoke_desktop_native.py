@@ -109,6 +109,30 @@ class DesktopNativeSmokeTests(unittest.TestCase):
         self.assertEqual(attempts, [path, path, path])
         self.assertEqual(sleeps, [0.1, 0.2])
 
+    def test_remove_tree_does_not_confuse_missing_child_with_missing_root(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "fixture"
+            path.mkdir()
+            (path / "webview.db").write_text("locked", encoding="utf-8")
+            real_rmtree = smoke.shutil.rmtree
+            attempts: list[Path] = []
+            sleeps: list[float] = []
+
+            def remove(candidate: Path) -> None:
+                attempts.append(candidate)
+                if len(attempts) == 1:
+                    raise FileNotFoundError("WebView2 removed a child concurrently")
+                real_rmtree(candidate)
+
+            with mock.patch.object(smoke.shutil, "rmtree", side_effect=remove):
+                smoke.remove_tree_with_retries(
+                    path, retry_seconds=(0.1,), sleeper=sleeps.append
+                )
+
+            self.assertFalse(path.exists())
+            self.assertEqual(attempts, [path, path])
+            self.assertEqual(sleeps, [0.1])
+
     def test_default_cleanup_retry_budget_covers_slow_windows_runners(self) -> None:
         budget = sum(smoke.TEMP_CLEANUP_RETRY_SECONDS)
         self.assertGreaterEqual(budget, 20.0)
