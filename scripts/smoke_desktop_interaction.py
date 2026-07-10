@@ -37,10 +37,13 @@ MIN_TIMEOUT_SECONDS = 10
 MAX_TIMEOUT_SECONDS = 180
 WORKSPACE_TITLE = "Native UI Workspace"
 COMPOSER_AUTOMATION_ID = "composer-input"
+SEND_AUTOMATION_ID = "composer-send"
+STOP_AUTOMATION_ID = "composer-stop"
 ONBOARDING_AUTOMATION_ID = "onboarding-key"
 LOOPBACK_PROVIDER_NAME = "native-smoke"
 LOOPBACK_MODEL = "native-smoke-model"
 LOOPBACK_RESPONSE = "Native Desktop interaction smoke response"
+LONG_RUNNING_COMMAND = 'python -c "import time; time.sleep(30)"'
 
 
 def utc_now() -> str:
@@ -477,7 +480,11 @@ def run_smoke(
             result.initial_session_path = str(tab.get("sessionPath") or "")
 
             uia.type_text(result.marker, automation_id=COMPOSER_AUTOMATION_ID)
-            uia.wait_enabled(name=SEND_NAMES, timeout_seconds=timeout_seconds)
+            uia.wait_enabled(
+                name=SEND_NAMES,
+                automation_id=SEND_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
             uia.press_enter(automation_id=COMPOSER_AUTOMATION_ID)
             result.message_sent = True
             wait_until(
@@ -509,17 +516,29 @@ def run_smoke(
             result.provider_received_marker = True
 
             uia.type_text(
-                "!Start-Sleep -Seconds 30", automation_id=COMPOSER_AUTOMATION_ID
+                f"!{LONG_RUNNING_COMMAND}", automation_id=COMPOSER_AUTOMATION_ID
             )
-            uia.wait_enabled(name=SEND_NAMES, timeout_seconds=timeout_seconds)
+            uia.wait_enabled(
+                name=SEND_NAMES,
+                automation_id=SEND_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
             uia.press_enter(
                 automation_id=COMPOSER_AUTOMATION_ID,
                 timeout_seconds=timeout_seconds,
             )
+            uia.invoke(
+                name=STOP_NAMES,
+                automation_id=STOP_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
             result.stop_visible = True
-            uia.invoke(name=STOP_NAMES, timeout_seconds=timeout_seconds)
             result.stop_invoked = True
-            uia.wait_absent(name=STOP_NAMES, timeout_seconds=timeout_seconds)
+            uia.wait_absent(
+                name=STOP_NAMES,
+                automation_id=STOP_AUTOMATION_ID,
+                timeout_seconds=timeout_seconds,
+            )
             result.stop_completed = True
             result.uia_actions.extend(uia.actions)
             uia.actions.clear()

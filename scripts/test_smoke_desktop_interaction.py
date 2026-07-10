@@ -158,12 +158,29 @@ class DesktopInteractionSmokeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 smoke.validate_timeout(invalid)
 
+    def test_long_running_command_is_shell_portable(self) -> None:
+        self.assertIn("python -c", smoke.LONG_RUNNING_COMMAND)
+        self.assertNotIn("Start-Sleep", smoke.LONG_RUNNING_COMMAND)
+
     def test_uia_labels_cover_english_and_chinese(self) -> None:
         self.assertEqual(ctypes.sizeof(windows_uia.GUID), 16)
         self.assertIn("New session", windows_uia.NEW_SESSION_NAMES)
         self.assertIn("新建会话", windows_uia.NEW_SESSION_NAMES)
         self.assertIn("Stop", windows_uia.STOP_NAMES)
         self.assertIn("停止", windows_uia.STOP_NAMES)
+
+    def test_composer_controls_expose_stable_automation_ids(self) -> None:
+        composer = (
+            Path(__file__).parents[1]
+            / "desktop"
+            / "frontend"
+            / "src"
+            / "components"
+            / "Composer.tsx"
+        ).read_text(encoding="utf-8")
+        self.assertIn(f'id="{smoke.COMPOSER_AUTOMATION_ID}"', composer)
+        self.assertIn(f'id="{smoke.SEND_AUTOMATION_ID}"', composer)
+        self.assertIn(f'id="{smoke.STOP_AUTOMATION_ID}"', composer)
 
     @unittest.skipIf(sys.platform == "win32", "non-Windows classification")
     def test_run_smoke_rejects_non_windows_before_inputs(self) -> None:

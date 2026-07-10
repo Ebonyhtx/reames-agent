@@ -81,7 +81,7 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 按以下顺序推进：
 
 1. [x] 使用真实 API Key 完成最小文本对话，记录 Provider、缓存和使用量证据（见 `audits/2026-07-09-real-provider.md`）。
-2. [x] 在原生 Wails 中完成新建会话、选择工作区、发送和停止（截图无关的 Windows UIA 驱动通过 `InvokePattern`、焦点和 `SendInput` 操作真实 WebView；隔离 home 内的 loopback OpenAI 兼容端点收到 marker，用户/助手消息进入 canonical 事件账本；`Start-Sleep` 长命令出现 Stop 并被取消，见 `audits/2026-07-10-windows-native-interaction-smoke.md`）。
+2. [x] 在原生 Wails 中完成新建会话、选择工作区、发送和停止（截图无关的 Windows UIA 驱动通过 `InvokePattern`、`ValuePattern`、稳定 AutomationId 和焦点窗口消息操作真实 WebView，`SendInput` 仅作回退；隔离 home 内的 loopback OpenAI 兼容端点收到 marker，用户/助手消息进入 canonical 事件账本；跨 Git Bash/PowerShell 的 Python 长命令出现 Stop 并被取消，见 `audits/2026-07-10-windows-native-interaction-smoke.md`）。
 3. [x] 执行一次需要文件写入的任务，验证审批、补丁预览、落盘和回退（自动化锁定真实 `write_file`：审批请求 diff、ToolDispatch diff、磁盘写入、RewindCode 删除，见 `audits/2026-07-09-m1-file-write-loop.md`）。
 4. [x] 关闭并重启应用，验证会话、待处理状态和工作区恢复（前端/后端自动化覆盖 pending approval replay、tab/workspace/pinned session/history；Windows 原生 smoke 进一步关闭并重启同一安装后二进制，确认同一项目、同一 session path、用户 marker 和 assistant response 均恢复，见 `audits/2026-07-09-m1-reconnect-recovery.md`、`audits/2026-07-10-windows-native-interaction-smoke.md`）。
 5. [ ] 对失败场景补自动化：断流、限流、无效密钥、权限拒绝和工具超时（已补 provider 鉴权失败/429/503/流中断恢复耗尽 TurnDone、审批超时与用户拒绝阻塞写入/清 pending、真实 bash 工具超时 ToolResult + 运行态归零的 Controller 自动化，以及 Desktop 前端可见 warn/error 与停止态复位合同；见 `audits/2026-07-09-m1-failure-contracts.md`、`audits/2026-07-09-desktop-m1-failure-display.md`；仍需真实原生窗口失败 smoke）。

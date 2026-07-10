@@ -510,6 +510,68 @@ class WindowsUIAutomation:
             }
         )
 
+    def get_value(
+        self,
+        *,
+        automation_id: str,
+        timeout_seconds: float = 10.0,
+    ) -> str:
+        item = self._find(
+            automation_id=automation_id,
+            timeout_seconds=timeout_seconds,
+        )
+        element: ctypes.c_void_p = item["element"]  # type: ignore[assignment]
+        pattern = ctypes.c_void_p()
+        _check_hresult(
+            _method(
+                element,
+                14,
+                ctypes.c_int,
+                ctypes.POINTER(GUID),
+                ctypes.POINTER(ctypes.c_void_p),
+            )(
+                element,
+                UIA_VALUE_PATTERN_ID,
+                ctypes.byref(IID_VALUE_PATTERN),
+                ctypes.byref(pattern),
+            ),
+            "GetCurrentPatternAs(Value)",
+        )
+        if not pattern.value:
+            raise RuntimeError("UIA ValuePattern unavailable")
+        value = ctypes.c_void_p()
+        try:
+            _check_hresult(
+                _method(pattern, 4, ctypes.POINTER(ctypes.c_void_p))(
+                    pattern, ctypes.byref(value)
+                ),
+                "ValuePattern.CurrentValue",
+            )
+            return ctypes.wstring_at(value.value) if value.value else ""
+        finally:
+            if value.value:
+                self._oleaut32.SysFreeString(value)
+            _release(pattern)
+
+    def wait_value(
+        self,
+        expected: str,
+        *,
+        automation_id: str,
+        timeout_seconds: float = 2.0,
+    ) -> bool:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            try:
+                if self.get_value(
+                    automation_id=automation_id, timeout_seconds=0.25
+                ) == expected:
+                    return True
+            except (OSError, RuntimeError, TimeoutError):
+                pass
+            time.sleep(0.05)
+        return False
+
     @staticmethod
     def _keyboard_input(vk: int, scan: int, flags: int) -> _Input:
         return _Input(
@@ -557,6 +619,53 @@ class WindowsUIAutomation:
         time.sleep(0.05)
         return info
 
+    def _focused_window(self) -> int:
+        class GUIThreadInfo(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("flags", wintypes.DWORD),
+                ("hwndActive", wintypes.HWND),
+                ("hwndFocus", wintypes.HWND),
+                ("hwndCapture", wintypes.HWND),
+                ("hwndMenuOwner", wintypes.HWND),
+                ("hwndMoveSize", wintypes.HWND),
+                ("hwndCaret", wintypes.HWND),
+                ("rcCaret", wintypes.RECT),
+            ]
+
+        info = GUIThreadInfo(cbSize=ctypes.sizeof(GUIThreadInfo))
+        if not ctypes.windll.user32.GetGUIThreadInfo(0, ctypes.byref(info)):
+            raise OSError(ctypes.get_last_error(), "GetGUIThreadInfo failed")
+        hwnd = info.hwndFocus or info.hwndActive or self.hwnd
+        if not hwnd:
+            raise RuntimeError("focused WebView window is unavailable")
+        return int(hwnd)
+
+    @staticmethod
+    def _post_message(hwnd: int, message: int, wparam: int, lparam: int) -> None:
+        user32 = ctypes.windll.user32
+        user32.PostMessageW.argtypes = [
+            wintypes.HWND,
+            wintypes.UINT,
+            wintypes.WPARAM,
+            wintypes.LPARAM,
+        ]
+        user32.PostMessageW.restype = wintypes.BOOL
+        if not user32.PostMessageW(hwnd, message, wparam, lparam):
+            raise OSError(ctypes.get_last_error(), f"PostMessageW({message:#x}) failed")
+
+    def _post_virtual_key(self, virtual_key: int) -> None:
+        hwnd = self._focused_window()
+        self._post_message(hwnd, 0x0100, virtual_key, 1)
+        self._post_message(hwnd, 0x0101, virtual_key, -1073741823)
+
+    def _sync_value_pattern_with_react(self) -> None:
+        hwnd = self._focused_window()
+        self._post_message(hwnd, 0x0102, ord(" "), 1)
+        time.sleep(0.05)
+        self._post_message(hwnd, 0x0100, 0x08, 1)
+        self._post_message(hwnd, 0x0101, 0x08, -1073741823)
+
     def type_text(
         self,
         value: str,
@@ -564,31 +673,26 @@ class WindowsUIAutomation:
         automation_id: str,
         timeout_seconds: float = 10.0,
     ) -> None:
+        self.set_value(
+            value,
+            automation_id=automation_id,
+            timeout_seconds=timeout_seconds,
+        )
         item = self._find(
             automation_id=automation_id,
             timeout_seconds=timeout_seconds,
         )
         info = self._focus(item)
-        self._send_inputs(
-            [
-                self._keyboard_input(0x11, 0, 0),
-                self._keyboard_input(0x41, 0, 0),
-                self._keyboard_input(0x41, 0, 0x0002),
-                self._keyboard_input(0x11, 0, 0x0002),
-                self._keyboard_input(0x08, 0, 0),
-                self._keyboard_input(0x08, 0, 0x0002),
-            ]
-        )
-        units = value.encode("utf-16-le")
-        inputs: list[_Input] = []
-        for offset in range(0, len(units), 2):
-            scan = int.from_bytes(units[offset : offset + 2], "little")
-            inputs.append(self._keyboard_input(0, scan, 0x0004))
-            inputs.append(self._keyboard_input(0, scan, 0x0004 | 0x0002))
-        self._send_inputs(inputs)
+        self._sync_value_pattern_with_react()
+        if not self.wait_value(
+            value,
+            automation_id=automation_id,
+            timeout_seconds=2.0,
+        ):
+            raise RuntimeError(f"UIA composer value did not settle after input: {info.name!r}")
         self.actions.append(
             {
-                "action": "uia-focus-sendinput",
+                "action": "value-pattern-window-message",
                 "name": info.name,
                 "automation_id": info.automation_id,
                 "value_length": len(value),
@@ -606,15 +710,34 @@ class WindowsUIAutomation:
             timeout_seconds=timeout_seconds,
         )
         info = self._focus(item)
-        self._send_inputs(
-            [
-                self._keyboard_input(0x0D, 0, 0),
-                self._keyboard_input(0x0D, 0, 0x0002),
-            ]
-        )
+        self._post_virtual_key(0x0D)
+        action = "uia-focus-window-message-enter"
+        if not self.wait_value(
+            "",
+            automation_id=automation_id,
+            timeout_seconds=2.0,
+        ):
+            item = self._find(
+                automation_id=automation_id,
+                timeout_seconds=timeout_seconds,
+            )
+            self._focus(item)
+            self._send_inputs(
+                [
+                    self._keyboard_input(0x0D, 0, 0),
+                    self._keyboard_input(0x0D, 0, 0x0002),
+                ]
+            )
+            action = "uia-focus-sendinput-enter-fallback"
+            if not self.wait_value(
+                "",
+                automation_id=automation_id,
+                timeout_seconds=2.0,
+            ):
+                raise RuntimeError(f"UIA Enter did not submit composer: {info.name!r}")
         self.actions.append(
             {
-                "action": "uia-focus-enter",
+                "action": action,
                 "name": info.name,
                 "automation_id": info.automation_id,
             }

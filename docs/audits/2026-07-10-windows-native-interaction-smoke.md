@@ -30,7 +30,7 @@
 
 ### 截图无关的 UIA 驱动
 
-`scripts/windows_uia.py` 直接通过 Windows UI Automation COM 接口枚举 WebView 可访问性树，不依赖截图缓存。驱动优先使用 `InvokePattern`；文本输入使用 UIA `SetFocus`、键盘焦点确认和 Unicode `SendInput`，按钮状态通过 `IsEnabled` 形成有界等待围栏。
+`scripts/windows_uia.py` 直接通过 Windows UI Automation COM 接口枚举 WebView 可访问性树，不依赖截图缓存。驱动优先使用 `InvokePattern` 和 `ValuePattern`；文本先由 `ValuePattern.SetValue` 写入，再向实际焦点 WebView HWND 发送最小字符消息以同步 React `onChange`，Enter 同样投递到该焦点窗口，只有失败时才回退到 `SendInput`。Composer 的输入、发送和停止控件分别暴露稳定的 `composer-input`、`composer-send`、`composer-stop` AutomationId，按钮状态通过 AutomationId、名称和 `IsEnabled` 共同形成有界等待围栏。
 
 该路径绕开了 frameless 窗口截图仍会返回的错误：
 
@@ -57,7 +57,7 @@ SetIsBorderRequired failed: 不支持此接口 (0x80004002)
 ```text
 desktop/build/bin/reames-agent-desktop.exe
 size: 47,875,584 bytes
-SHA-256: A0AD1AB8FA5EF7948279F64BBDAD6F8A1E905F0FD15A06909BF3F5923625D449
+SHA-256: 27D2B7567476D9BF09B670EC0B965238D76A9BBAA5B32D1B2D85CE2B68192E16
 ```
 
 执行命令：
@@ -76,7 +76,7 @@ python scripts/smoke_desktop_interaction.py `
 - `onboarding_absent`、`project_visible`、`new_session_invoked`、`workspace_selected` 均为 `true`；
 - loopback provider 收到 1 个请求并包含唯一 marker；
 - user marker 与固定 assistant response 都进入 canonical 事件账本；
-- UIA 输入 `!Start-Sleep -Seconds 30` 后发现 Stop，调用 `InvokePattern` 并等待 Stop 消失；
+- UIA 输入跨 Git Bash/PowerShell 可用的 `!python -c "import time; time.sleep(30)"` 后，通过 `composer-stop` AutomationId 发现 Stop，调用 `InvokePattern` 并等待 Stop 消失；
 - 两次 `WM_CLOSE` 均在有界等待内结束进程，没有 `terminate` / `kill` 回退；
 - 重启后恢复的 session path 与首次运行完全一致，UIA 同时看见 user marker 和 assistant response；
 - `boundary_changes` 与 `errors` 为空，临时夹具已删除。
@@ -88,6 +88,8 @@ python scripts/smoke_desktop_interaction.py `
 - `desktop-windows-interaction-smoke.json` 随候选 artifact 上传；release contract 要求 workflow 不能移除该步骤或证据路径。
 
 WebView2 子进程在 GitHub Windows runner 上可能比 Wails 主进程晚几百毫秒释放 user-data 数据库。夹具删除因此使用总计约 8 秒的有界重试；锁释放后仍删除整个隔离 home，锁持续不释放则保持失败。该重试只处理 teardown 的短暂文件占用，不放宽 `cleanup_ok`、`temp_cleaned` 或默认状态围栏。
+
+GitHub Windows runner 可能由 Git Bash 而不是 PowerShell 承担 controller shell。交互 smoke 因此不使用 PowerShell 专有的 `Start-Sleep`；长命令由 runner 已必备的 Python 执行，在两种 shell 中保持同一取消语义。非交互 runner 也不依赖前台桌面的全局 `SendInput`：`ValuePattern` 与焦点窗口消息是主路径，`SendInput` 仅保留为显式回退。
 
 ## 证据边界
 

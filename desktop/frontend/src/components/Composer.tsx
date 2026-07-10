@@ -2328,7 +2328,7 @@ export function Composer({
             <span className="composer-runstatus__dot" />
             <span className="composer-runstatus__text">{runActivity}</span>
             <Tooltip label={t("composer.stop")}>
-              <button className="composer-runstatus__stop" type="button" onClick={handleCancel}>
+              <button id="composer-stop" className="composer-runstatus__stop" type="button" onClick={handleCancel}>
                 <Square size={10} fill="currentColor" />
                 <span>{t("composer.stopShort")}</span>
               </button>
@@ -2545,6 +2545,7 @@ export function Composer({
           )}
           <Tooltip label={submitTooltip}>
             <button
+              id="composer-send"
               className={`composer__btn composer__btn--send${running ? " composer__btn--steer" : ""}`}
               onClick={submit}
               disabled={submitBlocked}
