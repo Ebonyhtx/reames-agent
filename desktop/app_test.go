@@ -5431,8 +5431,12 @@ func TestDeleteSessionWithStuckJobReturnsAfterSingleGrace(t *testing.T) {
 		}
 	}
 
-	grace := 500 * time.Millisecond
-	slack := 300 * time.Millisecond
+	// Keep the threshold below two teardown windows while leaving enough
+	// scheduler headroom for loaded Windows CI runners. A 500ms grace with only
+	// 300ms slack proved too tight when the VM paused this goroutine after the
+	// timer fired.
+	grace := time.Second
+	slack := 750 * time.Millisecond
 	jm := jobs.NewManager(event.Discard, jobs.WithTeardownGrace(grace))
 	ctrl := control.New(control.Options{SessionDir: dir, SessionPath: path, Label: "test", Jobs: jm})
 	keepCtrl := control.New(control.Options{SessionDir: dir, SessionPath: keepPath, Label: "keep"})

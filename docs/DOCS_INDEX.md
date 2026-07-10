@@ -75,6 +75,7 @@
 | [Windows native Desktop smoke attempt](audits/2026-07-10-windows-native-smoke-attempt.md) | Windows Wails 启动响应与 frameless 截图通道的初始阻断证据 |
 | [Windows native Desktop interaction smoke](audits/2026-07-10-windows-native-interaction-smoke.md) | 截图无关 UIA 的新建、工作区、发送、停止、事件账本和重启恢复证据 |
 | [Windows 原生 Desktop 失败恢复审计](audits/2026-07-11-windows-native-failure-recovery.md) | 401、429、断流、权限拒绝和工具超时的原生可见提示、运行态复位与后续成功 turn 证据 |
+| [M2 结构化错误与会话恢复控制面审计](audits/2026-07-11-m2-error-session-control.md) | `ErrorInfo` 前端 category 动作、原生 UIA 点击与 CLI 会话 DTO/依赖棘轮收缩证据 |
 | [外部 Agent 批次验收](audits/2026-07-11-external-agent-batch-acceptance.md) | 大批提交的保留/撤回范围、真实性修复和全量本地验证 |
 | [Control transport boundary ratchet audit](audits/2026-07-10-control-boundary-ratchet.md) | Desktop/CLI/Serve/Bot/ACP 对 runtime 内部直连的精确依赖基线和 CI 收缩棘轮 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |
