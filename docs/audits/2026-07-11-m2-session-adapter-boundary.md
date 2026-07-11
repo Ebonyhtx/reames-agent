@@ -2,7 +2,7 @@
 
 日期：2026-07-11
 
-状态：本地全量验证完成，待集中提交与推送
+状态：已交付；commit `4beae18`
 
 ## 当前结论
 
@@ -36,4 +36,4 @@ builtin tool/docs/public/release contracts                            PASS
 git diff --check                                                      PASS
 ```
 
-新增 control 测试覆盖活动时间映射、branch ID、rename 后列表读取、同进程 lease probe 与 removal guard；既有 CLI/Bot/Serve/ACP 与 Desktop 测试覆盖路径校验、HTTP 状态、命令路由、租约拒绝、snapshot recovery、重启恢复、cleanup、trash/restore、recovery GC 与设置延迟 rebuild。前端 build 只有既有 chunk/dynamic-import 警告且成功。本批尚未推送，因此仍不得冒充远端 CI 证据。
+新增 control 测试覆盖活动时间映射、branch ID、rename 后列表读取、同进程 lease probe 与 removal guard；既有 CLI/Bot/Serve/ACP 与 Desktop 测试覆盖路径校验、HTTP 状态、命令路由、租约拒绝、snapshot recovery、重启恢复、cleanup、trash/restore、recovery GC 与设置延迟 rebuild。前端 build 只有既有 chunk/dynamic-import 警告且成功。远端 CI run `29144669944` 与 CodeQL run `29144669930` 均为 `Success`。

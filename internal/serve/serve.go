@@ -30,8 +30,6 @@ import (
 	"reames-agent/internal/event"
 	"reames-agent/internal/feedback"
 	"reames-agent/internal/jobs"
-	"reames-agent/internal/nilutil"
-	"reames-agent/internal/provider"
 	"reames-agent/internal/store"
 )
 
@@ -56,8 +54,7 @@ type Server struct {
 	// Nil in production (switchModel falls back to boot.Build); tests inject a
 	// fake so switchModel can be exercised without real provider IO.
 	buildController func(ctx context.Context, ref string) (*control.Controller, error)
-	titleProv       provider.Provider // lightweight flash provider for session titles
-	titlePrice      *provider.Pricing
+	titleGenerator  *boot.SessionTitleGenerator
 	titles          *titleCache
 	auth            *authGate // nil when auth is disabled
 	// leases guards the active session file against other runtimes (a desktop
@@ -76,7 +73,7 @@ func New(ctrl control.SessionAPI, bc *Broadcaster, serveCfg config.ServeConfig) 
 		titles: newTitleCache(ctrl.SessionDir()),
 		auth:   newAuthGate(serveCfg),
 	}
-	s.initTitleProvider()
+	s.titleGenerator = boot.NewSessionTitleGenerator()
 	return s
 }
 
@@ -131,32 +128,6 @@ func (s *Server) AuthMode() string {
 		return "none"
 	}
 	return s.auth.Mode()
-}
-
-// initTitleProvider builds a lightweight flash-model provider used solely to
-// generate short session titles. Errors are silently swallowed — title
-// generation is best-effort, and the server works fine without it.
-func (s *Server) initTitleProvider() {
-	cfg, err := config.Load()
-	if err != nil {
-		return
-	}
-	entry, ok := cfg.ResolveModel("deepseek-flash")
-	if !ok {
-		return
-	}
-	prov, err := provider.New(entry.Kind, provider.Config{
-		Name:    entry.Name,
-		BaseURL: entry.BaseURL,
-		Model:   entry.Model,
-		APIKey:  entry.APIKey(),
-		Extra:   map[string]any{"effort": "off"},
-	})
-	if err != nil {
-		return
-	}
-	s.titleProv = prov
-	s.titlePrice = entry.Price
 }
 
 // switchModel rebuilds the controller with a new model, carrying over the
@@ -1200,48 +1171,13 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, sess)
 }
 
-const titlePrompt = `Generate a very short title (3-5 words max) for this conversation based on the user's first message. Reply with ONLY the title, no quotes, no punctuation at the end.`
-
 // generateTitle calls a lightweight LLM to produce a short session title.
 // Returns empty string on any error — callers should fall back to a preview.
 func (s *Server) generateTitle(ctx context.Context, firstMsg string) string {
-	if nilutil.IsNil(s.titleProv) || strings.TrimSpace(firstMsg) == "" {
+	if s.titleGenerator == nil {
 		return ""
 	}
-	if r := []rune(firstMsg); len(r) > 300 {
-		firstMsg = string(r[:300]) + "..."
-	}
-	ch, err := s.titleProv.Stream(ctx, provider.Request{
-		Messages: []provider.Message{
-			{Role: provider.RoleSystem, Content: titlePrompt},
-			{Role: provider.RoleUser, Content: firstMsg},
-		},
-		Temperature: provider.TemperaturePtr(0),
-		MaxTokens:   20,
-	})
-	if err != nil {
-		return ""
-	}
-	var text strings.Builder
-	var usage *provider.Usage
-	for chunk := range ch {
-		switch chunk.Type {
-		case provider.ChunkText:
-			text.WriteString(chunk.Text)
-		case provider.ChunkUsage:
-			// Title usage is intentionally not broadcast on the shared chat SSE stream.
-		case provider.ChunkError:
-			return ""
-		}
-	}
-	if usage != nil && usage.TotalTokens > 0 && s.bc != nil {
-		s.bc.Emit(event.Event{Kind: event.Usage, Usage: usage, Pricing: s.titlePrice, UsageSource: event.UsageSourceTitle})
-	}
-	title := strings.TrimSpace(text.String())
-	if len(title) >= 2 && ((title[0] == '"' && title[len(title)-1] == '"') || (title[0] == '\'' && title[len(title)-1] == '\'')) {
-		title = title[1 : len(title)-1]
-	}
-	return strings.TrimSpace(title)
+	return s.titleGenerator.Generate(ctx, firstMsg)
 }
 
 // sessions lists saved session files from the session directory, enriched with

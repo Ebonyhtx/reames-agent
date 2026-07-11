@@ -7352,7 +7352,7 @@ func (a *App) SetModelForTab(tabID, name string) error {
 		newCtrl.Close()
 		return err
 	}
-	resumeWithFreshSystemPrompt(newCtrl, carried, path)
+	newCtrl.AdoptHistoryWithCurrentSystemPrompt(carried, path)
 	a.mu.Lock()
 	if current := a.tabs[tab.ID]; current != tab {
 		// The tab was closed/replaced while we built the new controller off-lock;
@@ -7507,7 +7507,7 @@ func (a *App) SetEffortForTab(tabID, level string) error {
 		newCtrl.Close()
 		return err
 	}
-	resumeWithFreshSystemPrompt(newCtrl, carried, path)
+	newCtrl.AdoptHistoryWithCurrentSystemPrompt(carried, path)
 	a.mu.Lock()
 	if current := a.tabs[tab.ID]; current != tab {
 		a.mu.Unlock()
@@ -7635,7 +7635,7 @@ func (a *App) SetTokenModeForTab(tabID, mode string) error {
 		newCtrl.Close()
 		return err
 	}
-	resumeWithFreshSystemPrompt(newCtrl, carried, path)
+	newCtrl.AdoptHistoryWithCurrentSystemPrompt(carried, path)
 	a.mu.Lock()
 	if current := a.tabs[tab.ID]; current != tab {
 		a.mu.Unlock()

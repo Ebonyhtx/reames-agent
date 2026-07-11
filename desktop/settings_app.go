@@ -15,7 +15,6 @@ import (
 	"reames-agent/internal/botruntime"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
-	"reames-agent/internal/provider"
 )
 
 // settings_app.go is the desktop Settings panel's command surface: it reads the
@@ -786,7 +785,7 @@ func (a *App) Settings() SettingsView {
 			Providers:         []ProviderView{},
 			OfficialProviders: officialProviderViews(map[string]bool{}, ""),
 			ProviderPresets:   providerPresetViewsForRootWithResolver(nil, a.activeWorkspaceRoot(), nil),
-			ProviderKinds:     nonNil(provider.Kinds()),
+			ProviderKinds:     nonNil(control.RegisteredProviderKinds()),
 			Permissions: PermissionsView{
 				Mode:  "ask",
 				Allow: []string{},
@@ -874,7 +873,7 @@ func (a *App) Settings() SettingsView {
 		MemoryCompiler:          cfg.MemoryCompilerEnabled(),
 		ExpandThinking:          cfg.Desktop.ExpandThinking,
 		ConfigPath:              cfgPath,
-		ProviderKinds:           nonNil(provider.Kinds()),
+		ProviderKinds:           nonNil(control.RegisteredProviderKinds()),
 		AutoApproveTools:        ctrl != nil && ctrl.AutoApproveTools(),
 		Bypass:                  ctrl != nil && ctrl.AutoApproveTools(),
 	}
@@ -1521,7 +1520,7 @@ func (a *App) rebuildSettingLocked(setting string) error {
 		return err
 	}
 
-	var carried []provider.Message
+	var carried control.SessionHistorySnapshot
 	oldCtrl := a.controllerForTab(tab)
 	if oldCtrl != nil {
 		if prevPath == "" {
@@ -1534,7 +1533,7 @@ func (a *App) rebuildSettingLocked(setting string) error {
 			return err
 		}
 		prevPath = sessionPathAfterSnapshot(oldCtrl, prevPath)
-		carried = oldCtrl.History()
+		carried = control.CaptureSessionHistory(oldCtrl)
 	}
 	snap := a.tabRuntimeSnapshot(tab)
 	model := snap.model
@@ -1588,7 +1587,7 @@ func (a *App) rebuildSettingLocked(setting string) error {
 		ctrl.Close()
 		return err
 	}
-	resumeWithFreshSystemPrompt(ctrl, carried, path)
+	ctrl.AdoptSessionHistoryWithCurrentSystemPrompt(carried, path)
 	if oldCtrl != nil {
 		oldCtrl.Close()
 	}

@@ -20,7 +20,6 @@ import (
 	"reames-agent/internal/fileutil"
 	"reames-agent/internal/jobs"
 	"reames-agent/internal/plugin"
-	"reames-agent/internal/provider"
 	"reames-agent/internal/store"
 )
 
@@ -653,7 +652,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 		return SessionConfigState{}, &RPCError{Code: ErrInvalidParams, Message: method + ": unknown session " + id}
 	}
 
-	meta := metadataForLoadedSession(path, id, cwd, ctrl.History())
+	meta := metadataForLoadedSession(path, id, cwd, ctrl.Transcript())
 	meta.Model = cfgState.Model
 	meta.EffortOverride = cloneStringPtr(cfgState.EffortOverride)
 	sess := &acpSession{
@@ -1560,14 +1559,14 @@ func (m acpSessionMeta) info(extra map[string]any) SessionInfo {
 	}
 }
 
-func metadataForLoadedSession(path, id, cwd string, history []provider.Message) acpSessionMeta {
+func metadataForLoadedSession(path, id, cwd string, transcript []control.TranscriptMessage) acpSessionMeta {
 	now := time.Now().UTC()
 	meta, ok, err := loadACPMeta(path)
 	if err != nil || !ok {
 		meta = acpSessionMeta{
 			SessionID: id,
 			Cwd:       cwd,
-			Title:     titleFromHistory(history),
+			Title:     titleFromTranscript(transcript),
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
@@ -1583,7 +1582,7 @@ func metadataForLoadedSession(path, id, cwd string, history []provider.Message) 
 		meta.Cwd = cwd
 	}
 	if meta.Title == "" {
-		meta.Title = titleFromHistory(history)
+		meta.Title = titleFromTranscript(transcript)
 	}
 	if meta.CreatedAt.IsZero() {
 		meta.CreatedAt = now
@@ -1729,9 +1728,9 @@ func sessionInfoMatchesCwd(info SessionInfo, filter string) bool {
 	return filepath.Clean(info.Cwd) == filepath.Clean(filter)
 }
 
-func titleFromHistory(history []provider.Message) string {
-	for _, m := range history {
-		if m.Role == provider.RoleUser {
+func titleFromTranscript(transcript []control.TranscriptMessage) string {
+	for _, m := range transcript {
+		if m.Role == control.TranscriptUser && !m.Hidden {
 			if title := previewTitle(m.Content); title != "" {
 				return title
 			}

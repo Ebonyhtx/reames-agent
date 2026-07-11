@@ -2982,7 +2982,7 @@ func (a *App) buildTabControllerWithContext(tab *WorkspaceTab, loadedSession loa
 				return
 			}
 			if resumeSession != nil {
-				ctrl.Resume(sessionWithFreshSystemPrompt(resumeSession, systemPromptFrom(ctrl.History())), path)
+				ctrl.AdoptLoadedHistoryWithCurrentSystemPrompt(resumeSession.Snapshot(), path)
 			} else {
 				ctrl.SetSessionPath(path)
 			}

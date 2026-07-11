@@ -11,11 +11,9 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
 	"reames-agent/internal/memory"
-	"reames-agent/internal/provider"
 	"reames-agent/internal/skill"
 )
 
@@ -63,7 +61,7 @@ type suggestionSession struct {
 	ID       string
 	Preview  string
 	LastSeen time.Time
-	Messages []provider.Message
+	Messages []control.TranscriptMessage
 }
 
 type workflowCategory struct {
@@ -188,7 +186,7 @@ func loadSuggestionSessions(dir string, limit int) []suggestionSession {
 	if strings.TrimSpace(dir) == "" || limit <= 0 {
 		return nil
 	}
-	infos, err := agent.ListSessions(dir)
+	infos, err := control.ListSessions(dir)
 	if err != nil {
 		return nil
 	}
@@ -197,7 +195,7 @@ func loadSuggestionSessions(dir string, limit int) []suggestionSession {
 		if len(out) >= limit {
 			break
 		}
-		loaded, err := agent.LoadSession(info.Path)
+		messages, err := control.LoadTranscript(info.Path)
 		if err != nil {
 			continue
 		}
@@ -206,7 +204,7 @@ func loadSuggestionSessions(dir string, limit int) []suggestionSession {
 			ID:       strings.TrimSuffix(filepath.Base(info.Path), filepath.Ext(info.Path)),
 			Preview:  info.Preview,
 			LastSeen: info.LastActivityAt,
-			Messages: loaded.Snapshot(),
+			Messages: messages,
 		})
 	}
 	return out
@@ -221,7 +219,7 @@ func suggestMemories(set *memory.Set, sessions []suggestionSession) []MemorySugg
 	var out []MemorySuggestion
 	for _, sess := range sessions {
 		for _, msg := range sess.Messages {
-			if msg.Role != provider.RoleUser {
+			if msg.Role != control.TranscriptUser || msg.Hidden {
 				continue
 			}
 			statement, reason := extractMemoryStatement(msg.Content)
@@ -435,7 +433,7 @@ func workflowEvidence(cat workflowCategory, sessions []suggestionSession) []stri
 	var evidence []string
 	for _, sess := range sessions {
 		for _, msg := range sess.Messages {
-			if msg.Role != provider.RoleUser {
+			if msg.Role != control.TranscriptUser || msg.Hidden {
 				continue
 			}
 			text := oneLine(msg.Content)

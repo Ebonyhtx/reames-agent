@@ -86,8 +86,8 @@ func copySessionFiles(t *testing.T, from, to string) {
 // for the provider prefix cache. It builds the strongest comparison available:
 // from ONE saved transcript, run the same follow-up turn twice — once on the
 // original controller (no rebind, the provider-cache-warm baseline) and once
-// after the desktop rebind path (agent.LoadSession + sessionWithFreshSystemPrompt
-// + Resume on a freshly built controller, the shape of tabs.go's restore). The
+// after the desktop rebind path (agent.LoadSession plus the control-owned
+// loaded-history adoption policy, the shape of tabs.go's restore). The
 // two requests must be byte-identical END TO END — system prompt, prior user
 // AND assistant turns, and the composed follow-up. Any divergence means a
 // desktop rebuild cold-starts the conversation's provider cache at 10x miss
@@ -136,7 +136,7 @@ func TestRebindReproducesRequestBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSession: %v", err)
 	}
-	ctrl2.Resume(sessionWithFreshSystemPrompt(loaded, systemPromptFrom(ctrl2.History())), rebindPath)
+	ctrl2.AdoptLoadedHistoryWithCurrentSystemPrompt(loaded.Snapshot(), rebindPath)
 
 	if err := ctrl2.RunTurn(context.Background(), "second question"); err != nil {
 		t.Fatalf("post-rebind second turn: %v", err)
@@ -184,7 +184,7 @@ func TestRebindWithDriftedPromptBreaksRequestPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSession: %v", err)
 	}
-	ctrl2.Resume(sessionWithFreshSystemPrompt(loaded, systemPromptFrom(ctrl2.History())), rebindPath)
+	ctrl2.AdoptLoadedHistoryWithCurrentSystemPrompt(loaded.Snapshot(), rebindPath)
 	if err := ctrl2.RunTurn(context.Background(), "second question"); err != nil {
 		t.Fatalf("post-rebind turn: %v", err)
 	}

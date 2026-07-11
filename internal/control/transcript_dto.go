@@ -62,6 +62,15 @@ func (c *Controller) Transcript() []TranscriptMessage {
 	return transcriptMessages(c.History())
 }
 
+// LoadTranscript returns a display-safe projection of one persisted session.
+func LoadTranscript(path string) ([]TranscriptMessage, error) {
+	session, err := agent.LoadSession(path)
+	if err != nil {
+		return nil, err
+	}
+	return transcriptMessages(session.Snapshot()), nil
+}
+
 func transcriptMessages(messages []provider.Message) []TranscriptMessage {
 	out := make([]TranscriptMessage, len(messages))
 	for i, message := range messages {

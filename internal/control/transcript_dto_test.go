@@ -1,6 +1,7 @@
 package control
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -51,5 +52,24 @@ func TestTranscriptMessagesHidePromptInternalsAndPreserveDisplayData(t *testing.
 	}
 	if messages[0].Content != "SYSTEM-SECRET" || !strings.Contains(messages[2].Content, "FILE-SECRET") {
 		t.Fatal("transcript conversion mutated runtime history")
+	}
+}
+
+func TestLoadTranscriptAppliesDisplaySafetyToPersistedHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	session := agent.NewSession("SYSTEM-SECRET")
+	session.Add(provider.Message{Role: provider.RoleUser, Content: "Referenced context:\n<file path=\"secret.txt\">FILE-SECRET</file>\n\nremember visible preference"})
+	if err := session.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadTranscript(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || !got[0].Hidden || got[1].Content != "remember visible preference" {
+		t.Fatalf("persisted transcript projection = %+v", got)
+	}
+	if strings.Contains(got[1].Content, "FILE-SECRET") {
+		t.Fatalf("referenced context leaked into persisted transcript projection: %+v", got[1])
 	}
 }

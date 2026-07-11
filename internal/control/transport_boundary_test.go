@@ -19,18 +19,13 @@ import (
 var legacyTransportRuntimeImports = map[string][]string{
 	"desktop/app.go":                {"reames-agent/internal/agent", "reames-agent/internal/provider"},
 	"desktop/main.go":               {"reames-agent/internal/provider/anthropic", "reames-agent/internal/provider/openai", "reames-agent/internal/tool/builtin"},
-	"desktop/memory_suggestions.go": {"reames-agent/internal/agent", "reames-agent/internal/provider"},
-	"desktop/session_prompt.go":     {"reames-agent/internal/agent", "reames-agent/internal/provider"},
-	"desktop/settings_app.go":       {"reames-agent/internal/provider"},
 	"desktop/tabs.go":               {"reames-agent/internal/agent", "reames-agent/internal/provider"},
-	"internal/acp/service.go":       {"reames-agent/internal/provider"},
 	"internal/cli/acp.go":           {"reames-agent/internal/provider", "reames-agent/internal/tool", "reames-agent/internal/tool/builtin"},
 	"internal/cli/chat_tui.go":      {"reames-agent/internal/agent", "reames-agent/internal/provider", "reames-agent/internal/tool"},
 	"internal/cli/cli.go":           {"reames-agent/internal/agent", "reames-agent/internal/provider", "reames-agent/internal/provider/openai"},
 	"internal/cli/review.go":        {"reames-agent/internal/agent", "reames-agent/internal/tool", "reames-agent/internal/tool/builtin"},
 	"internal/cli/session_lease.go": {"reames-agent/internal/agent"},
 	"internal/cli/toolcard.go":      {"reames-agent/internal/tool"},
-	"internal/serve/serve.go":       {"reames-agent/internal/provider"},
 }
 
 func TestTransportRuntimeImportRatchet(t *testing.T) {
