@@ -28,6 +28,7 @@ import (
 	"reames-agent/internal/event"
 	"reames-agent/internal/hook"
 	"reames-agent/internal/i18n"
+	"reames-agent/internal/mcpname"
 	"reames-agent/internal/memory"
 	"reames-agent/internal/migration"
 	"reames-agent/internal/outputstyle"
@@ -36,7 +37,6 @@ import (
 	"reames-agent/internal/provider"
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/skill"
-	"reames-agent/internal/tool"
 )
 
 // chatTUI is a bubbletea Model that normally owns the terminal with an
@@ -2808,7 +2808,7 @@ func approvalToolDetails(toolName string) (name, detail string) {
 	if toolName == control.SandboxEscapeApprovalTool {
 		return i18n.M.ApprovalToolLabelSandboxEscape, fmt.Sprintf(i18n.M.ToolApprovalSourceFmt, i18n.M.ToolApprovalBuiltIn)
 	}
-	if server, short, ok := tool.SplitMCPName(toolName); ok {
+	if server, short, ok := mcpname.Split(toolName); ok {
 		lines := []string{}
 		if strings.EqualFold(short, "understand_image") {
 			lines = append(lines, i18n.M.ToolApprovalImageUse)

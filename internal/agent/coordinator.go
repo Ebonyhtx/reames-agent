@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"reames-agent/internal/event"
+	"reames-agent/internal/mcpname"
 	"reames-agent/internal/nilutil"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/sandbox"
@@ -407,7 +408,7 @@ func executorToolHandoffContext(a *Agent) string {
 			continue
 		}
 		toolNames = append(toolNames, name)
-		if strings.HasPrefix(name, tool.MCPNamePrefix) {
+		if strings.HasPrefix(name, mcpname.Prefix) {
 			mcpNames = append(mcpNames, name)
 		}
 	}

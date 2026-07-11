@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"reames-agent/internal/tool"
+	"reames-agent/internal/mcpname"
 )
 
 // connector is the Claude-style "⎿" gutter that ties a continuation block (tool
@@ -106,7 +106,7 @@ var toolCategory = map[string]string{
 // toolDisplayName returns the card verb for a tool: a mapped builtin verb, the
 // short name for an MCP tool (mcp__server__tool), or the raw id as a fallback.
 func toolDisplayName(name string) string {
-	if _, short, ok := tool.SplitMCPName(name); ok {
+	if _, short, ok := mcpname.Split(name); ok {
 		return short
 	}
 	if v, ok := toolVerb[name]; ok {

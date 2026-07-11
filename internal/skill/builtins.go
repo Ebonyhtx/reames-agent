@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"reames-agent/internal/mcpname"
 	"reames-agent/internal/tool"
 )
 
@@ -212,7 +213,7 @@ func CodeGraphReadTools(reg *tool.Registry) []string {
 
 func looksLikeCodeGraphTool(name string) bool {
 	return strings.HasPrefix(name, "codegraph_") ||
-		strings.HasPrefix(name, tool.MCPNamePrefix+"codegraph__")
+		strings.HasPrefix(name, mcpname.Prefix+"codegraph__")
 }
 
 func normalizeExtraToolNames(names []string) []string {

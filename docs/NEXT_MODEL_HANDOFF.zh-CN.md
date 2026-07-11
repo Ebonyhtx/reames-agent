@@ -29,27 +29,36 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
-- M2 进行中：依赖棘轮、结构化错误、CLI 会话恢复、版本化 command/event/display DTO、prompt metadata、主要会话持久化、设置与 Desktop history 边界已关闭；剩余 Desktop session-store、CLI/ACP composition root 与专用渲染边界待继续收口。
+- M2 进行中：依赖棘轮、结构化错误、CLI 会话恢复、版本化 command/event/display DTO、prompt metadata、主要会话持久化、设置与 Desktop history 边界已关闭；当前候选批次进一步关闭 ACP production composition、session copy 与 MCP name rendering；剩余 Desktop session-store、CLI composition root 与其余专用渲染边界待继续收口。
 - M6 进行中：Gateway service、headless smoke 和 feedback 本地闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
 
 ## 最近已交付 M2 批次
 
-详见 `docs/audits/2026-07-11-m2-prompt-settings-boundary.md`（上一批会话适配器见 `docs/audits/2026-07-11-m2-session-adapter-boundary.md`）：
+详见 `docs/audits/2026-07-11-m2-desktop-transcript-boundary.md`（上一批 prompt/settings 见 `docs/audits/2026-07-11-m2-prompt-settings-boundary.md`）：
 
-- Desktop 删除自有 prompt helper，control 统一处理 carried history、loaded legacy transcript、system prompt 刷新和磁盘 rewrite baseline；相同 prompt 的 rebind wire bytes 保持不变。
-- Memory suggestions 与 ACP metadata title 改用展示安全 `control.TranscriptMessage`，不再从 system、合成恢复指令、compose 控制块或 referenced-context payload 生成本地持久化内容。
-- Settings 使用 opaque `SessionHistorySnapshot` 和 `RegisteredProviderKinds`；Serve 的后台标题 provider 迁入 `boot.SessionTitleGenerator`，其用量不污染主会话事件流。
-- 本批再删除七条 `agent/provider` 生产依赖边；累计收缩十九条。Serve、Bot 和 ACP service 已无受守卫 runtime 直连。
+- Desktop history、分页、checkpoint、tool/todo replay、planner sidecar 与 legacy preview 改用展示安全 `control.TranscriptMessage`，原消息 `Index` 直接保持 checkpoint 关联。
+- `DisplayKey` 保持旧 SHA-256 sidecar key 兼容，安全 `ReplayText` 排除 referenced-context、synthetic、steer 和 Memory Compiler contract；两者均为 `json:"-"` 本地字段。
+- model/effort/token-mode rebuild 改用 opaque `SessionHistorySnapshot`；event preview/citation/tool 也不再声明 provider DTO。
+- 本批删除 Desktop app/tabs 两条 `provider` 生产依赖边，累计收缩二十一条；Serve、Bot、ACP service 无 runtime 直连，Desktop app/tabs 无 provider 直连。
 
-## 本批关键本地证据
+## 当前候选批次
+
+- 删除 ACP 三组无生产 caller、仅由旧测试维持的 Reasonix 初始装配 helper；真实 ACP session 继续统一走 `boot.Build`，既有 boot 测试覆盖 builtin 与 subagent profile。
+- CLI `--copy` 改用 `control.CopySessionForWriting`，control 测试覆盖 cleanup-pending、event-log transcript、branch lineage、标题/模型、源文件只读与新路径无 lease。
+- 新增独立 `internal/mcpname` 命名合同，CLI tool card/approval rendering 不再为解析名称依赖 tool registry。
+- 候选批次从 allowlist 再删除六条 `agent/provider/tool` 边，若全量门禁与远端交付通过，累计将达到二十七条；ACP 已无受守卫 runtime 生产直连。
+
+详见 `docs/audits/2026-07-11-m2-cli-composition-boundary.md`。root/Desktop/frontend/contracts/baseline 与六目标交叉编译均已通过；当前仍未 commit/push，不得把候选状态写成远端已交付。
+
+## 上一已交付批次关键证据
 
 ```text
 go build ./...                                      PASS
 go vet ./...                                        PASS
 go test ./internal/... -count=1 -timeout 10m        PASS
-desktop/go test ./... -count=1 -timeout 10m         PASS (191.4s wall time)
+desktop/go test ./... -count=1 -timeout 10m         PASS (169.9s wall time)
 desktop/frontend/corepack pnpm test:all              PASS
 desktop/frontend/corepack pnpm build                 PASS (既有 chunk/dynamic-import 警告)
 Python Desktop/upstream/installer contracts          PASS (69 tests, 2 platform skips)
@@ -58,17 +67,17 @@ six-target CGO_ENABLED=0 cross-compile               PASS
 .\scripts\verify-baseline.ps1 -SkipFrontendHint      PASS
 ```
 
-本批不改变 Wails UI 或安装工件，未重复触发 Desktop candidate；上一批 production Windows schema v3 candidate 已全绿。当前远端 `main` 为 `5f6eae7`，普通 CI run `29150773856` 为 8/8、CodeQL run `29150773848` 为 3/3。
+本批不改变 Wails UI 或安装工件，未重复触发 Desktop candidate；上一批 production Windows schema v3 candidate 已全绿。当前远端 `main` 为 `b68e872`，普通 CI run `29158669525` 为 8/8、CodeQL run `29158669534` 为 3/3。
 
 ## 下一执行顺序
 
-1. 显式暂存当前 Desktop transcript 批次，排除受保护路径；形成单个提交、单次 push，并守候普通 CI 与 CodeQL 全绿。
-2. 下一批继续关闭 Desktop session-store 或 CLI/ACP composition root 的完整纵向路径，不为了清空 allowlist 制造反向依赖。
+1. 先完成当前 CLI/ACP 候选批次的 root/Desktop/frontend/contracts/baseline 全量门禁，显式暂存后单 commit、单 push，并守候普通 CI 与 CodeQL。
+2. 远端全绿后继续关闭 Desktop session-store 或 CLI composition root 的完整纵向路径，不为了清空 allowlist 制造反向依赖。
 3. M2 达到当前里程碑门槛后，进入干净云节点 CLI + Gateway + feedback 运维闭环与真实飞书回环。
 
 ## 长期未关闭项
 
-- M2 剩余 Desktop session-store、CLI/ACP composition root 与 CLI 专用渲染边界收口。
+- M2 剩余 Desktop session-store、CLI composition root 与其余 CLI 专用渲染边界收口。
 - 干净 Linux/云节点的 CLI、Gateway、feedback、日志、备份、升级回滚。
 - 真实飞书/Lark 文本、审批、取消与恢复回环。
 - plugin 权限 manifest、内容完整性和安装预览。
@@ -78,4 +87,4 @@ six-target CGO_ENABLED=0 cross-compile               PASS
 
 ## 当前未提交批次
 
-Desktop transcript/pagination/planner/rebuild 已迁入展示安全 control DTO，并删除 app/tabs 两条 `provider` 依赖边；root build/vet/internal、Desktop、frontend、合同、六目标交叉编译与组合基线均已通过。上一批 `5f6eae7` 远端成功证据已补录；当前批次待集中提交/推送，受保护文件继续排除。
+当前已有 CLI/ACP composition、session copy、MCP naming 与 Windows GNU bash 探测代码/测试/文档批次；本地全量门禁已通过，commit/push 与远端证据待完成。受保护文件继续排除。

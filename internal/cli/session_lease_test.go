@@ -173,9 +173,9 @@ func TestCopySessionForWritingDuplicatesTranscript(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	copyPath, err := copySessionForWriting(src)
+	copyPath, err := control.CopySessionForWriting(src)
 	if err != nil {
-		t.Fatalf("copySessionForWriting: %v", err)
+		t.Fatalf("control.CopySessionForWriting: %v", err)
 	}
 	if filepath.Dir(copyPath) != dir {
 		t.Fatalf("copy landed in %q, want beside the source in %q", filepath.Dir(copyPath), dir)

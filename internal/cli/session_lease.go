@@ -1,13 +1,6 @@
 package cli
 
-import (
-	"fmt"
-	"path/filepath"
-	"strings"
-
-	"reames-agent/internal/agent"
-	"reames-agent/internal/control"
-)
+import "reames-agent/internal/control"
 
 // sessionLeaseResumeRefusal is the startup-time refusal for `reamesAgent
 // [--resume|--continue]` and `reames-agent run --resume/--continue`: it names the
@@ -57,53 +50,4 @@ func (m *chatTUI) followSessionLease() {
 	if err := m.leases.Rebind(m.ctrl.SessionPath()); err != nil {
 		m.notice(sessionLeaseHeldNotice(err))
 	}
-}
-
-// copySessionForWriting duplicates the session at src into a fresh session
-// file beside it and returns the new path. It backs the --copy escape hatch:
-// when src is held by another runtime, the copy gives this process a session
-// it can own. The duplicate is written through Session.Save, so it is
-// event-log aware (authoritative event log plus .jsonl checkpoint) and starts
-// with no lease/lock sidecars of its own; src is only read. When src is being
-// written concurrently, the copy captures the transcript as of the load — an
-// append-only prefix, the same view a resume would see.
-func copySessionForWriting(src string) (string, error) {
-	loaded, err := loadResumableSession(src)
-	if err != nil {
-		return "", err
-	}
-	msgs := loaded.Snapshot()
-
-	var srcMeta agent.BranchMeta
-	if meta, ok, metaErr := agent.LoadBranchMeta(src); metaErr == nil && ok {
-		srcMeta = meta
-	}
-	label := "session"
-	if model, ok := agent.LoadSessionModel(src); ok && strings.TrimSpace(model) != "" {
-		label = model
-	}
-
-	newPath := agent.NewSessionPath(filepath.Dir(src), label)
-	copySess := agent.NewSession("")
-	copySess.Messages = msgs
-	if err := copySess.Save(newPath); err != nil {
-		return "", fmt.Errorf("copy session: %w", err)
-	}
-	preview, turns := agent.SessionPreviewFromMessages(msgs)
-	meta := agent.BranchMeta{
-		ParentID:         agent.BranchID(src),
-		ForkTurn:         -1,
-		ForkMessageIndex: len(msgs),
-		Preview:          preview,
-		Turns:            turns,
-		SchemaVersion:    agent.BranchMetaCountsVersion,
-		Model:            srcMeta.Model,
-	}
-	if title := strings.TrimSpace(firstNonEmpty(srcMeta.CustomTitle, srcMeta.TopicTitle)); title != "" {
-		meta.CustomTitle = title + " (copy)"
-	}
-	if err := agent.SaveBranchMeta(newPath, meta); err != nil {
-		return "", fmt.Errorf("copy session meta: %w", err)
-	}
-	return newPath, nil
 }

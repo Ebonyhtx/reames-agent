@@ -81,6 +81,7 @@
 | [M2 会话适配器边界审计](audits/2026-07-11-m2-session-adapter-boundary.md) | Bot 会话列表/附着恢复、CLI branch/rename 的 control 迁移与依赖棘轮收缩 |
 | [M2 prompt 与设置边界审计](audits/2026-07-11-m2-prompt-settings-boundary.md) | Desktop prompt rebuild、memory suggestions、settings provider view、Serve title 装配与 ACP metadata 安全投影 |
 | [M2 Desktop transcript 边界审计](audits/2026-07-11-m2-desktop-transcript-boundary.md) | history/pagination/checkpoint/planner sidecar、安全 replay 与 opaque rebuild snapshot 收口 |
+| [M2 CLI/ACP composition 边界审计](audits/2026-07-11-m2-cli-composition-boundary.md) | ACP 死装配删除、session copy control API、MCP 名称合同拆分与依赖棘轮收缩 |
 | [外部 Agent 批次验收](audits/2026-07-11-external-agent-batch-acceptance.md) | 大批提交的保留/撤回范围、真实性修复和全量本地验证 |
 | [Control transport boundary ratchet audit](audits/2026-07-10-control-boundary-ratchet.md) | Desktop/CLI/Serve/Bot/ACP 对 runtime 内部直连的精确依赖基线和 CI 收缩棘轮 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |

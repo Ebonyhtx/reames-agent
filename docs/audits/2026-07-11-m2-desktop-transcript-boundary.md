@@ -2,7 +2,7 @@
 
 日期：2026-07-11
 
-状态：本地全量验证完成，待集中提交与单次推送
+状态：已交付；commit `b68e872`
 
 ## 当前结论
 
@@ -31,4 +31,4 @@ go test ./internal/control -run TestTransportRuntimeImportRatchet     PASS
 git diff --check                                                       PASS
 ```
 
-定向回归覆盖 sidecar/planner hash 兼容、referenced-context 不可 replay、Memory Compiler 不可 replay、synthetic/steer 隐藏、checkpoint 原索引、历史分页、tool payload 归档、todo `complete_step` replay、UTF-8 错误截断及三类 runtime rebuild。前端 build 只有既有 dynamic-import/chunk-size 警告且成功。本批尚未 commit/push；当前证据不得冒充远端 CI 或原生 Desktop 交互证据。
+定向回归覆盖 sidecar/planner hash 兼容、referenced-context 不可 replay、Memory Compiler 不可 replay、synthetic/steer 隐藏、checkpoint 原索引、历史分页、tool payload 归档、todo `complete_step` replay、UTF-8 错误截断及三类 runtime rebuild。前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CI run `29158669525` 为 8/8、CodeQL run `29158669534` 为 3/3；本批没有重复触发原生 Desktop candidate。

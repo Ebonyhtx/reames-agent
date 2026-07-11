@@ -8,6 +8,7 @@ part of the deployment contract.
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import subprocess
@@ -38,6 +39,38 @@ def powershell() -> str | None:
     return shutil.which("pwsh") or shutil.which("powershell")
 
 
+def unix_bash() -> str | None:
+    """Return a real GNU bash, ignoring the unusable Windows WSL app alias."""
+    candidates = [shutil.which("bash")]
+    if platform.system() == "Windows":
+        for root in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+            if root:
+                candidates.extend(
+                    [
+                        str(Path(root) / "Git" / "bin" / "bash.exe"),
+                        str(Path(root) / "Git" / "usr" / "bin" / "bash.exe"),
+                    ]
+                )
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen or not Path(candidate).is_file():
+            continue
+        seen.add(candidate)
+        try:
+            probe = subprocess.run(
+                [candidate, "--version"],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+        except OSError:
+            continue
+        if probe.returncode == 0 and b"GNU bash" in probe.stdout:
+            return candidate
+    return None
+
+
 def powershell_args(script: str, *args: str) -> list[str]:
     exe = powershell()
     if not exe:
@@ -50,7 +83,7 @@ def powershell_args(script: str, *args: str) -> list[str]:
 
 class InstallerDryRunTests(unittest.TestCase):
     def test_unix_gateway_dry_run_preserves_home_and_credential_boundary(self) -> None:
-        bash = shutil.which("bash")
+        bash = unix_bash()
         if not bash:
             self.skipTest("bash is not available")
 
@@ -78,7 +111,7 @@ class InstallerDryRunTests(unittest.TestCase):
 
     @unittest.skipIf(platform.system() == "Windows", "Unix release target is tested on CI Linux")
     def test_unix_release_dry_run_verifies_checksum(self) -> None:
-        bash = shutil.which("bash")
+        bash = unix_bash()
         if not bash:
             self.skipTest("bash is not available")
 

@@ -347,7 +347,7 @@ func runAgent(args []string) int {
 		return 2
 	}
 	if *copySession {
-		copied, err := copySessionForWriting(resumePath)
+		copied, err := control.CopySessionForWriting(resumePath)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 			return 1
@@ -676,7 +676,7 @@ func chatREPL(args []string) int {
 		return 2
 	}
 	if *copySession {
-		copied, err := copySessionForWriting(resumePath)
+		copied, err := control.CopySessionForWriting(resumePath)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 			return 1

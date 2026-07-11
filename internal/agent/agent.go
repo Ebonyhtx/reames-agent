@@ -18,6 +18,7 @@ import (
 	"reames-agent/internal/evidence"
 	"reames-agent/internal/instruction"
 	"reames-agent/internal/jobs"
+	"reames-agent/internal/mcpname"
 	"reames-agent/internal/memory"
 	"reames-agent/internal/memorycompiler"
 	"reames-agent/internal/nilutil"
@@ -2571,7 +2572,7 @@ func planModeMCPTrustTarget(toolName string, t tool.Tool) (server, rawTool strin
 			return server, rawTool, true
 		}
 	}
-	server, rawTool, ok = tool.SplitMCPName(toolName)
+	server, rawTool, ok = mcpname.Split(toolName)
 	return server, rawTool, ok
 }
 

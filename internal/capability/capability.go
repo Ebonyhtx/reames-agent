@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"reames-agent/internal/mcpname"
 	"reames-agent/internal/skill"
 	"reames-agent/internal/tool"
 )
@@ -117,7 +118,7 @@ func ToolEntries(tools []tool.ContractEntry) []Entry {
 			ReadOnly:    t.ReadOnly,
 			ToolName:    t.Name,
 		}
-		if server, raw, ok := tool.SplitMCPName(t.Name); ok {
+		if server, raw, ok := mcpname.Split(t.Name); ok {
 			e.ID = "mcp-tool:" + server + "/" + raw
 			e.Kind = KindMCPTool
 			e.Name = server + "/" + raw
