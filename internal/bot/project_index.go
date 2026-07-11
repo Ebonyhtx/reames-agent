@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
 )
 
 const (
@@ -210,7 +210,7 @@ func (gw *BotGateway) buildSessionIndex(projects []botProjectEntry) []botSession
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			continue
 		}
-		infos, err := agent.ListSessions(dir)
+		infos, err := control.ListSessions(dir)
 		if err != nil {
 			gw.logger.Warn("bot project session index failed", "project", project.Name, "err", err)
 			continue

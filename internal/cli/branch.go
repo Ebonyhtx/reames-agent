@@ -6,7 +6,6 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/control"
 )
 
@@ -16,7 +15,7 @@ func (m *chatTUI) showBranchTree() {
 		m.notice("tree: " + err.Error())
 		return
 	}
-	current := agent.BranchID(m.ctrl.SessionPath())
+	current := control.BranchID(m.ctrl.SessionPath())
 	tree := renderBranchTree(control.FormatBranchTree(branches, current))
 	m.commitLine(ansi.Hardwrap(tree, max(m.width, 20), false))
 }

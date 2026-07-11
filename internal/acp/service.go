@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/control"
 	"reames-agent/internal/event"
 	"reames-agent/internal/fileutil"
@@ -187,7 +186,7 @@ type acpSession struct {
 	// Config rebuilds keep the same transcript; when a snapshot conflict
 	// retargets the controller to a recovery branch, sessionRecoveredHandler
 	// moves transcript and this lease to the recovery file at commit time.
-	lease *agent.SessionLease
+	lease *control.SessionLeaseKeeper
 	// maintenanceDone is non-nil while session-owned maintenance, such as an
 	// idle config rebuild, is in flight outside mu.
 	maintenanceDone chan struct{}
@@ -308,7 +307,7 @@ func (s *acpSession) releaseSessionLease() {
 // error the client sees: a held session names its holder with the shared CLI
 // wording; anything else is an internal error.
 func sessionLeaseBindError(method string, err error) *RPCError {
-	if errors.Is(err, agent.ErrSessionLeaseHeld) {
+	if control.IsSessionLeaseHeld(err) {
 		return &RPCError{
 			Code:    ErrInvalidRequest,
 			Message: method + ": " + control.SessionInUseMessage(err) + "; " + control.SessionLeaseCloseHint,
@@ -337,9 +336,15 @@ func (s *service) sessionRecoveredHandler(id string) func(control.SessionRecover
 		if sess == nil {
 			return nil
 		}
-		lease, err := agent.TryAcquireSessionLease(recoveryPath)
-		if err != nil {
-			if errors.Is(err, agent.ErrSessionLeaseHeld) {
+		sess.mu.Lock()
+		lease := sess.lease
+		deleted := sess.deleted
+		sess.mu.Unlock()
+		if deleted || lease == nil {
+			return fmt.Errorf("bind recovery session: session is deleted")
+		}
+		if err := lease.Rebind(recoveryPath); err != nil {
+			if control.IsSessionLeaseHeld(err) {
 				return fmt.Errorf("bind recovery session: %s; %s",
 					control.SessionInUseMessage(err), control.SessionLeaseCloseHint)
 			}
@@ -351,14 +356,9 @@ func (s *service) sessionRecoveredHandler(id string) func(control.SessionRecover
 			lease.Release()
 			return fmt.Errorf("bind recovery session: session is deleted")
 		}
-		old := sess.lease
-		sess.lease = lease
 		sess.transcript = recoveryPath
 		meta := sess.metaLocked()
 		sess.mu.Unlock()
-		if old != nil {
-			old.Release()
-		}
 		_ = saveACPMeta(recoveryPath, meta)
 		// Leave a redirect on the id-keyed sidecar so restart-time lookups
 		// (session/load, session/resume, session/delete, loadMeta) resolve the
@@ -503,8 +503,8 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 	// so no other runtime can bind the transcript while this session lives.
 	if dir := ctrl.SessionDir(); dir != "" {
 		sess.transcript = transcriptPath(dir, id)
-		lease, err := agent.TryAcquireSessionLease(sess.transcript)
-		if err != nil {
+		lease := control.NewSessionLeaseKeeper()
+		if err := lease.Rebind(sess.transcript); err != nil {
 			ctrl.Close()
 			return nil, sessionLeaseBindError("session/new", err)
 		}
@@ -569,7 +569,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 	}
 
 	if sess := s.session(id); sess != nil {
-		if agent.IsCleanupPending(sess.transcript) {
+		if control.SessionCleanupPending(sess.transcript) {
 			return SessionConfigState{}, &RPCError{Code: ErrInvalidParams, Message: method + ": unknown session " + id}
 		}
 		if replay {
@@ -587,7 +587,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 	persistedPath := ""
 	if dir := s.sessionDir(); dir != "" {
 		persistedPath = resolveTranscriptPath(dir, id)
-		if agent.IsCleanupPending(persistedPath) {
+		if control.SessionCleanupPending(persistedPath) {
 			return SessionConfigState{}, &RPCError{Code: ErrInvalidParams, Message: method + ": unknown session " + id}
 		}
 		meta, _, metaErr := loadACPMeta(persistedPath)
@@ -631,25 +631,27 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 		return SessionConfigState{}, &RPCError{Code: ErrInternal, Message: method + ": persistence is disabled"}
 	}
 	path := resolveTranscriptPath(dir, id)
-	if path != persistedPath && agent.IsCleanupPending(path) {
+	if path != persistedPath && control.SessionCleanupPending(path) {
 		ctrl.Close()
 		return SessionConfigState{}, &RPCError{Code: ErrInvalidParams, Message: method + ": unknown session " + id}
 	}
 	// Bind the transcript for writing only if no other runtime (a desktop
 	// window, the CLI) holds it; the editor should not silently double-write a
 	// session that is open elsewhere.
-	lease, leaseErr := agent.TryAcquireSessionLease(path)
-	if leaseErr != nil {
-		ctrl.Close()
-		return SessionConfigState{}, sessionLeaseBindError(method, leaseErr)
-	}
-	loaded, err := agent.LoadSession(path)
+	lease := control.NewSessionLeaseKeeper()
+	leaseAttempted := false
+	err = ctrl.ResumeSessionPath(path, func() error {
+		leaseAttempted = true
+		return lease.Rebind(path)
+	})
 	if err != nil {
 		lease.Release()
 		ctrl.Close()
+		if leaseAttempted {
+			return SessionConfigState{}, sessionLeaseBindError(method, err)
+		}
 		return SessionConfigState{}, &RPCError{Code: ErrInvalidParams, Message: method + ": unknown session " + id}
 	}
-	ctrl.Resume(loaded, path)
 
 	meta := metadataForLoadedSession(path, id, cwd, ctrl.History())
 	meta.Model = cfgState.Model
@@ -1132,7 +1134,7 @@ func (s *service) sessionDelete(_ context.Context, raw json.RawMessage) (any, er
 		path = sess.transcript
 		destroy = sess.ctrl.BeginDestroySession(path)
 		if result := destroy.Wait(); result.HasTimedOut() {
-			if err := agent.MarkCleanupPending(path, "delete"); err != nil {
+			if err := control.MarkSessionCleanupPending(path, "delete"); err != nil {
 				go delayedDeleteSessionFiles(path, destroy)
 				sess.ctrl.CloseAfterDestroy()
 				return nil, &RPCError{Code: ErrInternal, Message: "session/delete: " + err.Error()}
@@ -1666,7 +1668,7 @@ func listACPMetas(dir string) ([]acpSessionMeta, error) {
 		}
 		id := strings.TrimSuffix(e.Name(), ".acp.json")
 		sessionPath := transcriptPath(dir, id)
-		if agent.IsCleanupPending(sessionPath) {
+		if control.SessionCleanupPending(sessionPath) {
 			continue
 		}
 		if !sessionFileExists(sessionPath) {
@@ -1804,20 +1806,20 @@ func deleteSessionFiles(sessionPath string) error {
 			return err
 		}
 	}
-	if err := agent.DeleteSubagentsByParent(filepath.Dir(sessionPath), agent.BranchID(sessionPath)); err != nil {
+	if err := control.DeleteSessionSubagents(filepath.Dir(sessionPath), sessionPath); err != nil {
 		return err
 	}
 	if err := jobs.RemoveArtifacts(sessionPath); err != nil {
 		return err
 	}
-	return agent.ClearCleanupPending(sessionPath)
+	return control.ClearSessionCleanupPending(sessionPath)
 }
 
 // ReconcileCleanupPending retries delayed ACP session cleanup left by a previous
 // process, including ACP's own metadata sidecar.
 func ReconcileCleanupPending(dir string) error {
-	return agent.ReconcileCleanupPending(dir, func(item agent.CleanupPendingInfo) error {
-		return deleteSessionFiles(item.SessionPath)
+	return control.ReconcileSessionCleanupPending(dir, func(sessionPath string) error {
+		return deleteSessionFiles(sessionPath)
 	})
 }
 

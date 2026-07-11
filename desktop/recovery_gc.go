@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"time"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 )
 
 // recoveryGCInterval bounds how often the background sweep repeats after the
@@ -52,7 +52,7 @@ func (a *App) sweepReclaimableRecoveryBranches() int {
 func (a *App) reclaimRecoveryBranchesIn(dirs []string, now time.Time) int {
 	reclaimed := 0
 	for _, dir := range dirs {
-		reclaimable, err := agent.ReclaimableRecoveryBranches(dir, now, agent.RecoveryGCGracePeriod)
+		reclaimable, err := control.ReclaimableRecoverySessions(dir, now)
 		if err != nil {
 			slog.Warn("desktop: scan reclaimable recovery branches", "dir", dir, "err", err)
 			continue
@@ -62,7 +62,7 @@ func (a *App) reclaimRecoveryBranchesIn(dirs []string, now time.Time) int {
 			// and the user may have opened the branch since. DeleteSession then
 			// runs the full removal path (removal guard, runtime unbinding,
 			// trash move), so even a miss here lands in the recoverable trash.
-			if agent.SessionLeaseHeld(path) || a.sessionOpenInAnyTab(path) {
+			if control.SessionLeaseHeld(path) || a.sessionOpenInAnyTab(path) {
 				continue
 			}
 			if err := a.DeleteSession(path); err != nil {

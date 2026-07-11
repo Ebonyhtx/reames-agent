@@ -81,7 +81,7 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
 
 当前代码仍有历史直连，主要用于会话持久化、装配注册和设置重建，因此这是一项目标架构而不是已经完全满足的事实。`TestTransportRuntimeImportRatchet` 用精确 allowlist 冻结 Desktop、CLI、Serve、Bot 和 ACP 的现有直连：新增依赖会使 CI 失败，迁移删除依赖后也必须同步收缩 allowlist。Provider 与内置工具的 blank import 只允许保留在明确的装配入口。当前已完成四条可验证的纵向路径：共享 `ErrorInfo` 由 Desktop 按 code/category 消费；CLI `/resume` 通过 `control.SessionInfo`、`control.ListSessions` 和事务式 `ResumeSessionPath` 工作；提交/取消/审批/状态通过版本化 `control.Command` / `CommandResult` 与服务端选择的 `CommandScope` 驱动；事件通过 `eventwire` v1 输出完整 source/cache payload，历史展示通过 `control.TranscriptMessage` 投影。Serve history 与 ACP replay 不再消费 `provider.Message`，不会把 system、合成恢复指令、compose 控制块或 referenced-context payload当作用户历史发给远端前端。Serve 的新 `/command` 与 WebSocket `method=command` 共用相同执行器，旧端点/WS method 只是兼容适配器。
 
-迁移按纵向路径进行：命令、event/display DTO 与 CLI 会话恢复已经收口；下一步迁移剩余会话持久化、装配与设置边界。CLI/Bot/ACP 为拥有 turn 生命周期而保留同步 `RunTurn`，它与异步 command acknowledgement 是不同语义，不强行合并成伪统一接口。
+迁移按纵向路径进行：命令、event/display DTO，以及 CLI/Bot/Serve/ACP/Desktop 的稳定会话列表、恢复、租约、cleanup、trash/recovery GC 与设置延迟 rebuild 路径已经收口；下一步迁移 Desktop prompt/tab 与剩余装配/provider 设置边界。CLI/Bot/ACP 为拥有 turn 生命周期而保留同步 `RunTurn`，它与异步 command acknowledgement 是不同语义，不强行合并成伪统一接口。
 
 ## 四、缓存优先约束
 

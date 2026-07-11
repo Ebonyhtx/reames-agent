@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/boot"
 	"reames-agent/internal/botruntime"
 	"reames-agent/internal/config"
@@ -796,7 +794,7 @@ func (a *App) Settings() SettingsView {
 				Deny:  []string{},
 			},
 			Sandbox:                 SandboxView{Bash: config.Default().BashMode(), AllowWrite: []string{}, EffectiveWriteRoots: []string{}, Shell: "auto"},
-			Agent:                   AgentView{PlannerMaxSteps: 0, MaxSubagentDepth: agent.DefaultMaxSubagentDepth, ColdResumePrune: true, ReasoningLanguage: "auto"},
+			Agent:                   AgentView{PlannerMaxSteps: 0, MaxSubagentDepth: control.DefaultMaxSubagentDepth, ColdResumePrune: true, ReasoningLanguage: "auto"},
 			Bot:                     botSettingsView(config.BotConfig{}),
 			AutoPlan:                "off",
 			DesktopLayoutStyle:      "workbench",
@@ -1143,7 +1141,7 @@ func (a *App) ensureLiveControllersRuntimeMutationAllowed(setting string) error 
 }
 
 func (a *App) deferredRebuildWarning(setting string, err error) (string, bool) {
-	if err == nil || !errors.Is(err, agent.ErrSessionLeaseHeld) {
+	if err == nil || !control.IsSessionLeaseHeld(err) {
 		return "", false
 	}
 	setting = strings.TrimSpace(setting)
@@ -1585,7 +1583,7 @@ func (a *App) rebuildSettingLocked(setting string) error {
 	if mode := strings.TrimSpace(snap.toolApprovalMode); mode != "" {
 		applyTabToolApprovalModeToController(ctrl, mode)
 	}
-	path := agent.ContinueSessionPath(prevPath, ctrl.SessionDir(), ctrl.Label())
+	path := control.ContinueSessionPath(prevPath, ctrl.SessionDir(), ctrl.Label())
 	if err := a.ensureTabSessionLeaseForRebuild(tab, path, setting); err != nil {
 		ctrl.Close()
 		return err
@@ -1720,12 +1718,12 @@ func (a *App) SetSubagentEffort(level string) error {
 
 func desktopMaxSubagentDepth(depth int) int {
 	if depth <= 0 {
-		return agent.DefaultMaxSubagentDepth
+		return control.DefaultMaxSubagentDepth
 	}
 	if depth == 1 {
 		return 1
 	}
-	return agent.DefaultMaxSubagentDepth
+	return control.DefaultMaxSubagentDepth
 }
 
 // SetMaxSubagentDepth controls whether first-layer subagents may delegate once more.

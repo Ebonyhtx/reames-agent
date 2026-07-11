@@ -11,12 +11,14 @@ import (
 // It intentionally exposes only presentation and identity fields; transports
 // must not depend on the agent persistence model.
 type SessionInfo struct {
-	Path        string
-	ModTime     time.Time
-	Preview     string
-	Turns       int
-	TopicTitle  string
-	CustomTitle string
+	Path           string
+	LastActivityAt time.Time
+	ModTime        time.Time
+	Preview        string
+	Turns          int
+	Scope          string
+	TopicTitle     string
+	CustomTitle    string
 }
 
 // ListSessions returns saved sessions in the agent store's canonical order as
@@ -29,15 +31,23 @@ func ListSessions(dir string) ([]SessionInfo, error) {
 	out := make([]SessionInfo, len(sessions))
 	for i, session := range sessions {
 		out[i] = SessionInfo{
-			Path:        session.Path,
-			ModTime:     session.ModTime,
-			Preview:     session.Preview,
-			Turns:       session.Turns,
-			TopicTitle:  session.TopicTitle,
-			CustomTitle: session.CustomTitle,
+			Path:           session.Path,
+			LastActivityAt: session.LastActivityAt,
+			ModTime:        session.ModTime,
+			Preview:        session.Preview,
+			Turns:          session.Turns,
+			Scope:          session.Scope,
+			TopicTitle:     session.TopicTitle,
+			CustomTitle:    session.CustomTitle,
 		}
 	}
 	return out, nil
+}
+
+// RenameSession updates the display title without exposing the persistence
+// sidecar model to a transport.
+func RenameSession(path, title string) error {
+	return agent.RenameSession(path, title)
 }
 
 // ResumeSessionPath loads a persisted session behind the control boundary and

@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
 	"reames-agent/internal/fileutil"
@@ -159,16 +158,16 @@ func sessionTrashArtifacts(sessionPath, key string) []sessionTrashArtifact {
 // writer id, hostname, or path.
 var errSessionBusyElsewhere = errors.New("session is in use by another Reames Agent window or process")
 
-// acquireSessionRemovalGuard wraps agent.TryAcquireSessionRemovalGuard with
+// acquireSessionRemovalGuard wraps the control persistence guard with
 // the sanitized busy error. The guard holds the session's save and lease
 // locks across the destructive operation and deletes the lock files
 // atomically with the release — a one-shot busy probe followed by RemoveAll
 // would let another process acquire the lease in between and then lose its
 // freshly locked lease file, breaking cross-process mutual exclusion.
-func acquireSessionRemovalGuard(sessionPath string) (*agent.SessionRemovalGuard, error) {
-	guard, err := agent.TryAcquireSessionRemovalGuard(sessionPath)
+func acquireSessionRemovalGuard(sessionPath string) (*control.SessionRemovalGuard, error) {
+	guard, err := control.TryAcquireSessionRemovalGuard(sessionPath)
 	if err != nil {
-		if errors.Is(err, agent.ErrSessionLeaseHeld) {
+		if control.IsSessionLeaseHeld(err) {
 			return nil, errSessionBusyElsewhere
 		}
 		return nil, err
@@ -193,8 +192,8 @@ func trashSessionArtifacts(dir, sessionPath, key string) error {
 }
 
 func reconcileDesktopCleanupPending(dir string) error {
-	return agent.ReconcileCleanupPending(dir, func(item agent.CleanupPendingInfo) error {
-		if strings.TrimSpace(item.Meta.Operation) == "delete" {
+	return control.ReconcileSessionCleanupPendingDetailed(dir, func(item control.SessionCleanupPendingInfo) error {
+		if strings.TrimSpace(item.Operation) == "delete" {
 			sessionPath, key, err := validateSessionPath(dir, item.SessionPath)
 			if err != nil {
 				return err
@@ -260,7 +259,7 @@ func reconcileDesktopTrashSessionArtifacts(dir, sessionPath, key string) error {
 	if err := os.WriteFile(filepath.Join(itemDir, sessionTrashMetaFile), b, 0o644); err != nil {
 		return err
 	}
-	return agent.ClearCleanupPending(sessionPath)
+	return control.ClearSessionCleanupPending(sessionPath)
 }
 
 func validateSessionTrashTarget(dir, sessionPath, key string) error {
@@ -283,7 +282,7 @@ func validateSessionTrashTarget(dir, sessionPath, key string) error {
 			if removable {
 				return nil
 			}
-			if agent.SessionLeaseHeldByOtherRuntime(sessionPath) {
+			if control.SessionLeaseHeldByOtherRuntime(sessionPath) {
 				return errSessionBusyElsewhere
 			}
 			return nil
@@ -323,7 +322,7 @@ func prepareSessionTrashTarget(dir, sessionPath, key string) (preparedSessionTra
 			if removable {
 				return preparedSessionTrashTarget{}, removeDesktopSessionArtifacts(sessionPath)
 			}
-			if agent.SessionLeaseHeldByOtherRuntime(sessionPath) {
+			if control.SessionLeaseHeldByOtherRuntime(sessionPath) {
 				return preparedSessionTrashTarget{}, errSessionBusyElsewhere
 			}
 			return preparedSessionTrashTarget{shouldMove: true, allocateUnique: true}, nil
@@ -377,11 +376,11 @@ func liveSessionRemovableWithExistingTrash(sessionPath, trashPath string) (bool,
 	if !discardable && !duplicate {
 		return false, nil
 	}
-	return !agent.SessionLeaseHeldByOtherRuntime(sessionPath), nil
+	return !control.SessionLeaseHeldByOtherRuntime(sessionPath), nil
 }
 
 func liveSessionDiscardable(sessionPath string) (bool, error) {
-	if agent.IsCleanupPending(sessionPath) {
+	if control.SessionCleanupPending(sessionPath) {
 		return true, nil
 	}
 	info, err := os.Stat(sessionPath)
@@ -397,11 +396,11 @@ func liveSessionDiscardable(sessionPath string) (bool, error) {
 	if info.Size() == 0 {
 		return true, nil
 	}
-	session, err := agent.LoadSession(sessionPath)
+	hasContent, err := control.SessionHasContent(sessionPath)
 	if err != nil {
 		return false, nil
 	}
-	return !session.HasContent(), nil
+	return !hasContent, nil
 }
 
 func trashSessionMatchesLive(sessionPath, trashPath string) (bool, error) {
@@ -415,22 +414,22 @@ func trashSessionMatchesLive(sessionPath, trashPath string) (bool, error) {
 	// changes at checkpoints, so two byte-identical .jsonl files can hide
 	// diverged event logs — and treating them as duplicates would delete the
 	// live session's newer history.
-	return agent.SessionsShareContent(sessionPath, trashPath)
+	return control.SessionsShareContent(sessionPath, trashPath)
 }
 
 func sessionFileHasConversationContent(sessionPath string) bool {
-	if strings.TrimSpace(sessionPath) == "" || agent.IsCleanupPending(sessionPath) {
+	if strings.TrimSpace(sessionPath) == "" || control.SessionCleanupPending(sessionPath) {
 		return false
 	}
 	info, err := os.Stat(sessionPath)
 	if err != nil || info.IsDir() || info.Size() == 0 {
 		return false
 	}
-	session, err := agent.LoadSession(sessionPath)
+	hasContent, err := control.SessionHasContent(sessionPath)
 	if err != nil {
 		return false
 	}
-	return session.HasContent()
+	return hasContent
 }
 
 func trashSessionArtifactsBeforeMove(dir, sessionPath, key string, beforeMove func()) error {
@@ -482,7 +481,7 @@ func trashSessionArtifactsBeforeMove(dir, sessionPath, key string, beforeMove fu
 	if err := os.WriteFile(filepath.Join(itemDir, sessionTrashMetaFile), b, 0o644); err != nil {
 		return err
 	}
-	if err := agent.ClearCleanupPending(sessionPath); err != nil {
+	if err := control.ClearSessionCleanupPending(sessionPath); err != nil {
 		return err
 	}
 	return nil
@@ -756,7 +755,7 @@ func copySymlink(src, dst string) error {
 }
 
 func trashSubagentArtifacts(dir, sessionPath, itemDir string) error {
-	artifacts, err := agent.ListSubagentsByParent(dir, agent.BranchID(sessionPath))
+	artifacts, err := control.ListSessionSubagentArtifacts(dir, sessionPath)
 	if err != nil {
 		return err
 	}

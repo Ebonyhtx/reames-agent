@@ -34,8 +34,31 @@ func TestListSessionsReturnsStableSummary(t *testing.T) {
 	if got.Path != path || got.Turns != 1 || got.Preview != "inspect the parser" || got.CustomTitle != "Parser audit" {
 		t.Fatalf("stable session summary = %+v", got)
 	}
-	if got.ModTime.IsZero() {
-		t.Fatal("stable session summary lost modification time")
+	if got.ModTime.IsZero() || got.LastActivityAt.IsZero() {
+		t.Fatal("stable session summary lost activity time")
+	}
+}
+
+func TestSessionIdentityHelpersStayBehindControlBoundary(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "branch-123.jsonl")
+	session := agent.NewSession("system")
+	session.Add(provider.Message{Role: provider.RoleUser, Content: "task"})
+	if err := session.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := BranchID(path); got != "branch-123" {
+		t.Fatalf("BranchID = %q", got)
+	}
+	if err := RenameSession(path, "Control title"); err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := ListSessions(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 1 || sessions[0].CustomTitle != "Control title" {
+		t.Fatalf("renamed sessions = %+v", sessions)
 	}
 }
 

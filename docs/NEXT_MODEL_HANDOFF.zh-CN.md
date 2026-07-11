@@ -57,12 +57,12 @@ upstream issue + builtin/public/release contracts    PASS
 .\scripts\verify-baseline.ps1 -SkipFrontendHint      PASS
 ```
 
-本批不改变 Wails UI 或安装工件，不重复触发 Desktop candidate；上一批 production Windows schema v3 candidate 已全绿。当前远端 `main` 为 `f2a2222`，普通 CI run `29136484518` 为 8/8、CodeQL run `29136484531` 为 3/3；本批远端结果需集中 push 后确认。
+event/transcript/metadata 批次不改变 Wails UI 或安装工件，未重复触发 Desktop candidate；上一批 production Windows schema v3 candidate 已全绿。当前远端 `main` 为 `f1da4d4`，普通 CI run `29137582416` 为 8/8、CodeQL run `29137582392` 为 3/3。
 
 ## 下一执行顺序
 
-1. 显式暂存本批路径，集中提交并只 push 一次；观察普通 CI 与 CodeQL。
-2. 审查并收口剩余会话持久化、装配和设置边界，继续逐条缩小 transport runtime import allowlist。
+1. 继续扩展本地未提交的会话适配器批次：CLI/Bot/Serve/ACP/Desktop 的列表、恢复、租约、cleanup、trash/recovery GC 和设置 rebuild 已迁入 control，本轮十条生产 `agent` allowlist 边已删除，详见 `docs/audits/2026-07-11-m2-session-adapter-boundary.md`。
+2. 完成 Desktop prompt/tab 或剩余装配/provider 设置边界的下一条完整纵向路径；全量验证后再集中 commit/push，避免紧跟上一批重复消耗 CI。
 3. 然后进入干净云节点 CLI + Gateway + feedback 运维闭环与真实飞书回环。
 
 ## 长期未关闭项
@@ -74,3 +74,7 @@ upstream issue + builtin/public/release contracts    PASS
 - 生产签名、notarization、provenance 与 updater 信任链，保持 `external-blocked`。
 
 长期 GOAL 尚未完成。即使本批全绿，也只能声明该批验收完成，不能声明整个项目完成。
+
+## 当前未提交批次验证
+
+会话适配器边界批次已通过 root build/vet/internal 全测、Desktop 全测、前端 `test:all`/build、Python/Node/工具/文档/公开/发布合同及 `verify-baseline.ps1`。工作树仍保留该批生产代码、测试和文档，必须显式暂存并集中提交；受保护文件继续排除。

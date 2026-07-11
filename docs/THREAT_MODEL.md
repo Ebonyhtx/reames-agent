@@ -33,7 +33,7 @@ Controller ── Agent loop ── Provider API
 | HTTP Serve | 部分实现 | 支持 `none`/token/password，token 常量时间比较、密码 session HMAC、登录速率限制、JSON-only POST CSRF guard、默认无 CORS、显式单 origin CORS；版本化 command 校验与服务端 `remote` scope 阻止客户端选择 trusted submit，旧 WS submit 也不再绕过 `!shell` 限制；history 使用展示安全 transcript 而不输出 system/注入上下文；真实 WebSocket 握手有回归测试 | WebSocket `CheckOrigin` 当前放行并依赖外层鉴权；`auth=none` 依赖 loopback/same-origin 部署假设；请求体、WS frame 和全局请求速率限制仍需系统化审计 |
 | IM Gateway | 部分实现 | 用户/群 allowlist、admin/approver 角色、operator 身份检查和各渠道传输适配已存在；connection/domain/chat/user/operator/message ID 只用于路由，不进入 Provider prompt，群聊显式参与者名称标签保留 | 当前没有通用飞书 webhook HMAC/重放验证实现；真实飞书/QQ/微信回环需要外部应用凭据与网络环境，未验证前不得声明完成 |
 | 插件与 Hook | 部分实现 | 插件路径/名称/manifest 基础校验、启停状态、MCP 启动/调用超时、项目 Hook trust gate 和 Hook 超时已存在 | manifest 尚无被安装器执行的权限声明、兼容版本、内容哈希或签名验证；“用户安装即信任”仍是主要边界 |
-| 状态与恢复 | 部分实现 | session JSONL、lease/recovery、checkpoint/rewind、版本化 Goal sidecar 和 Todo 恢复均有测试 | 并非所有 sidecar 都使用同一种原子写协议；崩溃时跨多个文件的一致性没有事务保证，需按写路径验证 |
+| 状态与恢复 | 部分实现 | session JSONL、lease/recovery、checkpoint/rewind、版本化 Goal sidecar 和 Todo 恢复均有测试；CLI/Bot/Serve/ACP/Desktop 的列表/恢复/跨进程 lease/cleanup/trash/recovery GC 通过 control persistence 边界复用同一语义 | 并非所有 sidecar 都使用同一种原子写协议；崩溃时跨多个文件的一致性没有事务保证，需按写路径验证；剩余 Desktop tab/prompt 与装配直连仍在依赖棘轮中 |
 | 构建与发布 | 部分实现 | Go 依赖哈希、六目标 candidate、SHA256SUMS、三平台 Desktop candidate、CodeQL 和发布契约检查已建立 | 生产发布仍禁用；CLI/Windows/macOS 工件签名、notarization、provenance attestation 和可信 updater 发布链未完成 |
 
 ## 优先风险

@@ -23,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/board"
 	"reames-agent/internal/boot"
 	"reames-agent/internal/config"
@@ -200,7 +199,7 @@ func (s *Server) switchModel(ctx context.Context, ref string) error {
 	}
 	// Keep the carried conversation in its existing file so the switch doesn't
 	// orphan a duplicate (#2807).
-	newPath := agent.ContinueSessionPath(prevPath, newCtrl.SessionDir(), newCtrl.Label())
+	newPath := control.ContinueSessionPath(prevPath, newCtrl.SessionDir(), newCtrl.Label())
 	newCtrl.AdoptHistory(carried, newPath)
 
 	// Publish the swap under a short write lock. bindMu already serializes
@@ -1077,7 +1076,7 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "path outside session dir", http.StatusForbidden)
 		return
 	}
-	if agent.IsCleanupPending(realPath) {
+	if control.SessionCleanupPending(realPath) {
 		http.Error(w, "session is pending cleanup", http.StatusBadRequest)
 		return
 	}
@@ -1094,26 +1093,29 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 	}
 	// Refuse to bind a session another runtime is writing (a desktop window,
 	// another CLI); on success the lease now guards the resume target.
-	if err := s.rebindSessionLease(realPath); err != nil {
-		if errors.Is(err, agent.ErrSessionLeaseHeld) {
-			http.Error(w, sessionInUseError(err), http.StatusConflict)
+	leaseAttempted := false
+	err = s.ctl().ResumeSessionPath(realPath, func() error {
+		leaseAttempted = true
+		if err := s.rebindSessionLease(realPath); err != nil {
+			return err
+		}
+		if hook := resumeBindHookForTest; hook != nil {
+			hook()
+		}
+		return nil
+	})
+	if err != nil {
+		if leaseAttempted {
+			if control.IsSessionLeaseHeld(err) {
+				http.Error(w, sessionInUseError(err), http.StatusConflict)
+			} else {
+				http.Error(w, "session lease: "+err.Error(), http.StatusInternalServerError)
+			}
 		} else {
-			http.Error(w, "session lease: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 		return
 	}
-	loaded, err := agent.LoadSession(realPath)
-	if err != nil {
-		// The lease already moved to the target; re-point it at the session the
-		// controller still owns (best-effort).
-		_ = s.rebindSessionLease(s.ctl().SessionPath())
-		http.Error(w, "load session: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	if hook := resumeBindHookForTest; hook != nil {
-		hook()
-	}
-	s.ctl().Resume(loaded, realPath)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1257,37 +1259,21 @@ func (s *Server) sessions(w http.ResponseWriter, r *http.Request) {
 		Turns   int    `json:"turns,omitempty"`
 		Current bool   `json:"current,omitempty"`
 	}
-	entries, err := os.ReadDir(dir)
+	infos, err := control.ListSessions(dir)
 	if err != nil {
 		writeJSON(w, []any{})
 		return
 	}
 	current := filepath.Clean(s.ctl().SessionPath())
-	var out []sessionEntry
-	for _, e := range entries {
-		if e.IsDir() || !store.IsSessionTranscriptName(e.Name()) {
-			continue
+	out := make([]sessionEntry, 0, len(infos))
+	for _, info := range infos {
+		name := control.SessionName(info.Path)
+		entry := sessionEntry{
+			Name: name, Path: info.Path, Turns: info.Turns,
+			Current: filepath.Clean(info.Path) == current,
 		}
-		path := filepath.Join(dir, e.Name())
-		if agent.IsCleanupPending(path) {
-			continue
-		}
-		name := strings.TrimSuffix(e.Name(), ".jsonl")
-		entry := sessionEntry{Name: name, Path: path, Current: filepath.Clean(path) == current}
-		// Event-log aware: reading the .jsonl checkpoint directly would freeze
-		// turn counts and titles at the last checkpoint write.
-		if first, turns := agent.SessionPreview(path); turns > 0 {
-			entry.Turns = turns
-			entry.Title = s.sessionTitle(r.Context(), e.Name(), first, agent.SessionContentModTime(path).UnixNano())
-		}
+		entry.Title = s.sessionTitle(r.Context(), filepath.Base(info.Path), info.Preview, info.ModTime.UnixNano())
 		out = append(out, entry)
-	}
-	// reverse so newest first
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
-	if out == nil {
-		out = []sessionEntry{}
 	}
 	writeJSON(w, out)
 }
@@ -1337,7 +1323,7 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 	}
 	destroy := s.ctl().BeginDestroySession(abs)
 	if result := finishSessionDestroy(destroy); result.HasTimedOut() {
-		if err := agent.MarkCleanupPending(abs, "delete"); err != nil {
+		if err := control.MarkSessionCleanupPending(abs, "delete"); err != nil {
 			go delayedSessionDelete(absDir, abs, destroy)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -1389,13 +1375,13 @@ func removeSessionFiles(absDir, abs string) error {
 			return err
 		}
 	}
-	if err := agent.DeleteSubagentsByParent(absDir, agent.BranchID(abs)); err != nil {
+	if err := control.DeleteSessionSubagents(absDir, abs); err != nil {
 		return err
 	}
 	if err := jobs.RemoveArtifacts(abs); err != nil {
 		return err
 	}
-	return agent.ClearCleanupPending(abs)
+	return control.ClearSessionCleanupPending(abs)
 }
 
 // sessionTitle returns a title for a session: the cached flash-generated title

@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/boot"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
@@ -1839,8 +1838,7 @@ func (gw *BotGateway) getOrCreateSession(ctx context.Context, key string, msg In
 		return nil
 	}
 	if profile.sessionPath != "" {
-		loaded, err := agent.LoadSession(profile.sessionPath)
-		if err != nil {
+		if err := ctrl.ResumeSessionPath(profile.sessionPath, nil); err != nil {
 			ctrl.Close()
 			if os.IsNotExist(err) {
 				gw.logger.Error("attached bot session missing", "session_path", profile.sessionPath)
@@ -1849,7 +1847,6 @@ func (gw *BotGateway) getOrCreateSession(ctx context.Context, key string, msg In
 			}
 			return nil
 		}
-		ctrl.Resume(loaded, profile.sessionPath)
 	}
 	ctrl.EnableInteractiveApproval()
 	ctrl.SetToolApprovalMode(profile.toolApprovalMode)

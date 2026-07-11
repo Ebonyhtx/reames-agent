@@ -5,12 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/control"
 )
 
@@ -218,7 +216,7 @@ func (a *App) retryDeferredRebuild(tabID, setting string) {
 		a.noticeForTab(tabID, fmt.Sprintf("%s applied: session refreshed after the lease was released", setting))
 		return
 	}
-	if errors.Is(err, agent.ErrSessionLeaseHeld) {
+	if control.IsSessionLeaseHeld(err) {
 		return // grabbed back before we could rebuild; keep waiting
 	}
 	var busy *rebuildBusyError
@@ -247,7 +245,7 @@ func (a *App) retryDeferredStartupBuild(tabID string, tab *WorkspaceTab) {
 		a.clearDeferredRebuild(tabID)
 		return
 	}
-	if errors.Is(err, agent.ErrSessionLeaseHeld) {
+	if control.IsSessionLeaseHeld(err) {
 		return
 	}
 	a.clearDeferredRebuild(tabID)
@@ -314,7 +312,7 @@ func (a *App) rebuildStartupTabLocked(tab *WorkspaceTab) error {
 		return nil
 	}
 	if leaseHeld {
-		return agent.ErrSessionLeaseHeld
+		return control.ErrSessionLeaseHeld
 	}
 	if strings.TrimSpace(startupErr) != "" {
 		return fmt.Errorf("session startup: %s", startupErr)
@@ -339,7 +337,7 @@ func (a *App) tryRecoverStartupLeaseHeldTab(tab *WorkspaceTab) bool {
 		a.clearDeferredRebuild(tab.ID)
 		return a.controllerForTab(tab) != nil
 	}
-	if errors.Is(err, agent.ErrSessionLeaseHeld) {
+	if control.IsSessionLeaseHeld(err) {
 		a.scheduleDeferredStartupBuild(tab.ID)
 	} else {
 		a.clearDeferredRebuild(tab.ID)
@@ -366,19 +364,5 @@ func (a *App) deferredRebuildLeaseLooksFree(tab *WorkspaceTab) bool {
 	if path == "" {
 		return true // nothing to probe; let the rebuild decide
 	}
-	lease, err := agent.TryAcquireSessionLease(sessionRuntimeKey(path))
-	if err != nil {
-		var leaseErr *agent.SessionLeaseError
-		if errors.As(err, &leaseErr) && leaseErr.Info != nil && leaseErr.Info.PID == os.Getpid() {
-			if host, _ := os.Hostname(); leaseErr.Info.Hostname == host {
-				// This process (usually this very tab) holds the probed path;
-				// the blocking lease is some other path. Attempt the rebuild
-				// and let its own lease checks decide.
-				return true
-			}
-		}
-		return !errors.Is(err, agent.ErrSessionLeaseHeld)
-	}
-	lease.Release()
-	return true
+	return control.SessionLeaseAvailableForRebuild(sessionRuntimeKey(path))
 }

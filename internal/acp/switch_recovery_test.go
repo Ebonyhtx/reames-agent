@@ -68,10 +68,10 @@ func assertACPSessionOnRecoveryPath(t *testing.T, sess *acpSession, originalPath
 	if transcript != recoveryPath {
 		t.Fatalf("session transcript = %q, want recovery path %q", transcript, recoveryPath)
 	}
-	if lease == nil || lease.Path() != agent.CanonicalSessionPath(recoveryPath) {
+	if lease == nil || lease.HeldPath() != agent.CanonicalSessionPath(recoveryPath) {
 		got := ""
 		if lease != nil {
-			got = lease.Path()
+			got = lease.HeldPath()
 		}
 		t.Fatalf("session lease path = %q, want recovery path %q", got, recoveryPath)
 	}
@@ -82,6 +82,15 @@ func assertACPSessionOnRecoveryPath(t *testing.T, sess *acpSession, originalPath
 		t.Fatalf("original transcript lease should be free after recovery move: %v", err)
 	}
 	orig.Release()
+}
+
+func acquireACPTestLease(t *testing.T, path string) *control.SessionLeaseKeeper {
+	t.Helper()
+	lease := control.NewSessionLeaseKeeper()
+	if err := lease.Rebind(path); err != nil {
+		t.Fatalf("acquire session lease: %v", err)
+	}
+	return lease
 }
 
 // TestACPRebuildSessionContinuesRecoveryPathAfterSnapshotConflict is the ACP
@@ -105,11 +114,7 @@ func TestACPRebuildSessionContinuesRecoveryPathAfterSnapshotConflict(t *testing.
 		model:      "fast",
 		transcript: originalPath,
 	}
-	lease, err := agent.TryAcquireSessionLease(originalPath)
-	if err != nil {
-		t.Fatalf("acquire original session lease: %v", err)
-	}
-	sess.lease = lease
+	sess.lease = acquireACPTestLease(t, originalPath)
 	t.Cleanup(sess.releaseSessionLease)
 
 	svc := &service{
@@ -163,11 +168,7 @@ func TestACPPersistAfterTurnMovesBookkeepingToRecoveryPath(t *testing.T) {
 		model:      "fast",
 		transcript: originalPath,
 	}
-	lease, err := agent.TryAcquireSessionLease(originalPath)
-	if err != nil {
-		t.Fatalf("acquire original session lease: %v", err)
-	}
-	sess.lease = lease
+	sess.lease = acquireACPTestLease(t, originalPath)
 	t.Cleanup(sess.releaseSessionLease)
 
 	svc := &service{
@@ -223,11 +224,7 @@ func recoverACPSessionAndRestart(t *testing.T, dir, id string) (originalPath, re
 		title:      "recovered title",
 		transcript: originalPath,
 	}
-	lease, err := agent.TryAcquireSessionLease(originalPath)
-	if err != nil {
-		t.Fatalf("acquire original session lease: %v", err)
-	}
-	sess.lease = lease
+	sess.lease = acquireACPTestLease(t, originalPath)
 	svc.sessions[id] = sess
 	ctrl := control.New(control.Options{
 		Executor:           agent.New(nil, nil, stale, agent.Options{}, event.Discard),

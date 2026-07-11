@@ -28,12 +28,15 @@ func ParseBranchTarget(args string) (turn int, name string, fromTurn bool, err e
 	return n, name, true, nil
 }
 
+// BranchID returns the stable branch identifier derived from a session path.
+func BranchID(path string) string { return agent.BranchID(path) }
+
 func (c *Controller) BranchTreeText() string {
 	branches, err := c.Branches()
 	if err != nil {
 		return "branches: " + err.Error()
 	}
-	return FormatBranchTree(branches, agent.BranchID(c.SessionPath()))
+	return FormatBranchTree(branches, BranchID(c.SessionPath()))
 }
 
 func FormatBranchTree(branches []agent.BranchInfo, currentID string) string {

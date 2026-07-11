@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
 	"reames-agent/internal/i18n"
 )
 
@@ -49,7 +49,7 @@ func (m *chatTUI) runRenameCommand(input string) {
 		return
 	}
 
-	if err := agent.RenameSession(targetPath, title); err != nil {
+	if err := control.RenameSession(targetPath, title); err != nil {
 		m.notice("rename: " + err.Error())
 		return
 	}
