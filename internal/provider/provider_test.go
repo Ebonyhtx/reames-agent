@@ -6,6 +6,34 @@ import (
 	"testing"
 )
 
+func TestMessagesForRequestStripsLocalMetadataWithoutMutatingHistory(t *testing.T) {
+	clean := []Message{{Role: RoleUser, Content: "clean"}}
+	cleanOut := MessagesForRequest(clean)
+	if &cleanOut[0] != &clean[0] {
+		t.Fatal("clean messages should keep their backing slice")
+	}
+
+	decorated := []Message{
+		{Role: RoleUser, Content: "edited", Edited: true, Original: "original", Images: []string{"data:image/png;base64,AA=="}},
+		{Role: RoleAssistant, Content: "done", ReasoningContent: "reason", MemoryCitations: []MemoryCitation{{ID: "m1", Source: "MEMORY.md"}}, ToolCalls: []ToolCall{{ID: "c1", Name: "bash", Arguments: `{}`}}},
+	}
+	out := MessagesForRequest(decorated)
+	if &out[0] == &decorated[0] {
+		t.Fatal("decorated messages must be cloned")
+	}
+	for i, message := range out {
+		if message.Edited || message.Original != "" || len(message.MemoryCitations) != 0 {
+			t.Fatalf("request message %d retained local metadata: %+v", i, message)
+		}
+	}
+	if len(out[0].Images) != 1 || out[1].ReasoningContent != "reason" || len(out[1].ToolCalls) != 1 {
+		t.Fatalf("provider-semantic fields were lost: %+v", out)
+	}
+	if !decorated[0].Edited || decorated[0].Original != "original" || len(decorated[1].MemoryCitations) != 1 {
+		t.Fatalf("persisted history was mutated: %+v", decorated)
+	}
+}
+
 // --- SanitizeToolPairing ---
 
 // toolIDsAnswered reports whether every assistant tool_call id has a following

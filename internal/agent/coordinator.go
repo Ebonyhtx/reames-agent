@@ -295,7 +295,7 @@ func (c *Coordinator) plan(ctx context.Context, input string) (string, error) {
 	c.plannerSess.Add(provider.Message{Role: provider.RoleUser, Content: input})
 
 	ch, err := c.planner.Stream(ctx, provider.Request{
-		Messages:    c.plannerSess.Messages,
+		Messages:    provider.MessagesForRequest(c.plannerSess.Messages),
 		Temperature: provider.OptionalTemperature(c.temperature),
 	})
 	if err != nil {

@@ -122,13 +122,38 @@ func OptionalTemperature(v float64) *float64 {
 // responding to each 'tool_call_id'".
 const interruptedToolResult = "[no result: the previous turn was interrupted before this tool call completed]"
 
+// MessagesForRequest removes local display-only metadata before a message slice
+// crosses the Provider interface. Clean slices are returned unchanged; decorated
+// slices are shallow-cloned so the persisted transcript keeps its UI metadata.
+func MessagesForRequest(messages []Message) []Message {
+	needsClone := false
+	for _, message := range messages {
+		if len(message.MemoryCitations) > 0 || message.Edited || message.Original != "" {
+			needsClone = true
+			break
+		}
+	}
+	if !needsClone {
+		return messages
+	}
+	out := append([]Message(nil), messages...)
+	for i := range out {
+		out[i].MemoryCitations = nil
+		out[i].Edited = false
+		out[i].Original = ""
+	}
+	return out
+}
+
 // SanitizeToolPairing is the provider-side alias for NormalizeMessages. It repairs
 // a history so it satisfies the tool-call contract the OpenAI-compatible and
 // Anthropic APIs enforce (every assistant tool_calls answered, no orphan tool
 // messages, truncated args closed) right before sending it to the wire — without
 // touching the stored session. Kept as a distinct name so call sites read as
 // "defensive wire prep" rather than "session mutation".
-func SanitizeToolPairing(msgs []Message) []Message { return NormalizeMessages(msgs) }
+func SanitizeToolPairing(msgs []Message) []Message {
+	return NormalizeMessages(MessagesForRequest(msgs))
+}
 
 // NormalizeMessages repairs a conversation history so it satisfies the tool-call
 // contract the OpenAI-compatible and Anthropic APIs enforce: every assistant

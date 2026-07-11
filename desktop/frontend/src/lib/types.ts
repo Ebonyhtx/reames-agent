@@ -171,7 +171,9 @@ export interface WireErrorInfo {
 }
 
 export interface WireEvent {
+  version?: number;
   kind: EventKind;
+  source?: string;
   text?: string;
   reasoning?: string;
   memoryCitations?: MemoryCitation[];
@@ -187,6 +189,7 @@ export interface WireEvent {
   error?: WireErrorInfo;
   retryAttempt?: number;
   retryMax?: number;
+  cacheDiagnostics?: WireCacheDiagnostics;
   // Tab routing: set by the Go-side tabEventSink so multi-tab frontends
   // route each event to the correct per-tab reducer.
   tabId?: string;

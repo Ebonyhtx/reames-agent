@@ -26,7 +26,6 @@ var legacyTransportRuntimeImports = map[string][]string{
 	"desktop/sessions.go":           {"reames-agent/internal/agent"},
 	"desktop/settings_app.go":       {"reames-agent/internal/agent", "reames-agent/internal/provider"},
 	"desktop/tabs.go":               {"reames-agent/internal/agent", "reames-agent/internal/provider"},
-	"internal/acp/dispatch.go":      {"reames-agent/internal/provider"},
 	"internal/acp/service.go":       {"reames-agent/internal/agent", "reames-agent/internal/provider"},
 	"internal/bot/gateway.go":       {"reames-agent/internal/agent"},
 	"internal/bot/project_index.go": {"reames-agent/internal/agent"},

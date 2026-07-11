@@ -315,6 +315,31 @@ func TestBuildRequestDropsMemoryCitations(t *testing.T) {
 	}
 }
 
+func TestBuildRequestLocalMetadataDoesNotChangeWireBytes(t *testing.T) {
+	c := &client{model: "claude-opus-4-8"}
+	base := []provider.Message{
+		{Role: provider.RoleSystem, Content: "stable system"},
+		{Role: provider.RoleUser, Content: "edited prompt"},
+		{Role: provider.RoleAssistant, Content: "done"},
+	}
+	decorated := append([]provider.Message(nil), base...)
+	decorated[1].Edited = true
+	decorated[1].Original = "original prompt"
+	decorated[2].MemoryCitations = []provider.MemoryCitation{{ID: "m1", Source: "MEMORY.md", Note: "local only"}}
+
+	plain, err := json.Marshal(c.buildRequest(provider.Request{Messages: base}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	withMetadata, err := json.Marshal(c.buildRequest(provider.Request{Messages: decorated}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(withMetadata) != string(plain) {
+		t.Fatalf("local metadata changed Anthropic wire/cache bytes:\nplain=%s\nmetadata=%s", plain, withMetadata)
+	}
+}
+
 const sseThinking = `event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking"}}
 

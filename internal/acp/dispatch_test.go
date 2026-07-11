@@ -182,6 +182,42 @@ func TestUpdateSinkDropsAndWarns(t *testing.T) {
 	}
 }
 
+func TestUpdateSinkReplayUsesDisplaySafeTranscript(t *testing.T) {
+	fn := &fakeNotifier{}
+	sink := newUpdateSink(fn, "sess-1")
+	sink.replay([]control.TranscriptMessage{
+		{Index: 0, Role: control.TranscriptSystem, Content: "secret system prompt", Hidden: true},
+		{Index: 1, Role: control.TranscriptUser, Content: "visible request"},
+		{Index: 2, Role: control.TranscriptUser, SteerText: "focus tests"},
+		{Index: 3, Role: control.TranscriptAssistant, Reasoning: "brief thought", Content: "visible answer", ToolCalls: []control.TranscriptToolCall{{ID: "call-1", Name: "read_file", Arguments: `{"path":"a.go"}`}}},
+		{Index: 4, Role: control.TranscriptTool, ToolCallID: "call-1", ToolName: "read_file", Content: "package main"},
+	})
+
+	wantKinds := []string{
+		"user_message_chunk", "user_message_chunk", "agent_thought_chunk",
+		"agent_message_chunk", "tool_call", "tool_call_update",
+	}
+	if len(fn.notifs) != len(wantKinds) {
+		t.Fatalf("replay notifications = %d, want %d", len(fn.notifs), len(wantKinds))
+	}
+	for i, want := range wantKinds {
+		if got := fn.updateMap(t, i)["sessionUpdate"]; got != want {
+			t.Errorf("notification %d kind = %v, want %s", i, got, want)
+		}
+	}
+	steer := fn.updateMap(t, 1)
+	if content, _ := steer["content"].(map[string]any); content["text"] != "↪ focus tests" {
+		t.Errorf("steer replay content = %v", steer["content"])
+	}
+	raw, err := json.Marshal(fn.notifs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "secret system prompt") {
+		t.Fatalf("hidden prompt leaked through ACP replay: %s", raw)
+	}
+}
+
 // approveCall records one approve(id, allow, session, persist) callback.
 type approveCall struct {
 	id      string

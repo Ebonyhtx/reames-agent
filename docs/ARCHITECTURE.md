@@ -2,7 +2,7 @@
 
 > 创建：2026-07-08
 >
-> 更新：2026-07-10
+> 更新：2026-07-11
 >
 > 基座：DeepSeek Reasonix main-v2，Go 1.25+，MIT License
 
@@ -79,9 +79,9 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
 | `control.SessionAPI` 的分区接口 | 新增直接 import `internal/provider` |
 | `event.Sink` 与 `internal/eventwire` | 新增直接 import `internal/tool` |
 
-当前代码仍有历史直连，主要用于会话 DTO、历史迁移、渲染数据和装配注册，因此这是一项目标架构而不是已经完全满足的事实。`TestTransportRuntimeImportRatchet` 用精确 allowlist 冻结 Desktop、CLI、Serve、Bot 和 ACP 的现有直连：新增依赖会使 CI 失败，迁移删除依赖后也必须同步收缩 allowlist。Provider 与内置工具的 blank import 只允许保留在明确的装配入口。当前已完成三条可验证的纵向路径：共享 `ErrorInfo` 由 Desktop 按 code/category 消费；CLI `/resume` 通过 `control.SessionInfo`、`control.ListSessions` 和事务式 `ResumeSessionPath` 工作；提交/取消/审批/状态通过版本化 `control.Command` / `CommandResult` 与服务端选择的 `CommandScope` 驱动，远端 JSON 无法提升为 trusted scope。Serve 的新 `/command` 与 WebSocket `method=command` 共用相同执行器，旧端点/WS method 只是兼容适配器。
+当前代码仍有历史直连，主要用于会话持久化、装配注册和设置重建，因此这是一项目标架构而不是已经完全满足的事实。`TestTransportRuntimeImportRatchet` 用精确 allowlist 冻结 Desktop、CLI、Serve、Bot 和 ACP 的现有直连：新增依赖会使 CI 失败，迁移删除依赖后也必须同步收缩 allowlist。Provider 与内置工具的 blank import 只允许保留在明确的装配入口。当前已完成四条可验证的纵向路径：共享 `ErrorInfo` 由 Desktop 按 code/category 消费；CLI `/resume` 通过 `control.SessionInfo`、`control.ListSessions` 和事务式 `ResumeSessionPath` 工作；提交/取消/审批/状态通过版本化 `control.Command` / `CommandResult` 与服务端选择的 `CommandScope` 驱动；事件通过 `eventwire` v1 输出完整 source/cache payload，历史展示通过 `control.TranscriptMessage` 投影。Serve history 与 ACP replay 不再消费 `provider.Message`，不会把 system、合成恢复指令、compose 控制块或 referenced-context payload当作用户历史发给远端前端。Serve 的新 `/command` 与 WebSocket `method=command` 共用相同执行器，旧端点/WS method 只是兼容适配器。
 
-迁移按纵向路径进行：命令与 CLI 会话恢复已经收口；下一步审查剩余 event/展示 DTO，再迁移会话、装配与设置边界。CLI/Bot/ACP 为拥有 turn 生命周期而保留同步 `RunTurn`，它与异步 command acknowledgement 是不同语义，不强行合并成伪统一接口。
+迁移按纵向路径进行：命令、event/display DTO 与 CLI 会话恢复已经收口；下一步迁移剩余会话持久化、装配与设置边界。CLI/Bot/ACP 为拥有 turn 生命周期而保留同步 `RunTurn`，它与异步 command acknowledgement 是不同语义，不强行合并成伪统一接口。
 
 ## 四、缓存优先约束
 
@@ -90,3 +90,5 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
 3. Compaction/prune 必须 bump rewrite version
 4. 动态状态（Goal/Plan/Memory）走 user-turn compose
 5. UI 状态、诊断、面板状态不得注入 prompt
+6. `MemoryCitations`、`Edited`、`Original` 等本地展示 metadata 在 Provider interface 前剥离，不能依赖具体 Provider 恰好忽略它们
+7. IM connection/domain/chat/user/operator/message ID 只用于路由和授权，不进入 prompt；群聊中显式的参与者名称标签属于用户可见语义

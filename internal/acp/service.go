@@ -574,7 +574,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 		}
 		if replay {
 			ctrl := sess.currentCtrl()
-			newUpdateSink(s.conn, id).replay(ctrl.History())
+			newUpdateSink(s.conn, id).replay(ctrl.Transcript())
 		}
 		cfgState, err := s.configStateForSession(ctx, sess)
 		if err != nil {
@@ -679,7 +679,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 	s.sendAvailableCommands(sess)
 
 	if replay {
-		sink.replay(ctrl.History())
+		sink.replay(ctrl.Transcript())
 	}
 	return cfgState, nil
 }

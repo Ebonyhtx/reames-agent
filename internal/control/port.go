@@ -66,6 +66,7 @@ type TurnControl interface {
 	RuntimeStatus() RuntimeStatus
 	Turn() int
 	History() []provider.Message
+	Transcript() []TranscriptMessage
 	ToolResult(toolID string) *ToolResultData
 }
 

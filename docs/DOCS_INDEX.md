@@ -77,6 +77,7 @@
 | [Windows 原生 Desktop 失败恢复审计](audits/2026-07-11-windows-native-failure-recovery.md) | 401、429、断流、权限拒绝和工具超时的原生可见提示、运行态复位与后续成功 turn 证据 |
 | [M2 结构化错误与会话恢复控制面审计](audits/2026-07-11-m2-error-session-control.md) | `ErrorInfo` 前端 category 动作、原生 UIA 点击与 CLI 会话 DTO/依赖棘轮收缩证据 |
 | [M2 版本化命令控制面审计](audits/2026-07-11-m2-command-control.md) | submit/cancel/approval/status 的稳定 DTO、五入口迁移、HTTP/WS 兼容与真实握手安全回归 |
+| [M2 事件、转录与 metadata 边界审计](audits/2026-07-11-m2-event-transcript-metadata.md) | `eventwire` v1、展示安全 transcript、Provider/渠道 metadata 隔离与缓存前缀回归 |
 | [外部 Agent 批次验收](audits/2026-07-11-external-agent-batch-acceptance.md) | 大批提交的保留/撤回范围、真实性修复和全量本地验证 |
 | [Control transport boundary ratchet audit](audits/2026-07-10-control-boundary-ratchet.md) | Desktop/CLI/Serve/Bot/ACP 对 runtime 内部直连的精确依赖基线和 CI 收缩棘轮 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |

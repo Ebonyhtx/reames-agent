@@ -1805,7 +1805,7 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		a.sink.Emit(event.Event{Kind: event.Retrying, RetryAttempt: info.Attempt, RetryMax: info.Max})
 	})
 	ch, err := a.prov.Stream(ctx, provider.Request{
-		Messages:    a.session.Messages,
+		Messages:    provider.MessagesForRequest(a.session.Messages),
 		Tools:       a.tools.Schemas(),
 		Temperature: provider.OptionalTemperature(a.temperature),
 	})

@@ -742,6 +742,27 @@ function applyEvent(s: State, e: WireEvent): State {
       const usage = updateContextGauge ? e.usage : s.usage;
       return { ...s, usage, context: { ...s.context, used, sessionTokens }, turnTokens, turnTotalTokens, turnCost, sessionTokens, sessionCost, sessionCurrency };
     }
+    case "cache_updated": {
+      if (!e.cacheDiagnostics) return s;
+      const usage: WireUsage = s.usage
+        ? {
+            ...s.usage,
+            cacheDiagnostics: e.cacheDiagnostics,
+            sessionCacheHitTokens: e.sessionHitTokens ?? s.usage.sessionCacheHitTokens,
+            sessionCacheMissTokens: e.sessionMissTokens ?? s.usage.sessionCacheMissTokens,
+          }
+        : {
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            cacheHitTokens: e.cacheDiagnostics.cacheHitTokens,
+            cacheMissTokens: e.cacheDiagnostics.cacheMissTokens,
+            sessionCacheHitTokens: e.sessionHitTokens ?? 0,
+            sessionCacheMissTokens: e.sessionMissTokens ?? 0,
+            cacheDiagnostics: e.cacheDiagnostics,
+          };
+      return { ...s, usage };
+    }
     case "notice":
       return appendNoticeToState(s, e.level ?? "info", e.text ?? "");
     case "phase":

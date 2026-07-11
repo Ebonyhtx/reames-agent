@@ -694,19 +694,19 @@ type historyMessage struct {
 	ToolName   string            `json:"toolName,omitempty"`
 }
 
-func historyMessages(msgs []provider.Message) []historyMessage {
+func historyMessages(msgs []control.TranscriptMessage) []historyMessage {
 	out := make([]historyMessage, 0, len(msgs))
 	for _, m := range msgs {
-		// Steer messages are surfaced as a notice, not a user message.
-		if m.Role == provider.RoleUser {
-			if steerText, isSteer := agent.SteerText(m.Content); isSteer {
-				out = append(out, historyMessage{Role: "notice", Content: "↪ " + steerText})
-				continue
-			}
+		if m.Hidden {
+			continue
+		}
+		if m.SteerText != "" {
+			out = append(out, historyMessage{Role: "notice", Content: "↪ " + m.SteerText})
+			continue
 		}
 		hm := historyMessage{Role: string(m.Role), Content: m.Content}
-		if m.Role == provider.RoleAssistant {
-			hm.Reasoning = m.ReasoningContent
+		if m.Role == control.TranscriptAssistant {
+			hm.Reasoning = m.Reasoning
 			if len(m.ToolCalls) > 0 {
 				hm.ToolCalls = make([]historyToolCall, len(m.ToolCalls))
 				for i, tc := range m.ToolCalls {
@@ -714,9 +714,9 @@ func historyMessages(msgs []provider.Message) []historyMessage {
 				}
 			}
 		}
-		if m.Role == provider.RoleTool {
+		if m.Role == control.TranscriptTool {
 			hm.ToolCallID = m.ToolCallID
-			hm.ToolName = m.Name
+			hm.ToolName = m.ToolName
 		}
 		out = append(out, hm)
 	}
@@ -728,7 +728,7 @@ func historyMessages(msgs []provider.Message) []historyMessage {
 // if the client sends If-None-Match with the current ETag, the server returns
 // 304 Not Modified with no body, saving bandwidth on reconnects.
 func (s *Server) history(w http.ResponseWriter, r *http.Request) {
-	writeJSONCached(w, r, historyMessages(s.ctl().History()))
+	writeJSONCached(w, r, historyMessages(s.ctl().Transcript()))
 }
 
 // context returns the prompt-vs-window gauge numbers. Supports ETag caching

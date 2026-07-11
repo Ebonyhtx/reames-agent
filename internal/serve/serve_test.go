@@ -484,12 +484,12 @@ func TestServeSubmitRejectsShellShortcut(t *testing.T) {
 }
 
 func TestHistoryMessagesPreserveToolDetails(t *testing.T) {
-	got := historyMessages([]provider.Message{
-		{Role: provider.RoleUser, Content: "run command"},
-		{Role: provider.RoleAssistant, Content: "checking", ReasoningContent: "think", ToolCalls: []provider.ToolCall{{
+	got := historyMessages([]control.TranscriptMessage{
+		{Role: control.TranscriptUser, Content: "run command"},
+		{Role: control.TranscriptAssistant, Content: "checking", Reasoning: "think", ToolCalls: []control.TranscriptToolCall{{
 			ID: "call_1", Name: "bash", Arguments: `{"command":"pwd"}`,
 		}}},
-		{Role: provider.RoleTool, Name: "bash", ToolCallID: "call_1", Content: "/tmp/project\n"},
+		{Role: control.TranscriptTool, ToolName: "bash", ToolCallID: "call_1", Content: "/tmp/project\n"},
 	})
 
 	if len(got) != 3 {
@@ -503,6 +503,41 @@ func TestHistoryMessagesPreserveToolDetails(t *testing.T) {
 	}
 	if got[2].ToolCallID != "call_1" || got[2].ToolName != "bash" || got[2].Content != "/tmp/project\n" {
 		t.Fatalf("tool result details not preserved: %+v", got[2])
+	}
+}
+
+func TestServeHistoryDoesNotExposeHiddenPromptMaterial(t *testing.T) {
+	bc := NewBroadcaster()
+	session := agent.NewSession("SYSTEM-SECRET")
+	session.Add(provider.Message{Role: provider.RoleUser, Content: "<reasoning-language>English</reasoning-language>\n\nvisible request"})
+	session.Add(provider.Message{Role: provider.RoleUser, Content: "Referenced context:\n<file path=\"secret.txt\">FILE-SECRET</file>\n\nexplain it"})
+	session.Add(provider.Message{Role: provider.RoleAssistant, Content: "answer"})
+	ctrl := control.New(control.Options{
+		Executor: agent.New(nil, nil, session, agent.Options{}, bc),
+		Sink:     bc,
+	})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, secret := range []string{"SYSTEM-SECRET", "reasoning-language", "FILE-SECRET"} {
+		if strings.Contains(text, secret) {
+			t.Fatalf("history leaked %q: %s", secret, text)
+		}
+	}
+	for _, visible := range []string{"visible request", "explain it", "answer"} {
+		if !strings.Contains(text, visible) {
+			t.Fatalf("history dropped %q: %s", visible, text)
+		}
 	}
 }
 

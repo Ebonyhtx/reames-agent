@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +21,19 @@ type approvalBlockingController struct {
 	released      chan struct{}
 	approved      chan struct{}
 }
+
+type promptCaptureController struct {
+	botController
+	input string
+}
+
+func (c *promptCaptureController) RunTurn(_ context.Context, input string) error {
+	c.input = input
+	return nil
+}
+
+func (c *promptCaptureController) SessionPath() string   { return "" }
+func (c *promptCaptureController) WorkspaceRoot() string { return "" }
 
 func (c *approvalBlockingController) ExecuteCommand(command control.Command, _ control.CommandScope) (control.CommandResult, error) {
 	if command.Kind == control.CommandApproval && command.Approval != nil {
@@ -130,5 +144,36 @@ func TestGatewayApprovalReplyUnblocksTurnOffDispatchGoroutine(t *testing.T) {
 	case <-ctrl.released:
 	case <-time.After(2 * time.Second):
 		t.Fatal("turn did not unblock after approval")
+	}
+}
+
+func TestGatewayPromptExcludesOpaqueChannelRoutingMetadata(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	gw := NewGateway(GatewayConfig{Allowlist: AllowlistConfig{AllowAll: true}}, nil, logger)
+	adapter := newFakeAdapter(PlatformFeishu, "fake-feishu")
+	msg := InboundMessage{
+		Platform:     PlatformFeishu,
+		ConnectionID: "CONNECTION-SECRET-42",
+		Domain:       "DOMAIN-SECRET-42",
+		ChatType:     ChatGroup,
+		ChatID:       "CHAT-SECRET-42",
+		UserID:       "USER-SECRET-42",
+		OperatorID:   "OPERATOR-SECRET-42",
+		UserName:     "Alice",
+		MessageID:    "MESSAGE-SECRET-42",
+		Text:         "review the patch",
+	}
+	key := BuildSessionKey(msg.Session())
+	ctrl := &promptCaptureController{}
+	gw.controllers[key] = &sessionState{ctrl: ctrl, sink: &sessionEventSink{}, platform: msg.Platform, connectionID: msg.ConnectionID}
+
+	gw.runTurn(context.Background(), adapter, key, msg, nil)
+	if ctrl.input != "[Alice] review the patch" {
+		t.Fatalf("provider prompt = %q, want only explicit participant label + content", ctrl.input)
+	}
+	for _, opaque := range []string{msg.ConnectionID, msg.Domain, msg.ChatID, msg.UserID, msg.OperatorID, msg.MessageID} {
+		if strings.Contains(ctrl.input, opaque) {
+			t.Fatalf("opaque channel metadata %q leaked into provider prompt %q", opaque, ctrl.input)
+		}
 	}
 }

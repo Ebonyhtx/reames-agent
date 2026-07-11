@@ -375,6 +375,31 @@ console.log("\nuse controller meta");
   const afterCompaction = reducer(activeExecutor, { type: "event", e: { kind: "usage", usage: usage("compaction") } });
   eq(afterCompaction.usage?.source, "executor", "compaction usage does not overwrite displayed executor usage");
   eq(afterCompaction.sessionTokens, 240, "compaction usage still contributes to session token totals");
+
+  const cacheUpdated = reducer(activeExecutor, {
+    type: "event",
+    e: {
+      version: 1,
+      kind: "cache_updated",
+      source: "executor",
+      sessionHitTokens: 900,
+      sessionMissTokens: 100,
+      cacheDiagnostics: {
+        prefixHash: "prefix-v2",
+        prefixChanged: true,
+        prefixChangeReasons: ["tools"],
+        systemHash: "system",
+        toolsHash: "tools-v2",
+        logRewriteVersion: 2,
+        toolSchemaTokens: 42,
+        cacheMissTokens: 100,
+        cacheHitTokens: 900,
+      },
+    },
+  });
+  eq(cacheUpdated.usage?.cacheDiagnostics?.prefixHash, "prefix-v2", "cache_updated payload reaches frontend state");
+  eq(cacheUpdated.usage?.sessionCacheHitTokens, 900, "cache_updated refreshes cumulative hit tokens");
+  eq(cacheUpdated.usage?.sessionCacheMissTokens, 100, "cache_updated refreshes cumulative miss tokens");
 }
 
 {

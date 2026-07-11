@@ -12,7 +12,6 @@ import (
 	"reames-agent/internal/control"
 	"reames-agent/internal/event"
 	"reames-agent/internal/permission"
-	"reames-agent/internal/provider"
 )
 
 // notifier is the slice of Conn the dispatch sink depends on: it pushes
@@ -184,16 +183,23 @@ func (s *updateSink) send(update any) {
 // notifications so a resumed session reconstructs its transcript view. The
 // system message is skipped (not user-visible); everything is reported as already
 // completed since it is history, not a live turn.
-func (s *updateSink) replay(msgs []provider.Message) {
+func (s *updateSink) replay(msgs []control.TranscriptMessage) {
 	for _, m := range msgs {
+		if m.Hidden {
+			continue
+		}
+		if m.SteerText != "" {
+			s.send(messageChunk{SessionUpdate: "user_message_chunk", Content: textBlock("↪ " + m.SteerText)})
+			continue
+		}
 		switch m.Role {
-		case provider.RoleUser:
+		case control.TranscriptUser:
 			if m.Content != "" {
 				s.send(messageChunk{SessionUpdate: "user_message_chunk", Content: textBlock(m.Content)})
 			}
-		case provider.RoleAssistant:
-			if m.ReasoningContent != "" {
-				s.send(messageChunk{SessionUpdate: "agent_thought_chunk", Content: textBlock(m.ReasoningContent)})
+		case control.TranscriptAssistant:
+			if m.Reasoning != "" {
+				s.send(messageChunk{SessionUpdate: "agent_thought_chunk", Content: textBlock(m.Reasoning)})
 			}
 			if m.Content != "" {
 				s.send(messageChunk{SessionUpdate: "agent_message_chunk", Content: textBlock(m.Content)})
@@ -208,7 +214,7 @@ func (s *updateSink) replay(msgs []provider.Message) {
 					RawInput:      rawJSON(tc.Arguments),
 				})
 			}
-		case provider.RoleTool:
+		case control.TranscriptTool:
 			s.send(toolCallUpdateMsg{
 				SessionUpdate: "tool_call_update",
 				ToolCallID:    m.ToolCallID,

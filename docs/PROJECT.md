@@ -46,7 +46,7 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 - 核心、Desktop 和前端已建立本地与远端 CI 基线，并有六目标 CLI candidate、三平台 Desktop candidate 及原生安装 smoke 记录。
 - M1 真实任务闭环已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复以及五类原生失败恢复均有分层证据。
 - 24 个内置工具，具备权限、沙箱、检查点、记忆、技能、插件、定时任务、LSP 和证据账本等模块。
-- 当前最大风险不是“缺功能”，而是剩余 event/会话/装配 control 边界、插件供应链、远程入口加固和真实 IM 回环尚未完全闭环；版本化 command DTO 已收口。
+- 当前最大风险不是“缺功能”，而是剩余会话持久化/装配/设置 control 边界、插件供应链、远程入口加固和真实 IM 回环尚未完全闭环；版本化 command、event/display DTO 与 prompt metadata 边界已收口。
 - `site/`、`workers/` 等遗留产品面仍需按运行引用、发布依赖和替代实现逐批判断，不能一次性盲删。
 
 代码与测试驱动的初始接管结论见 [audits/2026-07-09-takeover.md](audits/2026-07-09-takeover.md)。

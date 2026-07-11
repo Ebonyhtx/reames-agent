@@ -49,6 +49,8 @@ func TestDesktopWireEventKindTypeCoversSharedKinds(t *testing.T) {
 func TestDesktopWireEventTypeCoversSharedPayloadFields(t *testing.T) {
 	ts := readDesktopTypes(t)
 	for _, want := range []string{
+		"version?: number;",
+		"source?: string;",
 		"retryAttempt?: number;",
 		"retryMax?: number;",
 		"memoryCitations?: MemoryCitation[];",
@@ -63,9 +65,44 @@ func TestDesktopWireEventTypeCoversSharedPayloadFields(t *testing.T) {
 		"toolSchemaTokens: number;",
 		"error?: WireErrorInfo;",
 		"export interface WireErrorInfo",
+		"cacheDiagnostics?: WireCacheDiagnostics;",
 	} {
 		if !strings.Contains(ts, want) {
 			t.Fatalf("desktop WireEvent types are missing %q", want)
+		}
+	}
+}
+
+func TestToWireVersionSourceAndCacheUpdatedPayload(t *testing.T) {
+	w := ToWire(event.Event{
+		Kind:   event.CacheUpdated,
+		Source: event.UsageSourcePlanner,
+		CacheDiagnostics: &event.CacheDiagnostics{
+			PrefixHash: "prefix", PrefixChanged: true,
+			PrefixChangeReasons: []string{"tools"}, SystemHash: "system", ToolsHash: "tools",
+			LogRewriteVersion: 3, ToolSchemaTokens: 42, CacheMissTokens: 10, CacheHitTokens: 90,
+		},
+		SessionHit: 900, SessionMiss: 100,
+	})
+	if w.Version != Version || w.Source != event.UsageSourcePlanner || w.CacheDiagnostics == nil {
+		t.Fatalf("wire envelope = %+v", w)
+	}
+	if w.CacheDiagnostics.PrefixHash != "prefix" || w.CacheDiagnostics.CacheHitTokens != 90 {
+		t.Fatalf("cache diagnostics = %+v", w.CacheDiagnostics)
+	}
+	if w.SessionHitTokens != 900 || w.SessionMissTokens != 100 {
+		t.Fatalf("session cache tokens = %d/%d", w.SessionHitTokens, w.SessionMissTokens)
+	}
+	raw, err := json.Marshal(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"version":1`, `"kind":"cache_updated"`, `"source":"planner"`,
+		`"cacheDiagnostics":{"prefixHash":"prefix"`, `"sessionHitTokens":900`, `"sessionMissTokens":100`,
+	} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("cache-updated JSON = %s, want %s", raw, want)
 		}
 	}
 }

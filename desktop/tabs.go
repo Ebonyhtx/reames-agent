@@ -1397,13 +1397,11 @@ func (s *tabEventSink) telemetryTab() (*WorkspaceTab, string) {
 func toWireTab(e event.Event, tabID string) wireEventTab {
 	w := eventwire.ToWire(e)
 	return wireEventTab{
-		Event:             w,
-		TabID:             tabID,
-		SessionHitTokens:  e.SessionHit,
-		SessionMissTokens: e.SessionMiss,
-		SessionCost:       0, // filled by frontend accumulator per tab
-		SessionCurrency:   "",
-		SessionCostUsd:    0, // deprecated compatibility alias
+		Event:           w,
+		TabID:           tabID,
+		SessionCost:     0, // filled by frontend accumulator per tab
+		SessionCurrency: "",
+		SessionCostUsd:  0, // deprecated compatibility alias
 	}
 }
 
@@ -1412,9 +1410,6 @@ func toWireTab(e event.Event, tabID string) wireEventTab {
 type wireEventTab struct {
 	eventwire.Event
 	TabID string `json:"tabId"`
-	// Session-cumulative tokens per tab.
-	SessionHitTokens  int `json:"sessionHitTokens,omitempty"`
-	SessionMissTokens int `json:"sessionMissTokens,omitempty"`
 	// SessionCost is filled by the frontend's per-tab accumulator.
 	SessionCost     float64 `json:"sessionCost,omitempty"`
 	SessionCurrency string  `json:"sessionCurrency,omitempty"`

@@ -29,19 +29,19 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
-- M2 进行中：依赖棘轮、结构化错误、CLI 会话恢复和版本化 command DTO 已关闭；剩余 event/展示 DTO、会话、装配、设置和 prompt/cache 边界待继续收口。
+- M2 进行中：依赖棘轮、结构化错误、CLI 会话恢复、版本化 command/event/display DTO 和 prompt metadata 边界已关闭；剩余会话持久化、装配与设置边界待继续收口。
 - M6 进行中：Gateway service、headless smoke 和 feedback 本地闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
 
 ## 当前 M2 批次
 
-详见 `docs/audits/2026-07-11-m2-command-control.md`（上一批原生错误与恢复证据仍见 `docs/audits/2026-07-11-m2-error-session-control.md`）：
+详见 `docs/audits/2026-07-11-m2-event-transcript-metadata.md`（上一批命令协议见 `docs/audits/2026-07-11-m2-command-control.md`）：
 
-- 新增版本化 `control.Command` / `CommandResult`、结构化协议错误和服务端选择的 `CommandScope`，远端 JSON 不能选择 trusted scope。
-- Desktop、CLI、Serve、Bot、ACP 的 submit/cancel/approval/status 对应生产入口已迁移；同步 `RunTurn` 为拥有 turn context 的 CLI/Bot/ACP 保留。
-- Serve 新增 `POST /command` 和 WebSocket `method=command`，旧 HTTP/WS 入口兼容映射同一 remote dispatcher。
-- 修复日志 response writer 未转发 `http.Hijacker` 导致 `/ws` 实际无法握手，以及旧 WS submit 可绕过 HTTP `!shell` 禁止的策略漂移；真实 WebSocket 回归覆盖两者。
+- `eventwire` 固定 `version=1`，补齐 event source、独立 cache diagnostics 和 session cache counters；Desktop reducer 实际消费 cache update。
+- 新增展示安全 `control.TranscriptMessage`；Serve history 与 ACP replay 不再消费 `provider.Message`，system、合成恢复指令、compose 控制块和 referenced-context payload 不再作为远端历史输出。
+- Agent/Coordinator 在 Provider interface 前剥离 citation/edit/original 等本地 metadata；OpenAI/Anthropic wire bytes 和 Agent 双轮 cache diagnostics 回归证明它们不改变请求或缓存前缀。
+- Gateway prompt 保留显式群聊参与者标签，但排除 connection/domain/chat/user/operator/message ID；ACP replay 的 `provider` 直连和依赖 allowlist 基线同步删除。
 
 ## 本批关键本地证据
 
@@ -49,26 +49,25 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 go build ./...                                      PASS
 go vet ./...                                        PASS
 go test ./internal/... -count=1 -timeout 10m        PASS
-desktop/go test . -count=1                          PASS (170.678s final rerun)
+desktop/go test ./... -count=1 -timeout 10m         PASS (190.3s wall time)
 desktop/frontend/corepack pnpm test:all              PASS
-desktop/frontend/corepack pnpm build                 PASS (既有 chunk 警告)
+desktop/frontend/corepack pnpm build                 PASS (既有 chunk/dynamic-import 警告)
 Python Desktop/upstream contracts                    PASS (44 tests, 1 skip)
-upstream issue + builtin tool contract               PASS
+upstream issue + builtin/public/release contracts    PASS
 .\scripts\verify-baseline.ps1 -SkipFrontendHint      PASS
-真实 localhost WebSocket 握手/command/legacy policy  PASS
 ```
 
-本批不改变 Wails UI 或安装工件，不重复触发 Desktop candidate；上一批 production Windows schema v3 candidate 已全绿。远端普通 CI/CodeQL 仍需本批集中 push 后确认。
+本批不改变 Wails UI 或安装工件，不重复触发 Desktop candidate；上一批 production Windows schema v3 candidate 已全绿。当前远端 `main` 为 `f2a2222`，普通 CI run `29136484518` 为 8/8、CodeQL run `29136484531` 为 3/3；本批远端结果需集中 push 后确认。
 
 ## 下一执行顺序
 
-1. 完成全量本地门禁，显式暂存本批路径，集中提交并只 push 一次；观察普通 CI 与 CodeQL。
-2. 审查并收口剩余 event/展示 DTO 与会话/装配边界；随后补 provider prompt 与 UI/渠道 metadata 的缓存前缀回归。
+1. 显式暂存本批路径，集中提交并只 push 一次；观察普通 CI 与 CodeQL。
+2. 审查并收口剩余会话持久化、装配和设置边界，继续逐条缩小 transport runtime import allowlist。
 3. 然后进入干净云节点 CLI + Gateway + feedback 运维闭环与真实飞书回环。
 
 ## 长期未关闭项
 
-- M2 剩余 event/展示 DTO、会话/装配/设置和 prompt/cache 边界收口。
+- M2 剩余会话持久化、装配与设置边界收口。
 - 干净 Linux/云节点的 CLI、Gateway、feedback、日志、备份、升级回滚。
 - 真实飞书/Lark 文本、审批、取消与恢复回环。
 - plugin 权限 manifest、内容完整性和安装预览。

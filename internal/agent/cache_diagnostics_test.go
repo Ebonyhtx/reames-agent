@@ -10,13 +10,15 @@ import (
 )
 
 type cacheDiagProvider struct {
-	chunks [][]provider.Chunk
-	calls  int
+	chunks   [][]provider.Chunk
+	requests []provider.Request
+	calls    int
 }
 
 func (p *cacheDiagProvider) Name() string { return "cache-diag" }
 
-func (p *cacheDiagProvider) Stream(_ context.Context, _ provider.Request) (<-chan provider.Chunk, error) {
+func (p *cacheDiagProvider) Stream(_ context.Context, request provider.Request) (<-chan provider.Chunk, error) {
+	p.requests = append(p.requests, request)
 	chunks := p.chunks[p.calls]
 	p.calls++
 	ch := make(chan provider.Chunk, len(chunks))
@@ -25,6 +27,53 @@ func (p *cacheDiagProvider) Stream(_ context.Context, _ provider.Request) (<-cha
 	}
 	close(ch)
 	return ch, nil
+}
+
+func TestLocalDisplayMetadataDoesNotChangeProviderPrefix(t *testing.T) {
+	usage := &provider.Usage{PromptTokens: 100, CompletionTokens: 10, TotalTokens: 110}
+	prov := &cacheDiagProvider{chunks: [][]provider.Chunk{
+		{{Type: provider.ChunkText, Text: "first"}, {Type: provider.ChunkUsage, Usage: usage}},
+		{{Type: provider.ChunkText, Text: "second"}, {Type: provider.ChunkUsage, Usage: usage}},
+	}}
+	var diagnostics []*event.CacheDiagnostics
+	sink := event.FuncSink(func(e event.Event) {
+		if e.Kind == event.Usage {
+			diagnostics = append(diagnostics, e.CacheDiagnostics)
+		}
+	})
+	session := NewSession("stable system")
+	a := New(prov, tool.NewRegistry(), session, Options{}, sink)
+
+	if err := a.Run(context.Background(), "one"); err != nil {
+		t.Fatalf("first Run: %v", err)
+	}
+	stored := session.Snapshot()
+	stored[1].Edited = true
+	stored[1].Original = "original one"
+	stored[2].MemoryCitations = []provider.MemoryCitation{{ID: "m1", Source: "MEMORY.md"}}
+	session.Replace(stored)
+
+	if err := a.Run(context.Background(), "two"); err != nil {
+		t.Fatalf("second Run: %v", err)
+	}
+	if len(diagnostics) != 2 || diagnostics[1] == nil {
+		t.Fatalf("usage diagnostics = %+v, want two populated entries", diagnostics)
+	}
+	if diagnostics[1].PrefixChanged || len(diagnostics[1].PrefixChangeReasons) != 0 {
+		t.Fatalf("local display metadata changed cache prefix: %+v", diagnostics[1])
+	}
+	if len(prov.requests) != 2 {
+		t.Fatalf("provider requests = %d, want 2", len(prov.requests))
+	}
+	for i, message := range prov.requests[1].Messages {
+		if message.Edited || message.Original != "" || len(message.MemoryCitations) != 0 {
+			t.Fatalf("provider request message %d leaked local metadata: %+v", i, message)
+		}
+	}
+	persisted := session.Snapshot()
+	if !persisted[1].Edited || persisted[1].Original != "original one" || len(persisted[2].MemoryCitations) != 1 {
+		t.Fatalf("session did not preserve local metadata: %+v", persisted)
+	}
 }
 
 func TestRunPopulatesCacheDiagnosticsOnUsageEvents(t *testing.T) {
