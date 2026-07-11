@@ -50,7 +50,7 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 - 新增独立 `internal/mcpname` 命名合同，CLI tool card/approval rendering 不再为解析名称依赖 tool registry。
 - 候选批次从 allowlist 再删除六条 `agent/provider/tool` 边，若全量门禁与远端交付通过，累计将达到二十七条；ACP 已无受守卫 runtime 生产直连。
 
-详见 `docs/audits/2026-07-11-m2-cli-composition-boundary.md`。root/Desktop/frontend/contracts/baseline 与六目标交叉编译均已通过；当前仍未 commit/push，不得把候选状态写成远端已交付。
+详见 `docs/audits/2026-07-11-m2-cli-composition-boundary.md`。commit `c698fe7` 已推送，root/Desktop/frontend/contracts/baseline 与六目标交叉编译均已通过，CodeQL 3/3 成功；普通 CI 首跑的 Core Go 暴露既有 `/clear` 异步测试清理竞态，修复重跑全绿前不得写成远端已交付。
 
 ## 上一已交付批次关键证据
 
@@ -71,7 +71,7 @@ six-target CGO_ENABLED=0 cross-compile               PASS
 
 ## 下一执行顺序
 
-1. 先完成当前 CLI/ACP 候选批次的 root/Desktop/frontend/contracts/baseline 全量门禁，显式暂存后单 commit、单 push，并守候普通 CI 与 CodeQL。
+1. 验证并提交 `/clear` 测试等待命令完成的 CI 修复，push 后守候普通 CI 全部 8 jobs 成功；CodeQL 首跑已经 3/3 成功。
 2. 远端全绿后继续关闭 Desktop session-store 或 CLI composition root 的完整纵向路径，不为了清空 allowlist 制造反向依赖。
 3. M2 达到当前里程碑门槛后，进入干净云节点 CLI + Gateway + feedback 运维闭环与真实飞书回环。
 
@@ -87,4 +87,4 @@ six-target CGO_ENABLED=0 cross-compile               PASS
 
 ## 当前未提交批次
 
-当前已有 CLI/ACP composition、session copy、MCP naming 与 Windows GNU bash 探测代码/测试/文档批次；本地全量门禁已通过，commit/push 与远端证据待完成。受保护文件继续排除。
+CLI/ACP 主批次已作为 `c698fe7` 推送；本地全量门禁与 CodeQL 成功，普通 CI 仅 Core Go 的既有 `/clear` 测试 TempDir 清理竞态失败，当前修复等待完成 notice 后再断言并退出。修复需显式暂存/提交/推送并守候 CI；受保护文件继续排除。

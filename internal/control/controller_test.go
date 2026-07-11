@@ -2150,7 +2150,13 @@ func TestSubmitClearDiscardsCurrentContextWithoutSavingTranscript(t *testing.T) 
 	sess.Add(provider.Message{Role: provider.RoleUser, Content: "old context"})
 	exec := agent.New(nil, nil, sess, agent.Options{}, event.Discard)
 	path := filepath.Join(dir, "session.jsonl")
-	c := New(Options{Executor: exec, SystemPrompt: "sys", SessionDir: dir, SessionPath: path, Label: "test"})
+	clearDone := make(chan struct{}, 1)
+	sink := event.FuncSink(func(e event.Event) {
+		if e.Kind == event.Notice && e.Text == "context cleared" {
+			clearDone <- struct{}{}
+		}
+	})
+	c := New(Options{Executor: exec, SystemPrompt: "sys", SessionDir: dir, SessionPath: path, Label: "test", Sink: sink})
 	if err := c.Snapshot(); err != nil {
 		t.Fatal(err)
 	}
@@ -2163,9 +2169,10 @@ func TestSubmitClearDiscardsCurrentContextWithoutSavingTranscript(t *testing.T) 
 	}
 
 	c.submit("/clear", "", "")
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) && c.SessionPath() == path {
-		time.Sleep(time.Millisecond)
+	select {
+	case <-clearDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("/clear did not finish")
 	}
 	if c.SessionPath() == path {
 		t.Fatal("/clear did not rotate to a fresh session path")

@@ -2,7 +2,7 @@
 
 日期：2026-07-11
 
-状态：本地全量验收通过；commit 与远端 CI/CodeQL 证据待交付后回填
+状态：commit `c698fe7` 已推送；CodeQL 成功，普通 CI 的既有 `/clear` 异步测试清理竞态待修复重跑
 
 ## 当前结论
 
@@ -13,6 +13,7 @@
 - 新增零 runtime 依赖的 `internal/mcpname`，集中定义 `mcp__<server>__<tool>` 的 model-visible 命名合同。Agent、capability、skill 与 CLI 共用该解析器，CLI tool card 和 approval renderer 不再仅为解析名称而 import tool registry；
 - `TestTransportRuntimeImportRatchet` 删除 `internal/cli/acp.go` 的三条 provider/tool 边、`session_lease.go` 的 agent 边、`toolcard.go` 与 `chat_tui.go` 的两条 tool 边。本批收缩六条，项目累计收缩二十七条；Serve、Bot 与 ACP 已无受守卫 runtime 直连。
 - 全量门禁暴露 Windows `C:\Windows\System32\bash.exe` 可能只是不可用 WSL app alias，并输出 Python 默认代码页无法解码的错误；安装器合同现在先以 bytes 探测真正 GNU bash，并在 Windows 回退 Git for Windows，不再把 app alias 当成可用 shell。
+- 远端 Core Go 首跑唯一失败为 `TestSubmitClearDiscardsCurrentContextWithoutSavingTranscript` 在 `/clear` 已换 path、但命令 goroutine 尚未发出完成 notice 时让 `t.TempDir` 开始删除，Linux 报 `directory not empty`；测试现等待最终 `context cleared` notice，再检查磁盘与退出，避免把中间状态误作命令完成。该失败与本批生产代码无关，但必须修复并让 CI 重跑全绿。
 
 ## 参考与取舍
 
@@ -37,4 +38,4 @@ go test ./internal/control -run TestTransportRuntimeImportRatchet     PASS
 git diff --check                                                      PASS
 ```
 
-前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CI/CodeQL 尚未运行；在远端证据补齐前，本批不得声明已交付，M2 与长期 GOAL 仍保持未完成。
+前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CodeQL run `29159796431` 为 3/3；CI run `29159796418` 除 Core Go 上述测试清理竞态外其余 7/8 jobs 成功。修复重跑全绿前，本批不得声明已交付，M2 与长期 GOAL 仍保持未完成。
