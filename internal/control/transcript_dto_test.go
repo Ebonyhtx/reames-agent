@@ -1,6 +1,7 @@
 package control
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,14 +33,23 @@ func TestTranscriptMessagesHidePromptInternalsAndPreserveDisplayData(t *testing.
 	if got[1].Content != "visible request" || !got[1].Edited || got[1].Original != "original request" {
 		t.Fatalf("visible edited entry = %+v", got[1])
 	}
+	if got[1].ReplayText != "visible request" {
+		t.Fatalf("safe replay text = %q", got[1].ReplayText)
+	}
 	if got[2].Content != "explain it" || strings.Contains(got[2].Content, "FILE-SECRET") {
 		t.Fatalf("referenced context leaked: %+v", got[2])
+	}
+	if got[2].ReplayText != "explain it" || strings.Contains(got[2].ReplayText, "FILE-SECRET") {
+		t.Fatalf("referenced context leaked into replay text: %+v", got[2])
 	}
 	if !got[3].Hidden || got[3].Content != "" {
 		t.Fatalf("synthetic entry leaked: %+v", got[3])
 	}
 	if got[4].SteerText != "focus tests" || got[4].Content != "focus tests" {
 		t.Fatalf("steer entry = %+v", got[4])
+	}
+	if got[3].ReplayText != "" || got[4].ReplayText != "" {
+		t.Fatalf("synthetic or steer message became replayable: synthetic=%+v steer=%+v", got[3], got[4])
 	}
 	if got[5].Reasoning != "reason" || len(got[5].ToolCalls) != 1 || got[5].ToolCalls[0].Diff != "+hello" {
 		t.Fatalf("assistant display data = %+v", got[5])
@@ -52,6 +62,39 @@ func TestTranscriptMessagesHidePromptInternalsAndPreserveDisplayData(t *testing.
 	}
 	if messages[0].Content != "SYSTEM-SECRET" || !strings.Contains(messages[2].Content, "FILE-SECRET") {
 		t.Fatal("transcript conversion mutated runtime history")
+	}
+}
+
+func TestTranscriptMessageDisplayKeyAndReplayContract(t *testing.T) {
+	memoryContract := `<memory-compiler-execution>{"planner_ir":{"source_event":"ship safely"}}</memory-compiler-execution>`
+	messages := []provider.Message{
+		{Role: provider.RoleUser, Content: "expanded prompt"},
+		{Role: provider.RoleUser, Content: memoryContract},
+	}
+
+	got := transcriptMessages(messages)
+	if got[0].DisplayKey != "4b1b46c9a040fb9d9813b9466a0c49061c91b426fb8e32d99a954dfdae792066" {
+		t.Fatalf("display key = %q", got[0].DisplayKey)
+	}
+	if got[0].ReplayText != "expanded prompt" {
+		t.Fatalf("normal replay text = %q", got[0].ReplayText)
+	}
+	if got[1].Content != "ship safely" || got[1].ReplayText != "" {
+		t.Fatalf("memory compiler transcript = %+v", got[1])
+	}
+	if got[0].Index != 0 || got[1].Index != 1 {
+		t.Fatalf("original indexes changed: %+v", got)
+	}
+	if messages[0].Content != "expanded prompt" || messages[1].Content != memoryContract {
+		t.Fatal("transcript projection mutated runtime messages")
+	}
+	localOnly := TranscriptMessage{Role: TranscriptUser, Content: "display prompt", DisplayKey: got[0].DisplayKey, ReplayText: "expanded prompt"}
+	encoded, err := json.Marshal(localOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), got[0].DisplayKey) || strings.Contains(string(encoded), "replayText") || strings.Contains(string(encoded), "expanded prompt") {
+		t.Fatalf("local transcript correlation metadata crossed JSON transport: %s", encoded)
 	}
 }
 

@@ -110,7 +110,7 @@ func restoredTodoPayload(t *testing.T, msgs []provider.Message, todoID string) s
 	} `json:"todos"`
 } {
 	t.Helper()
-	history := historyMessages(msgs, func(s string) string { return s })
+	history := historyMessagesFromProviderForTest(msgs, func(s string) string { return s })
 	var todoArgs string
 	for _, m := range history {
 		for _, tc := range m.ToolCalls {

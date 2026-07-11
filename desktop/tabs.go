@@ -28,7 +28,6 @@ import (
 	"reames-agent/internal/eventwire"
 	"reames-agent/internal/fileutil"
 	"reames-agent/internal/notify"
-	"reames-agent/internal/provider"
 	"reames-agent/internal/store"
 )
 
@@ -181,11 +180,7 @@ func cloneSessionUsageStats(in sessionUsageStats) sessionUsageStats {
 	return out
 }
 
-func (s *sessionUsageStats) cacheTokenDelta(source string, u *provider.Usage, sessionHit, sessionMiss int) (hit, miss int) {
-	if u != nil {
-		hit = u.CacheHitTokens
-		miss = u.CacheMissTokens
-	}
+func (s *sessionUsageStats) cacheTokenDelta(source string, hit, miss, sessionHit, sessionMiss int) (int, int) {
 	if source != event.UsageSourceExecutor && source != event.UsageSourcePlanner {
 		return hit, miss
 	}
@@ -679,7 +674,7 @@ func (t *WorkspaceTab) recordUsage(e event.Event) {
 	t.usageTelemetry.CompletionTokens += u.CompletionTokens
 	t.usageTelemetry.TotalTokens += u.TotalTokens
 	t.usageTelemetry.ReasoningTokens += u.ReasoningTokens
-	cacheHitTokens, cacheMissTokens := t.usageTelemetry.cacheTokenDelta(source, u, e.SessionHit, e.SessionMiss)
+	cacheHitTokens, cacheMissTokens := t.usageTelemetry.cacheTokenDelta(source, u.CacheHitTokens, u.CacheMissTokens, e.SessionHit, e.SessionMiss)
 	t.usageTelemetry.CacheHitTokens += cacheHitTokens
 	t.usageTelemetry.CacheMissTokens += cacheMissTokens
 	t.usageTelemetry.RequestCount++
@@ -807,7 +802,13 @@ func (t *WorkspaceTab) recordPlannerDisplayEvent(e event.Event) {
 				hm.Reasoning = e.Reasoning
 			}
 			if len(e.MemoryCitations) > 0 {
-				hm.MemoryCitations = append([]provider.MemoryCitation(nil), e.MemoryCitations...)
+				hm.MemoryCitations = make([]control.TranscriptMemoryCitation, len(e.MemoryCitations))
+				for i, citation := range e.MemoryCitations {
+					hm.MemoryCitations[i] = control.TranscriptMemoryCitation{
+						ID: citation.ID, Source: citation.Source, LineStart: citation.LineStart,
+						LineEnd: citation.LineEnd, Note: citation.Note, Kind: citation.Kind,
+					}
+				}
 			}
 		}
 	case event.ToolDispatch:
@@ -1337,11 +1338,11 @@ func (s *tabEventSink) flushPlannerDisplay() {
 	if sessionPath == "" {
 		return
 	}
-	userContent := lastUserMessageContent(ctrl.History())
-	if strings.TrimSpace(userContent) == "" {
+	userDisplayKey := lastUserMessageDisplayKey(ctrl.Transcript())
+	if strings.TrimSpace(userDisplayKey) == "" {
 		return
 	}
-	_ = recordSessionPlannerDisplay(controllerSessionDir(ctrl), sessionPath, userContent, messages)
+	_ = recordSessionPlannerDisplay(controllerSessionDir(ctrl), sessionPath, userDisplayKey, messages)
 }
 
 func (s *tabEventSink) eventTabAndController() (*WorkspaceTab, control.SessionAPI) {
@@ -1358,10 +1359,10 @@ func (s *tabEventSink) eventTabAndController() (*WorkspaceTab, control.SessionAP
 	return tab, tab.Ctrl
 }
 
-func lastUserMessageContent(msgs []provider.Message) string {
+func lastUserMessageDisplayKey(msgs []control.TranscriptMessage) string {
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == provider.RoleUser {
-			return msgs[i].Content
+		if msgs[i].Role == control.TranscriptUser && msgs[i].DisplayKey != "" {
+			return msgs[i].DisplayKey
 		}
 	}
 	return ""
@@ -1989,7 +1990,7 @@ func (a *App) blankTabMatchesTargetLocked(tab *WorkspaceTab, scope, workspaceRoo
 	if tab.hasActiveRuntimeWork() {
 		return false
 	}
-	return !messagesHaveConversationContent(tab.Ctrl.History())
+	return !messagesHaveConversationContent(tab.Ctrl.Transcript())
 }
 
 func createEmptySessionFile(dir, model string) (string, error) {
@@ -5806,10 +5807,10 @@ func restoredSessionTopicTitle(dir, sessionPath string, meta agent.BranchMeta) s
 	if title := storedSessionTopicTitle(dir, sessionPath, meta); title != "" {
 		return title
 	}
-	if s, err := agent.LoadSession(sessionPath); err == nil {
-		for _, msg := range s.Messages {
-			if msg.Role == provider.RoleUser {
-				if title := topicTitleFromText(control.StripComposePrefixes(agent.HandoffTask(msg.Content))); title != "" {
+	if transcript, err := control.LoadTranscript(sessionPath); err == nil {
+		for _, msg := range transcript {
+			if msg.Role == control.TranscriptUser && !msg.Hidden && msg.SteerText == "" {
+				if title := topicTitleFromText(agent.HandoffTask(msg.Content)); title != "" {
 					return title
 				}
 			}

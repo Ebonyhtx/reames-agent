@@ -988,14 +988,14 @@ func saveSessionPlannerDisplays(dir string, m sessionPlannerDisplayMap) error {
 	return fileutil.ReplaceFile(tmpPath, sessionPlannerDisplayPath(dir))
 }
 
-func recordSessionPlannerDisplay(dir, sessionPath, userContent string, messages []HistoryMessage) error {
-	if strings.TrimSpace(sessionPath) == "" || strings.TrimSpace(userContent) == "" || len(messages) == 0 {
+func recordSessionPlannerDisplay(dir, sessionPath, userDisplayKey string, messages []HistoryMessage) error {
+	if strings.TrimSpace(sessionPath) == "" || strings.TrimSpace(userDisplayKey) == "" || len(messages) == 0 {
 		return nil
 	}
 	m := loadSessionPlannerDisplays(dir)
 	key := filepath.Base(sessionPath)
 	turn := plannerDisplayTurn{
-		UserHash: messageDisplayKey(userContent),
+		UserHash: userDisplayKey,
 		Messages: cloneHistoryMessages(messages),
 	}
 	m[key] = append(m[key], turn)
@@ -1154,6 +1154,21 @@ func sessionDisplayResolverFromMap(displays sessionDisplayMap, sessionPath strin
 			}
 		}
 		return control.StripComposePrefixes(content)
+	}
+}
+
+// sessionTranscriptDisplayResolver joins the display-safe control transcript
+// to Desktop's legacy .display.json sidecar using the opaque key computed from
+// the original runtime message. It never needs the raw provider prompt.
+func sessionTranscriptDisplayResolver(dir, sessionPath string) func(control.TranscriptMessage) string {
+	byHash := loadSessionDisplays(dir)[filepath.Base(sessionPath)]
+	return func(message control.TranscriptMessage) string {
+		if byHash != nil && message.DisplayKey != "" {
+			if display := byHash[message.DisplayKey]; strings.TrimSpace(display) != "" {
+				return display
+			}
+		}
+		return message.Content
 	}
 }
 

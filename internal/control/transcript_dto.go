@@ -1,6 +1,9 @@
 package control
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+
 	"reames-agent/internal/agent"
 	"reames-agent/internal/provider"
 )
@@ -45,6 +48,10 @@ type TranscriptMessage struct {
 	Index           int                        `json:"index"`
 	Role            TranscriptRole             `json:"role"`
 	Content         string                     `json:"content,omitempty"`
+	// DisplayKey and ReplayText are local adapter metadata. DisplayKey hashes
+	// the original runtime content, so neither field may cross JSON transports.
+	DisplayKey      string                     `json:"-"`
+	ReplayText      string                     `json:"-"`
 	Reasoning       string                     `json:"reasoning,omitempty"`
 	ToolCalls       []TranscriptToolCall       `json:"toolCalls,omitempty"`
 	ToolCallID      string                     `json:"toolCallId,omitempty"`
@@ -79,6 +86,7 @@ func transcriptMessages(messages []provider.Message) []TranscriptMessage {
 		case provider.RoleSystem:
 			entry.Hidden = true
 		case provider.RoleUser:
+			entry.DisplayKey = transcriptDisplayKey(message.Content)
 			if text, ok := agent.SteerText(message.Content); ok {
 				entry.Content = text
 				entry.SteerText = text
@@ -90,6 +98,9 @@ func transcriptMessages(messages []provider.Message) []TranscriptMessage {
 				break
 			}
 			entry.Content = display
+			if !agent.ContainsMemoryCompilerExecution(message.Content) {
+				entry.ReplayText = display
+			}
 			entry.Edited = message.Edited
 			entry.Original = StripReferencedContextPrefix(StripComposePrefixes(message.Original))
 		case provider.RoleAssistant:
@@ -123,4 +134,9 @@ func transcriptMessages(messages []provider.Message) []TranscriptMessage {
 		out[i] = entry
 	}
 	return out
+}
+
+func transcriptDisplayKey(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
 }

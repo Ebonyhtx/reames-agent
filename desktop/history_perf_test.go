@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"reames-agent/internal/control"
 	"reames-agent/internal/provider"
 )
 
@@ -61,13 +62,13 @@ func historyPerfCases() []historyPerfCase {
 func BenchmarkHistoryMessagesSynthetic(b *testing.B) {
 	for _, tc := range historyPerfCases() {
 		b.Run(tc.name, func(b *testing.B) {
-			msgs := syntheticHistoryMessages(tc.turns, tc.outputSize, tc.toolName, tc.failed)
+			msgs := providerTranscriptForTest(syntheticHistoryMessages(tc.turns, tc.outputSize, tc.toolName, tc.failed))
 			inputBytes := int64(tc.turns * tc.outputSize)
 			b.ReportAllocs()
 			b.SetBytes(inputBytes)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				got := historyMessages(msgs, func(content string) string { return content })
+				got := historyMessages(msgs, func(message control.TranscriptMessage) string { return message.Content })
 				if len(got) == 0 {
 					b.Fatal("empty history")
 				}
@@ -79,13 +80,13 @@ func BenchmarkHistoryMessagesSynthetic(b *testing.B) {
 func BenchmarkHistoryMessagesMarshalSynthetic(b *testing.B) {
 	for _, tc := range historyPerfCases() {
 		b.Run(tc.name, func(b *testing.B) {
-			msgs := syntheticHistoryMessages(tc.turns, tc.outputSize, tc.toolName, tc.failed)
+			msgs := providerTranscriptForTest(syntheticHistoryMessages(tc.turns, tc.outputSize, tc.toolName, tc.failed))
 			inputBytes := int64(tc.turns * tc.outputSize)
 			b.ReportAllocs()
 			b.SetBytes(inputBytes)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				got := historyMessages(msgs, func(content string) string { return content })
+				got := historyMessages(msgs, func(message control.TranscriptMessage) string { return message.Content })
 				encoded, err := json.Marshal(got)
 				if err != nil {
 					b.Fatal(err)
@@ -99,8 +100,8 @@ func BenchmarkHistoryMessagesMarshalSynthetic(b *testing.B) {
 }
 
 func TestHistoryMessagesSyntheticPayloadSizes(t *testing.T) {
-	msgs := syntheticHistoryMessages(10, 1<<20, "bash", false)
-	got := historyMessages(msgs, func(content string) string { return content })
+	msgs := providerTranscriptForTest(syntheticHistoryMessages(10, 1<<20, "bash", false))
+	got := historyMessages(msgs, func(message control.TranscriptMessage) string { return message.Content })
 	encoded, err := json.Marshal(got)
 	if err != nil {
 		t.Fatal(err)

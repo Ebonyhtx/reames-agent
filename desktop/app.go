@@ -46,7 +46,6 @@ import (
 	"reames-agent/internal/notify"
 	"reames-agent/internal/plugin"
 	"reames-agent/internal/pluginpkg"
-	"reames-agent/internal/provider"
 	"reames-agent/internal/skill"
 	"reames-agent/internal/store"
 )
@@ -1552,7 +1551,7 @@ func (a *App) NewSession() error {
 		return a.workspaceNotReadyErr(tab)
 	}
 	// Tab is already blank — just persist and skip the new-session dance.
-	if !controllerHasActiveRuntimeWork(ctrl) && !messagesHaveConversationContent(ctrl.History()) {
+	if !controllerHasActiveRuntimeWork(ctrl) && !messagesHaveConversationContent(ctrl.Transcript()) {
 		a.persistTabSessionPath(tab, ctrl.SessionPath())
 		return nil
 	}
@@ -1634,9 +1633,9 @@ func (a *App) ensureTabTopicIndexedForUserTurn(tab *WorkspaceTab) {
 	a.emitProjectTreeChanged()
 }
 
-func messagesHaveConversationContent(messages []provider.Message) bool {
+func messagesHaveConversationContent(messages []control.TranscriptMessage) bool {
 	for _, msg := range messages {
-		if msg.Role != provider.RoleSystem {
+		if msg.Role != control.TranscriptSystem {
 			return true
 		}
 	}
@@ -4092,23 +4091,23 @@ func (a *App) singleSurfaceLayoutEnabled() bool {
 // HistoryMessage is one prior turn, for the frontend to repopulate its transcript
 // after a reload.
 type HistoryMessage struct {
-	Role               string                    `json:"role"`
-	Content            string                    `json:"content"`
-	SubmitText         string                    `json:"submitText,omitempty"`
-	CheckpointTurn     *int                      `json:"checkpointTurn,omitempty"`
-	Reasoning          string                    `json:"reasoning,omitempty"`
-	MemoryCitations    []provider.MemoryCitation `json:"memoryCitations,omitempty"`
-	Level              string                    `json:"level,omitempty"`
-	ToolCalls          []HistoryToolCall         `json:"toolCalls,omitempty"`
-	ToolCallID         string                    `json:"toolCallId,omitempty"`
-	ToolName           string                    `json:"toolName,omitempty"`
-	ToolResultArchived bool                      `json:"toolResultArchived,omitempty"`
-	ToolResultError    string                    `json:"toolResultError,omitempty"`
-	Pending            bool                      `json:"pending,omitempty"`
-	Trigger            string                    `json:"trigger,omitempty"`
-	Messages           int                       `json:"messages,omitempty"`
-	Summary            string                    `json:"summary,omitempty"`
-	Archive            string                    `json:"archive,omitempty"`
+	Role               string                             `json:"role"`
+	Content            string                             `json:"content"`
+	SubmitText         string                             `json:"submitText,omitempty"`
+	CheckpointTurn     *int                               `json:"checkpointTurn,omitempty"`
+	Reasoning          string                             `json:"reasoning,omitempty"`
+	MemoryCitations    []control.TranscriptMemoryCitation `json:"memoryCitations,omitempty"`
+	Level              string                             `json:"level,omitempty"`
+	ToolCalls          []HistoryToolCall                  `json:"toolCalls,omitempty"`
+	ToolCallID         string                             `json:"toolCallId,omitempty"`
+	ToolName           string                             `json:"toolName,omitempty"`
+	ToolResultArchived bool                               `json:"toolResultArchived,omitempty"`
+	ToolResultError    string                             `json:"toolResultError,omitempty"`
+	Pending            bool                               `json:"pending,omitempty"`
+	Trigger            string                             `json:"trigger,omitempty"`
+	Messages           int                                `json:"messages,omitempty"`
+	Summary            string                             `json:"summary,omitempty"`
+	Archive            string                             `json:"archive,omitempty"`
 }
 
 type HistoryToolCall struct {
@@ -4166,12 +4165,12 @@ func (a *App) HistoryPageForTab(tabID string, beforeTurn, limit int) HistoryPage
 		}
 		return page
 	}
-	msgs := ctrl.History()
+	msgs := ctrl.Transcript()
 	dir := controllerSessionDir(ctrl)
 	path := ctrl.SessionPath()
-	return historyPageFromProviderMessages(
+	return historyPageFromTranscript(
 		msgs,
-		sessionDisplayResolver(dir, path),
+		sessionTranscriptDisplayResolver(dir, path),
 		sessionPlannerDisplayTurns(dir, path),
 		ctrl.CheckpointTurnsByMessageIndex(),
 		beforeTurn,
@@ -4259,12 +4258,12 @@ func (a *App) HistoryForTab(tabID string) []HistoryMessage {
 		}
 		return messages
 	}
-	msgs := ctrl.History()
+	msgs := ctrl.Transcript()
 	dir := controllerSessionDir(ctrl)
 	path := ctrl.SessionPath()
 	return historyMessagesWithPlannerDisplays(
 		msgs,
-		sessionDisplayResolver(dir, path),
+		sessionTranscriptDisplayResolver(dir, path),
 		sessionPlannerDisplayTurns(dir, path),
 		ctrl.CheckpointTurnsByMessageIndex(),
 	)
@@ -4282,25 +4281,18 @@ func (a *App) HistoryCheckpointTurnsForTab(tabID string) []int {
 		return []int{}
 	}
 	return historyCheckpointTurns(
-		ctrl.History(),
-		sessionDisplayResolver(controllerSessionDir(ctrl), ctrl.SessionPath()),
+		ctrl.Transcript(),
 		ctrl.CheckpointTurnsByMessageIndex(),
 	)
 }
 
-func historyCheckpointTurns(msgs []provider.Message, resolveUserContent func(string) string, checkpointTurns map[int]int) []int {
+func historyCheckpointTurns(msgs []control.TranscriptMessage, checkpointTurns map[int]int) []int {
 	out := make([]int, 0)
-	for index, msg := range msgs {
-		if msg.Role != provider.RoleUser {
+	for _, msg := range msgs {
+		if msg.Role != control.TranscriptUser || msg.Hidden || msg.SteerText != "" {
 			continue
 		}
-		if _, isSteer := agent.SteerText(msg.Content); isSteer {
-			continue
-		}
-		if control.IsSyntheticUserMessage(resolveUserContent(msg.Content)) {
-			continue
-		}
-		turn, ok := checkpointTurns[index]
+		turn, ok := checkpointTurns[msg.Index]
 		if !ok {
 			turn = -1
 		}
@@ -4309,61 +4301,60 @@ func historyCheckpointTurns(msgs []provider.Message, resolveUserContent func(str
 	return out
 }
 
-func historyMessages(msgs []provider.Message, resolveUserContent func(string) string) []HistoryMessage {
+func historyMessages(msgs []control.TranscriptMessage, resolveUserContent func(control.TranscriptMessage) string) []HistoryMessage {
 	return historyMessagesWithPlannerDisplays(msgs, resolveUserContent, nil, nil)
 }
 
-func historyMessagesWithPlannerDisplays(msgs []provider.Message, resolveUserContent func(string) string, plannerTurns []plannerDisplayTurn, checkpointTurns map[int]int) []HistoryMessage {
+func historyMessagesWithPlannerDisplays(msgs []control.TranscriptMessage, resolveUserContent func(control.TranscriptMessage) string, plannerTurns []plannerDisplayTurn, checkpointTurns map[int]int) []HistoryMessage {
 	replayedTodoArgs := historyTodoArgsWithCompleteSteps(msgs)
 	toolResults := historyToolResultsByID(msgs)
 	return historyMessagesWithPlannerDisplaysAndLookups(msgs, resolveUserContent, plannerTurns, checkpointTurns, replayedTodoArgs, toolResults)
 }
 
 func historyMessagesWithPlannerDisplaysAndLookups(
-	msgs []provider.Message,
-	resolveUserContent func(string) string,
+	msgs []control.TranscriptMessage,
+	resolveUserContent func(control.TranscriptMessage) string,
 	plannerTurns []plannerDisplayTurn,
 	checkpointTurns map[int]int,
 	replayedTodoArgs map[string]string,
-	toolResults map[string]provider.Message,
+	toolResults map[string]control.TranscriptMessage,
 ) []HistoryMessage {
 	out := make([]HistoryMessage, 0, len(msgs))
 	plannerByUserHash := plannerTurnsByUserHash(plannerTurns)
-	for index, m := range msgs {
+	for _, m := range msgs {
 		content := m.Content
 		var checkpointTurn *int
-		if m.Role == provider.RoleUser {
+		if m.Role == control.TranscriptUser {
 			// Mid-turn steer messages are persisted in the session so they
 			// survive tab switches. They are surfaced as a notice (↪ text)
 			// — matching the live Steer event look — rather than as a
 			// regular user bubble or being filtered as synthetic (#4044).
-			// Check against the raw m.Content: resolveUserContent applies
-			// StripComposePrefixes which trims trailing whitespace.
-			if steerText, isSteer := agent.SteerText(m.Content); isSteer {
-				out = append(out, HistoryMessage{Role: "notice", Content: "↪ " + steerText})
+			if m.SteerText != "" {
+				out = append(out, HistoryMessage{Role: "notice", Content: "↪ " + m.SteerText})
 				continue
 			}
-			content = resolveUserContent(m.Content)
-			if control.IsSyntheticUserMessage(content) {
+			if m.Hidden {
 				continue
 			}
-			if turn, ok := checkpointTurns[index]; ok {
+			if resolveUserContent != nil {
+				content = resolveUserContent(m)
+			}
+			if turn, ok := checkpointTurns[m.Index]; ok {
 				turnCopy := turn
 				checkpointTurn = &turnCopy
 			}
 		}
-		reasoning := ""
-		if m.Role == provider.RoleAssistant {
-			reasoning = m.ReasoningContent
+		if m.Hidden && m.Role != control.TranscriptSystem {
+			continue
 		}
-		hm := HistoryMessage{Role: string(m.Role), Content: content, CheckpointTurn: checkpointTurn, Reasoning: reasoning}
-		if m.Role == provider.RoleAssistant && len(m.MemoryCitations) > 0 {
-			hm.MemoryCitations = append([]provider.MemoryCitation(nil), m.MemoryCitations...)
+		hm := HistoryMessage{Role: string(m.Role), Content: content, CheckpointTurn: checkpointTurn, Reasoning: m.Reasoning}
+		if m.Role == control.TranscriptAssistant && len(m.MemoryCitations) > 0 {
+			hm.MemoryCitations = append([]control.TranscriptMemoryCitation(nil), m.MemoryCitations...)
 		}
-		if m.Role == provider.RoleUser && content != m.Content && !agent.ContainsMemoryCompilerExecution(m.Content) {
-			hm.SubmitText = m.Content
+		if m.Role == control.TranscriptUser && m.ReplayText != "" && content != m.ReplayText {
+			hm.SubmitText = m.ReplayText
 		}
-		if m.Role == provider.RoleAssistant && len(m.ToolCalls) > 0 {
+		if m.Role == control.TranscriptAssistant && len(m.ToolCalls) > 0 {
 			hm.ToolCalls = make([]HistoryToolCall, len(m.ToolCalls))
 			for i, tc := range m.ToolCalls {
 				args := tc.Arguments
@@ -4375,31 +4366,31 @@ func historyMessagesWithPlannerDisplaysAndLookups(
 				hm.ToolCalls[i] = historyToolCall(tc, args, toolResults[tc.ID])
 			}
 		}
-		if m.Role == provider.RoleTool {
+		if m.Role == control.TranscriptTool {
 			hm.ToolCallID = m.ToolCallID
-			hm.ToolName = m.Name
+			hm.ToolName = m.ToolName
 			hm.Content, hm.ToolResultArchived, hm.ToolResultError = historyToolResultContent(m.Content, m.ToolCallID != "")
 		}
 		out = append(out, hm)
-		if m.Role == provider.RoleUser {
-			if turns := plannerByUserHash[messageDisplayKey(m.Content)]; len(turns) > 0 {
+		if m.Role == control.TranscriptUser && m.DisplayKey != "" {
+			if turns := plannerByUserHash[m.DisplayKey]; len(turns) > 0 {
 				out = append(out, cloneHistoryMessages(turns[0].Messages)...)
-				plannerByUserHash[messageDisplayKey(m.Content)] = turns[1:]
+				plannerByUserHash[m.DisplayKey] = turns[1:]
 			}
 		}
 	}
 	return out
 }
 
-func historyPageFromProviderMessages(
-	msgs []provider.Message,
-	resolveUserContent func(string) string,
+func historyPageFromTranscript(
+	msgs []control.TranscriptMessage,
+	resolveUserContent func(control.TranscriptMessage) string,
 	plannerTurns []plannerDisplayTurn,
 	checkpointTurns map[int]int,
 	beforeTurn, limit int,
 ) HistoryPage {
 	limit = normalizeHistoryPageLimit(limit)
-	totalTurns := visibleHistoryUserTurns(msgs, resolveUserContent)
+	totalTurns := visibleHistoryUserTurns(msgs)
 	if beforeTurn <= 0 || beforeTurn > totalTurns {
 		beforeTurn = totalTurns
 	}
@@ -4417,69 +4408,47 @@ func historyPageFromProviderMessages(
 		page.Messages = []HistoryMessage{}
 		return page
 	}
-	pageMessages, originalIndexes := providerMessagesForVisibleTurnRange(msgs, resolveUserContent, startTurn, beforeTurn)
+	pageMessages := transcriptMessagesForVisibleTurnRange(msgs, startTurn, beforeTurn)
 	page.Messages = historyMessagesWithPlannerDisplaysAndLookups(
 		pageMessages,
 		resolveUserContent,
 		plannerTurns,
-		checkpointTurnsForProviderWindow(checkpointTurns, originalIndexes),
+		checkpointTurns,
 		historyTodoArgsWithCompleteSteps(msgs),
 		historyToolResultsByID(msgs),
 	)
 	return page
 }
 
-func visibleHistoryUserTurns(msgs []provider.Message, resolveUserContent func(string) string) int {
+func visibleHistoryUserTurns(msgs []control.TranscriptMessage) int {
 	total := 0
 	for _, msg := range msgs {
-		if isVisibleHistoryUser(msg, resolveUserContent) {
+		if isVisibleHistoryUser(msg) {
 			total++
 		}
 	}
 	return total
 }
 
-func isVisibleHistoryUser(msg provider.Message, resolveUserContent func(string) string) bool {
-	if msg.Role != provider.RoleUser {
-		return false
-	}
-	if _, isSteer := agent.SteerText(msg.Content); isSteer {
-		return false
-	}
-	return !control.IsSyntheticUserMessage(resolveUserContent(msg.Content))
+func isVisibleHistoryUser(msg control.TranscriptMessage) bool {
+	return msg.Role == control.TranscriptUser && !msg.Hidden && msg.SteerText == ""
 }
 
-func providerMessagesForVisibleTurnRange(msgs []provider.Message, resolveUserContent func(string) string, startTurn, endTurn int) ([]provider.Message, []int) {
-	out := make([]provider.Message, 0, len(msgs))
-	indexes := make([]int, 0, len(msgs))
+func transcriptMessagesForVisibleTurnRange(msgs []control.TranscriptMessage, startTurn, endTurn int) []control.TranscriptMessage {
+	out := make([]control.TranscriptMessage, 0, len(msgs))
 	turn := -1
-	for index, msg := range msgs {
-		if isVisibleHistoryUser(msg, resolveUserContent) {
+	for _, msg := range msgs {
+		if isVisibleHistoryUser(msg) {
 			turn++
 		}
 		if turn < 0 {
 			if startTurn == 0 {
 				out = append(out, msg)
-				indexes = append(indexes, index)
 			}
 			continue
 		}
 		if turn >= startTurn && turn < endTurn {
 			out = append(out, msg)
-			indexes = append(indexes, index)
-		}
-	}
-	return out, indexes
-}
-
-func checkpointTurnsForProviderWindow(checkpointTurns map[int]int, originalIndexes []int) map[int]int {
-	if len(checkpointTurns) == 0 || len(originalIndexes) == 0 {
-		return nil
-	}
-	out := map[int]int{}
-	for pageIndex, originalIndex := range originalIndexes {
-		if turn, ok := checkpointTurns[originalIndex]; ok {
-			out[pageIndex] = turn
 		}
 	}
 	return out
@@ -4504,7 +4473,7 @@ func cloneHistoryMessages(in []HistoryMessage) []HistoryMessage {
 	copy(out, in)
 	for i := range out {
 		if len(in[i].MemoryCitations) > 0 {
-			out[i].MemoryCitations = append([]provider.MemoryCitation(nil), in[i].MemoryCitations...)
+			out[i].MemoryCitations = append([]control.TranscriptMemoryCitation(nil), in[i].MemoryCitations...)
 		}
 		if len(in[i].ToolCalls) > 0 {
 			out[i].ToolCalls = append([]HistoryToolCall(nil), in[i].ToolCalls...)
@@ -4515,7 +4484,7 @@ func cloneHistoryMessages(in []HistoryMessage) []HistoryMessage {
 
 const historyToolPreviewLimit = 2_000
 
-func historyToolCall(tc provider.ToolCall, args string, result provider.Message) HistoryToolCall {
+func historyToolCall(tc control.TranscriptToolCall, args string, result control.TranscriptMessage) HistoryToolCall {
 	call := HistoryToolCall{
 		ID:      tc.ID,
 		Name:    tc.Name,
@@ -4539,10 +4508,10 @@ func historyToolCall(tc provider.ToolCall, args string, result provider.Message)
 	return call
 }
 
-func historyToolResultsByID(msgs []provider.Message) map[string]provider.Message {
-	out := map[string]provider.Message{}
+func historyToolResultsByID(msgs []control.TranscriptMessage) map[string]control.TranscriptMessage {
+	out := map[string]control.TranscriptMessage{}
 	for _, msg := range msgs {
-		if msg.Role != provider.RoleTool || msg.ToolCallID == "" {
+		if msg.Role != control.TranscriptTool || msg.ToolCallID == "" {
 			continue
 		}
 		out[msg.ToolCallID] = msg
@@ -4720,7 +4689,7 @@ func clipStringBytes(s string, max int) string {
 	return s[:max]
 }
 
-func historyTodoArgsWithCompleteSteps(msgs []provider.Message) map[string]string {
+func historyTodoArgsWithCompleteSteps(msgs []control.TranscriptMessage) map[string]string {
 	successful := successfulHistoryToolCallIDs(msgs)
 	out := map[string]string{}
 	var todos []evidence.TodoItem
@@ -4761,10 +4730,10 @@ func historyTodoArgsWithCompleteSteps(msgs []provider.Message) map[string]string
 	return out
 }
 
-func successfulHistoryToolCallIDs(msgs []provider.Message) map[string]bool {
+func successfulHistoryToolCallIDs(msgs []control.TranscriptMessage) map[string]bool {
 	successful := map[string]bool{}
 	for _, msg := range msgs {
-		if msg.Role != provider.RoleTool || msg.ToolCallID == "" {
+		if msg.Role != control.TranscriptTool || msg.ToolCallID == "" {
 			continue
 		}
 		if !historyToolResultFailed(msg.Content) {
@@ -4820,13 +4789,13 @@ func previewSessionMessages(sessionDir, path string) ([]HistoryMessage, error) {
 	if out, ok, err := previewEventSessionMessages(sessionPath); ok || err != nil {
 		return out, err
 	}
-	loaded, err := agent.LoadSession(sessionPath)
+	transcript, err := control.LoadTranscript(sessionPath)
 	if err != nil {
 		return nil, err
 	}
 	return historyMessagesWithPlannerDisplays(
-		loaded.Snapshot(),
-		sessionDisplayResolver(sessionDir, sessionPath),
+		transcript,
+		sessionTranscriptDisplayResolver(sessionDir, sessionPath),
 		sessionPlannerDisplayTurns(sessionDir, sessionPath),
 		nil,
 	), nil
@@ -4843,13 +4812,13 @@ func previewSessionPage(sessionDir, path string, beforeTurn, limit int) (History
 		}
 		return historyPageFromMessages(out, beforeTurn, limit), nil
 	}
-	loaded, err := agent.LoadSession(sessionPath)
+	transcript, err := control.LoadTranscript(sessionPath)
 	if err != nil {
 		return HistoryPage{}, err
 	}
-	return historyPageFromProviderMessages(
-		loaded.Snapshot(),
-		sessionDisplayResolver(sessionDir, sessionPath),
+	return historyPageFromTranscript(
+		transcript,
+		sessionTranscriptDisplayResolver(sessionDir, sessionPath),
 		sessionPlannerDisplayTurns(sessionDir, sessionPath),
 		nil,
 		beforeTurn,
@@ -4858,32 +4827,32 @@ func previewSessionPage(sessionDir, path string, beforeTurn, limit int) (History
 }
 
 type previewEventRecord struct {
-	Kind             string                    `json:"kind"`
-	Type             string                    `json:"type"`
-	Role             string                    `json:"role"`
-	Time             json.RawMessage           `json:"time"`
-	Timestamp        json.RawMessage           `json:"timestamp"`
-	CreatedAt        json.RawMessage           `json:"createdAt"`
-	CreatedAtSnake   json.RawMessage           `json:"created_at"`
-	UpdatedAt        json.RawMessage           `json:"updatedAt"`
-	UpdatedAtSnake   json.RawMessage           `json:"updated_at"`
-	Text             string                    `json:"text"`
-	Content          string                    `json:"content"`
-	Reasoning        string                    `json:"reasoning"`
-	ReasoningContent string                    `json:"reasoningContent"`
-	MemoryCitations  []provider.MemoryCitation `json:"memoryCitations"`
-	Level            string                    `json:"level"`
-	ToolCalls        []previewToolCall         `json:"toolCalls"`
-	CallID           string                    `json:"callId"`
-	ToolCallID       string                    `json:"toolCallId"`
-	ToolName         string                    `json:"toolName"`
-	Name             string                    `json:"name"`
-	Output           string                    `json:"output"`
-	Compaction       *previewCompaction        `json:"compaction"`
-	Trigger          string                    `json:"trigger"`
-	Messages         int                       `json:"messages"`
-	Summary          string                    `json:"summary"`
-	Archive          string                    `json:"archive"`
+	Kind             string                             `json:"kind"`
+	Type             string                             `json:"type"`
+	Role             string                             `json:"role"`
+	Time             json.RawMessage                    `json:"time"`
+	Timestamp        json.RawMessage                    `json:"timestamp"`
+	CreatedAt        json.RawMessage                    `json:"createdAt"`
+	CreatedAtSnake   json.RawMessage                    `json:"created_at"`
+	UpdatedAt        json.RawMessage                    `json:"updatedAt"`
+	UpdatedAtSnake   json.RawMessage                    `json:"updated_at"`
+	Text             string                             `json:"text"`
+	Content          string                             `json:"content"`
+	Reasoning        string                             `json:"reasoning"`
+	ReasoningContent string                             `json:"reasoningContent"`
+	MemoryCitations  []control.TranscriptMemoryCitation `json:"memoryCitations"`
+	Level            string                             `json:"level"`
+	ToolCalls        []previewToolCall                  `json:"toolCalls"`
+	CallID           string                             `json:"callId"`
+	ToolCallID       string                             `json:"toolCallId"`
+	ToolName         string                             `json:"toolName"`
+	Name             string                             `json:"name"`
+	Output           string                             `json:"output"`
+	Compaction       *previewCompaction                 `json:"compaction"`
+	Trigger          string                             `json:"trigger"`
+	Messages         int                                `json:"messages"`
+	Summary          string                             `json:"summary"`
+	Archive          string                             `json:"archive"`
 }
 
 type previewToolCall struct {
@@ -4941,13 +4910,13 @@ func previewEventSessionMessages(path string) ([]HistoryMessage, bool, error) {
 		case "model.final":
 			hm := HistoryMessage{Role: "assistant", Content: rec.Content, Reasoning: firstNonEmpty(rec.Reasoning, rec.ReasoningContent)}
 			if len(rec.MemoryCitations) > 0 {
-				hm.MemoryCitations = append([]provider.MemoryCitation(nil), rec.MemoryCitations...)
+				hm.MemoryCitations = append([]control.TranscriptMemoryCitation(nil), rec.MemoryCitations...)
 			}
 			for _, tc := range rec.ToolCalls {
 				id := tc.ID
 				name := firstNonEmpty(tc.Name, tc.Function.Name)
 				args := firstNonEmpty(tc.Arguments, tc.Function.Arguments)
-				hm.ToolCalls = append(hm.ToolCalls, historyToolCall(provider.ToolCall{ID: id, Name: name, Arguments: args}, args, provider.Message{}))
+				hm.ToolCalls = append(hm.ToolCalls, historyToolCall(control.TranscriptToolCall{ID: id, Name: name, Arguments: args}, args, control.TranscriptMessage{}))
 				if id != "" {
 					toolName[id] = name
 				}
@@ -7305,7 +7274,7 @@ func (a *App) SetModelForTab(tabID, name string) error {
 		}
 	}
 
-	var carried []provider.Message
+	var carried control.SessionHistorySnapshot
 	oldCtrl := a.controllerForTab(tab)
 	if oldCtrl != nil {
 		if prevPath == "" {
@@ -7318,7 +7287,7 @@ func (a *App) SetModelForTab(tabID, name string) error {
 			return err
 		}
 		prevPath = sessionPathAfterSnapshot(oldCtrl, prevPath)
-		carried = oldCtrl.History()
+		carried = control.CaptureSessionHistory(oldCtrl)
 	}
 
 	// Preserve the shared plugin host across controller rebuilds — the tab
@@ -7352,7 +7321,7 @@ func (a *App) SetModelForTab(tabID, name string) error {
 		newCtrl.Close()
 		return err
 	}
-	newCtrl.AdoptHistoryWithCurrentSystemPrompt(carried, path)
+	newCtrl.AdoptSessionHistoryWithCurrentSystemPrompt(carried, path)
 	a.mu.Lock()
 	if current := a.tabs[tab.ID]; current != tab {
 		// The tab was closed/replaced while we built the new controller off-lock;
@@ -7465,7 +7434,7 @@ func (a *App) SetEffortForTab(tabID, level string) error {
 	if err != nil {
 		return err
 	}
-	var carried []provider.Message
+	var carried control.SessionHistorySnapshot
 	oldCtrl := a.controllerForTab(tab)
 	if oldCtrl != nil {
 		if prevPath == "" {
@@ -7478,7 +7447,7 @@ func (a *App) SetEffortForTab(tabID, level string) error {
 			return err
 		}
 		prevPath = sessionPathAfterSnapshot(oldCtrl, prevPath)
-		carried = oldCtrl.History()
+		carried = control.CaptureSessionHistory(oldCtrl)
 	}
 	sharedHost := a.lookupSharedHost(snap.sharedHostKey)
 	newCtrl, err := boot.Build(a.bootContext(), boot.Options{
@@ -7507,7 +7476,7 @@ func (a *App) SetEffortForTab(tabID, level string) error {
 		newCtrl.Close()
 		return err
 	}
-	newCtrl.AdoptHistoryWithCurrentSystemPrompt(carried, path)
+	newCtrl.AdoptSessionHistoryWithCurrentSystemPrompt(carried, path)
 	a.mu.Lock()
 	if current := a.tabs[tab.ID]; current != tab {
 		a.mu.Unlock()
@@ -7593,7 +7562,7 @@ func (a *App) SetTokenModeForTab(tabID, mode string) error {
 		a.noticeForTab(tab.ID, fmt.Sprintf("model %q is no longer available; switched to %s", snap.model, modelRef))
 	}
 
-	var carried []provider.Message
+	var carried control.SessionHistorySnapshot
 	oldCtrl := a.controllerForTab(tab)
 	if oldCtrl != nil {
 		if prevPath == "" {
@@ -7606,7 +7575,7 @@ func (a *App) SetTokenModeForTab(tabID, mode string) error {
 			return err
 		}
 		prevPath = sessionPathAfterSnapshot(oldCtrl, prevPath)
-		carried = oldCtrl.History()
+		carried = control.CaptureSessionHistory(oldCtrl)
 	}
 	sharedHost := a.lookupSharedHost(snap.sharedHostKey)
 	newCtrl, err := boot.Build(a.bootContext(), boot.Options{
@@ -7635,7 +7604,7 @@ func (a *App) SetTokenModeForTab(tabID, mode string) error {
 		newCtrl.Close()
 		return err
 	}
-	newCtrl.AdoptHistoryWithCurrentSystemPrompt(carried, path)
+	newCtrl.AdoptSessionHistoryWithCurrentSystemPrompt(carried, path)
 	a.mu.Lock()
 	if current := a.tabs[tab.ID]; current != tab {
 		a.mu.Unlock()

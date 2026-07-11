@@ -2,7 +2,7 @@
 
 日期：2026-07-11
 
-状态：本地全量验证完成，待集中提交与单次推送
+状态：已交付；commit `5f6eae7`
 
 ## 当前结论
 
@@ -34,4 +34,4 @@ six-target CGO_ENABLED=0 cross-compile                                PASS
 git diff --check                                                      PASS
 ```
 
-定向测试曾发现 loaded legacy transcript 被新 API 插入 system message 的回归；实现已拆分 loaded-history 兼容策略，原失败用例与新增 control 回归均通过。前端 build 只有既有 dynamic-import/chunk-size 警告且成功。本批尚未推送，以上证据不得冒充远端 CI、真实 Provider 计费缓存或真实 IM 证据。
+定向测试曾发现 loaded legacy transcript 被新 API 插入 system message 的回归；实现已拆分 loaded-history 兼容策略，原失败用例与新增 control 回归均通过。前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CI run `29150773856` 为 8/8、CodeQL run `29150773848` 为 3/3；真实 Provider 计费缓存与真实 IM 证据仍不在本批证明范围内。

@@ -29,7 +29,7 @@ func TestHistoryMessagesIncludeAssistantReasoning(t *testing.T) {
 		{Role: provider.RoleAssistant, ReasoningContent: "tool-call-only thinking"},
 	}
 
-	got := historyMessages(msgs, func(content string) string {
+	got := historyMessagesFromProviderForTest(msgs, func(content string) string {
 		if content != "expanded prompt" {
 			t.Fatalf("unexpected user content passed to resolver: %q", content)
 		}
@@ -75,7 +75,7 @@ func TestHistoryMessagesDoNotReplayMemoryCompilerContract(t *testing.T) {
 		{Role: provider.RoleAssistant, Content: "done"},
 	}
 
-	got := historyMessages(msgs, control.StripComposePrefixes)
+	got := historyMessagesFromProviderForTest(msgs, control.StripComposePrefixes)
 	if len(got) != 2 {
 		t.Fatalf("history length = %d, want 2: %+v", len(got), got)
 	}
@@ -95,7 +95,7 @@ func TestHistoryMessagesStripActiveGoalFromVisibleUserContent(t *testing.T) {
 		{Role: provider.RoleAssistant, Content: "done"},
 	}
 
-	got := historyMessages(msgs, control.StripComposePrefixes)
+	got := historyMessagesFromProviderForTest(msgs, control.StripComposePrefixes)
 	if len(got) != 2 {
 		t.Fatalf("history length = %d, want 2: %+v", len(got), got)
 	}
@@ -104,6 +104,34 @@ func TestHistoryMessagesStripActiveGoalFromVisibleUserContent(t *testing.T) {
 	}
 	if strings.Contains(got[0].Content, "<active-goal>") || strings.Contains(got[0].Content, "ship the approval redesign") {
 		t.Fatalf("active-goal leaked into visible history content: %+v", got[0])
+	}
+}
+
+func TestTranscriptDisplayKeyPreservesSidecarsWithoutReplayingReferencedContext(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "safe-sidecar.jsonl")
+	raw := "Referenced context:\n<file path=\"secret.txt\">FILE-SECRET</file>\n\nexplain it"
+	if err := saveSessionDisplays(dir, sessionDisplayMap{
+		filepath.Base(path): {messageDisplayKey(raw): "display prompt"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	planner := []plannerDisplayTurn{{
+		UserHash: messageDisplayKey(raw),
+		Messages: []HistoryMessage{{Role: "phase", Content: "planner phase"}},
+	}}
+
+	got := historyMessagesWithPlannerDisplays(
+		providerTranscriptForTest([]provider.Message{{Role: provider.RoleUser, Content: raw}}),
+		sessionTranscriptDisplayResolver(dir, path),
+		planner,
+		nil,
+	)
+	if len(got) != 2 || got[0].Content != "display prompt" || got[1].Content != "planner phase" {
+		t.Fatalf("sidecar/planner projection = %+v", got)
+	}
+	if got[0].SubmitText != "explain it" || strings.Contains(got[0].SubmitText, "FILE-SECRET") {
+		t.Fatalf("safe replay text = %q", got[0].SubmitText)
 	}
 }
 
@@ -118,7 +146,7 @@ func TestHistoryMessagesCarryCheckpointTurnsAcrossHiddenSyntheticUsers(t *testin
 		{Role: provider.RoleAssistant, Content: "second answer"},
 	}
 
-	got := historyMessagesWithPlannerDisplays(
+	got := historyMessagesWithPlannerDisplaysFromProviderForTest(
 		msgs,
 		func(content string) string { return content },
 		nil,
@@ -238,8 +266,7 @@ func TestHistoryCheckpointTurnsSkipsHiddenUsers(t *testing.T) {
 		{Role: provider.RoleUser, Content: "second visible"},
 	}
 	got := historyCheckpointTurns(
-		msgs,
-		func(content string) string { return content },
+		providerTranscriptForTest(msgs),
 		map[int]int{0: 0, 2: 1, 3: 2},
 	)
 	if len(got) != 2 || got[0] != 0 || got[1] != 2 {
@@ -372,7 +399,7 @@ func TestHistoryMessagesArchiveCompletedToolPayloads(t *testing.T) {
 		{Role: provider.RoleTool, Name: "bash", ToolCallID: "call_large", Content: largeOutput},
 	}
 
-	got := historyMessages(msgs, func(content string) string { return content })
+	got := historyMessagesFromProviderForTest(msgs, func(content string) string { return content })
 	if len(got) != 2 {
 		t.Fatalf("history length = %d, want 2", len(got))
 	}
@@ -414,7 +441,7 @@ func TestHistoryMessagesKeepRunSkillSubjectWhenArchived(t *testing.T) {
 		{Role: provider.RoleTool, Name: "run_skill", ToolCallID: "call_skill", Content: "Skill completed"},
 	}
 
-	got := historyMessages(msgs, func(content string) string { return content })
+	got := historyMessagesFromProviderForTest(msgs, func(content string) string { return content })
 	if len(got) != 2 {
 		t.Fatalf("history length = %d, want 2", len(got))
 	}
@@ -441,7 +468,7 @@ func TestHistoryMessagesKeepToolFileDiffMetadata(t *testing.T) {
 		{Role: provider.RoleTool, Name: "edit_file", ToolCallID: "edit", Content: "edited settings/settings_IO.gd"},
 	}
 
-	got := historyMessages(msgs, func(content string) string { return content })
+	got := historyMessagesFromProviderForTest(msgs, func(content string) string { return content })
 	call := got[0].ToolCalls[0]
 	if call.Diff != diff || call.Added != 1 || call.Removed != 1 {
 		t.Fatalf("history tool diff metadata = diff:%q +%d -%d", call.Diff, call.Added, call.Removed)
@@ -460,7 +487,7 @@ func TestHistoryMessagesKeepBoundedToolErrors(t *testing.T) {
 		{Role: provider.RoleTool, Name: "bash", ToolCallID: "call_error", Content: largeError},
 	}
 
-	got := historyMessages(msgs, func(content string) string { return content })
+	got := historyMessagesFromProviderForTest(msgs, func(content string) string { return content })
 	result := got[1]
 	if result.ToolResultError == "" {
 		t.Fatalf("failed tool result should keep an error preview: %+v", result)
@@ -488,7 +515,7 @@ func TestHistoryMessagesClipToolErrorsAtUTF8Boundary(t *testing.T) {
 		{Role: provider.RoleTool, Name: "bash", ToolCallID: "call_unicode_error", Content: largeError},
 	}
 
-	got := historyMessages(msgs, func(content string) string { return content })
+	got := historyMessagesFromProviderForTest(msgs, func(content string) string { return content })
 	result := got[1]
 	if result.ToolResultError == "" {
 		t.Fatalf("failed tool result should keep an error preview: %+v", result)
@@ -510,7 +537,7 @@ func TestHistoryMessagesKeepTodoWriteArguments(t *testing.T) {
 		{Role: provider.RoleTool, Name: "todo_write", ToolCallID: "todo_1", Content: "Todos updated"},
 	}
 
-	got := historyMessages(msgs, func(content string) string { return content })
+	got := historyMessagesFromProviderForTest(msgs, func(content string) string { return content })
 	call := got[0].ToolCalls[0]
 	if call.ArgumentsArchived {
 		t.Fatalf("todo_write arguments must remain available for restored todo panel: %+v", call)
@@ -530,7 +557,7 @@ func TestHistoryMessagesPreserveUnaddressableToolPayloads(t *testing.T) {
 		{Role: provider.RoleTool, Name: "bash", Content: output},
 	}
 
-	got := historyMessages(msgs, func(content string) string { return content })
+	got := historyMessagesFromProviderForTest(msgs, func(content string) string { return content })
 	call := got[0].ToolCalls[0]
 	if call.ArgumentsArchived {
 		t.Fatalf("tool call without an id cannot be archived for later lookup: %+v", call)
