@@ -29,7 +29,7 @@ Controller ── Agent loop ── Provider API
 | 工具审批 | 已实现核心路径 | `internal/permission` 按工具、subject、只读属性和 allow/ask/deny 规则决策；文件写入审批可携带 diff，拒绝/超时路径有不落盘测试 | `yolo`/显式 allow 会绕过交互；所有新工具、远程入口和扩展必须持续做集成覆盖，不能只依赖工具自报 `readOnly` |
 | Shell 隔离 | 部分实现 | `sandbox.mode = enforce` 时使用 Linux bubblewrap、macOS Seatbelt、Windows AppContainer/低完整性 token 与 Job Object；后端不可用时 enforce 模式 fail closed | sandbox 可被配置为 off，零值也不隔离；平台能力不完全等价；MCP、Hook、LSP 不是自动置于同一 shell sandbox 中 |
 | 不可信内容 | 部分实现 | 有 untrusted envelope、HTML 文本化和常见 token 正则脱敏；system prompt/tool schema 采用稳定前缀约束 | 不能保证模型不受 prompt injection 影响；正则无法识别所有私有凭据；工具/插件/网页内容仍必须依赖权限边界限制副作用 |
-| HTTP Serve | 部分实现 | 支持 `none`/token/password，token 常量时间比较、密码 session HMAC、登录速率限制、JSON-only POST CSRF guard、默认无 CORS、显式单 origin CORS | WebSocket `CheckOrigin` 当前放行并依赖外层鉴权；`auth=none` 依赖 loopback/same-origin 部署假设；请求体、WS frame 和全局请求速率限制仍需系统化审计 |
+| HTTP Serve | 部分实现 | 支持 `none`/token/password，token 常量时间比较、密码 session HMAC、登录速率限制、JSON-only POST CSRF guard、默认无 CORS、显式单 origin CORS；版本化 command 校验与服务端 `remote` scope 阻止客户端选择 trusted submit，旧 WS submit 也不再绕过 `!shell` 限制；真实 WebSocket 握手有回归测试 | WebSocket `CheckOrigin` 当前放行并依赖外层鉴权；`auth=none` 依赖 loopback/same-origin 部署假设；请求体、WS frame 和全局请求速率限制仍需系统化审计 |
 | IM Gateway | 部分实现 | 用户/群 allowlist、admin/approver 角色、operator 身份检查和各渠道传输适配已存在 | 当前没有通用飞书 webhook HMAC/重放验证实现；真实飞书/QQ/微信回环需要外部应用凭据与网络环境，未验证前不得声明完成 |
 | 插件与 Hook | 部分实现 | 插件路径/名称/manifest 基础校验、启停状态、MCP 启动/调用超时、项目 Hook trust gate 和 Hook 超时已存在 | manifest 尚无被安装器执行的权限声明、兼容版本、内容哈希或签名验证；“用户安装即信任”仍是主要边界 |
 | 状态与恢复 | 部分实现 | session JSONL、lease/recovery、checkpoint/rewind、版本化 Goal sidecar 和 Todo 恢复均有测试 | 并非所有 sidecar 都使用同一种原子写协议；崩溃时跨多个文件的一致性没有事务保证，需按写路径验证 |

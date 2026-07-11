@@ -207,6 +207,7 @@ type Settings interface {
 // rich frontend (the HTTP server, the desktop app, the TUI) depends on this;
 // leaner frontends (bot, acp) depend on just the sub-ports they use.
 type SessionAPI interface {
+	CommandControl
 	Lifecycle
 	TurnControl
 	Approvals
@@ -235,5 +236,6 @@ var (
 	_ SessionPersistence = (*Controller)(nil)
 	_ Input              = (*Controller)(nil)
 	_ Settings           = (*Controller)(nil)
+	_ CommandControl     = (*Controller)(nil)
 	_ SessionAPI         = (*Controller)(nil)
 )

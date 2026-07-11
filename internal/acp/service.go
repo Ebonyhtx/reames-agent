@@ -141,11 +141,21 @@ type service struct {
 // goals, checkpoints, or memory, so it depends on those sub-ports only — not the
 // concrete *control.Controller.
 type acpController interface {
+	control.CommandControl
 	control.Lifecycle
 	control.TurnControl
 	control.Approvals
 	control.Capabilities
 	control.SessionPersistence
+}
+
+func acpApprovalHandler(ctrl control.CommandControl) func(string, bool, bool, bool) {
+	return func(id string, allow, session, persist bool) {
+		_, _ = ctrl.ExecuteCommand(
+			control.NewApprovalCommand(id, allow, session, persist),
+			control.CommandScopeRemote,
+		)
+	}
 }
 
 // acpSession is one open session: its controller, the on-disk transcript path
@@ -471,7 +481,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 		return nil, &RPCError{Code: ErrInternal, Message: "session/new: " + err.Error()}
 	}
 	ctrl.EnableInteractiveApproval()
-	sink.bindApprove(ctrl.Approve)
+	sink.bindApprove(acpApprovalHandler(ctrl))
 	sink.bindAnswer(ctrl.AnswerQuestion)
 
 	now := time.Now().UTC()
@@ -612,7 +622,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 		return SessionConfigState{}, &RPCError{Code: ErrInternal, Message: method + ": " + err.Error()}
 	}
 	ctrl.EnableInteractiveApproval()
-	sink.bindApprove(ctrl.Approve)
+	sink.bindApprove(acpApprovalHandler(ctrl))
 	sink.bindAnswer(ctrl.AnswerQuestion)
 
 	dir := ctrl.SessionDir()
@@ -858,7 +868,12 @@ func (s *service) rebuildSession(ctx context.Context, sess *acpSession, cfgState
 		sess.mu.Unlock()
 		return &RPCError{Code: ErrInvalidRequest, Message: "session config: session is deleted"}
 	}
-	status := sess.ctrl.RuntimeStatus()
+	statusResult, statusErr := sess.ctrl.ExecuteCommand(control.NewStatusCommand(), control.CommandScopeRemote)
+	if statusErr != nil {
+		sess.mu.Unlock()
+		return sessionConfigActiveWorkError("controller status is unavailable")
+	}
+	status := statusResult.Status
 	if status.PendingPrompt {
 		sess.mu.Unlock()
 		return sessionConfigActiveWorkError("answer pending prompts before switching config")
@@ -918,7 +933,7 @@ func (s *service) rebuildSession(ctx context.Context, sess *acpSession, cfgState
 		return &RPCError{Code: ErrInternal, Message: "session config: " + err.Error()}
 	}
 	newCtrl.EnableInteractiveApproval()
-	sink.bindApprove(newCtrl.Approve)
+	sink.bindApprove(acpApprovalHandler(newCtrl))
 	sink.bindAnswer(newCtrl.AnswerQuestion)
 	newCtrl.AdoptHistory(carried, prevPath)
 	// InheritLifecycleFrom wires two concrete controllers' turn/hook state; it's a

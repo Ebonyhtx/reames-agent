@@ -22,7 +22,7 @@ func (m *chatTUI) runReasoningLanguageCommand(input string) {
 		m.notice("usage: /reasoning-language auto|zh|en")
 		return
 	}
-	if m.ctrl != nil && m.ctrl.Running() {
+	if m.ctrl != nil && cliRuntimeStatus(m.ctrl).Running {
 		m.notice("finish or cancel the current turn before changing reasoning-language")
 		return
 	}

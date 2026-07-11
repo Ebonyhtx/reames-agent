@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -8,6 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"reames-agent/internal/control"
 )
 
 var upgrader = websocket.Upgrader{
@@ -20,8 +23,8 @@ var upgrader = websocket.Upgrader{
 
 // wsEvents handles WebSocket upgrade requests. It mirrors the SSE /events
 // endpoint but over a bidirectional WebSocket: the server pushes typed event
-// frames, and the client can send JSON-RPC-style commands (submit, cancel,
-// approve) on the same connection.
+// frames, and the client can send either the versioned control command or the
+// legacy JSON-RPC-style submit/cancel/approve methods on the same connection.
 func (s *Server) wsEvents(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -105,6 +108,19 @@ type wsCommand struct {
 // handleWSCommand dispatches a WebSocket command to the appropriate handler.
 func (s *Server) handleWSCommand(conn *websocket.Conn, r *http.Request, cmd wsCommand) {
 	switch cmd.Method {
+	case "command":
+		command, err := decodeControlCommand(bytes.NewReader(cmd.Params))
+		if err != nil {
+			s.writeWSCommandResult(conn, rejectedCommandResult(command.Kind, &control.CommandError{
+				Code: control.CommandErrInvalidPayload, Field: "params", Message: "invalid command params: " + err.Error(),
+			}))
+			return
+		}
+		result, err := s.executeRemoteCommand(r.Context(), command)
+		if err != nil && result.Error == nil {
+			result.Error = &control.CommandError{Code: control.CommandErrInvalidPayload, Message: err.Error()}
+		}
+		s.writeWSCommandResult(conn, result)
 	case "submit":
 		var params struct {
 			Input string `json:"input"`
@@ -113,22 +129,31 @@ func (s *Server) handleWSCommand(conn *websocket.Conn, r *http.Request, cmd wsCo
 			s.writeWSError(conn, "invalid submit params")
 			return
 		}
-		s.ctl().Submit(params.Input)
+		if _, err := s.executeRemoteCommand(r.Context(), control.NewSubmitCommand(params.Input, "", "")); err != nil {
+			s.writeWSError(conn, err.Error())
+		}
 	case "cancel":
-		s.ctl().Cancel()
+		_, _ = s.executeRemoteCommand(r.Context(), control.NewCancelCommand())
 	case "approve":
 		var params struct {
-			ID     string `json:"id"`
+			ID      string `json:"id"`
 			Approve bool   `json:"approve"`
 		}
 		if err := json.Unmarshal(cmd.Params, &params); err != nil || params.ID == "" {
 			s.writeWSError(conn, "invalid approve params")
 			return
 		}
-		s.ctl().Approve(params.ID, params.Approve, true, true)
+		if _, err := s.executeRemoteCommand(r.Context(), control.NewApprovalCommand(params.ID, params.Approve, true, true)); err != nil {
+			s.writeWSError(conn, err.Error())
+		}
 	default:
 		s.writeWSError(conn, fmt.Sprintf("unknown method: %s", cmd.Method))
 	}
+}
+
+func (s *Server) writeWSCommandResult(conn *websocket.Conn, result control.CommandResult) {
+	data, _ := json.Marshal(result)
+	_ = conn.WriteMessage(websocket.TextMessage, data)
 }
 
 func (s *Server) writeWSError(conn *websocket.Conn, msg string) {

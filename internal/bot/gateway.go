@@ -171,9 +171,35 @@ type BotGateway struct {
 // touches goals, checkpoints, or memory, so it depends on those sub-ports only —
 // not the concrete *control.Controller and its ~99 methods.
 type botController interface {
+	control.CommandControl
 	control.Lifecycle
 	control.TurnControl
 	control.Approvals
+}
+
+func botRuntimeStatus(ctrl control.CommandControl) control.RuntimeStatus {
+	if ctrl == nil {
+		return control.RuntimeStatus{}
+	}
+	result, err := ctrl.ExecuteCommand(control.NewStatusCommand(), control.CommandScopeRemote)
+	if err != nil {
+		return control.RuntimeStatus{}
+	}
+	return result.Status
+}
+
+func botCancel(ctrl control.CommandControl) {
+	if ctrl == nil {
+		return
+	}
+	_, _ = ctrl.ExecuteCommand(control.NewCancelCommand(), control.CommandScopeRemote)
+}
+
+func botApprove(ctrl control.CommandControl, id string, allow bool) {
+	if ctrl == nil {
+		return
+	}
+	_, _ = ctrl.ExecuteCommand(control.NewApprovalCommand(id, allow, false, false), control.CommandScopeRemote)
 }
 
 type sessionState struct {
@@ -706,7 +732,7 @@ func (gw *BotGateway) cancelActiveSession(key string) {
 		return
 	}
 	if state.ctrl != nil {
-		state.ctrl.Cancel()
+		botCancel(state.ctrl)
 	}
 }
 
@@ -1134,7 +1160,7 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 			// above is asynchronous, so give the turn a bounded window to
 			// unwind before rotating.
 			deadline := time.Now().Add(5 * time.Second)
-			for state.ctrl.Running() && time.Now().Before(deadline) {
+			for botRuntimeStatus(state.ctrl).Running && time.Now().Before(deadline) {
 				time.Sleep(10 * time.Millisecond)
 			}
 			if err := state.ctrl.NewSession(); err != nil {
@@ -1161,7 +1187,7 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		state, ok := gw.controllers[key]
 		gw.mu.Unlock()
 		if ok && state.ctrl != nil {
-			state.ctrl.Approve(cmd.Args[0], true, false, false)
+			botApprove(state.ctrl, cmd.Args[0], true)
 			gw.forgetPendingApproval(key, cmd.Args[0])
 			_ = gw.sendText(ctx, adapter, msg, "已批准。")
 		} else {
@@ -1180,7 +1206,7 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		state, ok := gw.controllers[key]
 		gw.mu.Unlock()
 		if ok && state.ctrl != nil {
-			state.ctrl.Approve(cmd.Args[0], false, false, false)
+			botApprove(state.ctrl, cmd.Args[0], false)
 			gw.forgetPendingApproval(key, cmd.Args[0])
 			_ = gw.sendText(ctx, adapter, msg, "已拒绝。")
 		} else {

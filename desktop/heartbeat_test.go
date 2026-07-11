@@ -83,6 +83,15 @@ func (s *heartbeatExecuteTaskCtrlStub) RuntimeStatus() control.RuntimeStatus {
 	return s.status
 }
 
+func (s *heartbeatExecuteTaskCtrlStub) ExecuteCommand(command control.Command, scope control.CommandScope) (control.CommandResult, error) {
+	if command.Kind == control.CommandSubmit && command.Submit != nil && scope == control.CommandScopeUserTurn {
+		s.SubmitUserTurn(command.Submit.Input, command.Submit.Display)
+	}
+	return control.CommandResult{
+		Version: control.CommandVersion, Kind: command.Kind, Accepted: true, Status: s.status,
+	}, nil
+}
+
 func (s *heartbeatExecuteTaskCtrlStub) SubmitUserTurn(input, display string) {
 	s.submitted = append(s.submitted, input)
 }

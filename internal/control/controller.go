@@ -173,6 +173,11 @@ type Controller struct {
 
 	// mu guards the run state; every critical section under it is short and
 	// non-blocking.
+	// commandMu serializes versioned command dispatch so concurrent submit
+	// envelopes cannot both observe idle and report accepted. Legacy low-level
+	// methods remain for internal runtime composition; transport adapters use
+	// ExecuteCommand.
+	commandMu sync.Mutex
 	mu        sync.Mutex
 	cancel    context.CancelFunc
 	running   bool
@@ -253,11 +258,11 @@ type plannerSessionResetter interface {
 // distinguish a cancellable foreground turn from pending prompts and background
 // jobs.
 type RuntimeStatus struct {
-	Running         bool
-	PendingPrompt   bool
-	BackgroundJobs  int
-	CancelRequested bool
-	Cancellable     bool
+	Running         bool `json:"running"`
+	PendingPrompt   bool `json:"pendingPrompt"`
+	BackgroundJobs  int  `json:"backgroundJobs"`
+	CancelRequested bool `json:"cancelRequested"`
+	Cancellable     bool `json:"cancellable"`
 }
 
 const (

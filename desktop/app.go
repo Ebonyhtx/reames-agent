@@ -847,8 +847,8 @@ func (a *App) SubmitToTab(tabID, input string) error {
 		return a.workspaceNotReadyErr(tab)
 	}
 	a.ensureTabTopicIndexedForUserTurn(tab)
-	ctrl.SubmitDisplay(input, input)
-	return nil
+	_, err := ctrl.ExecuteCommand(control.NewSubmitCommand(input, input, ""), control.CommandScopeTrusted)
+	return err
 }
 
 func (a *App) submitUserTurnToTab(tabID, input string) bool {
@@ -864,8 +864,8 @@ func (a *App) submitUserTurnToTab(tabID, input string) bool {
 		return false
 	}
 	a.ensureTabTopicIndexedForUserTurn(tab)
-	ctrl.SubmitUserTurn(input, input)
-	return true
+	_, err := ctrl.ExecuteCommand(control.NewSubmitCommand(input, input, ""), control.CommandScopeUserTurn)
+	return err == nil
 }
 
 // RunShell executes a shell command directly (bypassing the model) and streams
@@ -916,8 +916,8 @@ func (a *App) SubmitDisplayToTab(tabID, display, input string) error {
 		return a.workspaceNotReadyErr(tab)
 	}
 	a.ensureTabTopicIndexedForUserTurn(tab)
-	ctrl.SubmitDisplay(display, input)
-	return nil
+	_, err := ctrl.ExecuteCommand(control.NewSubmitCommand(input, display, ""), control.CommandScopeTrusted)
+	return err
 }
 
 func (a *App) SubmitEditedDisplayToTab(tabID, display, input, original string) error {
@@ -936,8 +936,8 @@ func (a *App) SubmitEditedDisplayToTab(tabID, display, input, original string) e
 		return a.workspaceNotReadyErr(tab)
 	}
 	a.ensureTabTopicIndexedForUserTurn(tab)
-	ctrl.SubmitEditedDisplay(display, input, original)
-	return nil
+	_, err := ctrl.ExecuteCommand(control.NewSubmitCommand(input, display, original), control.CommandScopeTrusted)
+	return err
 }
 
 func (a *App) bindControllerDisplayRecorder(ctrl control.SessionAPI) {
@@ -960,7 +960,7 @@ func (a *App) Cancel() {
 
 func (a *App) CancelTab(tabID string) {
 	if ctrl := a.ctrlByTabID(tabID); ctrl != nil {
-		ctrl.Cancel()
+		cancelController(ctrl)
 	}
 }
 
@@ -1265,7 +1265,7 @@ func safeControllerSessionDir(ctrl control.SessionAPI) (dir string, ok bool) {
 func (a *App) Approve(id string, allow, session, persist bool) {
 	ctrl := a.ctrlByTabID("")
 	if ctrl != nil {
-		ctrl.Approve(id, allow, session, persist)
+		approveController(ctrl, id, allow, session, persist)
 	}
 }
 
@@ -1273,8 +1273,33 @@ func (a *App) Approve(id string, allow, session, persist bool) {
 func (a *App) ApproveTab(tabID, id string, allow, session, persist bool) {
 	ctrl := a.ctrlByTabID(tabID)
 	if ctrl != nil {
-		ctrl.Approve(id, allow, session, persist)
+		approveController(ctrl, id, allow, session, persist)
 	}
+}
+
+func cancelController(ctrl control.CommandControl) {
+	if ctrl == nil {
+		return
+	}
+	_, _ = ctrl.ExecuteCommand(control.NewCancelCommand(), control.CommandScopeTrusted)
+}
+
+func approveController(ctrl control.CommandControl, id string, allow, session, persist bool) {
+	if ctrl == nil {
+		return
+	}
+	_, _ = ctrl.ExecuteCommand(control.NewApprovalCommand(id, allow, session, persist), control.CommandScopeTrusted)
+}
+
+func controllerRuntimeStatus(ctrl control.CommandControl) control.RuntimeStatus {
+	if ctrl == nil {
+		return control.RuntimeStatus{}
+	}
+	result, err := ctrl.ExecuteCommand(control.NewStatusCommand(), control.CommandScopeTrusted)
+	if err != nil {
+		return control.RuntimeStatus{}
+	}
+	return result.Status
 }
 
 // ReplayPendingPrompts asks every tab's controller to re-emit any approval/ask
@@ -1699,8 +1724,8 @@ func (a *App) clearActiveSessionRuntime(tab *WorkspaceTab, oldCtrl control.Sessi
 		oldSink.setBinding(detachedRuntimeTabID(sessionRuntimeKey(oldPath)), nil)
 		oldSink.clearContext()
 	}
-	if oldCtrl.RuntimeStatus().Cancellable {
-		oldCtrl.Cancel()
+	if controllerRuntimeStatus(oldCtrl).Cancellable {
+		cancelController(oldCtrl)
 		if err := waitControllerStopped(oldCtrl); err != nil {
 			return err
 		}
@@ -2605,8 +2630,8 @@ func (a *App) prepareRemovedSessionRuntimes(removed []removedSessionRuntime) err
 		if item.ctrl == nil {
 			continue
 		}
-		if item.ctrl.Running() {
-			item.ctrl.Cancel()
+		if controllerRuntimeStatus(item.ctrl).Running {
+			cancelController(item.ctrl)
 			if err := waitControllerStopped(item.ctrl); err != nil {
 				return err
 			}
@@ -2629,7 +2654,7 @@ func (a *App) prepareRemovedSessionRuntimes(removed []removedSessionRuntime) err
 
 func waitControllerStopped(ctrl control.SessionAPI) error {
 	deadline := time.Now().Add(5 * time.Second)
-	for ctrl.Running() {
+	for controllerRuntimeStatus(ctrl).Running {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("timed out waiting for cancelled session work to stop")
 		}
@@ -6221,7 +6246,7 @@ func (a *App) ReloadCommands() error {
 	if ctrl == nil {
 		return fmt.Errorf("no active session")
 	}
-	if ctrl.Running() {
+	if controllerRuntimeStatus(ctrl).Running {
 		return fmt.Errorf("wait for the current turn to finish, then retry")
 	}
 	return ctrl.ReloadCommands(a.ctx)
@@ -7083,7 +7108,7 @@ func controllerHasActiveRuntimeWork(ctrl control.SessionAPI) bool {
 	if ctrl == nil {
 		return false
 	}
-	status := ctrl.RuntimeStatus()
+	status := controllerRuntimeStatus(ctrl)
 	return status.Running || status.PendingPrompt || status.BackgroundJobs > 0
 }
 

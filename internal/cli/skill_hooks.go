@@ -113,7 +113,7 @@ func (m *chatTUI) skillSaveEnabledChanges(changes map[string]bool) {
 		m.notice("skill toggle unavailable in this session")
 		return
 	}
-	if m.ctrl.Running() {
+	if cliRuntimeStatus(m.ctrl).Running {
 		m.notice("cannot change skills while a turn is running")
 		return
 	}
@@ -170,7 +170,7 @@ func (m *chatTUI) scheduleSkillSessionRefresh(reason, notice string) bool {
 	if m.ctrl == nil {
 		return false
 	}
-	if m.ctrl.Running() {
+	if cliRuntimeStatus(m.ctrl).Running {
 		m.notice("cannot refresh skills while a turn is running")
 		return false
 	}

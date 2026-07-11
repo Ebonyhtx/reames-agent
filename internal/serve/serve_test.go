@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
+
 	"reames-agent/internal/agent"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
@@ -26,6 +28,10 @@ import (
 type fakeRunner struct{ got chan string }
 
 func (f fakeRunner) Run(_ context.Context, input string) error { f.got <- input; return nil }
+
+type runnerFunc func(context.Context, string) error
+
+func (f runnerFunc) Run(ctx context.Context, input string) error { return f(ctx, input) }
 
 func TestServeSubmitRunsAndBroadcastsTurnDone(t *testing.T) {
 	bc := NewBroadcaster()
@@ -67,6 +73,197 @@ func TestServeSubmitRunsAndBroadcastsTurnDone(t *testing.T) {
 			t.Fatal("never saw turn_done on the stream")
 		}
 	}
+}
+
+func TestServeVersionedCommandEndpointSubmitCancelAndStatus(t *testing.T) {
+	bc := NewBroadcaster()
+	started := make(chan struct{}, 1)
+	stopped := make(chan struct{}, 1)
+	runner := runnerFunc(func(ctx context.Context, input string) error {
+		if input != "long turn" {
+			t.Fatalf("runner input = %q", input)
+		}
+		started <- struct{}{}
+		<-ctx.Done()
+		stopped <- struct{}{}
+		return ctx.Err()
+	})
+	ctrl := control.New(control.Options{Runner: runner, Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	postCommand := func(command string) (int, control.CommandResult) {
+		t.Helper()
+		resp, err := http.Post(srv.URL+"/command", "application/json", strings.NewReader(command))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var result control.CommandResult
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decode command result: %v", err)
+		}
+		return resp.StatusCode, result
+	}
+
+	status, result := postCommand(`{"version":1,"kind":"submit","submit":{"input":"long turn"}}`)
+	if status != http.StatusOK || !result.Accepted || result.Kind != control.CommandSubmit {
+		t.Fatalf("submit status/result = %d / %+v", status, result)
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("versioned submit did not reach runner")
+	}
+
+	status, result = postCommand(`{"version":1,"kind":"submit","submit":{"input":"must not replace active turn"}}`)
+	if status != http.StatusConflict || result.Accepted || result.Error == nil || result.Error.Code != control.CommandErrBusy {
+		t.Fatalf("busy submit status/result = %d / %+v", status, result)
+	}
+
+	status, result = postCommand(`{"version":1,"kind":"status"}`)
+	if status != http.StatusOK || !result.Accepted || !result.Status.Running || !result.Status.Cancellable {
+		t.Fatalf("running status/result = %d / %+v", status, result)
+	}
+
+	status, result = postCommand(`{"version":1,"kind":"cancel"}`)
+	if status != http.StatusOK || !result.Accepted || result.Kind != control.CommandCancel {
+		t.Fatalf("cancel status/result = %d / %+v", status, result)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("versioned cancel did not unwind runner")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, result = postCommand(`{"version":1,"kind":"status"}`)
+		if !result.Status.Running && !result.Status.Cancellable {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("controller did not return idle: %+v", result.Status)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestServeVersionedCommandRejectsInvalidAndPrivilegedPayloads(t *testing.T) {
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	tests := []struct {
+		name   string
+		body   string
+		status int
+		code   control.CommandErrorCode
+	}{
+		{"unknown version", `{"version":9,"kind":"status"}`, http.StatusBadRequest, control.CommandErrInvalidVersion},
+		{"unknown field", `{"version":1,"kind":"status","surprise":true}`, http.StatusBadRequest, control.CommandErrInvalidPayload},
+		{"trailing value", `{"version":1,"kind":"status"} {}`, http.StatusBadRequest, control.CommandErrInvalidPayload},
+		{"remote metadata", `{"version":1,"kind":"submit","submit":{"input":"x","display":"spoof"}}`, http.StatusForbidden, control.CommandErrForbidden},
+		{"shell shortcut", `{"version":1,"kind":"submit","submit":{"input":"!echo nope"}}`, http.StatusForbidden, control.CommandErrForbidden},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := http.Post(srv.URL+"/command", "application/json", strings.NewReader(tt.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			var result control.CommandResult
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != tt.status || result.Accepted || result.Error == nil || result.Error.Code != tt.code {
+				t.Fatalf("status/result = %d / %+v, want %d / %s", resp.StatusCode, result, tt.status, tt.code)
+			}
+		})
+	}
+}
+
+func TestServeWebSocketVersionedCommandAndLegacySubmitShareRemotePolicy(t *testing.T) {
+	bc := NewBroadcaster()
+	got := make(chan string, 1)
+	ctrl := control.New(control.Options{Runner: fakeRunner{got: got}, Sink: bc})
+	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	if err := conn.WriteJSON(map[string]any{
+		"method": "command",
+		"params": map[string]any{"version": control.CommandVersion, "kind": control.CommandStatus},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var statusResult control.CommandResult
+	if err := conn.ReadJSON(&statusResult); err != nil {
+		t.Fatal(err)
+	}
+	if !statusResult.Accepted || statusResult.Kind != control.CommandStatus {
+		t.Fatalf("status result = %+v", statusResult)
+	}
+
+	// Legacy WebSocket submit used to call trusted Submit and could therefore
+	// execute !shell. It now maps through the same remote policy as HTTP.
+	if err := conn.WriteJSON(map[string]any{
+		"method": "submit", "params": map[string]any{"input": "!echo must-not-run"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var legacyError map[string]string
+	if err := conn.ReadJSON(&legacyError); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(legacyError["error"], "unavailable over HTTP") {
+		t.Fatalf("legacy shell error = %#v", legacyError)
+	}
+	select {
+	case input := <-got:
+		t.Fatalf("legacy WebSocket shell reached runner: %q", input)
+	default:
+	}
+
+	if err := conn.WriteJSON(map[string]any{
+		"method": "command",
+		"params": map[string]any{
+			"version": control.CommandVersion,
+			"kind":    control.CommandSubmit,
+			"submit":  map[string]any{"input": "hello over ws"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case input := <-got:
+		if input != "hello over ws" {
+			t.Fatalf("runner input = %q", input)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("versioned WebSocket submit did not reach runner")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result control.CommandResult
+		if json.Unmarshal(raw, &result) == nil && result.Accepted && result.Kind == control.CommandSubmit {
+			return
+		}
+	}
+	t.Fatal("versioned WebSocket submit acknowledgement not received")
 }
 
 func TestServeEndpoints(t *testing.T) {

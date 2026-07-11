@@ -1074,11 +1074,11 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case m.state == tuiRunning && m.bubblePending:
 				m.unsendPending()
 			case m.state == tuiRunning:
-				m.ctrl.Cancel()
+				cliCancel(m.ctrl)
 				// Defensive: if the controller is no longer running (cancel
 				// completed synchronously, e.g. for shell commands), transition
 				// to idle immediately instead of waiting for TurnDone.
-				if !m.ctrl.Running() {
+				if !cliRuntimeStatus(m.ctrl).Running {
 					m.state = tuiIdle
 					m.confirmBubbleSent()
 				}
@@ -1112,10 +1112,10 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.bubblePending {
 					m.unsendPending() // server not yet replied — restore text, leave no trace
 				} else if m.cancelRequested() {
-					m.ctrl.Cancel()
+					cliCancel(m.ctrl)
 					return m, tea.Quit
 				} else {
-					m.ctrl.Cancel()
+					cliCancel(m.ctrl)
 				}
 				return m, nil
 			}
@@ -2292,13 +2292,13 @@ func (m chatTUI) handleApprovalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if allow && m.pendingApproval.Tool == planApprovalTool {
 			m.planMode = false
 		}
-		m.ctrl.Approve(m.pendingApproval.ID, allow, session, persist)
+		cliApprove(m.ctrl, m.pendingApproval.ID, allow, session, persist)
 		m.pendingApproval = nil
 		return m, nil
 	}
 	switch msg.String() {
 	case "ctrl+c":
-		m.ctrl.Cancel()
+		cliCancel(m.ctrl)
 		return answer(false, false, false)
 	case "enter":
 		return answer(true, false, false)
@@ -2348,7 +2348,7 @@ func (m chatTUI) cancelRequested() bool {
 	if m.state != tuiRunning || m.ctrl == nil {
 		return false
 	}
-	return m.ctrl.CancelRequested()
+	return cliRuntimeStatus(m.ctrl).CancelRequested
 }
 
 func (m chatTUI) runningWorkingLine(cancelRequested, styled bool) string {
@@ -3259,7 +3259,7 @@ func (m *chatTUI) unsendPending() {
 	m.pendingRestore = ""
 	m.pendingPastes = nil
 	m.turnDiscarded = true
-	m.ctrl.Cancel()
+	cliCancel(m.ctrl)
 }
 
 // ingestEvent routes one typed event from the agent. Reasoning (dim) and answer
@@ -3600,7 +3600,7 @@ func (m *chatTUI) runSlashCommand(input string) tea.Cmd {
 			m.notice("controller not ready")
 			return nil
 		}
-		if m.ctrl.Running() {
+		if cliRuntimeStatus(m.ctrl).Running {
 			m.notice("wait for the current turn to finish, then retry /reload-cmd")
 			return nil
 		}

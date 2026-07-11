@@ -21,6 +21,13 @@ type approvalBlockingController struct {
 	approved      chan struct{}
 }
 
+func (c *approvalBlockingController) ExecuteCommand(command control.Command, _ control.CommandScope) (control.CommandResult, error) {
+	if command.Kind == control.CommandApproval && command.Approval != nil {
+		c.Approve(command.Approval.ID, command.Approval.Allow, command.Approval.Session, command.Approval.Persist)
+	}
+	return control.CommandResult{Version: control.CommandVersion, Kind: command.Kind, Accepted: true}, nil
+}
+
 func newApprovalBlockingController() *approvalBlockingController {
 	return &approvalBlockingController{
 		started:  make(chan struct{}, 1),

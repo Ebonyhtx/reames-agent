@@ -249,7 +249,7 @@ func (t *WorkspaceTab) hasActiveRuntimeWork() bool {
 	if t == nil || t.Ctrl == nil {
 		return false
 	}
-	status := t.Ctrl.RuntimeStatus()
+	status := controllerRuntimeStatus(t.Ctrl)
 	return status.Running || status.PendingPrompt || status.BackgroundJobs > 0
 }
 
@@ -1509,7 +1509,7 @@ func (a *App) tabMeta(tab *WorkspaceTab, active bool) TabMeta {
 		m.ProjectColor = projectColor(tab.WorkspaceRoot)
 	}
 	if tab.Ctrl != nil {
-		status := tab.Ctrl.RuntimeStatus()
+		status := controllerRuntimeStatus(tab.Ctrl)
 		m.Running = status.Running || status.PendingPrompt || status.BackgroundJobs > 0
 		m.PendingPrompt = status.PendingPrompt
 		m.BackgroundJobs = status.BackgroundJobs
@@ -2309,7 +2309,7 @@ func (a *App) CloseTab(tabID string) error {
 		}
 		closeCtrl.SetSessionPath("") // future snapshots become no-ops
 		a.quiesceTabAutosave(tab)    // wait for any in-flight snapshot to finish
-		closeCtrl.Cancel()
+		cancelController(closeCtrl)
 		closeCtrl.Close()
 		// Release the shared plugin host reference. The host stays alive as
 		// long as any other tab for the same workspace root holds a reference;
@@ -2601,7 +2601,7 @@ func (a *App) closeTabRuntime(tab *WorkspaceTab) {
 	if ctrl != nil {
 		ctrl.SetSessionPath("") // future snapshots become no-ops
 		a.quiesceTabAutosave(tab)
-		ctrl.Cancel()
+		cancelController(ctrl)
 		ctrl.Close()
 		a.releaseTabSharedHost(tab)
 	}
@@ -5251,7 +5251,7 @@ func activityStatusForTab(tab *WorkspaceTab) string {
 	if tab.Ctrl == nil {
 		return status
 	}
-	runtimeStatus := tab.Ctrl.RuntimeStatus()
+	runtimeStatus := controllerRuntimeStatus(tab.Ctrl)
 	if runtimeStatus.PendingPrompt {
 		return topicStatusWaitingConfirmation
 	}
@@ -6551,7 +6551,7 @@ func (a *App) ListProjectTree() []ProjectNode {
 		status := activityStatusForTab(tab)
 		runtimeStatus := control.RuntimeStatus{}
 		if tab.Ctrl != nil {
-			runtimeStatus = tab.Ctrl.RuntimeStatus()
+			runtimeStatus = controllerRuntimeStatus(tab.Ctrl)
 		}
 		running := status != "" || runtimeStatus.Running || runtimeStatus.PendingPrompt || runtimeStatus.BackgroundJobs > 0
 		runtimeSessionsByTopic[topicSummaryKey(tab.Scope, tab.WorkspaceRoot, tab.TopicID)] = append(runtimeSessionsByTopic[topicSummaryKey(tab.Scope, tab.WorkspaceRoot, tab.TopicID)], runtimeSessionStatus{
@@ -7397,7 +7397,7 @@ func (a *App) tabSessionMetaSnapshotForCurrentSession(tab *WorkspaceTab) (tabSes
 		if dir, ok := safeControllerSessionDir(ctrl); ok {
 			ctrlDir = strings.TrimSpace(dir)
 		}
-		status := ctrl.RuntimeStatus()
+		status := controllerRuntimeStatus(ctrl)
 		activeWork = status.Running || status.PendingPrompt || status.BackgroundJobs > 0
 		mode = tabModeFromAxes(ctrl.PlanMode(), ctrl.AutoApproveTools())
 		toolApprovalMode = normalizeToolApprovalMode(ctrl.ToolApprovalMode())

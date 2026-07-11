@@ -22,7 +22,7 @@ func (m *chatTUI) runAutoPlanCommand(input string) {
 		m.notice("usage: /auto-plan off|on")
 		return
 	}
-	if m.ctrl != nil && m.ctrl.Running() {
+	if m.ctrl != nil && cliRuntimeStatus(m.ctrl).Running {
 		m.notice("finish or cancel the current turn before changing auto-plan")
 		return
 	}

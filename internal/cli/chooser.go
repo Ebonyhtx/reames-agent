@@ -90,7 +90,7 @@ func (m chatTUI) handleChooserKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	c := m.chooser
 	switch msg.String() {
 	case "ctrl+c":
-		m.ctrl.Cancel()
+		cliCancel(m.ctrl)
 		m.chooser = nil
 		return m, nil
 	case "esc":

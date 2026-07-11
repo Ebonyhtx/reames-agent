@@ -45,7 +45,7 @@ func (m *chatTUI) runResumeCommand(input string) {
 		m.openResumePicker()     // open interactive picker below
 		return
 	}
-	if m.ctrl.Running() {
+	if cliRuntimeStatus(m.ctrl).Running {
 		m.notice(i18n.M.ResumeBusy)
 		return
 	}

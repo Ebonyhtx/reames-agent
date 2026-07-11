@@ -147,6 +147,13 @@ type queueTestController struct {
 	canceled bool
 }
 
+func (c *queueTestController) ExecuteCommand(command control.Command, _ control.CommandScope) (control.CommandResult, error) {
+	if command.Kind == control.CommandCancel {
+		c.Cancel()
+	}
+	return control.CommandResult{Version: control.CommandVersion, Kind: command.Kind, Accepted: true}, nil
+}
+
 func (c *queueTestController) Steer(text string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -183,6 +190,13 @@ type blockingApprovalController struct {
 	approved chan struct{}
 	done     chan struct{}
 	once     sync.Once
+}
+
+func (c *blockingApprovalController) ExecuteCommand(command control.Command, _ control.CommandScope) (control.CommandResult, error) {
+	if command.Kind == control.CommandApproval && command.Approval != nil {
+		c.Approve(command.Approval.ID, command.Approval.Allow, command.Approval.Session, command.Approval.Persist)
+	}
+	return control.CommandResult{Version: control.CommandVersion, Kind: command.Kind, Accepted: true}, nil
 }
 
 func (c *blockingApprovalController) RunTurn(ctx context.Context, input string) error {

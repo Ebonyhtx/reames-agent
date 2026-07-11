@@ -78,7 +78,7 @@ func (m chatTUI) applyResumePick() (tea.Model, tea.Cmd) {
 		m.notice(i18n.M.ResumeAlreadyActive)
 		return m, nil
 	}
-	if m.ctrl.Running() {
+	if cliRuntimeStatus(m.ctrl).Running {
 		m.notice(i18n.M.ResumeBusy)
 		return m, nil
 	}

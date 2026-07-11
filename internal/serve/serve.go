@@ -1,18 +1,21 @@
-// Package serve exposes a control.Controller over HTTP: the typed event stream
-// as Server-Sent Events, and the commands as small JSON POST endpoints. It is a
+// Package serve exposes a control.Controller over HTTP: typed SSE/WebSocket
+// events and versioned JSON command endpoints. It is a
 // second frontend alongside the chat TUI — proof that the controller is
 // transport-agnostic, and the basis for a browser/desktop client. One server
 // drives one session; multiple browser tabs share it.
 package serve
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -174,7 +177,8 @@ func (s *Server) switchModel(ctx context.Context, ref string) error {
 
 	// Snapshot the current controller under a short read of s.mu only.
 	cur := s.ctl()
-	if cur.Running() {
+	status, _ := cur.ExecuteCommand(control.NewStatusCommand(), control.CommandScopeRemote)
+	if status.Status.Running {
 		return fmt.Errorf("cannot switch model while a turn is running")
 	}
 
@@ -244,7 +248,8 @@ func (s *Server) build(ctx context.Context, ref string) (*control.Controller, er
 // rebuilds via switchModel (which serializes on bindMu).
 func (s *Server) switchEffort(ctx context.Context, level string) error {
 	cur := s.ctl()
-	if cur.Running() {
+	status, _ := cur.ExecuteCommand(control.NewStatusCommand(), control.CommandScopeRemote)
+	if status.Status.Running {
 		return fmt.Errorf("cannot change effort while a turn is running")
 	}
 	cfg, err := config.Load()
@@ -327,6 +332,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("POST /submit", s.submit)
 	mux.HandleFunc("POST /cancel", s.cancel)
 	mux.HandleFunc("POST /approve", s.approve)
+	mux.HandleFunc("POST /command", s.command)
 	mux.HandleFunc("POST /plan", s.plan)
 	mux.HandleFunc("POST /compact", s.compact)
 	mux.HandleFunc("POST /new", s.newSession)
@@ -493,42 +499,15 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing input", http.StatusBadRequest)
 		return
 	}
-	trimmed := strings.TrimSpace(body.Input)
-	if strings.HasPrefix(trimmed, "!") {
-		http.Error(w, "shell commands are unavailable over HTTP", http.StatusForbidden)
+	if _, err := s.executeRemoteCommand(r.Context(), control.NewSubmitCommand(body.Input, "", "")); err != nil {
+		http.Error(w, err.Error(), commandHTTPStatus(err))
 		return
 	}
-	// Intercept /model <ref> for runtime model switching (the controller's
-	// Submit path only lists models — switching is frontend-specific).
-	if strings.HasPrefix(trimmed, "/model ") {
-		ref := strings.TrimSpace(strings.TrimPrefix(trimmed, "/model"))
-		if ref != "" {
-			if err := s.switchModel(r.Context(), ref); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-	}
-	// Intercept /effort <level> for reasoning effort switching.
-	if strings.HasPrefix(trimmed, "/effort ") {
-		level := strings.TrimSpace(strings.TrimPrefix(trimmed, "/effort"))
-		if level != "" {
-			if err := s.switchEffort(r.Context(), level); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-	}
-	s.ctl().SubmitHTTP(body.Input)
 	w.WriteHeader(http.StatusAccepted)
 }
 
 func (s *Server) cancel(w http.ResponseWriter, _ *http.Request) {
-	s.ctl().Cancel()
+	_, _ = s.executeRemoteCommand(context.Background(), control.NewCancelCommand())
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -543,8 +522,120 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing id", http.StatusBadRequest)
 		return
 	}
-	s.ctl().Approve(body.ID, body.Allow, body.Session, body.Persist)
+	if _, err := s.executeRemoteCommand(r.Context(), control.NewApprovalCommand(body.ID, body.Allow, body.Session, body.Persist)); err != nil {
+		http.Error(w, err.Error(), commandHTTPStatus(err))
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// command accepts the versioned control.Command wire contract. The legacy
+// /submit, /cancel, and /approve endpoints remain compatibility adapters to the
+// same dispatcher.
+func (s *Server) command(w http.ResponseWriter, r *http.Request) {
+	command, err := decodeControlCommand(r.Body)
+	if err != nil {
+		writeCommandError(w, command.Kind, &control.CommandError{
+			Code: control.CommandErrInvalidPayload, Field: "body", Message: "invalid command body: " + err.Error(),
+		}, http.StatusBadRequest)
+		return
+	}
+	result, err := s.executeRemoteCommand(r.Context(), command)
+	if err != nil {
+		var commandErr *control.CommandError
+		if errors.As(err, &commandErr) {
+			writeJSONStatus(w, result, commandHTTPStatus(commandErr))
+			return
+		}
+		writeCommandError(w, command.Kind, &control.CommandError{
+			Code: control.CommandErrInvalidPayload, Message: err.Error(),
+		}, http.StatusInternalServerError)
+		return
+	}
+	writeJSONStatus(w, result, http.StatusOK)
+}
+
+func decodeControlCommand(r io.Reader) (control.Command, error) {
+	var command control.Command
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&command); err != nil {
+		return command, err
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return command, fmt.Errorf("multiple JSON values")
+		}
+		return command, err
+	}
+	return command, nil
+}
+
+func (s *Server) executeRemoteCommand(ctx context.Context, command control.Command) (control.CommandResult, error) {
+	if err := control.ValidateCommand(command, control.CommandScopeRemote); err != nil {
+		return rejectedCommandResult(command.Kind, err), err
+	}
+	if command.Kind == control.CommandSubmit {
+		trimmed := strings.TrimSpace(command.Submit.Input)
+		if strings.HasPrefix(trimmed, "!") {
+			err := &control.CommandError{
+				Code: control.CommandErrForbidden, Field: "submit.input", Message: "shell commands are unavailable over HTTP",
+			}
+			return rejectedCommandResult(command.Kind, err), err
+		}
+		// Model and effort switches rebuild server-owned controller state, so the
+		// transport adapter performs them before common controller dispatch.
+		if strings.HasPrefix(trimmed, "/model ") {
+			if ref := strings.TrimSpace(strings.TrimPrefix(trimmed, "/model")); ref != "" {
+				if err := s.switchModel(ctx, ref); err != nil {
+					return rejectedCommandResult(command.Kind, nil), err
+				}
+				return s.acceptedCommandResult(command.Kind), nil
+			}
+		}
+		if strings.HasPrefix(trimmed, "/effort ") {
+			if level := strings.TrimSpace(strings.TrimPrefix(trimmed, "/effort")); level != "" {
+				if err := s.switchEffort(ctx, level); err != nil {
+					return rejectedCommandResult(command.Kind, nil), err
+				}
+				return s.acceptedCommandResult(command.Kind), nil
+			}
+		}
+	}
+	return s.ctl().ExecuteCommand(command, control.CommandScopeRemote)
+}
+
+func (s *Server) acceptedCommandResult(kind control.CommandKind) control.CommandResult {
+	status, _ := s.ctl().ExecuteCommand(control.NewStatusCommand(), control.CommandScopeRemote)
+	return control.CommandResult{Version: control.CommandVersion, Kind: kind, Accepted: true, Status: status.Status}
+}
+
+func rejectedCommandResult(kind control.CommandKind, err *control.CommandError) control.CommandResult {
+	return control.CommandResult{Version: control.CommandVersion, Kind: kind, Error: err}
+}
+
+func commandHTTPStatus(err error) int {
+	var commandErr *control.CommandError
+	if !errors.As(err, &commandErr) {
+		return http.StatusInternalServerError
+	}
+	if commandErr.Code == control.CommandErrForbidden {
+		return http.StatusForbidden
+	}
+	if commandErr.Code == control.CommandErrBusy {
+		return http.StatusConflict
+	}
+	return http.StatusBadRequest
+}
+
+func writeCommandError(w http.ResponseWriter, kind control.CommandKind, err *control.CommandError, status int) {
+	writeJSONStatus(w, rejectedCommandResult(kind, err), status)
+}
+
+func writeJSONStatus(w http.ResponseWriter, value any, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
 }
 
 func (s *Server) plan(w http.ResponseWriter, r *http.Request) {
@@ -782,6 +873,17 @@ func (rw *responseWriter) Flush() {
 	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Hijack delegates connection takeover to the underlying writer. WebSocket
+// upgrades require http.Hijacker; hiding it behind the logging wrapper made the
+// advertised /ws endpoint return 500 before the handshake completed.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("response writer does not support hijacking")
+	}
+	return h.Hijack()
 }
 
 // rewind rewinds the session to a checkpoint.
@@ -1059,11 +1161,13 @@ func (s *Server) branches(w http.ResponseWriter, _ *http.Request) {
 
 // status returns a combined status snapshot.
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
+	runtimeResult, _ := s.ctl().ExecuteCommand(control.NewStatusCommand(), control.CommandScopeRemote)
 	used, window := s.ctl().ContextSnapshot()
 	hit, miss := s.ctl().SessionCache()
 	sess := map[string]any{
 		"label":            s.ctl().Label(),
-		"running":          s.ctl().Running(),
+		"running":          runtimeResult.Status.Running,
+		"runtime":          runtimeResult.Status,
 		"plan":             s.ctl().PlanMode(),
 		"autoApproveTools": s.ctl().AutoApproveTools(),
 		"bypass":           s.ctl().AutoApproveTools(),

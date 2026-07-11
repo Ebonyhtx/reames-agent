@@ -28,7 +28,7 @@ func (m *chatTUI) runMemoryV5Command(input string) {
 		m.notice(fmt.Sprintf("memory-v5: %s (usage: /memory-v5 off|observe|compact|on|status|learnings)", cliMemoryV5Mode(cfg.MemoryCompilerEnabled(), cfg.MemoryCompilerVerbosity())))
 		return
 	}
-	if m.ctrl != nil && m.ctrl.Running() {
+	if m.ctrl != nil && cliRuntimeStatus(m.ctrl).Running {
 		m.notice("finish or cancel the current turn before changing memory-v5")
 		return
 	}
