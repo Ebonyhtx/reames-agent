@@ -15,7 +15,7 @@ M2 收官时 production build 虽成功，但入口 JS 为 1,103,017 B、初始 
 - 删除未使用的 `@gsap/react` 与 Flip 注册；`ScrollToPlugin` 注册下沉到唯一消费者 `useScrollManager`，保留滚动行为。
 - 新增 `bundle-budget.json` 与 `check-bundle-budget.mjs`，构建后从 `dist/index.html` 解析真实 entry、modulepreload 与 stylesheet，并递归测量最大 JS；本地引用必须留在 dist 内。
 - 预算固定为 entry JS 650,000 B、初始 JS 1,250,000 B、初始 CSS 620,000 B、最大 JS asset 725,000 B、初始 JS 文件 6 个。Vite warning limit 与严格的最大 asset 预算对齐。
-- `smoke_desktop_native.py` 的证据 schema 升至 v2，分别记录首次可见、首次响应和连续三次响应的稳定时间；`--max-startup-seconds` 超限以 `startup-budget` 明确失败。Windows candidate workflow 固定使用 8 秒冷启动预算。
+- `smoke_desktop_native.py` 的证据 schema 升至 v2，分别记录首次可见、首次响应和连续三次响应的稳定时间；`--max-startup-seconds` 超限以 `startup-budget` 明确失败。本批先以本地 production 的 8 秒冷启动预算建立基线；后续 installer candidate 依据真实托管 runner 首次安装实测拆分为独立 15 秒门槛，本地门槛没有放宽。
 
 当前 production 结果：
 

@@ -105,12 +105,12 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 - 原生体验：窗口生命周期、快捷键、拖放、文件选择、通知和自动更新。
 - 可访问性：键盘导航、焦点、对比度、缩放和屏幕阅读语义。
 - [x] 性能首批：关闭态/次级界面按真实打开状态拆包，构建后强制 entry、初始 JS/CSS、最大 chunk 与请求数预算；入口 chunk 从 1,103,017 B 降至 621,270 B，初始 JS 从 1,342,548 B 降至 1,209,699 B（见 `audits/2026-07-12-m3-desktop-bundle-budget.md`）。
-- [x] 建立 Windows 原生 Desktop 冷启动硬门槛：candidate workflow 和本地 smoke 均要求 8 秒内达到连续三次响应；当前 production Wails 实测首次可见/响应 1.016 秒、稳定响应 2.016 秒，隔离 HOME 边界无泄漏（见同一审计）。
+- [x] 建立 Windows 原生 Desktop 冷启动硬门槛：本地源码 production smoke 要求 8 秒内达到连续三次响应；托管 runner 的首次安装候选依据 11.531 秒首次响应实测采用 15 秒门槛与 20 秒观察窗，两层不得互相替代。当前源码 production Wails 实测首次可见/响应 1.016 秒、稳定响应 2.016 秒，隔离 HOME 边界无泄漏（见同一审计）。
 - [x] 可访问性首批：统一真正模态层的初始焦点、Tab/Shift+Tab 围栏、嵌套顶层判定、退出动画后 opener 恢复和 `aria-modal`/读屏关联；命令面板补 combobox/listbox active-descendant 合同，设置/历史/图片/首次引导/快捷键帮助共用同一生命周期（见 `audits/2026-07-13-m3-modal-focus-accessibility.md`）。
 - [x] Windows 显示缩放闭环：连续滑动按最后选择串行合并写入，Go 偏好使用原子替换并拒绝非有限值；设置页区分启动已应用/保存中/待重启，提供立即重启与失败回滚，组件和真实浏览器覆盖 100% → 105% → 100% 状态（见 `audits/2026-07-13-m3-display-zoom-persistence.md`）。
 - [x] 主题对比度与焦点纵向合同：六套视觉风格同时覆盖深/浅色、普通/创作模式的小文本、状态色、主按钮与焦点指示器，自动浅色必须与显式浅色一致；补 forced-colors 焦点规则、局部画布焦点环重算和入口重挂载后的语义焦点恢复，并用真实浏览器切换 Graphite/Carbon/Amber 及创作模式核验最终计算值（见 `audits/2026-07-13-m3-theme-contrast.md`）。
-- [x] Windows warm relaunch 门槛：native smoke schema v3 在冷启动关闭后复用同一隔离 HOME/WebView2 profile 启动第二个真实进程，独立记录可见/响应/稳定时间、预算、早退和清理；candidate 同时强制冷启动 8 秒与 warm 6 秒预算，当前源码 production Wails 两轮稳定响应均为 1.516 秒（见 `audits/2026-07-13-m3-windows-warm-startup.md`）。
-- [ ] Linux/macOS 启动预算：candidate smoke schema v2 已在本地完成，两个平台均要求隔离 HOME 的 Desktop 状态连续三次就绪且不泄漏默认状态，Linux 同时要求最终仍有可见窗口；workflow 固定 10 秒门槛。关闭本项仍需新一轮三平台 candidate 的真实 runner 证据（见 `audits/2026-07-13-m3-linux-macos-startup-readiness.md`）。
+- [x] Windows warm relaunch 门槛：native smoke schema v3 在冷启动关闭后复用同一隔离 HOME/WebView2 profile 启动第二个真实进程，独立记录可见/响应/稳定时间、预算、早退和清理；托管安装器 candidate 强制冷启动 15 秒与 warm 6 秒预算，本地源码 production 仍保持冷启动 8 秒，当前源码两轮稳定响应均为 1.516 秒（见 `audits/2026-07-13-m3-windows-warm-startup.md`）。
+- [x] Linux/macOS 启动预算：candidate smoke schema v2 要求隔离 HOME 的 Desktop 状态连续三次就绪且不泄漏默认状态，Linux 同时要求最终仍有可见窗口；run `29209723618` 的 Linux 首次状态/窗口就绪为 4.538 秒、稳定就绪 5.567 秒，macOS 首次状态就绪 0.575 秒、稳定就绪 1.872 秒，均通过 10 秒门槛。macOS 证据只声明状态 readiness，不冒充窗口可见性（见 `audits/2026-07-13-m3-linux-macos-startup-readiness.md`）。
 - [ ] 性能后续：继续评估 locale、主工作流与 CSS 拆分，不为数字牺牲首屏可用性。
 
 UI 改动必须同时提供组件测试和一次真实浏览器或 Wails 点击验证。

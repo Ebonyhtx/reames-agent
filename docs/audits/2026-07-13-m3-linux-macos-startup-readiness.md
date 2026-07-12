@@ -2,7 +2,7 @@
 
 日期：2026-07-13
 
-状态：完整本地门禁与 workflow 门槛通过；真实 Linux/macOS candidate runner 证据待完成
+状态：已交付（commit `de893c0`；普通 CI `29209717326` 8/8、CodeQL `29209717324` 3/3；candidate run `29209723618` 的 Linux/macOS jobs 成功）
 
 ## 缺口
 
@@ -34,9 +34,12 @@ go build ./... / go vet ./... / go test ./internal/...         PASS
 desktop/go test ./... -count=1 -timeout 10m                    PASS
 frontend typecheck / test:all / production build               PASS
 docs/public readiness contracts                                PASS
-Linux/macOS native candidate runner                            PENDING
+Linux native candidate runner                                 PASS (state + visible X11 window)
+macOS native candidate runner                                 PASS (state readiness)
 ```
 
-当前证据证明 schema、采样状态机、失败分类与 workflow 参数；Windows 主机不能替代 Linux/X11 或 macOS 原生 runner。只有新的 `Desktop candidate` 三平台 workflow 完成后，才能记录真实首次/稳定 readiness 时间并关闭路线图条目。
+`Desktop candidate` run `29209723618` 的 Linux job 首次状态就绪和首次可见 X11 窗口均为 4.538 秒，连续三次稳定 readiness 为 5.567 秒；最终仍就绪、进程在观察期内存活、窗口关闭清理成功、默认状态边界变化为 0。macOS job 首次隔离状态就绪为 0.575 秒，稳定 readiness 为 1.872 秒；最终仍就绪、进程存活、terminate 清理成功、边界变化为 0。两端都满足 10 秒预算。
 
-为减少远端试错，另只读下载并检查了历史 candidate run `29070966084` 的保留工件：Linux 与 macOS 两份 schema v1 证据均在隔离 HOME 根目录包含 `desktop-projects-legacy-recovered`、`desktop-tabs.json` 和 `desktop-window.json`，边界变化为 0；Linux 还已有可见窗口记录。该历史证据证明新状态探针与真实产物输出兼容，但旧 schema 没有采样时间，不能替代新 workflow 的预算结果。
+同一矩阵的 Windows job 因旧观察窗不足而失败，所以 workflow 总结为失败；这不抹除两个独立原生平台 job 及其上传 JSON 的成功证据。macOS 没有窗口探针，结论仍严格限定为状态 readiness。Windows 的校准和复跑单独记入 Windows warm startup 审计。
+
+为减少远端试错，另只读下载并检查了历史 candidate run `29070966084` 的保留工件：Linux 与 macOS 两份 schema v1 证据均在隔离 HOME 根目录包含 `desktop-projects-legacy-recovered`、`desktop-tabs.json` 和 `desktop-window.json`，边界变化为 0；Linux 还已有可见窗口记录。该历史证据用于验证新状态探针兼容性，最终预算结论来自上述 schema v2 远端结果。
