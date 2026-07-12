@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useT } from "../lib/i18n";
+import { useDialogFocus } from "../lib/useDialogFocus";
 
 export interface ImageViewerProps {
   open: boolean;
@@ -23,6 +24,9 @@ export function ImageViewer({ open, imageUrl, imageName, onClose }: ImageViewerP
   const t = useT();
   const [portalTarget, setPortalTarget] = useState<Element | null>(null);
   const [visible, setVisible] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useDialogFocus(open && Boolean(portalTarget && imageUrl), dialogRef, closeRef);
 
   // Resolve portal target when opening.
   useEffect(() => {
@@ -69,13 +73,16 @@ export function ImageViewer({ open, imageUrl, imageName, onClose }: ImageViewerP
 
   const overlay = (
     <div
+      ref={dialogRef}
       className={`image-viewer-backdrop${visible ? " image-viewer--enter" : ""}`}
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
       aria-label={imageName || t("imageViewer.title")}
+      tabIndex={-1}
     >
       <button
+        ref={closeRef}
         className="image-viewer__close"
         type="button"
         onClick={onClose}

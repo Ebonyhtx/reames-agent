@@ -968,6 +968,8 @@ export default function App() {
   const [startupUpdateChecksEnabled, setStartupUpdateChecksEnabled] = useState<boolean | null>(null);
   const [histView, setHistView] = useState<HistoryViewState | null>(null);
   const paletteOpen = useOverlayStore((s) => s.paletteOpen);
+  const [paletteLoaded, setPaletteLoaded] = useState(false);
+  const paletteRestoreFocusRef = useRef<HTMLElement | null>(null);
   const setPaletteOpen = useOverlayStore((s) => s.setPaletteOpen);
   const shortcutsOpen = useOverlayStore((s) => s.shortcutsOpen);
   const setShortcutsOpen = useOverlayStore((s) => s.setShortcutsOpen);
@@ -980,6 +982,10 @@ export default function App() {
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
   const heartbeatOpen = useOverlayStore((s) => s.heartbeatOpen);
+
+  useEffect(() => {
+    if (paletteOpen) setPaletteLoaded(true);
+  }, [paletteOpen]);
   const setHeartbeatOpen = useOverlayStore((s) => s.setHeartbeatOpen);
   type TimeFilter = "all" | "10" | "20" | "1h" | "3h" | "5h" | "1d";
   const [topicTimeFilter, setTopicTimeFilter] = useState<TimeFilter>(() => {
@@ -2640,7 +2646,9 @@ export default function App() {
   // Command palette: ⌘K / Ctrl+K opens a fuzzy navigator over commands and
   // recent sessions. Sessions are snapshotted on open so the list is stable
   // while the palette is up.
-  const openPalette = useCallback(async () => {
+  const openPalette = useCallback(async (opener?: HTMLElement) => {
+    const active = opener ?? document.activeElement;
+    paletteRestoreFocusRef.current = active instanceof HTMLElement && active !== document.body ? active : null;
     closeTransientOverlays();
     setPaletteOpen(true);
     setPaletteSessions(await listSessions().catch(() => []));
@@ -2951,7 +2959,7 @@ export default function App() {
             onTabsClose={(ids, nextActiveTabId) => void handleTabsClose(ids, nextActiveTabId)}
             onTabsReorder={(ids) => void handleTabsReorder(ids)}
             onNewTab={() => void handleNewTab()}
-            onOpenPalette={() => void openPalette()}
+            onOpenPalette={(opener) => void openPalette(opener)}
           />
         )}
         <a className="skip-to-composer" href="#composer-input">
@@ -3394,7 +3402,7 @@ export default function App() {
                   className="topicbar__action-btn topicbar__action-btn--label topicbar__action-btn--accent"
                   type="button"
                   aria-label={t("topicBar.command")}
-                  onClick={() => void openPalette()}
+                  onClick={(event) => void openPalette(event.currentTarget)}
                 >
                   <Command size={14} />
                   <span>{t("topicBar.command")}</span>
@@ -3752,14 +3760,15 @@ export default function App() {
         </Suspense>
       )}
 
-      {paletteOpen && (
+      {paletteLoaded && (
         <Suspense fallback={null}>
           <CommandPalette
-            open
+            open={paletteOpen}
             onClose={() => setPaletteOpen(false)}
             items={paletteItems}
             placeholder={t("palette.placeholder")}
             emptyText={t("palette.empty")}
+            restoreFocusRef={paletteRestoreFocusRef}
           />
         </Suspense>
       )}

@@ -8,6 +8,7 @@ import { historyMessagesToItems, type Item } from "../lib/useController";
 import { Transcript } from "./Transcript";
 import { ContextMenu, contextMenuPointFromEvent, type ContextMenuItem, type ContextMenuPoint } from "./ContextMenu";
 import { useDeferredClose } from "../lib/useMountTransition";
+import { useDialogFocus } from "../lib/useDialogFocus";
 import { ModalCloseButton } from "./ModalCloseButton";
 
 type HistoryScopeFilter = "all" | "project" | "global";
@@ -43,6 +44,9 @@ export function HistoryPanel({
   onClose: () => void;
 }) {
   const tr = useT();
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useDialogFocus(true, dialogRef, closeRef);
   const isTrash = kind === "trash";
   // Play the modal exit animation, then let the parent unmount us.
   const { status, requestClose } = useDeferredClose(onClose, 240);
@@ -345,14 +349,18 @@ export function HistoryPanel({
   return (
     <div className="management-modal-backdrop history-modal-backdrop" data-state={status} onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
       <section
+        ref={dialogRef}
         className="management-modal history-modal"
         data-state={status}
-        aria-label={tr(isTrash ? "history.trashTitle" : "history.title")}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="history-modal-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
       <header className="management-modal__head history-modal__head">
         <div>
-          <div className="management-modal__title history-modal__title">{tr(isTrash ? "history.trashTitle" : "history.title")}</div>
+          <div id="history-modal-title" className="management-modal__title history-modal__title">{tr(isTrash ? "history.trashTitle" : "history.title")}</div>
           {!isTrash && running && <div className="management-modal__summary history-modal__summary">{tr("history.readOnlyHint")}</div>}
         </div>
         <div className="management-modal__actions history-modal__actions">
@@ -365,7 +373,7 @@ export function HistoryPanel({
               {tr(actionConfirmClearTrash ? "history.confirmClearTrash" : "history.clearTrash")}
             </button>
           )}
-          <ModalCloseButton label={tr("common.close")} onClick={requestClose} />
+          <ModalCloseButton ref={closeRef} label={tr("common.close")} onClick={requestClose} />
         </div>
       </header>
 

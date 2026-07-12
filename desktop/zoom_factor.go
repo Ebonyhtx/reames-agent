@@ -2,12 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 
 	"reames-agent/internal/config"
+	"reames-agent/internal/fileutil"
 )
+
+var zoomFactorWriteMu sync.Mutex
 
 // DesktopZoomFactor persists the user's WebView2 zoom factor preference across
 // restarts. The frontend writes it; main.go reads it before wails.Run() to set
@@ -52,24 +58,28 @@ func (a *App) GetDesktopZoomFactor() float64 {
 // SetDesktopZoomFactor persists a zoom factor for the next launch. The value
 // is clamped to [0.5, 2.0] (50% – 200%) for safety.
 func (a *App) SetDesktopZoomFactor(factor float64) error {
+	if math.IsNaN(factor) || math.IsInf(factor, 0) {
+		return fmt.Errorf("desktop zoom factor must be finite")
+	}
 	if factor < 0.5 {
 		factor = 0.5
 	}
 	if factor > 2.0 {
 		factor = 2.0
 	}
-	path := zoomFactorPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	data, err := json.Marshal(DesktopZoomFactor{ZoomFactor: factor})
 	if err != nil {
-		return err
+		return fmt.Errorf("encode desktop zoom factor: %w", err)
 	}
-	return os.WriteFile(path, data, 0o644)
+	zoomFactorWriteMu.Lock()
+	defer zoomFactorWriteMu.Unlock()
+	if err := fileutil.AtomicWriteFile(zoomFactorPath(), data, 0o600); err != nil {
+		return fmt.Errorf("save desktop zoom factor: %w", err)
+	}
+	return nil
 }
 
-// RestartApplication saves the zoom and restarts the whole process so the new
+// RestartApplication restarts the whole process so the already-persisted
 // ZoomFactor takes effect in the WebView2 window options.
 func (a *App) RestartApplication() error {
 	exe, err := os.Executable()

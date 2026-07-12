@@ -106,6 +106,8 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 - 可访问性：键盘导航、焦点、对比度、缩放和屏幕阅读语义。
 - [x] 性能首批：关闭态/次级界面按真实打开状态拆包，构建后强制 entry、初始 JS/CSS、最大 chunk 与请求数预算；入口 chunk 从 1,103,017 B 降至 621,270 B，初始 JS 从 1,342,548 B 降至 1,209,699 B（见 `audits/2026-07-12-m3-desktop-bundle-budget.md`）。
 - [x] 建立 Windows 原生 Desktop 冷启动硬门槛：candidate workflow 和本地 smoke 均要求 8 秒内达到连续三次响应；当前 production Wails 实测首次可见/响应 1.016 秒、稳定响应 2.016 秒，隔离 HOME 边界无泄漏（见同一审计）。
+- [x] 可访问性首批：统一真正模态层的初始焦点、Tab/Shift+Tab 围栏、嵌套顶层判定、退出动画后 opener 恢复和 `aria-modal`/读屏关联；命令面板补 combobox/listbox active-descendant 合同，设置/历史/图片/首次引导/快捷键帮助共用同一生命周期（见 `audits/2026-07-13-m3-modal-focus-accessibility.md`）。
+- [x] Windows 显示缩放闭环：连续滑动按最后选择串行合并写入，Go 偏好使用原子替换并拒绝非有限值；设置页区分启动已应用/保存中/待重启，提供立即重启与失败回滚，组件和真实浏览器覆盖 100% → 105% → 100% 状态（见 `audits/2026-07-13-m3-display-zoom-persistence.md`）。
 - [ ] 性能后续：在可重复的原生 harness 中建立热启动门槛，并继续评估 locale、主工作流与 CSS 拆分；补齐 Linux/macOS candidate 启动预算证据，不为数字牺牲首屏可用性。
 
 UI 改动必须同时提供组件测试和一次真实浏览器或 Wails 点击验证。

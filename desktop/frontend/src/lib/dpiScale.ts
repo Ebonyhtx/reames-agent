@@ -15,6 +15,10 @@ export const ZOOM_STEP = 0.05;
 
 export type ZoomLevel = number; // 0.5 – 2.0
 
+export type ZoomWriteQueue = {
+  enqueue(value: ZoomLevel): Promise<ZoomLevel>;
+};
+
 export const DEFAULT_ZOOM: ZoomLevel = 1.0;
 
 const ZOOM_KEY = "reames-agent-zoom-restart";
@@ -68,6 +72,45 @@ export function getRestartZoom(): ZoomLevel {
  */
 export function saveRestartZoom(userZoom: ZoomLevel): void {
   writeZoom(snapZoom(userZoom));
+}
+
+/**
+ * Serialize rapid slider updates and coalesce pending values so the last user
+ * choice is always the last value written. Wails calls are asynchronous; firing
+ * one write per input event concurrently lets an older, slower call overwrite
+ * the newest preference on disk.
+ */
+export function createZoomWriteQueue(write: (value: ZoomLevel) => Promise<void>): ZoomWriteQueue {
+  let desired: ZoomLevel | null = null;
+  let active: Promise<ZoomLevel> | null = null;
+
+  const drain = async (): Promise<ZoomLevel> => {
+    let persisted = DEFAULT_ZOOM;
+    try {
+      while (desired !== null) {
+        const next = desired;
+        desired = null;
+        await write(next);
+        persisted = next;
+      }
+      return persisted;
+    } catch (error) {
+      desired = null;
+      throw error;
+    }
+  };
+
+  return {
+    enqueue(value) {
+      desired = snapZoom(value);
+      if (!active) {
+        active = drain().finally(() => {
+          active = null;
+        });
+      }
+      return active;
+    },
+  };
 }
 
 /**

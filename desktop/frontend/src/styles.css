@@ -14373,6 +14373,20 @@ body > .mermaid-diagram--fullscreen {
   min-width: 42px;
 }
 
+.zoom-slider__status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-height: 28px;
+  color: var(--fg-dim);
+  font-size: var(--font-control-small);
+}
+
+.zoom-slider__status .btn {
+  flex: none;
+}
+
 .zoom-stepper {
   display: inline-flex;
   align-items: center;

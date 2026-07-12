@@ -46,7 +46,7 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 - 核心、Desktop 和前端已建立本地与远端 CI 基线，并有六目标 CLI candidate、三平台 Desktop candidate 及原生安装 smoke 记录。
 - M1 真实任务闭环已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复以及五类原生失败恢复均有分层证据。
 - 24 个内置工具，具备权限、沙箱、检查点、记忆、技能、插件、定时任务、LSP 和证据账本等模块。
-- M3 已进入 Desktop 日用化：关闭态/次级界面已按需拆包并受真实产物硬预算保护，入口 JS 较基线下降 43.6%；Windows production Wails 冷启动已建立 8 秒门槛，当前稳定响应实测 2.016 秒。
+- M3 已进入 Desktop 日用化：关闭态/次级界面已按需拆包并受真实产物硬预算保护，入口 JS 较基线下降 43.6%；Windows production Wails 冷启动已建立 8 秒门槛，当前稳定响应实测 2.016 秒；首批模态焦点、键盘围栏与读屏语义已统一，Windows 显示缩放具备原子持久化、最后选择胜出、待重启提示和直接重启闭环。
 - 当前最大风险不是“缺功能”，而是 Desktop 日用化细节、插件供应链、远程入口加固和真实 IM 回环尚未完全闭环；统一 control 边界已关闭并有远端 CI/CodeQL 证据，transport 对 `agent/provider/tool` 的生产直连为零，版本化 command/event/display DTO、prompt metadata、会话持久化/复制、Desktop session-store、ACP/CLI 装配和终端渲染路径已收口。
 - `site/`、`workers/` 等遗留产品面仍需按运行引用、发布依赖和替代实现逐批判断，不能一次性盲删。
 

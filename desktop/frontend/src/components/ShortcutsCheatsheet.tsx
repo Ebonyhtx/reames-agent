@@ -8,6 +8,7 @@ import {
 import type { DictKey, Translator } from "../lib/i18n";
 import { ModalCloseButton } from "./ModalCloseButton";
 import { ShortcutComboDisplay } from "./ShortcutComboDisplay";
+import { useDialogFocus } from "../lib/useDialogFocus";
 
 const SECTION_ORDER: ShortcutSection[] = ["global", "session", "view", "tools", "help"];
 const SECTION_LABEL_KEYS: Record<ShortcutSection, DictKey> = {
@@ -30,7 +31,7 @@ export function ShortcutsCheatsheet({
   t: Translator;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const groups = useMemo(() => {
     return SECTION_ORDER.map((section) => ({
       section,
@@ -38,15 +39,7 @@ export function ShortcutsCheatsheet({
     })).filter((group) => group.items.length > 0);
   }, []);
 
-  useEffect(() => {
-    if (open) {
-      restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      requestAnimationFrame(() => closeRef.current?.focus());
-      return;
-    }
-    if (restoreFocusRef.current?.isConnected) restoreFocusRef.current.focus();
-    restoreFocusRef.current = null;
-  }, [open]);
+  useDialogFocus(open, dialogRef, closeRef);
 
   useEffect(() => {
     if (!open) return;
@@ -64,10 +57,12 @@ export function ShortcutsCheatsheet({
   return (
     <div className="drawer-backdrop shortcuts-cheatsheet-backdrop" onClick={onClose} role="presentation">
       <aside
+        ref={dialogRef}
         className="drawer drawer--wide shortcuts-cheatsheet"
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-cheatsheet-title"
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="drawer__head">

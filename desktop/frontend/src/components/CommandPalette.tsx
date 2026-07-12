@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Command, Search } from "lucide-react";
 import { useT } from "../lib/i18n";
 import { useMountTransition } from "../lib/useMountTransition";
+import { useDialogFocus } from "../lib/useDialogFocus";
 
 // CommandPalette is a ⌘K / Ctrl+K modal that surfaces the desktop app's
 // long-tail navigation surface. Tabs through sessions, slash-commands, and
@@ -51,22 +52,25 @@ export function CommandPalette({
   items,
   placeholder,
   emptyText,
+  restoreFocusRef,
 }: {
   open: boolean;
   onClose: () => void;
   items: PaletteItem[];
   placeholder: string;
   emptyText: string;
+  restoreFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useT();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isOpenRef = useRef(false);
-  isOpenRef.current = open;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
   // Keep the palette mounted through its exit animation after `open` flips
   // false; `status` drives the enter/exit keyframes via data-state.
   const { mounted, status } = useMountTransition(open, 200);
+  useDialogFocus(open, dialogRef, inputRef, restoreFocusRef);
 
   // Re-init whenever the palette opens: clear the query, reset the
   // highlight, and steal focus. Doing it on the open edge (not on every
@@ -81,17 +85,6 @@ export function CommandPalette({
       inputRef.current?.focus();
     }
   }, [open, items.length]);
-
-  // Callback ref: when the input element mounts while the palette is open,
-  // focus it immediately. This handles the case where the DOM element
-  // becomes available after the useLayoutEffect already ran.
-  const inputCallbackRef = useCallback(
-    (el: HTMLInputElement | null) => {
-      inputRef.current = el;
-      if (el && isOpenRef.current) el.focus();
-    },
-    [],
-  );
 
   // score is the fuzzy match: every space-separated query token must
   // appear (case-insensitively) in the candidate's haystack, in the order
@@ -205,17 +198,22 @@ export function CommandPalette({
       onClick={onClose}
       role="presentation"
     >
-      <div className="palette" data-state={status} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={placeholder}>
+      <div ref={dialogRef} className="palette" data-state={status} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={placeholder} tabIndex={-1}>
         <div className="palette__inputrow">
           <Search className="palette__search-icon" size={18} aria-hidden="true" />
           <input
-            ref={inputCallbackRef}
+            ref={inputRef}
             className="palette__input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={placeholder}
             spellCheck={false}
             autoComplete="off"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="true"
+            aria-controls={listboxId}
+            aria-activedescendant={active >= 0 && flat[active] ? `${listboxId}-option-${active}` : undefined}
           />
           <button
             className="palette__esc"
@@ -228,7 +226,7 @@ export function CommandPalette({
             esc
           </button>
         </div>
-        <div className="palette__list" role="listbox">
+        <div id={listboxId} className="palette__list" role="listbox">
           {flat.length === 0 ? (
             <div className="palette__empty">{emptyText}</div>
           ) : (
@@ -244,6 +242,7 @@ export function CommandPalette({
                     const on = idx === active;
                     return (
                       <button
+                        id={`${listboxId}-option-${idx}`}
                         type="button"
                         role="option"
                         aria-selected={on}
@@ -269,6 +268,7 @@ export function CommandPalette({
                     const on = idx === active;
                     return (
                       <button
+                        id={`${listboxId}-option-${idx}`}
                         type="button"
                         role="option"
                         aria-selected={on}

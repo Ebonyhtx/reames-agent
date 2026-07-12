@@ -2,6 +2,7 @@ import { lazy, memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, u
 import { Bot as BotIcon, Check, CheckCircle2, ChevronDown, ChevronUp, Clipboard, GripVertical, KeyRound, Loader2, MessageCircle, Minus, Play, Plus, QrCode, RefreshCw, RotateCcw, Send } from "lucide-react";
 import { asArray } from "../lib/array";
 import { useDeferredClose } from "../lib/useMountTransition";
+import { useDialogFocus } from "../lib/useDialogFocus";
 import { app } from "../lib/bridge";
 import { normalizeLangPref, useI18n, useT, type DictKey, type LangPref } from "../lib/i18n";
 import { apiKeyEnvFromProviderName, inferredVisionModels, mergedFetchedProviderModels, providerApiKeyEnvForSave, providerDefaultModel, providerIsConfigured, providerModelCandidates, providerRequiresKey } from "../lib/providerModels";
@@ -17,7 +18,7 @@ import {
   type ThemeStyle,
 } from "../lib/theme";
 import { TEXT_SIZES, applyTextSize, getTextSize, type TextSize } from "../lib/textSize";
-import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, snapZoom, zoomToPercent, saveRestartZoom, getRestartZoom, type ZoomLevel } from "../lib/dpiScale";
+import { createZoomWriteQueue, DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, snapZoom, zoomToPercent, saveRestartZoom, getRestartZoom, type ZoomLevel } from "../lib/dpiScale";
 import {
   applyFontFamily,
   applyMonoFontFamily,
@@ -95,6 +96,10 @@ export function SettingsPanel({
   const [themeStyle, setThemeStyleState] = useState<ThemeStyle>(() => getThemeStyle(getTheme()));
   const [textSize, setTextSizeState] = useState<TextSize>(getTextSize());
   const [zoomPct, setZoomPct] = useState<number>(zoomToPercent(getRestartZoom()));
+  const [zoomAppliedPct, setZoomAppliedPct] = useState<number>(zoomToPercent(getRestartZoom()));
+  const [zoomPersistedPct, setZoomPersistedPct] = useState<number>(zoomToPercent(getRestartZoom()));
+  const [zoomSaving, setZoomSaving] = useState(false);
+  const [zoomRestarting, setZoomRestarting] = useState(false);
   const [fontFamily, setFontFamilyState] = useState<FontFamily>(getFontFamily());
   const [monoFontFamily, setMonoFontFamilyState] = useState<MonoFontFamily>(getMonoFontFamily());
   const [customFontName, setCustomFontNameState] = useState<string>(getCustomFontName());
@@ -102,7 +107,12 @@ export function SettingsPanel({
   const [tab, setTab] = useState<SettingsTab>(initialTab === "providers" ? "models" : initialTab ?? "general");
   // Play the modal exit animation, then let the parent unmount us.
   const { status, requestClose } = useDeferredClose(onClose, 240);
-  const zoomSaveSeq = useRef(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useDialogFocus(true, dialogRef, closeRef);
+  const zoomEditSeq = useRef(0);
+  const zoomPersistedRef = useRef<ZoomLevel>(getRestartZoom());
+  const zoomWriteQueue = useMemo(() => createZoomWriteQueue((value) => app.SetDesktopZoomFactor(value)), []);
 
   const reload = useCallback(async () => {
     setLoadingSettings(true);
@@ -133,13 +143,18 @@ export function SettingsPanel({
   useEffect(() => {
     if (desktopPlatform !== "windows") return;
     let cancelled = false;
+    const initialEditSeq = zoomEditSeq.current;
     void (async () => {
       try {
         const persisted = await app.GetDesktopZoomFactor();
-        if (cancelled || typeof persisted !== "number" || !Number.isFinite(persisted)) return;
+        if (cancelled || zoomEditSeq.current !== initialEditSeq || typeof persisted !== "number" || !Number.isFinite(persisted)) return;
         const snapped = snapZoom(persisted);
+        const pct = zoomToPercent(snapped);
+        zoomPersistedRef.current = snapped;
         saveRestartZoom(snapped);
-        setZoomPct(zoomToPercent(snapped));
+        setZoomPct(pct);
+        setZoomAppliedPct(pct);
+        setZoomPersistedPct(pct);
       } catch {
         // Older mocks or startup races can lack the binding; keep the local fallback.
       }
@@ -180,17 +195,40 @@ export function SettingsPanel({
   }, [reload, onChanged, t]);
   const setRestartZoom = useCallback(async (zoom: ZoomLevel) => {
     const snapped = snapZoom(zoom);
-    const seq = ++zoomSaveSeq.current;
+    const seq = ++zoomEditSeq.current;
     setErr(null);
     setWarning(null);
     setZoomPct(zoomToPercent(snapped));
+    setZoomSaving(true);
     try {
-      await app.SetDesktopZoomFactor(snapped);
-      if (seq === zoomSaveSeq.current) saveRestartZoom(snapped);
+      const persisted = await zoomWriteQueue.enqueue(snapped);
+      if (seq !== zoomEditSeq.current) return;
+      const pct = zoomToPercent(persisted);
+      zoomPersistedRef.current = persisted;
+      saveRestartZoom(persisted);
+      setZoomPct(pct);
+      setZoomPersistedPct(pct);
     } catch (e) {
-      if (seq !== zoomSaveSeq.current) return;
+      if (seq !== zoomEditSeq.current) return;
       setErr(formatSettingsError(e, t));
-      setZoomPct(zoomToPercent(getRestartZoom()));
+      const persisted = zoomPersistedRef.current;
+      saveRestartZoom(persisted);
+      setZoomPct(zoomToPercent(persisted));
+      setZoomPersistedPct(zoomToPercent(persisted));
+    } finally {
+      if (seq === zoomEditSeq.current) setZoomSaving(false);
+    }
+  }, [t, zoomWriteQueue]);
+  const restartForZoom = useCallback(async () => {
+    setErr(null);
+    setWarning(null);
+    setZoomRestarting(true);
+    try {
+      await app.RestartApplication();
+    } catch (e) {
+      setErr(formatSettingsError(e, t));
+    } finally {
+      setZoomRestarting(false);
     }
   }, [t]);
 
@@ -212,10 +250,10 @@ export function SettingsPanel({
 
   return (
     <div id="settings-modal" className="management-modal-backdrop settings-modal-backdrop" data-state={status} onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
-      <div className="management-modal settings-modal" data-state={status}>
+      <div ref={dialogRef} className="management-modal settings-modal" data-state={status} role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" tabIndex={-1}>
         <header className="management-modal__head settings-modal__head">
-          <div className="management-modal__title settings-modal__title">{t("settings.title")}</div>
-          <ModalCloseButton id="settings-modal-close" label={t("common.close")} onClick={requestClose} />
+          <div id="settings-modal-title" className="management-modal__title settings-modal__title">{t("settings.title")}</div>
+          <ModalCloseButton ref={closeRef} id="settings-modal-close" label={t("common.close")} onClick={requestClose} />
         </header>
 
         <div className="settings-center">
@@ -264,6 +302,9 @@ export function SettingsPanel({
                       textSize={textSize}
                       showDisplayZoom={desktopPlatform === "windows"}
                       zoomPct={zoomPct}
+                      zoomRestartRequired={zoomPersistedPct !== zoomAppliedPct}
+                      zoomSaving={zoomSaving}
+                      zoomRestarting={zoomRestarting}
                       fontFamily={fontFamily}
                       monoFontFamily={monoFontFamily}
                       customFontName={customFontName}
@@ -283,6 +324,7 @@ export function SettingsPanel({
                         setTextSizeState(size);
                       }}
                       onRestartZoom={setRestartZoom}
+                      onRestartForZoom={restartForZoom}
                       onFontFamily={(font) => {
                         applyFontFamily(font);
                         setFontFamilyState(font);
@@ -6607,6 +6649,9 @@ function AppearanceSection({
   textSize,
   showDisplayZoom,
   zoomPct,
+  zoomRestartRequired,
+  zoomSaving,
+  zoomRestarting,
   fontFamily,
   monoFontFamily,
   customFontName,
@@ -6615,6 +6660,7 @@ function AppearanceSection({
   onThemeStyle,
   onTextSize,
   onRestartZoom,
+  onRestartForZoom,
   onFontFamily,
   onMonoFontFamily,
   onCustomFontNameChange,
@@ -6625,6 +6671,9 @@ function AppearanceSection({
   textSize: TextSize;
   showDisplayZoom: boolean;
   zoomPct: number;
+  zoomRestartRequired: boolean;
+  zoomSaving: boolean;
+  zoomRestarting: boolean;
   fontFamily: FontFamily;
   monoFontFamily: MonoFontFamily;
   customFontName: string;
@@ -6633,6 +6682,7 @@ function AppearanceSection({
   onThemeStyle: (style: ThemeStyle) => void;
   onTextSize: (size: TextSize) => void;
   onRestartZoom: (zoom: ZoomLevel) => Promise<void>;
+  onRestartForZoom: () => Promise<void>;
   onFontFamily: (font: FontFamily) => void;
   onMonoFontFamily: (font: MonoFontFamily) => void;
   onCustomFontNameChange: (name: string) => void;
@@ -6763,6 +6813,7 @@ function AppearanceSection({
                 <div className="slider-thumb" style={{ left: `${zoomProgressPct}%` }} />
                 <input
                   aria-label={t("settings.displayZoom")}
+                  aria-valuetext={`${zoomPct}%`}
                   type="range"
                   min={zoomMinPct}
                   max={zoomMaxPct}
@@ -6772,6 +6823,25 @@ function AppearanceSection({
                 />
               </div>
               <span className="zoom-slider__label">{zoomMaxPct}%</span>
+            </div>
+            <div className="zoom-slider__status" role="status" aria-live="polite">
+              {zoomSaving ? (
+                <span>{t("settings.displayZoomSaving")}</span>
+              ) : zoomRestartRequired ? (
+                <>
+                  <span>{t("settings.displayZoomPending", { zoom: zoomPct })}</span>
+                  <button
+                    type="button"
+                    className="btn btn--small"
+                    disabled={zoomRestarting}
+                    onClick={() => { void onRestartForZoom(); }}
+                  >
+                    {zoomRestarting ? t("settings.displayZoomRestarting") : t("settings.displayZoomRestart")}
+                  </button>
+                </>
+              ) : (
+                <span>{t("settings.displayZoomApplied")}</span>
+              )}
             </div>
           </div>
         </SettingsField>

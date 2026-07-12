@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import logo from "../assets/logo.svg";
 import { useT } from "../lib/i18n";
 import { app, openExternal } from "../lib/bridge";
+import { useDialogFocus } from "../lib/useDialogFocus";
 
 // Full-window first-run gate: validate a pasted key via Go, then onComplete
 // unmounts us so the rebuilt controller's main UI takes over.
@@ -12,6 +13,8 @@ export function OnboardingOverlay({ onComplete }: { onComplete: () => void }) {
   const [skipping, setSkipping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(true, dialogRef, inputRef);
 
   const submit = useCallback(async () => {
     const key = value.trim();
@@ -60,9 +63,16 @@ export function OnboardingOverlay({ onComplete }: { onComplete: () => void }) {
 
   return (
     <div className="onboarding">
-      <div className="onboarding__card">
+      <div
+        ref={dialogRef}
+        className="onboarding__card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-title"
+        tabIndex={-1}
+      >
         <img src={logo} className="onboarding__logo" alt="Reames Agent" draggable={false} />
-        <div className="onboarding__title">{t("onboarding.title")}</div>
+        <div id="onboarding-title" className="onboarding__title">{t("onboarding.title")}</div>
         <div className="onboarding__tag">{t("onboarding.tagline")}</div>
 
         <label className="onboarding__label" htmlFor="onboarding-key">

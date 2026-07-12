@@ -19,6 +19,7 @@ function ok(cond: boolean, label: string) {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appSource = readFileSync(resolve(here, "../App.tsx"), "utf8");
+const commandPaletteSource = readFileSync(resolve(here, "../components/CommandPalette.tsx"), "utf8");
 const settingsSource = readFileSync(resolve(here, "../components/SettingsPanel.tsx"), "utf8");
 const markdownSource = readFileSync(resolve(here, "../components/Markdown.tsx"), "utf8");
 const heartbeatSurfaceSource = readFileSync(resolve(here, "../custom/features/heartbeat/HeartbeatPanelSurface.tsx"), "utf8");
@@ -62,6 +63,24 @@ ok(
   deferredSurfaces.every((name) => appSource.includes(`import("./components/${name}")`)) &&
     appSource.includes('import("./custom/features/heartbeat/HeartbeatPanelSurface")'),
   "App loads closed and secondary surfaces on demand",
+);
+ok(
+  appSource.includes("const [paletteLoaded, setPaletteLoaded] = useState(false)") &&
+    appSource.includes("{paletteLoaded && (") &&
+    appSource.includes("open={paletteOpen}"),
+  "command palette stays mounted after first load so its close transition can finish",
+);
+ok(
+  commandPaletteSource.includes("useDialogFocus(open, dialogRef, inputRef, restoreFocusRef)") &&
+    commandPaletteSource.includes("ref={inputRef}") &&
+    !commandPaletteSource.includes("inputCallbackRef"),
+  "command palette leaves focus capture and restoration to the shared dialog lifecycle",
+);
+ok(
+  appSource.includes("paletteRestoreFocusRef.current = active instanceof HTMLElement") &&
+    appSource.includes("restoreFocusRef={paletteRestoreFocusRef}") &&
+    appSource.includes("openPalette(event.currentTarget)"),
+  "lazy command palette receives the opener captured before its chunk mounts",
 );
 ok(
   !appSource.includes('import "./custom/features/heartbeat/heartbeat.css"') &&

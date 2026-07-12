@@ -28,7 +28,7 @@ interface AppChromeProps {
   onTabsClose: (tabIds: string[], nextActiveTabId?: string) => void;
   onTabsReorder: (tabIds: string[]) => void;
   onNewTab: () => void;
-  onOpenPalette: () => void;
+  onOpenPalette: (opener: HTMLButtonElement) => void;
 }
 
 export function AppChrome({
@@ -111,7 +111,7 @@ export function AppChrome({
         <button
           className="app-chrome__workbench-search"
           type="button"
-          onClick={onOpenPalette}
+          onClick={(event) => onOpenPalette(event.currentTarget)}
           aria-label={t("palette.placeholder")}
         >
           <Search size={18} />
@@ -140,7 +140,7 @@ export function AppChrome({
                 "app-chrome__command",
               ].filter(Boolean).join(" ")}
               type="button"
-              onClick={onOpenPalette}
+              onClick={(event) => onOpenPalette(event.currentTarget)}
               aria-label={t("palette.placeholder")}
               title={t("palette.placeholder")}
             >
@@ -167,7 +167,7 @@ export function AppChrome({
                 "app-chrome__command",
               ].filter(Boolean).join(" ")}
               type="button"
-              onClick={onOpenPalette}
+              onClick={(event) => onOpenPalette(event.currentTarget)}
               aria-label={t("palette.placeholder")}
               title={t("palette.placeholder")}
             >

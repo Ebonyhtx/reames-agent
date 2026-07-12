@@ -295,6 +295,7 @@ document.body.appendChild(zoomRootEl);
 const zoomRoot = createRoot(zoomRootEl);
 let persistedZoom = 0.5;
 const savedZoomFactors: number[] = [];
+let zoomRestartCalls = 0;
 window.go = {
   main: {
     App: {
@@ -303,6 +304,9 @@ window.go = {
       SetDesktopZoomFactor: async (factor: number) => {
         persistedZoom = factor;
         savedZoomFactors.push(factor);
+      },
+      RestartApplication: async () => {
+        zoomRestartCalls += 1;
       },
     } as Partial<AppBindings> as AppBindings,
   },
@@ -334,6 +338,14 @@ await waitFor("display zoom reset", () => document.querySelector(".zoom-slider__
 
 eq(savedZoomFactors.at(-1), 1, "display zoom reset writes the default zoom factor");
 eq(localStorage.getItem("reames-agent-zoom-restart"), "1", "display zoom reset updates the local restart zoom cache");
+ok(document.body.textContent?.includes("Restart to apply 100% display zoom.") === true, "changed display zoom announces that restart is required");
+const restartZoomButton = Array.from(document.querySelectorAll("button")).find((button) => button.textContent?.trim() === "Restart now");
+if (!restartZoomButton) throw new Error("display zoom restart button did not render");
+await act(async () => {
+  restartZoomButton.click();
+  await flushPromises();
+});
+eq(zoomRestartCalls, 1, "display zoom restart action calls the native restart binding");
 
 await act(async () => {
   zoomRoot.unmount();
