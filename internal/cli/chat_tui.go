@@ -21,7 +21,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/command"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
@@ -34,9 +33,9 @@ import (
 	"reames-agent/internal/outputstyle"
 	"reames-agent/internal/permission"
 	"reames-agent/internal/plugin"
-	"reames-agent/internal/provider"
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/skill"
+	"reames-agent/internal/termrender"
 )
 
 // chatTUI is a bubbletea Model that normally owns the terminal with an
@@ -117,7 +116,7 @@ type chatTUI struct {
 
 	// history is a resumed session's messages, committed to scrollback once on
 	// the first WindowSizeMsg so a reopened chat shows its prior transcript.
-	history []provider.Message
+	history []control.TranscriptMessage
 
 	// reasoning accumulates the in-progress thinking stream (dim); pending
 	// accumulates the in-progress answer (raw markdown). They are committed to
@@ -286,7 +285,7 @@ type chatTUI struct {
 	// model — the swap happens in runModelSubcommand on the running copy). nil
 	// disables /model. modelRef is the active "provider/model" ref, marked
 	// current in the picker.
-	buildController func(ref string, carry []provider.Message, resumePath string) (*control.Controller, error)
+	buildController func(ref string, carry control.SessionHistorySnapshot, resumePath string) (*control.Controller, error)
 	modelRef        string
 	effortLevel     string // "" when the current provider/model has no configurable effort
 
@@ -532,7 +531,7 @@ func newChatTUI(ctrl control.SessionAPI, missing string, eventCh chan event.Even
 		shellTranscriptIdx:   make(map[string]int),
 		toolLineCountByID:    make(map[string]int),
 		eventCh:              eventCh,
-		history:              ctrl.History(),
+		history:              ctrl.Transcript(),
 		host:                 ctrl.Host(),
 		commands:             ctrl.Commands(),
 		skills:               ctrl.Skills(),
@@ -2784,7 +2783,7 @@ func (m chatTUI) renderApprovalBanner() string {
 	if m.pendingApproval.Tool == control.SandboxEscapeApprovalTool {
 		choices = i18n.M.SandboxEscapeApprovalChoices
 	}
-	if m.pendingApproval.Tool == agent.PlanModeReadOnlyCommandApprovalTool {
+	if m.pendingApproval.Tool == control.PlanModeReadOnlyCommandApprovalTool {
 		choices = i18n.M.PlanModeReadOnlyCommandChoices
 	}
 	if !control.RequiresFreshHumanApprovalTool(m.pendingApproval.Tool) && m.pendingApproval.Tool == "bash" && permission.BashCommandPrefix(m.pendingApproval.Subject) != "" {
@@ -2802,7 +2801,7 @@ func (m chatTUI) renderApprovalBanner() string {
 // MCP tools are advertised as mcp__<server>__<tool>; showing the short tool name
 // first keeps the approval prompt readable while preserving the source.
 func approvalToolDetails(toolName string) (name, detail string) {
-	if toolName == agent.PlanModeReadOnlyCommandApprovalTool {
+	if toolName == control.PlanModeReadOnlyCommandApprovalTool {
 		return i18n.M.ApprovalToolLabelPlanModeReadOnly, fmt.Sprintf(i18n.M.ToolApprovalSourceFmt, i18n.M.ToolApprovalBuiltIn)
 	}
 	if toolName == control.SandboxEscapeApprovalTool {
@@ -3373,7 +3372,7 @@ func (m *chatTUI) ingestEvent(e event.Event) {
 		if e.Usage != nil {
 			m.turnTokens += e.Usage.CompletionTokens
 		}
-		if line := agent.FormatUsageLine(e.Usage, e.Pricing, e.CacheDiagnostics); line != "" {
+		if line := termrender.FormatUsageLine(e.Usage, e.Pricing, e.CacheDiagnostics); line != "" {
 			m.finalizeStreamed()
 			m.commitLine(line)
 		}
@@ -3729,7 +3728,7 @@ func (m *chatTUI) runCopyCommand(input string) tea.Cmd {
 	// (or a non-numeric argument) opens the interactive picker instead.
 	arg := strings.TrimSpace(strings.TrimPrefix(input, "/copy"))
 	if n, err := strconv.Atoi(arg); err == nil && n > 0 {
-		msgs := m.ctrl.History()
+		msgs := m.ctrl.Transcript()
 		parts := copyAssistantParts(msgs)
 		if len(parts) == 0 {
 			m.notice(i18n.M.SlashCopyEmpty)
@@ -3766,10 +3765,10 @@ func firstLine(s string) string {
 // copyAssistantParts returns the Content of assistant messages after the last
 // user message in msgs, skipping empty strings and model placeholders ("…", "...").
 // The result is chronological (oldest first).
-func copyAssistantParts(msgs []provider.Message) []string {
+func copyAssistantParts(msgs []control.TranscriptMessage) []string {
 	lastUserIdx := -1
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == provider.RoleUser {
+		if msgs[i].Role == control.TranscriptUser && !msgs[i].Hidden {
 			lastUserIdx = i
 			break
 		}
@@ -3780,7 +3779,7 @@ func copyAssistantParts(msgs []provider.Message) []string {
 	}
 	var parts []string
 	for i := start; i < len(msgs); i++ {
-		if msgs[i].Role != provider.RoleAssistant {
+		if msgs[i].Role != control.TranscriptAssistant {
 			continue
 		}
 		c := strings.TrimSpace(msgs[i].Content)
@@ -3796,7 +3795,7 @@ func copyAssistantParts(msgs []provider.Message) []string {
 // system messages, reasoning/thinking content, and tool calls/results.
 func (m *chatTUI) runExportCommand(input string) {
 	m.echoLocalCommand(input)
-	msgs := m.ctrl.History()
+	msgs := m.ctrl.Transcript()
 	if len(msgs) == 0 {
 		m.notice(i18n.M.SlashExportEmpty)
 		return
@@ -3804,38 +3803,38 @@ func (m *chatTUI) runExportCommand(input string) {
 
 	var b strings.Builder
 	b.WriteString("# reamesAgent session\n\n")
-	lastRole := provider.Role("")
+	lastRole := control.TranscriptRole("")
 	exportedMessages := 0
 	for _, msg := range msgs {
 		switch msg.Role {
-		case provider.RoleUser:
+		case control.TranscriptUser:
 			// Skip internal steer messages.
-			if _, isSteer := agent.SteerText(msg.Content); isSteer {
+			if msg.Hidden || msg.SteerText != "" {
 				continue
 			}
 			content := exportUserContent(msg.Content)
 			if content == "" {
 				continue
 			}
-			if lastRole != provider.RoleUser {
+			if lastRole != control.TranscriptUser {
 				b.WriteString("## User\n\n")
 			}
 			b.WriteString(content)
 			b.WriteString("\n\n")
 			exportedMessages++
-			lastRole = provider.RoleUser
-		case provider.RoleAssistant:
+			lastRole = control.TranscriptUser
+		case control.TranscriptAssistant:
 			content := strings.TrimSpace(msg.Content)
 			if content == "" {
 				continue
 			}
-			if lastRole != provider.RoleAssistant {
+			if lastRole != control.TranscriptAssistant {
 				b.WriteString("## Assistant\n\n")
 			}
 			b.WriteString(content)
 			b.WriteString("\n\n")
 			exportedMessages++
-			lastRole = provider.RoleAssistant
+			lastRole = control.TranscriptAssistant
 		}
 	}
 	if exportedMessages == 0 {
@@ -4039,19 +4038,22 @@ func (m *chatTUI) runMCPPrompt(input string) tea.Cmd {
 // replaySectionsFor turns a loaded session into scrollback blocks: user bubbles
 // and assistant markdown. Tool messages are dropped — needed in session state
 // but noise in the visible transcript on resume.
-func replaySectionsFor(history []provider.Message, width int, renderer *mdRenderer) []string {
+func replaySectionsFor(history []control.TranscriptMessage, width int, renderer *mdRenderer) []string {
 	var out []string
 	for _, m := range history {
 		switch m.Role {
-		case provider.RoleUser:
+		case control.TranscriptUser:
+			if m.Hidden {
+				continue
+			}
 			// Steer messages are surfaced as a notice line, not a user bubble.
-			if steerText, isSteer := agent.SteerText(m.Content); isSteer {
-				out = append(out, fmt.Sprintf("  ↪ %s\n\n", steerText))
+			if m.SteerText != "" {
+				out = append(out, fmt.Sprintf("  ↪ %s\n\n", m.SteerText))
 				continue
 			}
 			content := control.StripComposePrefixes(m.Content)
 			out = append(out, renderUserBubble(content, width, false)+"\n\n")
-		case provider.RoleAssistant:
+		case control.TranscriptAssistant:
 			body := strings.TrimSpace(m.Content)
 			if body == "" {
 				continue

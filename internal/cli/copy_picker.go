@@ -17,7 +17,7 @@ type copyPicker struct {
 
 // openCopyPicker populates the picker from the session history and opens it.
 func (m *chatTUI) openCopyPicker() {
-	msgs := m.ctrl.History()
+	msgs := m.ctrl.Transcript()
 	parts := copyAssistantParts(msgs)
 	if len(parts) == 0 {
 		m.notice(i18n.M.SlashCopyEmpty)

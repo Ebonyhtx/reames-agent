@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 	"reames-agent/internal/hook"
 	"reames-agent/internal/skill"
 )
@@ -174,7 +175,7 @@ func (m *chatTUI) scheduleSkillSessionRefresh(reason, notice string) bool {
 		m.notice("cannot refresh skills while a turn is running")
 		return false
 	}
-	carried := m.ctrl.History()
+	carried := control.CaptureSessionHistory(m.ctrl)
 	prevPath := m.ctrl.SessionPath()
 	if err := m.ctrl.Snapshot(); err != nil {
 		slog.Warn(reason+": snapshot failed", "err", err)

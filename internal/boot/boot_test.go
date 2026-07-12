@@ -30,10 +30,6 @@ import (
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/tool"
 	"reames-agent/internal/tool/builtin"
-
-	// Blank import registers the provider kind the same way cmd/reamesAgent's main
-	// does; importing builtin above registers the built-in tools.
-	_ "reames-agent/internal/provider/openai"
 )
 
 func TestAgentKeepPolicyFromConfig(t *testing.T) {

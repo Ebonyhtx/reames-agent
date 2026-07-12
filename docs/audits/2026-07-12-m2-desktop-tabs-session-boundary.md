@@ -2,7 +2,7 @@
 
 日期：2026-07-12
 
-状态：本地全量验证通过；commit 与远端证据待完成
+状态：已交付；主 commit `9effae6`，索引修复 `cc92f67`
 
 ## 当前结论
 
@@ -38,4 +38,4 @@ go test ./internal/control -run TestUpdateSessionMetaPreserves...     PASS
 git diff --check                                                      PASS
 ```
 
-Python 数量仅统计 `.github/workflows/ci.yml` 显式运行的当前脚本合同，不把已隔离、依赖旧 Hermes Python 环境的遗留 `tests/` 树冒充产品门禁。前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CI/CodeQL 尚未运行；补齐前不得声明本批已交付。M2 与长期 GOAL 仍未完成。
+Python 数量仅统计 `.github/workflows/ci.yml` 显式运行的当前脚本合同，不把已隔离、依赖旧 Hermes Python 环境的遗留 `tests/` 树冒充产品门禁。前端 build 只有既有 dynamic-import/chunk-size 警告且成功。首个 CI run `29193639119` 在干净 clone 暴露新审计漏列 `DOCS_INDEX.md`，随后以索引修复 `cc92f67` 重跑：CI run `29193741370` 为 8/8、CodeQL run `29193741351` 为 3/3；本批未重复触发原生 Desktop candidate。M2 与长期 GOAL 仍未完成。

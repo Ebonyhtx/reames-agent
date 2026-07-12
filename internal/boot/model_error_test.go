@@ -6,9 +6,6 @@ import (
 	"testing"
 
 	"reames-agent/internal/event"
-
-	_ "reames-agent/internal/provider/openai"
-	_ "reames-agent/internal/tool/builtin"
 )
 
 // TestBuildUnknownModelErrorIsActionable: a default_model that doesn't resolve

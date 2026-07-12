@@ -5,11 +5,6 @@ import (
 	"os"
 
 	"reames-agent/internal/cli"
-
-	// Blank imports wire compile-time built-ins into their registries.
-	_ "reames-agent/internal/provider/anthropic"
-	_ "reames-agent/internal/provider/openai"
-	_ "reames-agent/internal/tool/builtin"
 )
 
 // version is injected at build time via -ldflags "-X main.version=...".

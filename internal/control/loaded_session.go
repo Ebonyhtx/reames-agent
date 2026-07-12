@@ -28,6 +28,15 @@ func (s *LoadedSession) Empty() bool {
 	return s == nil || s.session == nil || s.session.Len() == 0
 }
 
+// ResumeLoadedSession restores an opaque transcript with the same direct
+// resume semantics used before the transport boundary was introduced.
+func (c *Controller) ResumeLoadedSession(loaded *LoadedSession, path string) {
+	if c == nil || loaded == nil || loaded.session == nil {
+		return
+	}
+	c.Resume(loaded.session, path)
+}
+
 // AdoptLoadedSessionWithCurrentSystemPrompt resumes an opaque disk transcript
 // while preserving the loaded persistence baseline and legacy system-less rule.
 func AdoptLoadedSessionWithCurrentSystemPrompt(controller *Controller, loaded *LoadedSession, path string) {

@@ -140,7 +140,7 @@ func (m *chatTUI) replayActiveBranch(title string) {
 	}
 	contentW := transcriptContentWidth(m.width, m.nativeScrollback)
 	m.commitLine(strings.TrimRight(renderTUIBanner(m.label, "", contentW), "\n"))
-	for _, section := range replaySectionsFor(m.ctrl.History(), contentW, m.renderer) {
+	for _, section := range replaySectionsFor(m.ctrl.Transcript(), contentW, m.renderer) {
 		m.commitLine(strings.TrimRight(section, "\n"))
 	}
 }

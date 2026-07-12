@@ -12,7 +12,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,17 +22,15 @@ import (
 	"syscall"
 	"unicode/utf16"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/boot"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
 	"reames-agent/internal/event"
 	"reames-agent/internal/i18n"
 	"reames-agent/internal/notify"
-	"reames-agent/internal/provider"
-	"reames-agent/internal/provider/openai"
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/serve"
+	"reames-agent/internal/termrender"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -271,7 +268,7 @@ func modelForResumePath(modelName, resumePath string, cfg *config.Config) string
 	if strings.TrimSpace(modelName) != "" || strings.TrimSpace(resumePath) == "" {
 		return modelName
 	}
-	sessionModel, ok := agent.LoadSessionModel(resumePath)
+	sessionModel, ok := control.SessionModel(resumePath)
 	if !ok {
 		return modelName
 	}
@@ -284,11 +281,8 @@ func modelForResumePath(modelName, resumePath string, cfg *config.Config) string
 	return sessionModel
 }
 
-func loadResumableSession(path string) (*agent.Session, error) {
-	if agent.IsCleanupPending(path) {
-		return nil, fmt.Errorf("session is pending cleanup")
-	}
-	return agent.LoadSession(path)
+func loadResumableSession(path string) (*control.LoadedSession, error) {
+	return control.LoadSession(path)
 }
 
 var newNotificationSender = func() notify.Sender { return notify.NewPlatformSender() }
@@ -335,7 +329,7 @@ func runAgent(args []string) int {
 	// --continue, matching the Resume call below.
 	resumePath := strings.TrimSpace(*resume)
 	if resumePath == "" && *cont {
-		sessions, err := agent.ListSessions(resolveCLISessionDir())
+		sessions, err := control.ListSessions(resolveCLISessionDir())
 		if err != nil || len(sessions) == 0 {
 			fmt.Fprintln(os.Stderr, i18n.M.NoSessionToResume)
 			return 1
@@ -361,10 +355,10 @@ func runAgent(args []string) int {
 	// silently double-writing. Released after the controller closes.
 	leases := control.NewSessionLeaseKeeper()
 	defer leases.Release()
-	var resumeSession *agent.Session
+	var resumeSession *control.LoadedSession
 	if resumePath != "" {
 		if err := leases.Rebind(resumePath); err != nil {
-			if errors.Is(err, agent.ErrSessionLeaseHeld) {
+			if control.IsSessionLeaseHeld(err) {
 				fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, sessionLeaseResumeRefusal(err))
 			} else {
 				fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
@@ -385,7 +379,7 @@ func runAgent(args []string) int {
 	// Live run: render the agent's event stream to stdout. Markdown post-stream
 	// redraw (cursor moves) is enabled only on a TTY; piped / captured output
 	// keeps the raw stream.
-	var renderer agent.Renderer
+	var renderer termrender.Renderer
 	termW := 80
 	if isTTY(os.Stdout) {
 		if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
@@ -393,7 +387,7 @@ func runAgent(args []string) int {
 		}
 		renderer = newMarkdownRenderer(termW)
 	}
-	textSink := agent.NewTextSink(os.Stdout, renderer, termW)
+	textSink := termrender.NewTextSink(os.Stdout, renderer, termW)
 	textSink.SetShowReasoning(*showThinking)
 	var sink event.Sink = textSink
 	var metrics *metricsSink
@@ -417,11 +411,9 @@ func runAgent(args []string) int {
 	// precedence over --continue.
 	// --continue: resume the most recent saved session.
 	if resumePath != "" {
-		ctrl.Resume(resumeSession, resumePath)
+		ctrl.ResumeLoadedSession(resumeSession, resumePath)
 	}
-	if ctrl.SessionPath() == "" && ctrl.SessionDir() != "" {
-		ctrl.SetSessionPath(agent.NewSessionPath(ctrl.SessionDir(), ctrl.Label()))
-	}
+	ctrl.EnsureSessionPath()
 	// Fresh sessions take the lease too (defensive: the path is brand new); a
 	// resumed path is already held, making this a no-op.
 	if err := leases.Rebind(ctrl.SessionPath()); err != nil {
@@ -530,10 +522,10 @@ func runServe(args []string) int {
 	// through the same keeper. Released after the controller closes.
 	leases := control.NewSessionLeaseKeeper()
 	defer leases.Release()
-	var resumeSession *agent.Session
+	var resumeSession *control.LoadedSession
 	if *resume != "" {
 		if err := leases.Rebind(*resume); err != nil {
-			if errors.Is(err, agent.ErrSessionLeaseHeld) {
+			if control.IsSessionLeaseHeld(err) {
 				fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, control.SessionInUseMessage(err)+"; "+control.SessionLeaseCloseHint)
 			} else {
 				fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
@@ -567,7 +559,7 @@ func runServe(args []string) int {
 
 	// Auto-save target: reuse the resumed file, else a fresh one — same as chat.
 	if *resume != "" {
-		ctrl.Resume(resumeSession, *resume)
+		ctrl.ResumeLoadedSession(resumeSession, *resume)
 	}
 	ctrl.EnsureSessionPath()
 	// Fresh sessions take the lease too (defensive: the path is brand new); a
@@ -664,7 +656,7 @@ func chatREPL(args []string) int {
 		}
 		resumePath = path
 	case *cont:
-		sessions, err := agent.ListSessions(resolveCLISessionDir())
+		sessions, err := control.ListSessions(resolveCLISessionDir())
 		if err != nil || len(sessions) == 0 {
 			fmt.Fprintln(os.Stderr, i18n.M.NoSessionToResume)
 			return 1
@@ -693,7 +685,7 @@ func chatREPL(args []string) int {
 	defer leases.Release()
 	if resumePath != "" {
 		if err := leases.Rebind(resumePath); err != nil {
-			if errors.Is(err, agent.ErrSessionLeaseHeld) {
+			if control.IsSessionLeaseHeld(err) {
 				fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, sessionLeaseResumeRefusal(err))
 			} else {
 				fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
@@ -733,12 +725,12 @@ func chatREPL(args []string) int {
 	// file so closing/reopening keeps appending to the same history; a fresh
 	// session lands in a new file stamped with the model name.
 	if resumePath != "" {
-		loaded, err := agent.LoadSession(resumePath)
+		loaded, err := control.LoadSession(resumePath)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 			return 1
 		}
-		ctrl.Resume(loaded, resumePath)
+		ctrl.ResumeLoadedSession(loaded, resumePath)
 	}
 	ctrl.EnsureSessionPath()
 	// Fresh sessions take the lease too (defensive: the path is brand new); a
@@ -791,15 +783,15 @@ func chatREPL(args []string) int {
 	// model (carrying the conversation). It must NOT touch the running model —
 	// runModelSubcommand performs the swap on the live copy. The same stable sink
 	// feeds the new controller, so events keep flowing to this TUI.
-	m.buildController = func(ref string, carry []provider.Message, resumePath string) (*control.Controller, error) {
+	m.buildController = func(ref string, carry control.SessionHistorySnapshot, resumePath string) (*control.Controller, error) {
 		c, err := setupQuiet(ctx, ref, *maxSteps, false, sink)
 		if err != nil {
 			return nil, err
 		}
 		// Keep the carried conversation in its existing file so the switch doesn't
 		// orphan a duplicate (#2807).
-		path := agent.ContinueSessionPath(resumePath, c.SessionDir(), c.Label())
-		c.AdoptHistory(carry, path)
+		path := control.ContinueSessionPath(resumePath, c.SessionDir(), c.Label())
+		c.AdoptSessionHistoryWithCurrentSystemPrompt(carry, path)
 		c.EnableInteractiveApproval()
 		if *yolo {
 			c.SetAutoApproveTools(true)
@@ -1084,7 +1076,7 @@ func interactiveSetup(configPath, envPath string) int {
 // message so the user can pick one. Returns the chosen path and a process
 // exit code (non-zero when there's nothing to pick or the user cancelled).
 func pickSessionToResume() (string, int) {
-	sessions, err := agent.ListSessions(resolveCLISessionDir())
+	sessions, err := control.ListSessions(resolveCLISessionDir())
 	if err != nil || len(sessions) == 0 {
 		fmt.Fprintln(os.Stderr, i18n.M.NoSessionToResume)
 		return "", 1
@@ -1302,29 +1294,7 @@ func fetchOrFallback(probe *config.ProviderEntry, famName string) []string {
 // endpoint. Returning the empty slice (not an error) on full miss lets the
 // wizard fall through to a manual text input without an error message.
 func fetchModelListCompat(ctx context.Context, baseURL, apiKey string) ([]string, error) {
-	candidates, err := config.BuildModelFetchURLs(baseURL, "")
-	if err != nil {
-		return nil, err
-	}
-	var lastErr error
-	var firstHardErr error
-	for _, u := range candidates {
-		models, err := openai.FetchModels(ctx, u, apiKey, nil)
-		if err == nil {
-			return models, nil
-		}
-		lastErr = err
-		if !openai.IsModelFetchEndpointMiss(err) && firstHardErr == nil {
-			firstHardErr = err
-		}
-	}
-	if firstHardErr != nil {
-		return nil, firstHardErr
-	}
-	if lastErr != nil {
-		slog.Debug("model-list probe: all candidates missed", "base_url", baseURL, "err", lastErr)
-	}
-	return nil, nil
+	return config.FetchModelListCompat(ctx, baseURL, apiKey)
 }
 
 // buildFamilyEntry returns a single ProviderEntry exposing the user's

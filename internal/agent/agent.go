@@ -42,15 +42,6 @@ const maxExecutorHandoffNudges = 1
 const memoryCompilerInjectionMax = 5
 const memoryCompilerInjectionCooldown = 30 * time.Second
 
-// Renderer redraws the assistant's final-answer text as styled output. It is
-// applied only after a turn's text stream completes, so the user sees raw
-// markdown stream live, then a single redraw replaces it with formatted
-// output. The renderer is intentionally interface-shaped so the agent stays
-// independent of the cli's markdown library choice. Consumed by TextSink.
-type Renderer interface {
-	Render(text string) string
-}
-
 // Asker puts structured multiple-choice questions to the user and blocks for the
 // answers. The agent consults it for the `ask` tool. It is interface-shaped so
 // the agent stays independent of the frontend; a nil asker means no interactive

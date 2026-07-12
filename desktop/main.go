@@ -21,13 +21,8 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
-	// Blank imports wire compile-time built-ins into their registries, exactly as
-	// cmd/reamesAgent does — boot.Build resolves providers/tools from these registries.
 	"reames-agent/internal/config"
-	_ "reames-agent/internal/provider/anthropic"
-	_ "reames-agent/internal/provider/openai"
 	"reames-agent/internal/sandbox"
-	_ "reames-agent/internal/tool/builtin"
 )
 
 // runWindowsSandboxHelperIfRequested reports whether argv (os.Args-shaped, so

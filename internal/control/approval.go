@@ -14,6 +14,10 @@ import (
 	"reames-agent/internal/permission"
 )
 
+// PlanModeReadOnlyCommandApprovalTool is the stable approval protocol name for
+// trusting a read-only command prefix while plan mode is active.
+const PlanModeReadOnlyCommandApprovalTool = "plan_mode_read_only_command"
+
 // approvalManager owns the approval/ask prompt bookkeeping and the runtime
 // approval posture, behind its own locks and off the controller's c.mu. It is a
 // strict leaf: its methods only touch its own state and never call back into the

@@ -2,7 +2,7 @@
 
 > 创建：2026-07-08
 >
-> 更新：2026-07-11
+> 更新：2026-07-12
 >
 > 基座：DeepSeek Reasonix main-v2，Go 1.25+，MIT License
 
@@ -33,6 +33,7 @@ internal/
   autoresearch/   # 自动调研目标追踪
   billing/        # Token 计费
   boot/           # 装配：Config → Controller
+  termrender/     # CLI/TUI ANSI 事件渲染与终端宽度
 desktop/          # Wails v2 桌面应用
   app.go          # Go 后端（Wails 绑定）
   frontend/       # React 19 + Vite 8 + Zustand 前端
@@ -45,7 +46,7 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
 ```
 ┌──────────────────────────────────────────────┐
 │              cmd/reames-agent                 │
-│  (blank imports → providers, tools → cli)     │
+│            (thin process entry)               │
 └──────────────┬───────────────────────────────┘
                │
     ┌──────────▼──────────┐
@@ -55,8 +56,8 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
     └──────────┬──────────┘
                │  全部驱动同一接口
     ┌──────────▼──────────┐
+    │ internal/boot/       │  注册与装配
     │ internal/control/    │  传输无关 Controller
-    │   Controller         │  (SessionAPI 接口)
     └──────────┬──────────┘
                │
     ┌──────────▼──────────┐
@@ -79,9 +80,9 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
 | `control.SessionAPI` 的分区接口 | 新增直接 import `internal/provider` |
 | `event.Sink` 与 `internal/eventwire` | 新增直接 import `internal/tool` |
 
-当前代码仍有历史直连，主要用于会话持久化、装配注册和设置重建，因此这是一项目标架构而不是已经完全满足的事实。`TestTransportRuntimeImportRatchet` 用精确 allowlist 冻结 Desktop、CLI、Serve、Bot 和 ACP 的现有直连：新增依赖会使 CI 失败，迁移删除依赖后也必须同步收缩 allowlist。Provider 与内置工具的 blank import 只允许保留在明确的装配入口。当前已完成四条可验证的纵向路径：共享 `ErrorInfo` 由 Desktop 按 code/category 消费；CLI `/resume` 通过 `control.SessionInfo`、`control.ListSessions` 和事务式 `ResumeSessionPath` 工作；提交/取消/审批/状态通过版本化 `control.Command` / `CommandResult` 与服务端选择的 `CommandScope` 驱动；事件通过 `eventwire` v1 输出完整 source/cache payload，历史展示通过 `control.TranscriptMessage` 投影。Serve history 与 ACP replay 不再消费 `provider.Message`，不会把 system、合成恢复指令、compose 控制块或 referenced-context payload当作用户历史发给远端前端。Serve 的新 `/command` 与 WebSocket `method=command` 共用相同执行器，旧端点/WS method 只是兼容适配器。
+该目标边界当前已达到本地候选门槛。`TestTransportRuntimeImportRatchet` 扫描 Desktop、CLI、Serve、Bot 和 ACP，历史 allowlist 已为空；新增任意 `internal/agent`、`internal/provider` 或 `internal/tool` 生产 import 都会使 CI 失败。Compile-time provider 注册与 review 装配由 `boot` 拥有；CLI resume/rebuild 使用 opaque control handle，历史展示使用 `TranscriptMessage`；终端 ANSI 输出由 `termrender` 拥有。共享 `ErrorInfo`、版本化 command/event DTO、HTTP/WS 兼容适配器和 prompt metadata 隔离继续构成跨入口合同。
 
-迁移按纵向路径进行：命令、event/display DTO、主要会话 persistence/copy 路径、Desktop system-prompt-aware rebuild、settings provider-kind view、展示安全 memory suggestions、Serve title provider、ACP metadata title 与 Desktop history/pagination/planner replay 已经收口；Desktop app 的 listing/order/user-message/topic-binding/conflict/cleanup 走稳定 control DTO，loaded session 与 lease 是 opaque handle，app 已无 `agent/provider/tool` 直连；ACP CLI factory 的生产装配统一走 `boot.Build`，MCP model-visible name 由独立 `mcpname` 合同解析。Serve、Bot、ACP 与 Desktop app 已无 runtime 直连，Desktop tabs 已无 `provider` 直连。下一步迁移 Desktop tabs 剩余 branch/index session-store 类型与 CLI composition root/其余专用渲染边界。CLI/Bot/ACP 为拥有 turn 生命周期而保留同步 `RunTurn`，它与异步 command acknowledgement 是不同语义，不强行合并成伪统一接口。
+迁移已经覆盖命令、event/display DTO、会话 persistence/copy/meta、Desktop rebuild/settings/history、Serve title、ACP metadata、CLI composition/review/model discovery 与终端渲染。所有受守卫 transport 生产文件均无 runtime 直连。CLI/Bot/ACP 为拥有 turn 生命周期而保留同步 `RunTurn`，它与异步 command acknowledgement 是不同语义，不强行合并成伪统一接口。
 
 ## 四、缓存优先约束
 

@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 	"reames-agent/internal/i18n"
 )
 
@@ -44,7 +45,7 @@ func (m *chatTUI) runModelSubcommand(input string) {
 	// conflict can retarget the controller to a recovery branch (or adopt the
 	// newer disk transcript), and a pre-snapshot capture would bind the rebuilt
 	// controller back to the original file, re-conflicting on every later save.
-	carried := m.ctrl.History()
+	carried := control.CaptureSessionHistory(m.ctrl)
 	prevPath := m.ctrl.SessionPath()
 	m.notice(fmt.Sprintf(i18n.M.ModelSwitchingFmt, ref))
 

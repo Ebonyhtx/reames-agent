@@ -50,7 +50,7 @@ func TestModelSwitchCarriesRecoveryPathAfterSnapshotConflict(t *testing.T) {
 	m.ctrl = divergedSessionController(t, dir, originalPath)
 	m.modelRef = "old/old-model"
 	var gotResumePath string
-	m.buildController = func(_ string, _ []provider.Message, resumePath string) (*control.Controller, error) {
+	m.buildController = func(_ string, _ control.SessionHistorySnapshot, resumePath string) (*control.Controller, error) {
 		gotResumePath = resumePath
 		return control.New(control.Options{Label: "deepseek-flash"}), nil
 	}
@@ -80,7 +80,7 @@ func TestEffortSwitchCarriesRecoveryPathAfterSnapshotConflict(t *testing.T) {
 	m.ctrl = divergedSessionController(t, dir, originalPath)
 	m.modelRef = "deepseek-flash/deepseek-v4-flash"
 	var gotResumePath string
-	m.buildController = func(_ string, _ []provider.Message, resumePath string) (*control.Controller, error) {
+	m.buildController = func(_ string, _ control.SessionHistorySnapshot, resumePath string) (*control.Controller, error) {
 		gotResumePath = resumePath
 		return control.New(control.Options{Label: "deepseek-flash"}), nil
 	}

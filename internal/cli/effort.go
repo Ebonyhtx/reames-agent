@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 )
 
 func (m *chatTUI) runEffortCommand(input string) tea.Cmd {
@@ -88,7 +89,7 @@ func (m *chatTUI) runEffortCommand(input string) tea.Cmd {
 	// conflict can retarget the controller to a recovery branch (or adopt the
 	// newer disk transcript), and a pre-snapshot capture would bind the rebuilt
 	// controller back to the original file, re-conflicting on every later save.
-	carried := m.ctrl.History()
+	carried := control.CaptureSessionHistory(m.ctrl)
 	prevPath := m.ctrl.SessionPath()
 	oldCtrl := m.ctrl
 	build := m.buildController

@@ -57,6 +57,30 @@ func (e *ProviderEntry) FetchModels(ctx context.Context) ([]string, error) {
 	return nil, lastErr
 }
 
+// FetchModelListCompat probes the OpenAI-compatible model-list candidates for
+// a user-supplied base URL and credential. Endpoint-shape misses return an
+// empty result so setup can fall back to manual model entry.
+func FetchModelListCompat(ctx context.Context, baseURL, apiKey string) ([]string, error) {
+	candidates, err := BuildModelFetchURLs(baseURL, "")
+	if err != nil {
+		return nil, err
+	}
+	var firstHardErr error
+	for _, candidate := range candidates {
+		models, err := openai.FetchModels(ctx, candidate, apiKey, nil)
+		if err == nil {
+			return models, nil
+		}
+		if !openai.IsModelFetchEndpointMiss(err) && firstHardErr == nil {
+			firstHardErr = err
+		}
+	}
+	if firstHardErr != nil {
+		return nil, firstHardErr
+	}
+	return nil, nil
+}
+
 func modelFetchAuthMode(e *ProviderEntry) openai.ModelFetchAuthMode {
 	if e == nil || !strings.EqualFold(strings.TrimSpace(e.Kind), "anthropic") {
 		return openai.ModelFetchAuthAuto

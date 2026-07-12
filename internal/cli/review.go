@@ -7,14 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/boot"
 	"reames-agent/internal/config"
-	"reames-agent/internal/event"
-	"reames-agent/internal/sandbox"
 	"reames-agent/internal/skill"
-	"reames-agent/internal/tool"
-	"reames-agent/internal/tool/builtin"
 )
 
 func reviewCommand(args []string) int {
@@ -58,14 +53,7 @@ func reviewCommand(args []string) int {
 		return 1
 	}
 
-	// 3. Create provider.
-	prov, err := boot.NewProviderWithProxy(entry, cfg.NetworkProxySpec())
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: failed to create provider:", err)
-		return 1
-	}
-
-	// 4. Get the built-in review skill.
+	// 3. Get the built-in review skill.
 	root, _ := os.Getwd()
 	skillStore := skill.New(skill.Options{ProjectRoot: root, Stderr: os.Stderr})
 	reviewSk, ok := skillStore.Read("review")
@@ -78,20 +66,11 @@ func reviewCommand(args []string) int {
 		return 1
 	}
 
-	// 5. Build a review-scoped sub-agent registry.
-	reg := buildReviewSubagentRegistry(reviewSk, cfg)
-
-	// 6. Prepare the review prompt.
+	// 4. Prepare the review prompt.
 	task := buildReviewTask(diff, *instructions)
 
-	// 7. Run the review subagent.
-	ctx := context.Background()
-	result, err := agent.RunSubAgentWithSession(ctx, prov, reg, agent.NewSession(reviewSk.Body), task, agent.Options{
-		MaxSteps:      12,
-		Temperature:   cfg.Agent.Temperature,
-		Pricing:       entry.Price,
-		ContextWindow: entry.ContextWindow,
-	}, event.Discard)
+	// 5. Run the review subagent through the shared composition boundary.
+	result, err := boot.RunReviewSubagent(context.Background(), reviewSk, cfg, entry, task)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: review failed:", err)
 		return 1
@@ -99,26 +78,6 @@ func reviewCommand(args []string) int {
 
 	fmt.Print(result)
 	return 0
-}
-
-func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config) *tool.Registry {
-	// The shared helper strips subagent-unavailable background capabilities while
-	// preserving foreground bash. This direct CLI path does not go through boot,
-	// so it first builds the small parent set from the review skill allow-list.
-	parentReg := tool.NewRegistry()
-	for _, name := range reviewSk.AllowedTools {
-		if tl, ok := tool.LookupBuiltin(name); ok {
-			parentReg.Add(tl)
-		}
-	}
-	// Keep review bash unconfined as before (read-oriented skill), but attach
-	// the session-data guard so commands touching Reames Agent's own state warn the
-	// same way the boot-assembled bash does.
-	if _, ok := parentReg.Get("bash"); ok {
-		guard := builtin.NewSessionDataGuard(config.MemoryUserDir(), cfg.AllowWriteRoots())
-		parentReg.Add(builtin.ConfineBash(sandbox.Spec{}, guard))
-	}
-	return agent.SubagentToolRegistry(parentReg, reviewSk.AllowedTools)
 }
 
 // getReviewDiff runs the appropriate git diff command and returns its output.

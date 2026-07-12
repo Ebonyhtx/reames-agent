@@ -71,6 +71,18 @@ func TestSlashCopyDirectIndexUsesCurrentTurnNewestFirst(t *testing.T) {
 	}
 }
 
+func TestCopyAssistantPartsIgnoresHiddenSyntheticUserBoundary(t *testing.T) {
+	parts := copyAssistantParts([]control.TranscriptMessage{
+		{Role: control.TranscriptUser, Content: "visible prompt"},
+		{Role: control.TranscriptAssistant, Content: "first answer"},
+		{Role: control.TranscriptUser, Hidden: true},
+		{Role: control.TranscriptAssistant, Content: "continued answer"},
+	})
+	if want := []string{"first answer", "continued answer"}; !reflect.DeepEqual(parts, want) {
+		t.Fatalf("copy parts across hidden user = %#v, want %#v", parts, want)
+	}
+}
+
 func TestSlashCopyPickerCopiesSelectedAssistantMessage(t *testing.T) {
 	m := newTestChatTUIWithMessages(t, "",
 		provider.Message{Role: provider.RoleUser, Content: "current prompt"},
