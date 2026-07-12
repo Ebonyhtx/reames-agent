@@ -11,6 +11,7 @@ import (
 
 	"reames-agent/internal/agent"
 	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 	"reames-agent/internal/event"
 )
 
@@ -365,7 +366,7 @@ func TestRebindInvalidatesInFlightAsyncBuildBeforeSnapshot(t *testing.T) {
 		t.Fatal("async build did not reach the lease bind")
 	}
 
-	loaded, err := agent.LoadSession(newPath)
+	loaded, err := control.LoadSession(newPath)
 	if err != nil {
 		t.Fatalf("LoadSession(new): %v", err)
 	}

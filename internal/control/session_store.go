@@ -84,11 +84,21 @@ func DeleteSessionSubagents(sessionDir, sessionPath string) error {
 // without requiring a transport to import the agent persistence package.
 func IsSessionLeaseHeld(err error) bool { return errors.Is(err, agent.ErrSessionLeaseHeld) }
 
+// IsSessionSnapshotConflict classifies a stale runtime save without exposing
+// the persistence error sentinel to transports.
+func IsSessionSnapshotConflict(err error) bool {
+	return errors.Is(err, agent.ErrSessionSnapshotConflict)
+}
+
 func SessionLeaseHeldByOtherRuntime(path string) bool {
 	return agent.SessionLeaseHeldByOtherRuntime(path)
 }
 
 func SessionLeaseHeld(path string) bool { return agent.SessionLeaseHeld(path) }
+
+func CanonicalSessionPath(path string) string { return agent.CanonicalSessionPath(path) }
+
+func NewSessionPath(dir, label string) string { return agent.NewSessionPath(dir, label) }
 
 // SessionLeaseAvailableForRebuild probes path without changing a frontend's
 // owned keeper. A lease held by this process is treated as retryable because it

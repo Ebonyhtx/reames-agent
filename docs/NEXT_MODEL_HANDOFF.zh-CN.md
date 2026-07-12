@@ -29,7 +29,7 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
-- M2 进行中：依赖棘轮、结构化错误、CLI 会话恢复、版本化 command/event/display DTO、prompt metadata、主要会话持久化、设置与 Desktop history 边界已关闭；当前候选批次进一步关闭 ACP production composition、session copy 与 MCP name rendering；剩余 Desktop session-store、CLI composition root 与其余专用渲染边界待继续收口。
+- M2 进行中：依赖棘轮、结构化错误、CLI 会话恢复、版本化 command/event/display DTO、prompt metadata、主要会话持久化、设置、Desktop history 与 app session-store 边界已关闭；剩余 Desktop tabs branch/index session-store、CLI composition root 与其余专用渲染边界待继续收口。
 - M6 进行中：Gateway service、headless smoke 和 feedback 本地闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
@@ -43,14 +43,14 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 - model/effort/token-mode rebuild 改用 opaque `SessionHistorySnapshot`；event preview/citation/tool 也不再声明 provider DTO。
 - 本批删除 Desktop app/tabs 两条 `provider` 生产依赖边，累计收缩二十一条；Serve、Bot、ACP service 无 runtime 直连，Desktop app/tabs 无 provider 直连。
 
-## 当前候选批次
+## 最新已交付批次
 
 - 删除 ACP 三组无生产 caller、仅由旧测试维持的 Reasonix 初始装配 helper；真实 ACP session 继续统一走 `boot.Build`，既有 boot 测试覆盖 builtin 与 subagent profile。
 - CLI `--copy` 改用 `control.CopySessionForWriting`，control 测试覆盖 cleanup-pending、event-log transcript、branch lineage、标题/模型、源文件只读与新路径无 lease。
 - 新增独立 `internal/mcpname` 命名合同，CLI tool card/approval rendering 不再为解析名称依赖 tool registry。
-- 候选批次从 allowlist 再删除六条 `agent/provider/tool` 边，若全量门禁与远端交付通过，累计将达到二十七条；ACP 已无受守卫 runtime 生产直连。
+- 本批从 allowlist 再删除六条 `agent/provider/tool` 边，累计达到二十七条；ACP 已无受守卫 runtime 生产直连。
 
-详见 `docs/audits/2026-07-11-m2-cli-composition-boundary.md`。commit `c698fe7` 已推送，root/Desktop/frontend/contracts/baseline 与六目标交叉编译均已通过，CodeQL 3/3 成功；普通 CI 首跑的 Core Go 暴露既有 `/clear` 异步测试清理竞态，修复重跑全绿前不得写成远端已交付。
+详见 `docs/audits/2026-07-11-m2-cli-composition-boundary.md`。主 commit `c698fe7` 与 CI 修复 `8960216` 已推送；本地全量门禁通过，CI run `29160315008` 为 8/8、CodeQL run `29160315021` 为 3/3。
 
 ## 上一已交付批次关键证据
 
@@ -71,13 +71,13 @@ six-target CGO_ENABLED=0 cross-compile               PASS
 
 ## 下一执行顺序
 
-1. 验证并提交 `/clear` 测试等待命令完成的 CI 修复，push 后守候普通 CI 全部 8 jobs 成功；CodeQL 首跑已经 3/3 成功。
-2. 远端全绿后继续关闭 Desktop session-store 或 CLI composition root 的完整纵向路径，不为了清空 allowlist 制造反向依赖。
+1. 完成当前 Desktop app session-store 候选批次的全量门禁、显式暂存、单 commit/push 与远端 CI 守候。
+2. 远端全绿后继续关闭 Desktop tabs branch/index session-store 或 CLI composition root，不为了清空 allowlist 制造反向依赖。
 3. M2 达到当前里程碑门槛后，进入干净云节点 CLI + Gateway + feedback 运维闭环与真实飞书回环。
 
 ## 长期未关闭项
 
-- M2 剩余 Desktop session-store、CLI composition root 与其余 CLI 专用渲染边界收口。
+- M2 剩余 Desktop tabs branch/index session-store、CLI composition root 与其余 CLI 专用渲染边界收口。
 - 干净 Linux/云节点的 CLI、Gateway、feedback、日志、备份、升级回滚。
 - 真实飞书/Lark 文本、审批、取消与恢复回环。
 - plugin 权限 manifest、内容完整性和安装预览。
@@ -87,4 +87,4 @@ six-target CGO_ENABLED=0 cross-compile               PASS
 
 ## 当前未提交批次
 
-CLI/ACP 主批次已作为 `c698fe7` 推送；本地全量门禁与 CodeQL 成功，普通 CI 仅 Core Go 的既有 `/clear` 测试 TempDir 清理竞态失败，当前修复等待完成 notice 后再断言并退出。修复需显式暂存/提交/推送并守候 CI；受保护文件继续排除。
+当前 Desktop app session-store/control DTO/opaque handle 代码、测试与文档批次已形成，root/Desktop/frontend/contracts/baseline 与六目标交叉编译全绿；`c698fe7`/`8960216` 的远端成功证据已并入本批，等待显式暂存后集中提交/单次 push。受保护文件继续排除。

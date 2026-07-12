@@ -51,7 +51,7 @@ type WorkspaceTab struct {
 	Ready               bool               // true once boot.Build completes
 	StartupErr          string             // build error, surfaced to the frontend
 	StartupErrLeaseHeld bool               // true when StartupErr can be retried after a session lease releases
-	sessionLease        *agent.SessionLease
+	sessionLease        *control.SessionLease
 	sessionLeaseMu      sync.Mutex
 	sink                *tabEventSink      // routes events with this tab's ID
 	buildCancel         context.CancelFunc // cancels in-flight boot for tabs removed before Ready
@@ -249,13 +249,13 @@ func (t *WorkspaceTab) hasActiveRuntimeWork() bool {
 }
 
 // sessionRuntimeKey is the comparison/map key for "same session" checks. It
-// layers agent.CanonicalSessionPath on top of the desktop path normalization
+// layers the control session-store canonical path on top of Desktop normalization
 // so the key matches the form held by session leases (lowercased on Windows).
 // Comparing a lease's Path() against a raw tab path without this fold made
 // every rebuild on Windows look like a foreign holder (self-lock, #5999).
 // Keys are identities only — never use them as display or file paths.
 func sessionRuntimeKey(path string) string {
-	return agent.CanonicalSessionPath(canonicalTabSessionPath(path))
+	return control.CanonicalSessionPath(canonicalTabSessionPath(path))
 }
 
 var sessionLeaseAcquireHookForTest func()
@@ -273,7 +273,7 @@ func (t *WorkspaceTab) ensureSessionLease(path string) error {
 		t.sessionLeaseMu.Unlock()
 		return nil
 	}
-	lease, err := agent.TryAcquireSessionLease(key)
+	lease, err := control.TryAcquireSessionLease(key)
 	if err != nil {
 		t.sessionLeaseMu.Unlock()
 		return err
@@ -307,7 +307,7 @@ func (t *WorkspaceTab) releaseSessionLease() {
 // releasing it, so ownership can transfer to another holder. All access to
 // t.sessionLease must go through sessionLeaseMu; never read or assign the
 // field directly outside these helpers.
-func (t *WorkspaceTab) takeSessionLease() *agent.SessionLease {
+func (t *WorkspaceTab) takeSessionLease() *control.SessionLease {
 	if t == nil {
 		return nil
 	}
@@ -321,7 +321,7 @@ func (t *WorkspaceTab) takeSessionLease() *agent.SessionLease {
 // adoptSessionLease installs lease as the tab's session lease, releasing any
 // previously held lease unless it is the very same lease. A nil tab releases
 // the lease immediately so ownership is never dropped on the floor.
-func (t *WorkspaceTab) adoptSessionLease(lease *agent.SessionLease) {
+func (t *WorkspaceTab) adoptSessionLease(lease *control.SessionLease) {
 	if t == nil {
 		if lease != nil {
 			lease.Release()
@@ -2635,7 +2635,7 @@ func (a *App) buildTabController(tab *WorkspaceTab) {
 
 type loadedTabSession struct {
 	Path    string
-	Session *agent.Session
+	Session *control.LoadedSession
 }
 
 func (s loadedTabSession) matches(path string) bool {
@@ -2674,7 +2674,7 @@ func setTabStartupError(tab *WorkspaceTab, err error) bool {
 		return false
 	}
 	tab.StartupErr = userFacingSessionLeaseError("", err).Error()
-	tab.StartupErrLeaseHeld = errors.Is(err, agent.ErrSessionLeaseHeld)
+	tab.StartupErrLeaseHeld = control.IsSessionLeaseHeld(err)
 	return tab.StartupErrLeaseHeld
 }
 
@@ -2910,7 +2910,7 @@ func (a *App) buildTabControllerWithContext(tab *WorkspaceTab, loadedSession loa
 			a.mu.Unlock()
 		}
 		var path string
-		var resumeSession *agent.Session
+		var resumeSession *control.LoadedSession
 		// Prefer the exact session file persisted for this tab. Topic lookup is a
 		// compatibility fallback for older desktop-tabs.json files that only stored
 		// topicId and could pick the wrong session when one topic had multiple files.
@@ -2928,7 +2928,7 @@ func (a *App) buildTabControllerWithContext(tab *WorkspaceTab, loadedSession loa
 			}
 		}
 		if path == "" {
-			path = agent.NewSessionPath(dir, ctrl.Label())
+			path = control.NewSessionPath(dir, ctrl.Label())
 		}
 		// Write/update scope/session meta.
 		if path != "" {
@@ -2983,7 +2983,7 @@ func (a *App) buildTabControllerWithContext(tab *WorkspaceTab, loadedSession loa
 				return
 			}
 			if resumeSession != nil {
-				ctrl.AdoptLoadedHistoryWithCurrentSystemPrompt(resumeSession.Snapshot(), path)
+				control.AdoptLoadedSessionWithCurrentSystemPrompt(ctrl, resumeSession, path)
 			} else {
 				ctrl.SetSessionPath(path)
 			}
@@ -7223,15 +7223,15 @@ func globalTabWorkspaceRoot() string {
 	return root
 }
 
-func loadPinnedTabSession(dir, sessionPath string) (*agent.Session, string, bool) {
+func loadPinnedTabSession(dir, sessionPath string) (*control.LoadedSession, string, bool) {
 	return loadPinnedTabSessionWithPreloadAndMigrationFallback(dir, sessionPath, loadedTabSession{}, true)
 }
 
-func loadPinnedTabSessionWithPreload(dir, sessionPath string, preloaded loadedTabSession) (*agent.Session, string, bool) {
+func loadPinnedTabSessionWithPreload(dir, sessionPath string, preloaded loadedTabSession) (*control.LoadedSession, string, bool) {
 	return loadPinnedTabSessionWithPreloadAndMigrationFallback(dir, sessionPath, preloaded, false)
 }
 
-func loadPinnedTabSessionWithPreloadAndMigrationFallback(dir, sessionPath string, preloaded loadedTabSession, allowMigrationFallback bool) (*agent.Session, string, bool) {
+func loadPinnedTabSessionWithPreloadAndMigrationFallback(dir, sessionPath string, preloaded loadedTabSession, allowMigrationFallback bool) (*control.LoadedSession, string, bool) {
 	path, ok := pinnedTabSessionPath(dir, sessionPath)
 	if !ok && allowMigrationFallback {
 		path, ok = migratedPinnedTabSessionPath(dir, sessionPath)
@@ -7239,16 +7239,16 @@ func loadPinnedTabSessionWithPreloadAndMigrationFallback(dir, sessionPath string
 	if !ok {
 		return nil, "", false
 	}
-	if agent.IsCleanupPending(path) {
+	if control.SessionCleanupPending(path) {
 		return nil, "", false
 	}
 	if preloaded.matches(path) {
-		if preloaded.Session != nil && len(preloaded.Session.Snapshot()) == 0 {
+		if preloaded.Session.Empty() {
 			return nil, path, true
 		}
 		return preloaded.Session, path, true
 	}
-	loaded, err := agent.LoadSession(path)
+	loaded, err := control.LoadSession(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, path, true
@@ -7259,7 +7259,7 @@ func loadPinnedTabSessionWithPreloadAndMigrationFallback(dir, sessionPath string
 	// session to resume.  Treating it as valid would make ctrl.Resume replace
 	// the executor's live session (with system prompt) with the empty one,
 	// causing the saved transcript to lack the agent identity contract.
-	if len(loaded.Snapshot()) == 0 {
+	if loaded.Empty() {
 		return nil, path, true
 	}
 	return loaded, path, true

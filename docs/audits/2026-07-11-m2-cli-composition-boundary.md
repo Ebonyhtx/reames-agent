@@ -2,7 +2,7 @@
 
 日期：2026-07-11
 
-状态：commit `c698fe7` 已推送；CodeQL 成功，普通 CI 的既有 `/clear` 异步测试清理竞态待修复重跑
+状态：已交付；主 commit `c698fe7`，CI 修复 `8960216`
 
 ## 当前结论
 
@@ -38,4 +38,4 @@ go test ./internal/control -run TestTransportRuntimeImportRatchet     PASS
 git diff --check                                                      PASS
 ```
 
-前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CodeQL run `29159796431` 为 3/3；CI run `29159796418` 除 Core Go 上述测试清理竞态外其余 7/8 jobs 成功。修复重跑全绿前，本批不得声明已交付，M2 与长期 GOAL 仍保持未完成。
+前端 build 只有既有 dynamic-import/chunk-size 警告且成功。首轮 CodeQL run `29159796431` 为 3/3；首轮 CI run `29159796418` 暴露上述测试清理竞态后，修复重跑 CI `29160315008` 为 8/8、CodeQL `29160315021` 为 3/3。M2 与长期 GOAL 仍保持未完成。

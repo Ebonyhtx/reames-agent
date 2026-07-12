@@ -22,6 +22,11 @@ func TestListSessionsReturnsStableSummary(t *testing.T) {
 	if err := agent.RenameSession(path, "Parser audit"); err != nil {
 		t.Fatalf("rename session: %v", err)
 	}
+	if err := SetSessionTopicBinding(path, SessionTopicBinding{
+		Scope: "project", WorkspaceRoot: dir, TopicID: "parser", TopicTitle: "Parser work",
+	}); err != nil {
+		t.Fatalf("SetSessionTopicBinding: %v", err)
+	}
 
 	sessions, err := ListSessions(dir)
 	if err != nil {
@@ -34,8 +39,22 @@ func TestListSessionsReturnsStableSummary(t *testing.T) {
 	if got.Path != path || got.Turns != 1 || got.Preview != "inspect the parser" || got.CustomTitle != "Parser audit" {
 		t.Fatalf("stable session summary = %+v", got)
 	}
-	if got.ModTime.IsZero() || got.LastActivityAt.IsZero() {
+	if got.CreatedAt.IsZero() || got.ModTime.IsZero() || got.LastActivityAt.IsZero() {
 		t.Fatal("stable session summary lost activity time")
+	}
+	if got.Scope != "project" || got.WorkspaceRoot != dir || got.TopicID != "parser" || got.TopicTitle != "Parser work" {
+		t.Fatalf("stable session ownership = %+v", got)
+	}
+	if updatedAt, ok := SessionUpdatedAt(path); !ok || updatedAt.IsZero() {
+		t.Fatalf("SessionUpdatedAt = %v, %v", updatedAt, ok)
+	}
+	ordered, err := ListSessionOrder(dir)
+	if err != nil || len(ordered) != 1 || ordered[0].Path != path || ordered[0].TopicID != "parser" {
+		t.Fatalf("ListSessionOrder = %+v, %v", ordered, err)
+	}
+	users, err := LoadSessionUserMessages(path)
+	if err != nil || len(users) != 1 || users[0].Text != "inspect the parser" {
+		t.Fatalf("LoadSessionUserMessages = %+v, %v", users, err)
 	}
 }
 

@@ -3311,7 +3311,7 @@ func TestSetModelForTabReattachesDetachedRuntime(t *testing.T) {
 	oldSession.Add(provider.Message{Role: provider.RoleUser, Content: "hello from detached"})
 	oldExec := agent.New(nil, nil, oldSession, agent.Options{}, event.Discard)
 	oldCtrl := control.New(control.Options{Executor: oldExec, SessionDir: dir, SessionPath: path, Label: "old", Sink: event.Discard})
-	lease, err := agent.TryAcquireSessionLease(path)
+	lease, err := control.TryAcquireSessionLease(path)
 	if err != nil {
 		t.Fatalf("TryAcquireSessionLease: %v", err)
 	}

@@ -838,7 +838,7 @@ func TestRebindTabToLoadedSessionReusesPreloadedTranscript(t *testing.T) {
 	writeHistoryTestSession(t, currentPath, "current prompt")
 	writeHistoryTestSession(t, targetPath, "target prompt")
 
-	loaded, err := agent.LoadSession(targetPath)
+	loaded, err := control.LoadSession(targetPath)
 	if err != nil {
 		t.Fatalf("LoadSession: %v", err)
 	}
@@ -896,7 +896,7 @@ func TestRebindTabToLoadedSessionPersistsAndRestoresSessionProfile(t *testing.T)
 		t.Fatalf("SaveBranchMetaPreserveUpdated target: %v", err)
 	}
 
-	loaded, err := agent.LoadSession(targetPath)
+	loaded, err := control.LoadSession(targetPath)
 	if err != nil {
 		t.Fatalf("LoadSession: %v", err)
 	}

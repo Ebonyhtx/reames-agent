@@ -431,7 +431,7 @@ func TestRebindSessionBlocksWhenCurrentSessionCannotPersist(t *testing.T) {
 	if err := sess.Save(target); err != nil {
 		t.Fatalf("save target: %v", err)
 	}
-	loaded, err := agent.LoadSession(target)
+	loaded, err := control.LoadSession(target)
 	if err != nil {
 		t.Fatalf("load target: %v", err)
 	}

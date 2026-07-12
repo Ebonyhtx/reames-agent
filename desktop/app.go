@@ -29,7 +29,6 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/autoresearch"
 	"reames-agent/internal/billing"
 	"reames-agent/internal/boot"
@@ -1733,7 +1732,7 @@ func (a *App) clearActiveSessionRuntime(tab *WorkspaceTab, oldCtrl control.Sessi
 	destroys := []control.SessionDestroyHandle{destroy}
 	teardownTimedOut := waitDestroyHandles(destroys)
 	if teardownTimedOut {
-		if err := agent.MarkCleanupPending(oldPath, "clear"); err != nil {
+		if err := control.MarkSessionCleanupPending(oldPath, "clear"); err != nil {
 			return err
 		}
 	}
@@ -1784,7 +1783,7 @@ func (a *App) clearActiveSessionRuntime(tab *WorkspaceTab, oldCtrl control.Sessi
 	// Clearing the session clears the active goal too (same contract as
 	// Controller.ClearSession): the snapshot's goal belongs to the destroyed
 	// conversation and must not seed the replacement.
-	path := agent.NewSessionPath(newCtrl.SessionDir(), newCtrl.Label())
+	path := control.NewSessionPath(newCtrl.SessionDir(), newCtrl.Label())
 	if err := tab.ensureSessionLease(path); err != nil {
 		newCtrl.Close()
 		// Surfaces through ClearSession's Wails return; keep the holder's
@@ -1851,10 +1850,10 @@ func removeDesktopSessionArtifacts(path string) error {
 	if err := removeSessionDisplay(filepath.Dir(path), path); err != nil {
 		return err
 	}
-	if err := agent.DeleteSubagentsByParent(filepath.Dir(path), agent.BranchID(path)); err != nil {
+	if err := control.DeleteSessionSubagents(filepath.Dir(path), path); err != nil {
 		return err
 	}
-	return agent.ClearCleanupPending(path)
+	return control.ClearSessionCleanupPending(path)
 }
 
 // CheckpointMeta summarises one rewind point (a user turn) for the desktop.
@@ -2039,12 +2038,9 @@ func (a *App) Fork(turn int) (TabMeta, error) {
 	if err := setTopicTitle(titleRoot, topicID, topicTitle); err != nil {
 		return TabMeta{}, err
 	}
-	m, _ := agent.EnsureBranchMeta(newPath)
-	m.Scope = scope
-	m.WorkspaceRoot = workspaceRoot
-	m.TopicID = topicID
-	m.TopicTitle = topicTitle
-	if err := agent.SaveBranchMeta(newPath, m); err != nil {
+	if err := control.SetSessionTopicBinding(newPath, control.SessionTopicBinding{
+		Scope: scope, WorkspaceRoot: workspaceRoot, TopicID: topicID, TopicTitle: topicTitle,
+	}); err != nil {
 		return TabMeta{}, err
 	}
 	invalidateTopicSessionIndexForPath(newPath)
@@ -2206,7 +2202,7 @@ func (a *App) activeSessionDir() string {
 // user-chosen titles.
 func (a *App) ListSessions() []SessionMeta {
 	dir := a.activeSessionDir()
-	infos, err := agent.ListSessions(dir)
+	infos, err := control.ListSessions(dir)
 	if err != nil {
 		return []SessionMeta{}
 	}
@@ -2248,7 +2244,7 @@ func (a *App) ListTrashedSessions() []SessionMeta {
 		}
 		titles := loadSessionTitles(dir)
 		for _, path := range paths {
-			infos, err := agent.ListSessions(filepath.Dir(path))
+			infos, err := control.ListSessions(filepath.Dir(path))
 			if err != nil || len(infos) == 0 {
 				continue
 			}
@@ -2288,7 +2284,7 @@ func (a *App) sessionDirForPath(path string) (string, string, error) {
 	return "", "", fmt.Errorf("session path outside known session dirs: %s", path)
 }
 
-func sessionMetaFromInfo(s agent.SessionInfo, title string, current, open bool, deletedAt int64) SessionMeta {
+func sessionMetaFromInfo(s control.SessionInfo, title string, current, open bool, deletedAt int64) SessionMeta {
 	return SessionMeta{
 		Path:           s.Path,
 		Preview:        s.Preview,
@@ -2439,7 +2435,7 @@ func (a *App) deleteSession(path string) error {
 		teardownTimedOut := waitDestroyHandles(destroys)
 		a.closeRemovedSessionRuntimesForSessionAfterDestroy(removed, dir, sessionPath, closedRemoved)
 		if teardownTimedOut {
-			if err := agent.MarkCleanupPending(sessionPath, "delete"); err != nil {
+			if err := control.MarkSessionCleanupPending(sessionPath, "delete"); err != nil {
 				a.closeRemainingRemovedSessionRuntimesAfterDestroy(removed, closedRemoved)
 				return err
 			}
@@ -2639,7 +2635,7 @@ func (a *App) prepareRemovedSessionRuntimes(removed []removedSessionRuntime) err
 			continue
 		}
 		if err := item.ctrl.Snapshot(); err != nil {
-			if !errors.Is(err, agent.ErrSessionSnapshotConflict) {
+			if !control.IsSessionSnapshotConflict(err) {
 				return err
 			}
 			slog.Warn("desktop: skipping stale runtime snapshot before removing session",
@@ -2979,7 +2975,7 @@ func (a *App) RenameSession(path, title string) error {
 	if err != nil {
 		return err
 	}
-	if err := agent.RenameSession(sessionPath, title); err != nil {
+	if err := control.RenameSession(sessionPath, title); err != nil {
 		return err
 	}
 	if err := setSessionTitle(dir, sessionPath, title); err != nil {
@@ -3117,7 +3113,7 @@ func (a *App) rebindTabToSessionPath(tab *WorkspaceTab, sessionPath string) erro
 	return a.rebindTabToLoadedSessionPath(tab, sessionPath, loaded)
 }
 
-func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string, loaded *agent.Session) error {
+func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string, loaded *control.LoadedSession) error {
 	if tab == nil {
 		return fmt.Errorf("tab is not ready")
 	}
@@ -3125,7 +3121,7 @@ func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string
 	if sessionPath == "" {
 		return fmt.Errorf("session path is required")
 	}
-	if agent.IsCleanupPending(sessionPath) {
+	if control.SessionCleanupPending(sessionPath) {
 		return fmt.Errorf("session is pending cleanup")
 	}
 	if loaded == nil {
@@ -3248,11 +3244,8 @@ func (a *App) rebindTabToLoadedSessionPath(tab *WorkspaceTab, sessionPath string
 	return nil
 }
 
-func loadResumableSession(sessionPath string) (*agent.Session, error) {
-	if agent.IsCleanupPending(sessionPath) {
-		return nil, fmt.Errorf("session is pending cleanup")
-	}
-	return agent.LoadSession(sessionPath)
+func loadResumableSession(sessionPath string) (*control.LoadedSession, error) {
+	return control.LoadSession(sessionPath)
 }
 
 // PreviewSession reads a saved session for display only. It does not snapshot or
@@ -3530,7 +3523,7 @@ type promptHistorySessionFile struct {
 }
 
 func promptHistorySessionFiles(dir string) ([]promptHistorySessionFile, error) {
-	infos, err := agent.ListSessionOrder(dir)
+	infos, err := control.ListSessionOrder(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -3580,7 +3573,7 @@ func collectEventLogUserPrompts(path string, info os.FileInfo, resolveUserConten
 	if logInfo, err := os.Stat(logPath); err != nil || logInfo.IsDir() || logInfo.Size() == 0 {
 		return false, nil
 	}
-	users, err := agent.LoadSessionUserMessages(path)
+	users, err := control.LoadSessionUserMessages(path)
 	if err != nil {
 		return true, err
 	}
@@ -3666,8 +3659,8 @@ func collectJSONLUserPrompts(path string, info os.FileInfo, resolveUserContent f
 }
 
 func promptHistoryFallbackMillis(path string, info os.FileInfo) int64 {
-	if meta, ok, err := agent.LoadBranchMeta(path); err == nil && ok && !meta.UpdatedAt.IsZero() {
-		return meta.UpdatedAt.UnixMilli()
+	if updatedAt, ok := control.SessionUpdatedAt(path); ok {
+		return updatedAt.UnixMilli()
 	}
 	if info != nil {
 		return info.ModTime().UnixMilli()
@@ -7122,7 +7115,7 @@ func userFacingSessionLeaseError(setting string, err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, agent.ErrSessionLeaseHeld) {
+	if control.IsSessionLeaseHeld(err) {
 		return &sessionLeaseBusyError{setting: setting, err: err}
 	}
 	return err
@@ -7150,7 +7143,7 @@ func sessionPathAfterSnapshot(ctrl control.SessionAPI, fallback string) string {
 func (a *App) ensureTabSessionLeaseForRebuild(tab *WorkspaceTab, path, setting string) error {
 	if err := tab.ensureSessionLease(path); err != nil {
 		if a.canReclaimCurrentProcessSessionLease(tab, path, err) {
-			if lease, reclaimErr := agent.TryReclaimCurrentProcessSessionLease(path); reclaimErr == nil {
+			if lease, reclaimErr := control.TryReclaimCurrentProcessSessionLease(path); reclaimErr == nil {
 				tab.adoptSessionLease(lease)
 				return nil
 			} else {
@@ -7164,20 +7157,7 @@ func (a *App) ensureTabSessionLeaseForRebuild(tab *WorkspaceTab, path, setting s
 
 func (a *App) canReclaimCurrentProcessSessionLease(tab *WorkspaceTab, path string, err error) bool {
 	key := sessionRuntimeKey(path)
-	if tab == nil || key == "" || !errors.Is(err, agent.ErrSessionLeaseHeld) {
-		return false
-	}
-	var leaseErr *agent.SessionLeaseError
-	if !errors.As(err, &leaseErr) || leaseErr == nil {
-		return false
-	}
-	// A readable info naming a foreign runtime is respected here; reclaim
-	// would refuse it anyway. A nil Info (lease.json deleted by the user,
-	// quarantined by AV, or torn by a crash) must still attempt the reclaim:
-	// the OS lock is the arbiter there, and refusing on missing metadata
-	// wedges a session nobody actually holds as permanently busy.
-	if leaseErr.Info != nil &&
-		(leaseErr.Info.PID != os.Getpid() || leaseErr.Info.WriterID != agent.SessionWriterID()) {
+	if tab == nil || key == "" || !control.SessionLeaseReclaimCandidate(err) {
 		return false
 	}
 	a.mu.RLock()
@@ -7316,7 +7296,7 @@ func (a *App) SetModelForTab(tabID, name string) error {
 	applyTabToolApprovalModeToController(newCtrl, snap.toolApprovalMode)
 	newCtrl.SetGoal(snap.goal)
 
-	path := agent.ContinueSessionPath(prevPath, newCtrl.SessionDir(), newCtrl.Label())
+	path := control.ContinueSessionPath(prevPath, newCtrl.SessionDir(), newCtrl.Label())
 	if err := a.ensureTabSessionLeaseForRebuild(tab, path, "model"); err != nil {
 		newCtrl.Close()
 		return err
@@ -7471,7 +7451,7 @@ func (a *App) SetEffortForTab(tabID, level string) error {
 	applyTabModeToController(newCtrl, snap.mode)
 	applyTabToolApprovalModeToController(newCtrl, snap.toolApprovalMode)
 	newCtrl.SetGoal(snap.goal)
-	path := agent.ContinueSessionPath(prevPath, newCtrl.SessionDir(), newCtrl.Label())
+	path := control.ContinueSessionPath(prevPath, newCtrl.SessionDir(), newCtrl.Label())
 	if err := a.ensureTabSessionLeaseForRebuild(tab, path, "effort"); err != nil {
 		newCtrl.Close()
 		return err
@@ -7599,7 +7579,7 @@ func (a *App) SetTokenModeForTab(tabID, mode string) error {
 	applyTabModeToController(newCtrl, snap.mode)
 	applyTabToolApprovalModeToController(newCtrl, snap.toolApprovalMode)
 	newCtrl.SetGoal(snap.goal)
-	path := agent.ContinueSessionPath(prevPath, newCtrl.SessionDir(), newCtrl.Label())
+	path := control.ContinueSessionPath(prevPath, newCtrl.SessionDir(), newCtrl.Label())
 	if err := a.ensureTabSessionLeaseForRebuild(tab, path, "token mode"); err != nil {
 		newCtrl.Close()
 		return err
