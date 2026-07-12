@@ -18,7 +18,6 @@ import (
 // explicit architecture decision in this test and the development plan.
 var legacyTransportRuntimeImports = map[string][]string{
 	"desktop/main.go":          {"reames-agent/internal/provider/anthropic", "reames-agent/internal/provider/openai", "reames-agent/internal/tool/builtin"},
-	"desktop/tabs.go":          {"reames-agent/internal/agent"},
 	"internal/cli/chat_tui.go": {"reames-agent/internal/agent", "reames-agent/internal/provider"},
 	"internal/cli/cli.go":      {"reames-agent/internal/agent", "reames-agent/internal/provider", "reames-agent/internal/provider/openai"},
 	"internal/cli/review.go":   {"reames-agent/internal/agent", "reames-agent/internal/tool", "reames-agent/internal/tool/builtin"},

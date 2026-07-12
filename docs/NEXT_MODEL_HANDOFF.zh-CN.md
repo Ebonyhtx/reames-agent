@@ -1,6 +1,6 @@
 # 下一位模型接手交接文档
 
-日期：2026-07-11
+日期：2026-07-12
 
 仓库：`F:\reames-agent`
 
@@ -29,7 +29,7 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
-- M2 进行中：依赖棘轮、结构化错误、CLI 会话恢复、版本化 command/event/display DTO、prompt metadata、主要会话持久化、设置、Desktop history 与 app session-store 边界已关闭；剩余 Desktop tabs branch/index session-store、CLI composition root 与其余专用渲染边界待继续收口。
+- M2 进行中：依赖棘轮、结构化错误、CLI 会话恢复、版本化 command/event/display DTO、prompt metadata、主要会话持久化、设置、Desktop history 与 app/tabs session-store 边界已关闭；剩余 Desktop main/CLI composition root 与 CLI 专用渲染边界待继续收口。
 - M6 进行中：Gateway service、headless smoke 和 feedback 本地闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
@@ -45,12 +45,11 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 ## 最新已交付批次
 
-- 删除 ACP 三组无生产 caller、仅由旧测试维持的 Reasonix 初始装配 helper；真实 ACP session 继续统一走 `boot.Build`，既有 boot 测试覆盖 builtin 与 subagent profile。
-- CLI `--copy` 改用 `control.CopySessionForWriting`，control 测试覆盖 cleanup-pending、event-log transcript、branch lineage、标题/模型、源文件只读与新路径无 lease。
-- 新增独立 `internal/mcpname` 命名合同，CLI tool card/approval rendering 不再为解析名称依赖 tool registry。
-- 本批从 allowlist 再删除六条 `agent/provider/tool` 边，累计达到二十七条；ACP 已无受守卫 runtime 生产直连。
+- Desktop app 的 session listing/order/user-message/time/topic-binding/conflict/cleanup 改用稳定 control DTO；`app.go` 已无 `agent/provider/tool` 直连。
+- 新增 opaque `control.LoadedSession` 与 `control.SessionLease`；tab preload/rebind 与 lease transfer/reclaim 不再暴露 agent session/message/lease/error/writer 类型。
+- 依赖棘轮累计收缩二十八条，剩余 Desktop 直连集中在 tabs branch/index/migration 元数据。
 
-详见 `docs/audits/2026-07-11-m2-cli-composition-boundary.md`。主 commit `c698fe7` 与 CI 修复 `8960216` 已推送；本地全量门禁通过，CI run `29160315008` 为 8/8、CodeQL run `29160315021` 为 3/3。
+详见 `docs/audits/2026-07-11-m2-desktop-session-store-boundary.md`。commit `dc93f2a` 已推送；本地全量门禁通过，CI run `29192648091` 为 8/8、CodeQL run `29192648051` 为 3/3。
 
 ## 上一已交付批次关键证据
 
@@ -71,13 +70,13 @@ six-target CGO_ENABLED=0 cross-compile               PASS
 
 ## 下一执行顺序
 
-1. 完成当前 Desktop app session-store 候选批次的全量门禁、显式暂存、单 commit/push 与远端 CI 守候。
-2. 远端全绿后继续关闭 Desktop tabs branch/index session-store 或 CLI composition root，不为了清空 allowlist 制造反向依赖。
+1. 继续关闭 Desktop main 或 CLI composition root，再处理其余 CLI 专用渲染边界，不为了清空 allowlist 制造反向依赖。
+2. 积累足够大的实现/测试/文档批次后再统一跑全量门禁、提交和单次 push。
 3. M2 达到当前里程碑门槛后，进入干净云节点 CLI + Gateway + feedback 运维闭环与真实飞书回环。
 
 ## 长期未关闭项
 
-- M2 剩余 Desktop tabs branch/index session-store、CLI composition root 与其余 CLI 专用渲染边界收口。
+- M2 剩余 Desktop main/CLI composition root 与其余 CLI 专用渲染边界收口。
 - 干净 Linux/云节点的 CLI、Gateway、feedback、日志、备份、升级回滚。
 - 真实飞书/Lark 文本、审批、取消与恢复回环。
 - plugin 权限 manifest、内容完整性和安装预览。
@@ -87,4 +86,4 @@ six-target CGO_ENABLED=0 cross-compile               PASS
 
 ## 当前未提交批次
 
-当前 Desktop app session-store/control DTO/opaque handle 代码、测试与文档批次已形成，root/Desktop/frontend/contracts/baseline 与六目标交叉编译全绿；`c698fe7`/`8960216` 的远端成功证据已并入本批，等待显式暂存后集中提交/单次 push。受保护文件继续排除。
+Desktop tabs session-store/control DTO/原子 meta mutation 批次已形成；root build/vet/internal、Desktop 全测、前端 test/build、CI-scoped Python 69 项（2 platform skips）、Node/文档/公开/部署/发布/工具合同、baseline、上游报告与六目标交叉编译均通过。commit、单次 push 和远端 CI/CodeQL 尚待完成。既有 `dc93f2a` 远端证据已合并进本批文档；受保护文件继续排除。

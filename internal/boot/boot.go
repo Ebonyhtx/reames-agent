@@ -124,7 +124,7 @@ type Options struct {
 	ApprovalTimeout time.Duration
 	// SessionRecoveryMeta and OnSessionRecovered let richer frontends attach
 	// local UI metadata to automatic transcript recovery branches.
-	SessionRecoveryMeta func(control.SessionRecoveryRequest) agent.BranchMeta
+	SessionRecoveryMeta func(control.SessionRecoveryRequest) control.SessionMeta
 	OnSessionRecovered  func(control.SessionRecoveryInfo) error
 }
 

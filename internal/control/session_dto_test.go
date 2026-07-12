@@ -6,10 +6,77 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"reames-agent/internal/agent"
 	"reames-agent/internal/provider"
 )
+
+func TestUpdateSessionMetaPreservesPersistenceState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	updatedAt := time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC)
+	startedAt := updatedAt.Add(-time.Minute)
+	if err := agent.SaveBranchMetaPreserveUpdated(path, agent.BranchMeta{
+		ID:               "session",
+		ForkTurn:         3,
+		ForkMessageIndex: 7,
+		CreatedAt:        updatedAt.Add(-time.Hour),
+		UpdatedAt:        updatedAt,
+		Scope:            "global",
+		RecoveryDepth:    2,
+		Revision:         9,
+		ContentDigest:    "digest",
+		WriterID:         "writer",
+		SchemaVersion:    1,
+		Turns:            5,
+		Preview:          "preview",
+		InFlightTurn: &agent.InFlightTurnMeta{
+			StartMessageIndex: 4,
+			PreserveUser:      true,
+			StartedAt:         startedAt,
+		},
+	}); err != nil {
+		t.Fatalf("save meta: %v", err)
+	}
+
+	if err := UpdateSessionMeta(path, false, func(meta *SessionMeta) error {
+		meta.Scope = "project"
+		meta.WorkspaceRoot = "C:/work"
+		meta.TopicID = "topic"
+		meta.TokenMode = "economy"
+		return nil
+	}); err != nil {
+		t.Fatalf("UpdateSessionMeta: %v", err)
+	}
+	raw, ok, err := agent.LoadBranchMeta(path)
+	if err != nil || !ok {
+		t.Fatalf("LoadBranchMeta = %+v, %v, %v", raw, ok, err)
+	}
+	if raw.Scope != "project" || raw.WorkspaceRoot != "C:/work" || raw.TopicID != "topic" || raw.TokenMode != "economy" {
+		t.Fatalf("updated meta = %+v", raw)
+	}
+	if !raw.UpdatedAt.Equal(updatedAt) || raw.Revision != 9 || raw.ContentDigest != "digest" || raw.WriterID != "writer" {
+		t.Fatalf("persistence state changed = %+v", raw)
+	}
+	if raw.ID != "session" || raw.ForkTurn != 3 || raw.ForkMessageIndex != 7 || raw.RecoveryDepth != 2 || raw.SchemaVersion != 1 || raw.Turns != 5 || raw.Preview != "preview" {
+		t.Fatalf("hidden metadata changed = %+v", raw)
+	}
+	if raw.InFlightTurn == nil || raw.InFlightTurn.StartMessageIndex != 4 || !raw.InFlightTurn.PreserveUser || !raw.InFlightTurn.StartedAt.Equal(startedAt) {
+		t.Fatalf("in-flight marker changed = %+v", raw.InFlightTurn)
+	}
+
+	wantErr := errors.New("reject mutation")
+	if err := UpdateSessionMeta(path, false, func(meta *SessionMeta) error {
+		meta.TopicID = "should-not-save"
+		return wantErr
+	}); !errors.Is(err, wantErr) {
+		t.Fatalf("mutation error = %v", err)
+	}
+	meta, ok, err := LoadSessionMeta(path)
+	if err != nil || !ok || meta.TopicID != "topic" || meta.DefaultScope() != "project" {
+		t.Fatalf("stable meta after rejected mutation = %+v, %v, %v", meta, ok, err)
+	}
+}
 
 func TestListSessionsReturnsStableSummary(t *testing.T) {
 	dir := t.TempDir()

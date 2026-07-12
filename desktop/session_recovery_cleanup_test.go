@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"reames-agent/internal/agent"
+	"reames-agent/internal/control"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/store"
 )
@@ -28,7 +29,7 @@ func saveSnapshotTurns(t *testing.T, path string, turns int) *agent.Session {
 func TestMergeSessionInfosCountsRecoveryActivity(t *testing.T) {
 	summaries := map[string]topicSummary{}
 	now := time.Now()
-	infos := []agent.SessionInfo{
+	infos := []control.SessionInfo{
 		{
 			Path:           "/tmp/original.jsonl",
 			Turns:          3,
@@ -45,7 +46,7 @@ func TestMergeSessionInfosCountsRecoveryActivity(t *testing.T) {
 			Recovered:      true,
 		},
 	}
-	mergeSessionInfos("/tmp", infos, map[string]string{}, map[string]agent.SessionInfo{}, map[string]string{}, summaries)
+	mergeSessionInfos("/tmp", infos, map[string]string{}, map[string]control.SessionInfo{}, map[string]string{}, summaries)
 	summary := summaries[topicSummaryKey("global", "", "topic-1")]
 	if !summary.hasNormalSession || !summary.hasRecoveryOnly {
 		t.Fatalf("summary flags = %+v, want both normal and recovery seen", summary)

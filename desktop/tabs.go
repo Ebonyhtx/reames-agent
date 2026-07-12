@@ -20,7 +20,6 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"reames-agent/internal/agent"
 	"reames-agent/internal/boot"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
@@ -1512,7 +1511,7 @@ func (a *App) tabMeta(tab *WorkspaceTab, active bool) TabMeta {
 		m.CancelRequested = status.CancelRequested
 		m.Cancellable = status.Cancellable
 	}
-	if meta, ok, err := agent.LoadBranchMeta(tab.currentSessionPath()); err == nil && ok && meta.Recovered {
+	if meta, ok, err := control.LoadSessionMeta(tab.currentSessionPath()); err == nil && ok && meta.Recovered {
 		m.Recovered = true
 		m.RecoveryReason = meta.RecoveryReason
 		m.RecoveryDigest = meta.RecoveryDigest
@@ -2002,7 +2001,7 @@ func createEmptySessionFile(dir, model string) (string, error) {
 		return "", err
 	}
 	for i := 0; i < 3; i++ {
-		path := agent.NewSessionPath(dir, model)
+		path := control.NewSessionPath(dir, model)
 		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
 		if err == nil {
 			if closeErr := f.Close(); closeErr != nil {
@@ -2046,11 +2045,11 @@ func sessionPathHasNoContent(sessionDir, sessionPath string) bool {
 	if info.Size() == 0 {
 		return true
 	}
-	session, err := agent.LoadSession(path)
+	hasContent, err := control.SessionHasContent(path)
 	if err != nil {
 		return false
 	}
-	return !session.HasContent()
+	return !hasContent
 }
 
 func resetReusableBlankTabTitle(tab *WorkspaceTab, scope, workspaceRoot string) error {
@@ -2780,7 +2779,7 @@ func (a *App) buildTabControllerWithContext(tab *WorkspaceTab, loadedSession loa
 	}
 	startupSessionPath := ""
 	if pinnedPath, ok := pinnedTabSessionPath(sessionDir, tabSessionPath); ok {
-		if !agent.IsCleanupPending(pinnedPath) {
+		if !control.SessionCleanupPending(pinnedPath) {
 			startupSessionPath = pinnedPath
 		}
 	} else if topicID != "" {
@@ -2788,7 +2787,7 @@ func (a *App) buildTabControllerWithContext(tab *WorkspaceTab, loadedSession loa
 	}
 
 	model := strings.TrimSpace(tabModel)
-	if sessionModel, ok := agent.LoadSessionModel(startupSessionPath); ok {
+	if sessionModel, ok := control.SessionModel(startupSessionPath); ok {
 		config.NormalizeLegacyMimoCustomProvidersForRefs(cfg, sessionModel)
 		if _, ok := cfg.ResolveModel(sessionModel); ok {
 			model = sessionModel
@@ -3036,7 +3035,7 @@ type sessionBinding struct {
 	topicID       string
 	topicTitle    string
 	hasMeta       bool
-	meta          agent.BranchMeta
+	meta          control.SessionMeta
 }
 
 func (a *App) reconcileTabWithPinnedSessionMeta(tab *WorkspaceTab) (string, bool) {
@@ -3175,7 +3174,7 @@ func (a *App) resolveSessionBinding(sessionPath string) (sessionBinding, bool) {
 	if err != nil {
 		return sessionBinding{}, false
 	}
-	meta, ok, err := agent.LoadBranchMeta(path)
+	meta, ok, err := control.LoadSessionMeta(path)
 	if err != nil || !ok {
 		return sessionBinding{}, false
 	}
@@ -3187,7 +3186,7 @@ func (a *App) resolveSessionBinding(sessionPath string) (sessionBinding, bool) {
 	return sessionBindingFromMeta(path, meta)
 }
 
-func sessionBindingCandidateDirs(meta agent.BranchMeta) []string {
+func sessionBindingCandidateDirs(meta control.SessionMeta) []string {
 	if meta.DefaultScope() == "project" {
 		if root := normalizeProjectRoot(meta.WorkspaceRoot); root != "" {
 			return []string{desktopSessionDir(root)}
@@ -3202,7 +3201,7 @@ func sessionBindingInDir(dir, sessionPath string) (sessionBinding, bool) {
 	if !ok {
 		return sessionBinding{}, false
 	}
-	meta, hasMeta, err := agent.LoadBranchMeta(path)
+	meta, hasMeta, err := control.LoadSessionMeta(path)
 	if err != nil {
 		return sessionBinding{}, false
 	}
@@ -3236,7 +3235,7 @@ func sessionBindingInDir(dir, sessionPath string) (sessionBinding, bool) {
 	return binding, true
 }
 
-func sessionBindingFromMeta(path string, meta agent.BranchMeta) (sessionBinding, bool) {
+func sessionBindingFromMeta(path string, meta control.SessionMeta) (sessionBinding, bool) {
 	scope := meta.DefaultScope()
 	workspaceRoot := ""
 	if scope == "project" {
@@ -3568,7 +3567,7 @@ func sessionHasManualDisplayTitle(sessionPath string) bool {
 	if sessionPath == "" {
 		return false
 	}
-	if meta, ok, err := agent.LoadBranchMeta(sessionPath); err == nil && ok {
+	if meta, ok, err := control.LoadSessionMeta(sessionPath); err == nil && ok {
 		if strings.TrimSpace(meta.CustomTitle) != "" {
 			return true
 		}
@@ -3596,7 +3595,7 @@ func topicTitleFallbackForOpen(workspaceRoot, topicID, sessionPath string) (stri
 
 	if storedTitle == "" {
 		dir := filepath.Dir(sessionPath)
-		if meta, ok, err := agent.LoadBranchMeta(sessionPath); err == nil && ok {
+		if meta, ok, err := control.LoadSessionMeta(sessionPath); err == nil && ok {
 			if title := storedSessionTopicTitle(dir, sessionPath, meta); title != "" {
 				return title, topicTitleSourceManual, true
 			}
@@ -3628,13 +3627,13 @@ func topicTitleUserTurnsFromSession(path string) []string {
 	// Event-log aware: decoding the .jsonl checkpoint directly would stop
 	// seeing user turns after the first save, silently disabling the ≥3-turn
 	// title upgrade.
-	msgs, err := agent.LoadSessionUserMessages(path)
+	msgs, err := control.LoadSessionUserMessages(path)
 	if err != nil {
 		return nil
 	}
 	var users []string
 	for _, msg := range msgs {
-		content := control.StripComposePrefixes(agent.HandoffTask(msg.Text))
+		content := control.StripComposePrefixes(control.SessionUserTask(msg.Text))
 		content = control.StripReferencedContextPrefix(content)
 		if strings.TrimSpace(content) != "" {
 			users = append(users, content)
@@ -4900,10 +4899,10 @@ type sessionRecoveryFailedEvent struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-func (a *App) tabSessionRecoveryMeta(tab *WorkspaceTab) func(control.SessionRecoveryRequest) agent.BranchMeta {
-	return func(req control.SessionRecoveryRequest) agent.BranchMeta {
+func (a *App) tabSessionRecoveryMeta(tab *WorkspaceTab) func(control.SessionRecoveryRequest) control.SessionMeta {
+	return func(req control.SessionRecoveryRequest) control.SessionMeta {
 		if tab == nil {
-			return agent.BranchMeta{Name: agent.RecoveryBranchDefaultName}
+			return control.SessionMeta{Name: control.RecoverySessionDefaultName}
 		}
 		// This runs on the snapshot-recovery path, which can fire from the
 		// controller's autosave goroutine; snapshot the tab fields under a.mu so
@@ -4936,8 +4935,8 @@ func (a *App) tabSessionRecoveryMeta(tab *WorkspaceTab) func(control.SessionReco
 		if scope == "global" {
 			workspaceRoot = ""
 		}
-		return agent.BranchMeta{
-			Name:             agent.RecoveryBranchDefaultName,
+		return control.SessionMeta{
+			Name:             control.RecoverySessionDefaultName,
 			Scope:            scope,
 			WorkspaceRoot:    workspaceRoot,
 			TopicID:          topicID,
@@ -4960,7 +4959,7 @@ func (a *App) handleTabSessionRecovered(tab *WorkspaceTab) func(control.SessionR
 			if err := tab.ensureSessionLease(info.RecoveryPath); err != nil {
 				slog.Warn("desktop: acquire recovery session lease", "path", info.RecoveryPath, "err", err)
 				reason := "lease_unavailable"
-				if errors.Is(err, agent.ErrSessionLeaseHeld) {
+				if control.IsSessionLeaseHeld(err) {
 					reason = "lease_held"
 				}
 				a.emitRuntimeEvent("session:recovery-failed", sessionRecoveryFailedEvent{Reason: reason})
@@ -5371,7 +5370,7 @@ func migrateLegacySessionsIntoGlobalTopics(dir string) []string {
 	if topicMigrationDone(dir) {
 		return nil
 	}
-	infos, err := agent.ListSessionOrder(dir)
+	infos, err := control.ListSessionOrder(dir)
 	if err != nil {
 		return nil // transient read error — retry on the next render, leave unmarked
 	}
@@ -5389,7 +5388,7 @@ func migrateLegacySessionsIntoGlobalTopics(dir string) []string {
 		if strings.TrimSpace(info.TopicID) != "" {
 			continue
 		}
-		if meta, ok, err := agent.LoadBranchMeta(info.Path); err != nil {
+		if meta, ok, err := control.LoadSessionMeta(info.Path); err != nil {
 			deferred = true
 			continue
 		} else if ok && !legacySessionMetaMatchesMigrationTarget(meta, scope, workspaceRoot) {
@@ -5399,7 +5398,7 @@ func migrateLegacySessionsIntoGlobalTopics(dir string) []string {
 		if topicID == "" {
 			continue
 		}
-		preview, turns := agent.SessionPreview(info.Path)
+		preview, turns := control.SessionPreview(info.Path)
 		if turns == 0 {
 			deferred = true // empty now, but a later turn could make it migratable
 			continue
@@ -5425,28 +5424,20 @@ func migrateLegacySessionsIntoGlobalTopics(dir string) []string {
 			}
 		}
 
-		migrated, err := func() (bool, error) {
-			// Read-modify-write on the branch-meta sidecar: hold the per-path
-			// meta lock so agent-side writers (autosave revision bumps,
-			// in-flight markers) can't interleave between the load and save
-			// below and lose their fields.
-			unlock := agent.LockSessionMetaPath(info.Path)
-			defer unlock()
-			meta, err := agent.EnsureBranchMeta(info.Path)
-			if err != nil {
-				return false, err
-			}
+		migrated := false
+		err := control.UpdateSessionMeta(info.Path, false, func(meta *control.SessionMeta) error {
 			// Preserve scoped sessions only when their existing ownership matches
 			// the directory being migrated.
-			if !legacySessionMetaMatchesMigrationTarget(meta, scope, workspaceRoot) {
-				return false, nil
+			if !legacySessionMetaMatchesMigrationTarget(*meta, scope, workspaceRoot) {
+				return nil
 			}
 			meta.Scope = scope
 			meta.WorkspaceRoot = workspaceRoot
 			meta.TopicID = topicID
 			meta.TopicTitle = title
-			return true, agent.SaveBranchMetaPreserveUpdated(info.Path, meta)
-		}()
+			migrated = true
+			return nil
+		})
 		if err != nil {
 			deferred = true
 			continue
@@ -5525,7 +5516,7 @@ func repairIndexedSessionTopics(dir string) []string {
 	if topicIndexRepairDone(dir) {
 		return nil
 	}
-	infos, err := agent.ListSessionOrder(dir)
+	infos, err := control.ListSessionOrder(dir)
 	if err != nil {
 		return nil
 	}
@@ -5570,7 +5561,7 @@ func repairIndexedSessionTopics(dir string) []string {
 		if indexedSet[topicID] && strings.TrimSpace(topicTitles[topicID]) != "" {
 			continue // fully indexed already — nothing to repair, skip the meta read
 		}
-		meta, ok, err := agent.LoadBranchMeta(info.Path)
+		meta, ok, err := control.LoadSessionMeta(info.Path)
 		if err != nil {
 			deferred = true
 			continue
@@ -5646,7 +5637,7 @@ func repairIndexedSessionTopics(dir string) []string {
 	return nil
 }
 
-func indexedSessionTopicTitle(sessionTitles map[string]string, info agent.SessionOrderInfo, meta agent.BranchMeta) string {
+func indexedSessionTopicTitle(sessionTitles map[string]string, info control.SessionOrderInfo, meta control.SessionMeta) string {
 	if title := topicTitleFromText(meta.TopicTitle); title != "" {
 		return title
 	}
@@ -5675,14 +5666,14 @@ func legacyMigrationTargetForDir(dir string) (scope, workspaceRoot, topicTitleRo
 	return "", "", "", false
 }
 
-func legacySessionMetaMatchesMigrationTarget(meta agent.BranchMeta, scope, workspaceRoot string) bool {
+func legacySessionMetaMatchesMigrationTarget(meta control.SessionMeta, scope, workspaceRoot string) bool {
 	if strings.TrimSpace(meta.TopicID) != "" {
 		return false
 	}
 	return legacySessionScopeMatchesMigrationTarget(meta, scope, workspaceRoot)
 }
 
-func legacySessionScopeMatchesMigrationTarget(meta agent.BranchMeta, scope, workspaceRoot string) bool {
+func legacySessionScopeMatchesMigrationTarget(meta control.SessionMeta, scope, workspaceRoot string) bool {
 	metaScope := strings.TrimSpace(meta.Scope)
 	if metaScope != "" && metaScope != scope {
 		return false
@@ -5718,7 +5709,7 @@ func sameDesktopPath(a, b string) bool {
 }
 
 // projectRootKey is the map-key form of a project root: cleaned, absolute,
-// and case-folded on Windows — the same key form agent.CanonicalSessionPath
+// and case-folded on Windows — the same key form control.CanonicalSessionPath
 // uses for session paths, so equivalent spellings never split lookups.
 func projectRootKey(root string) string {
 	root = cleanDesktopPath(root)
@@ -5733,7 +5724,7 @@ func restoreSessionTopicIndex(dir, sessionPath string) error {
 	if sessionPath == "" {
 		return nil
 	}
-	meta, ok, err := agent.LoadBranchMeta(sessionPath)
+	meta, ok, err := control.LoadSessionMeta(sessionPath)
 	if err != nil {
 		return err
 	}
@@ -5744,73 +5735,63 @@ func restoreSessionTopicIndex(dir, sessionPath string) error {
 		return nil
 	}
 
-	// Read-modify-write on the branch-meta sidecar: re-read and save under the
-	// per-path meta lock so a concurrent save's revision bump can't land in
-	// between and get rolled back by the write at the end.
-	unlock := agent.LockSessionMetaPath(sessionPath)
-	defer unlock()
-	meta, ok, err = agent.LoadBranchMeta(sessionPath)
-	if err != nil {
-		return err
-	}
-	if !ok || strings.TrimSpace(meta.TopicID) == "" {
-		return nil
-	}
-
-	topicID := strings.TrimSpace(meta.TopicID)
-	scope := strings.TrimSpace(meta.Scope)
-	workspaceRoot := strings.TrimSpace(meta.WorkspaceRoot)
-	if scope != "global" && scope != "project" {
-		if workspaceRoot == "" {
-			scope = "global"
+	updated := false
+	if err := control.UpdateSessionMeta(sessionPath, false, func(meta *control.SessionMeta) error {
+		if strings.TrimSpace(meta.TopicID) == "" {
+			return nil
+		}
+		topicID := strings.TrimSpace(meta.TopicID)
+		scope := strings.TrimSpace(meta.Scope)
+		workspaceRoot := strings.TrimSpace(meta.WorkspaceRoot)
+		if scope != "global" && scope != "project" {
+			if workspaceRoot == "" {
+				scope = "global"
+			} else {
+				scope = "project"
+			}
+		}
+		if scope == "global" {
+			workspaceRoot = ""
 		} else {
-			scope = "project"
+			workspaceRoot = normalizeProjectRoot(workspaceRoot)
+			if workspaceRoot == "" {
+				scope = "global"
+			}
 		}
-	}
-	if scope == "global" {
-		workspaceRoot = ""
-	} else {
-		workspaceRoot = normalizeProjectRoot(workspaceRoot)
-		if workspaceRoot == "" {
-			scope = "global"
+
+		title := restoredSessionTopicTitle(dir, sessionPath, *meta)
+		if title == "" {
+			title = defaultTopicTitle
 		}
-	}
-
-	title := restoredSessionTopicTitle(dir, sessionPath, meta)
-	if title == "" {
-		title = defaultTopicTitle
-	}
-	if err := setTopicTitleWithSource(workspaceRoot, topicID, title, topicTitleSourceManual); err != nil {
-		return err
-	}
-
-	if scope == "global" {
-		meta.Scope = "global"
-		meta.WorkspaceRoot = ""
-	} else {
-		meta.Scope = "project"
+		if err := setTopicTitleWithSource(workspaceRoot, topicID, title, topicTitleSourceManual); err != nil {
+			return err
+		}
+		if err := prependTopicInProjectsFile(workspaceRoot, topicID, scope == "project"); err != nil {
+			return err
+		}
+		meta.Scope = scope
 		meta.WorkspaceRoot = workspaceRoot
-	}
-	meta.TopicID = topicID
-	meta.TopicTitle = title
-	if err := prependTopicInProjectsFile(workspaceRoot, topicID, scope == "project"); err != nil {
+		meta.TopicID = topicID
+		meta.TopicTitle = title
+		updated = true
+		return nil
+	}); err != nil {
 		return err
 	}
-	if err := agent.SaveBranchMetaPreserveUpdated(sessionPath, meta); err != nil {
-		return err
+	if updated {
+		invalidateTopicSessionIndexForPath(sessionPath)
 	}
-	invalidateTopicSessionIndexForPath(sessionPath)
 	return nil
 }
 
-func restoredSessionTopicTitle(dir, sessionPath string, meta agent.BranchMeta) string {
+func restoredSessionTopicTitle(dir, sessionPath string, meta control.SessionMeta) string {
 	if title := storedSessionTopicTitle(dir, sessionPath, meta); title != "" {
 		return title
 	}
 	if transcript, err := control.LoadTranscript(sessionPath); err == nil {
 		for _, msg := range transcript {
 			if msg.Role == control.TranscriptUser && !msg.Hidden && msg.SteerText == "" {
-				if title := topicTitleFromText(agent.HandoffTask(msg.Content)); title != "" {
+				if title := topicTitleFromText(control.SessionUserTask(msg.Content)); title != "" {
 					return title
 				}
 			}
@@ -5819,7 +5800,7 @@ func restoredSessionTopicTitle(dir, sessionPath string, meta agent.BranchMeta) s
 	return ""
 }
 
-func storedSessionTopicTitle(dir, sessionPath string, meta agent.BranchMeta) string {
+func storedSessionTopicTitle(dir, sessionPath string, meta control.SessionMeta) string {
 	if title := topicTitleFromText(meta.TopicTitle); title != "" {
 		return title
 	}
@@ -5827,7 +5808,7 @@ func storedSessionTopicTitle(dir, sessionPath string, meta agent.BranchMeta) str
 }
 
 func legacySessionTopicID(path string) string {
-	id := agent.BranchID(path)
+	id := control.BranchID(path)
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return ""
@@ -6064,7 +6045,7 @@ func (a *App) findTopicLocation(topicID string) (string, string, bool) {
 	}
 	a.mu.RUnlock()
 
-	infos, err := agent.ListSessions(config.SessionDir())
+	infos, err := control.ListSessions(config.SessionDir())
 	if err != nil {
 		return "", "", false
 	}
@@ -6103,18 +6084,10 @@ func (a *App) updateTopicSessionTitles(topicID, title string) {
 	}
 	for _, dir := range a.knownSessionDirs() {
 		for _, match := range topicSessionMatches(dir, topicID) {
-			// Read-modify-write on the branch-meta sidecar: hold the per-path
-			// meta lock so a concurrent save's revision bump can't land between
-			// the load and save below and get rolled back by this write.
-			unlock := agent.LockSessionMetaPath(match.path)
-			meta, ok, err := agent.LoadBranchMeta(match.path)
-			if err != nil || !ok {
-				unlock()
-				continue
-			}
-			meta.TopicTitle = title
-			err = agent.SaveBranchMetaPreserveUpdated(match.path, meta)
-			unlock()
+			err := control.UpdateSessionMeta(match.path, false, func(meta *control.SessionMeta) error {
+				meta.TopicTitle = title
+				return nil
+			})
 			if err == nil {
 				invalidateTopicSessionIndex(dir)
 			}
@@ -6305,7 +6278,7 @@ func (a *App) trashTopic(topicID string) error {
 			teardownTimedOut := waitDestroyHandles(destroys)
 			a.closeRemovedSessionRuntimesForSessionAfterDestroy(removed, target.dir, target.sessionPath, closedRemoved)
 			if teardownTimedOut {
-				if err := agent.MarkCleanupPending(target.sessionPath, "delete"); err != nil {
+				if err := control.MarkSessionCleanupPending(target.sessionPath, "delete"); err != nil {
 					return err
 				}
 				go delayedDesktopSessionTrash(target.dir, target.sessionPath, target.key, destroys)
@@ -6363,7 +6336,7 @@ func (a *App) topicTrashTargets(topicID string) ([]topicTrashTarget, error) {
 			return nil, err
 		}
 		for _, match := range index.byTopic[topicID] {
-			if agent.IsCleanupPending(match.path) {
+			if control.SessionCleanupPending(match.path) {
 				continue
 			}
 			if err := addTarget(dir, match.path); err != nil {
@@ -6467,7 +6440,7 @@ func (a *App) ListProjectTree() []ProjectNode {
 	}
 	out := []ProjectNode{}
 	topicSummaries := map[string]topicSummary{}
-	sessionInfos := map[string]agent.SessionInfo{}
+	sessionInfos := map[string]control.SessionInfo{}
 	sessionTitles := map[string]string{}
 
 	// Read session listings from all known directories concurrently, since
@@ -6476,7 +6449,7 @@ func (a *App) ListProjectTree() []ProjectNode {
 	cacheToken := projectSessionCache.versionToken()
 	type sessionDirLoadResult struct {
 		dir    string
-		infos  []agent.SessionInfo
+		infos  []control.SessionInfo
 		titles map[string]string
 		ok     bool
 	}
@@ -6503,7 +6476,7 @@ func (a *App) ListProjectTree() []ProjectNode {
 			// each session's .meta sidecar, so even large directories list in a few
 			// milliseconds without decoding any .jsonl body. The in-memory
 			// projectSessionCache still elides repeat listings within a session.
-			infos, err := agent.ListSessions(dir)
+			infos, err := control.ListSessions(dir)
 			if err != nil {
 				return
 			}
@@ -6770,7 +6743,7 @@ func projectSessionNodeKey(scope, sessionPath string) string {
 	return scope + "_session_" + hex.EncodeToString(sum[:8])
 }
 
-func runtimeSessionTreeLabel(tab *WorkspaceTab, info agent.SessionInfo, title string) string {
+func runtimeSessionTreeLabel(tab *WorkspaceTab, info control.SessionInfo, title string) string {
 	if title = strings.TrimSpace(title); title != "" {
 		return title
 	}
@@ -7448,15 +7421,6 @@ func saveTabSessionMetaSnapshot(snap tabSessionMetaSnapshot) error {
 	if strings.TrimSpace(snap.path) == "" {
 		return nil
 	}
-	// Read-modify-write on the branch-meta sidecar: hold the per-path meta lock
-	// so agent-side writers (autosave UpdateSessionMeta, in-flight markers)
-	// can't interleave and drop fields.
-	unlock := agent.LockSessionMetaPath(snap.path)
-	defer unlock()
-	m, err := agent.EnsureBranchMeta(snap.path)
-	if err != nil {
-		return err
-	}
 	scope := snap.scope
 	workspaceRoot := snap.workspaceRoot
 	if ownerScope, ownerRoot, _, ok := legacyMigrationTargetForDir(filepath.Dir(snap.path)); ok {
@@ -7471,15 +7435,17 @@ func saveTabSessionMetaSnapshot(snap tabSessionMetaSnapshot) error {
 		scope = "global"
 		workspaceRoot = ""
 	}
-	m.Scope = scope
-	m.WorkspaceRoot = workspaceRoot
-	m.TopicID = snap.topicID
-	m.TopicTitle = snap.topicTitle
-	m.TokenMode = persistedTabTokenMode(snap.tokenMode)
-	m.Mode = persistedTabMode(snap.mode)
-	m.ToolApprovalMode = persistedToolApprovalMode(snap.toolApprovalMode)
-	m.Goal = strings.TrimSpace(snap.goal)
-	if err := agent.SaveBranchMetaPreserveUpdated(snap.path, m); err != nil {
+	if err := control.UpdateSessionMeta(snap.path, false, func(meta *control.SessionMeta) error {
+		meta.Scope = scope
+		meta.WorkspaceRoot = workspaceRoot
+		meta.TopicID = snap.topicID
+		meta.TopicTitle = snap.topicTitle
+		meta.TokenMode = persistedTabTokenMode(snap.tokenMode)
+		meta.Mode = persistedTabMode(snap.mode)
+		meta.ToolApprovalMode = persistedToolApprovalMode(snap.toolApprovalMode)
+		meta.Goal = strings.TrimSpace(snap.goal)
+		return nil
+	}); err != nil {
 		return err
 	}
 	invalidateTopicSessionIndexForPath(snap.path)
@@ -7518,7 +7484,7 @@ func defaultTabSessionProfile() tabSessionProfile {
 	}
 }
 
-func tabSessionProfileFromMeta(sessionPath string, meta agent.BranchMeta) tabSessionProfile {
+func tabSessionProfileFromMeta(sessionPath string, meta control.SessionMeta) tabSessionProfile {
 	profile := defaultTabSessionProfile()
 	profile.tokenMode = boot.NormalizeTokenMode(meta.TokenMode)
 	profile.mode = normalizeTabMode(meta.Mode)
@@ -7531,7 +7497,7 @@ func tabSessionProfileFromMeta(sessionPath string, meta agent.BranchMeta) tabSes
 }
 
 func loadTabSessionProfile(sessionPath string) tabSessionProfile {
-	meta, ok, err := agent.LoadBranchMeta(sessionPath)
+	meta, ok, err := control.LoadSessionMeta(sessionPath)
 	if err != nil || !ok {
 		return defaultTabSessionProfile()
 	}
@@ -7739,7 +7705,7 @@ type topicSessionDirIndex struct {
 // session dir from disk. Invalidated by emitProjectTreeChanged — any create/
 // delete/rename session bumps the project tree version.
 type sessionListCacheEntry struct {
-	infos  []agent.SessionInfo
+	infos  []control.SessionInfo
 	titles map[string]string
 }
 
@@ -7749,7 +7715,7 @@ type sessionListCache struct {
 	version atomic.Uint64
 }
 
-func (c *sessionListCache) get(dir string) ([]agent.SessionInfo, map[string]string, bool) {
+func (c *sessionListCache) get(dir string) ([]control.SessionInfo, map[string]string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.byDir[dir]
@@ -7763,7 +7729,7 @@ func (c *sessionListCache) versionToken() uint64 {
 	return c.version.Load()
 }
 
-func (c *sessionListCache) put(dir string, infos []agent.SessionInfo, titles map[string]string, token uint64) {
+func (c *sessionListCache) put(dir string, infos []control.SessionInfo, titles map[string]string, token uint64) {
 	if c.version.Load() != token {
 		return
 	}
@@ -7786,7 +7752,7 @@ var projectSessionCache = &sessionListCache{byDir: map[string]sessionListCacheEn
 
 // mergeSessionInfos merges one directory's session listing into the maps used by
 // ListProjectTree. The result collection loop calls it serially.
-func mergeSessionInfos(dir string, infos []agent.SessionInfo, titles map[string]string, sessionInfos map[string]agent.SessionInfo, sessionTitles map[string]string, topicSummaries map[string]topicSummary) {
+func mergeSessionInfos(dir string, infos []control.SessionInfo, titles map[string]string, sessionInfos map[string]control.SessionInfo, sessionTitles map[string]string, topicSummaries map[string]topicSummary) {
 	for _, info := range infos {
 		sessionKey := sessionRuntimeKey(info.Path)
 		if sessionKey != "" {
@@ -7916,7 +7882,7 @@ func topicSessionIndexForDir(dir string) (topicSessionDirIndex, error) {
 	}
 	for _, name := range sessionNames {
 		path := filepath.Join(key, name)
-		meta, ok, err := agent.LoadBranchMeta(path)
+		meta, ok, err := control.LoadSessionMeta(path)
 		if err != nil || !ok {
 			continue
 		}
@@ -7959,7 +7925,7 @@ func topicSessionMatches(dir, topicID string) []topicSessionMatch {
 	}
 	out := make([]topicSessionMatch, 0, len(matches))
 	for _, match := range matches {
-		if agent.IsCleanupPending(match.path) {
+		if control.SessionCleanupPending(match.path) {
 			continue
 		}
 		out = append(out, match)

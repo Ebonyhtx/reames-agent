@@ -2,7 +2,7 @@
 
 日期：2026-07-11
 
-状态：本地全量验收通过；commit 与远端证据待完成
+状态：已交付；commit `dc93f2a`
 
 ## 当前结论
 
@@ -37,4 +37,4 @@ go test ./internal/control -run TestTransportRuntimeImportRatchet     PASS
 git diff --check                                                      PASS
 ```
 
-前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CI/CodeQL 尚未运行；这些证据补齐前不得声明本批已交付，M2 与长期 GOAL 仍保持未完成。
+前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CI run `29192648091` 为 8/8、CodeQL run `29192648051` 为 3/3；本批未重复触发原生 Desktop candidate。M2 与长期 GOAL 仍保持未完成。

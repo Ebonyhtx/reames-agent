@@ -119,8 +119,8 @@ func writeLegacyEventSession(t *testing.T, dir, name, prompt, reply string, modT
 func TestSessionListCacheRefillsAfterInvalidate(t *testing.T) {
 	cache := &sessionListCache{byDir: map[string]sessionListCacheEntry{}}
 	dir := t.TempDir()
-	first := []agent.SessionInfo{{Path: filepath.Join(dir, "first.jsonl")}}
-	second := []agent.SessionInfo{{Path: filepath.Join(dir, "second.jsonl")}}
+	first := []control.SessionInfo{{Path: filepath.Join(dir, "first.jsonl")}}
+	second := []control.SessionInfo{{Path: filepath.Join(dir, "second.jsonl")}}
 
 	token := cache.versionToken()
 	cache.put(dir, first, map[string]string{"first.jsonl": "First"}, token)
@@ -163,7 +163,7 @@ func TestRenameSessionInvalidatesProjectTreeCache(t *testing.T) {
 	app.setTestCtrl(ctrl, "")
 
 	token := projectSessionCache.versionToken()
-	projectSessionCache.put(dir, []agent.SessionInfo{{Path: sessionPath}}, map[string]string{"rename-me.jsonl": "old"}, token)
+	projectSessionCache.put(dir, []control.SessionInfo{{Path: sessionPath}}, map[string]string{"rename-me.jsonl": "old"}, token)
 	if _, _, ok := projectSessionCache.get(dir); !ok {
 		t.Fatalf("expected primed project tree cache")
 	}

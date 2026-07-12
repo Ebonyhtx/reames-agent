@@ -114,7 +114,7 @@ type Controller struct {
 	onRemember                        func(rule string) RememberResult // set via Options; invoked when user picks "always allow"
 	onRememberMCPReadOnlyTrust        func(serverName, rawToolName string) MCPReadOnlyTrustResult
 	onRememberPlanModeReadOnlyCommand func(prefix string) PlanModeReadOnlyCommandTrustResult
-	sessionRecoveryMeta               func(SessionRecoveryRequest) agent.BranchMeta
+	sessionRecoveryMeta               func(SessionRecoveryRequest) SessionMeta
 	onSessionRecovered                func(SessionRecoveryInfo) error
 
 	// balanceURL/balanceKey target the active provider's optional wallet-balance
@@ -317,7 +317,7 @@ type SessionRecoveryInfo struct {
 	RecoveryPath string
 	Existing     bool
 	Reason       string
-	Meta         agent.BranchMeta
+	Meta         SessionMeta
 }
 
 type externalFolderToolRefs interface {
@@ -393,7 +393,7 @@ type Options struct {
 	OnRememberPlanModeReadOnlyCommand func(prefix string) PlanModeReadOnlyCommandTrustResult
 	// SessionRecoveryMeta lets a frontend attach scope/topic/profile metadata to
 	// an automatic recovery branch before it is written.
-	SessionRecoveryMeta func(SessionRecoveryRequest) agent.BranchMeta
+	SessionRecoveryMeta func(SessionRecoveryRequest) SessionMeta
 	// OnSessionRecovered is called after a stale runtime's transcript has been
 	// saved as a recovery branch, before the controller commits to that branch.
 	OnSessionRecovered func(SessionRecoveryInfo) error
@@ -3049,14 +3049,14 @@ func (c *Controller) recoverSnapshotConflict(path string, saveErr error, forceRe
 		reason = "rewrite conflict"
 	}
 	req := SessionRecoveryRequest{OriginalPath: path, Reason: reason, Mode: mode}
-	meta := agent.BranchMeta{}
+	meta := SessionMeta{}
 	if c.sessionRecoveryMeta != nil {
 		meta = c.sessionRecoveryMeta(req)
 	}
 	info, err := c.executor.Session().SaveRecoveryBranch(agent.RecoveryBranchOptions{
 		OriginalPath: path,
 		Reason:       reason,
-		BranchMeta:   meta,
+		BranchMeta:   agentBranchMetaFromSession(meta),
 	})
 	if err != nil {
 		if errors.Is(err, agent.ErrSessionRecoveryDepthExceeded) {
@@ -3096,7 +3096,7 @@ func (c *Controller) recoverSnapshotConflict(path string, saveErr error, forceRe
 		RecoveryPath: info.Path,
 		Existing:     info.Existing,
 		Reason:       reason,
-		Meta:         info.Meta,
+		Meta:         sessionMetaFromAgent(info.Meta),
 	}
 	if c.onSessionRecovered != nil {
 		if err := c.onSessionRecovered(recoveryInfo); err != nil {
