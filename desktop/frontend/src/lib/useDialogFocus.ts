@@ -8,6 +8,7 @@ const FOCUSABLE_SELECTOR = [
   "textarea:not([disabled])",
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
+const RETURN_FOCUS_ATTRIBUTE = "data-dialog-return-focus";
 
 function focusableElements(dialog: HTMLElement): HTMLElement[] {
   return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
@@ -28,6 +29,14 @@ function focusElement(element: HTMLElement | null): void {
   }
 }
 
+function currentRestoreTarget(target: HTMLElement): HTMLElement | null {
+  if (target.isConnected) return target;
+  const key = target.getAttribute(RETURN_FOCUS_ATTRIBUTE);
+  if (!key) return null;
+  return Array.from(document.querySelectorAll<HTMLElement>(`[${RETURN_FOCUS_ATTRIBUTE}]`))
+    .find((candidate) => candidate.getAttribute(RETURN_FOCUS_ATTRIBUTE) === key && candidate.isConnected) ?? null;
+}
+
 function restoreAfterRemoval(dialog: HTMLElement, target: HTMLElement): void {
   if (typeof MutationObserver === "undefined" || !dialog.isConnected) return;
   const observer = new MutationObserver(() => {
@@ -35,7 +44,8 @@ function restoreAfterRemoval(dialog: HTMLElement, target: HTMLElement): void {
     observer.disconnect();
     window.clearTimeout(timeout);
     const topDialog = topModalDialog();
-    if (target.isConnected && (!topDialog || topDialog.contains(target))) focusElement(target);
+    const currentTarget = currentRestoreTarget(target);
+    if (currentTarget && (!topDialog || topDialog.contains(currentTarget))) focusElement(currentTarget);
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
   const timeout = window.setTimeout(() => observer.disconnect(), 1000);
@@ -106,8 +116,9 @@ export function useDialogFocus(
       if (frame !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
       document.removeEventListener("keydown", containTab, { capture: true });
       const dialog = dialogRef.current ?? ownedDialog;
-      if (dialog && topModalDialog() === dialog && previouslyFocused?.isConnected) {
-        focusElement(previouslyFocused);
+      const currentTarget = previouslyFocused ? currentRestoreTarget(previouslyFocused) : null;
+      if (dialog && topModalDialog() === dialog && currentTarget && previouslyFocused) {
+        focusElement(currentTarget);
         restoreAfterRemoval(dialog, previouslyFocused);
       }
     };

@@ -2,7 +2,7 @@
 
 日期：2026-07-13
 
-状态：完整本地门禁与真实浏览器交互通过；commit 与远端证据待完成
+状态：已交付（commit `9d8368c`；普通 CI `29203366720` 8/8、CodeQL `29203366703` 3/3）
 
 ## 缺口
 
@@ -40,4 +40,4 @@ in-app Browser http://127.0.0.1:5173                         PASS
 
 共享 hook 测试覆盖初始焦点、正反向 Tab 循环、无控件 root fallback、关闭恢复、嵌套顶层与断开 opener；命令面板组件测试额外覆盖延迟挂载和退出动画后恢复。真实浏览器验证：命令面板打开后 combobox 获焦并携带 listbox/active-descendant，末项 Tab 回到 combobox，Escape 关闭且 200ms 动画移除后焦点回到“命令”；设置和历史均暴露唯一模态 dialog，关闭后分别回到“设置”“历史”。全新浏览器标签完成命令面板回环后 warning/error 日志为 0。
 
-该证据是 Vite dev + 确定性 mock bridge 的真实浏览器交互，不冒充原生 Wails 屏幕阅读器或 Windows UIA 证据。原生键盘/读屏抽查、对比度和缩放仍属于后续 M3。
+该证据是 Vite dev + 确定性 mock bridge 的真实浏览器交互，不冒充原生 Wails 屏幕阅读器或 Windows UIA 证据。Windows 显示缩放由同一交付批次的独立审计覆盖；主题对比度和入口重挂载焦点恢复在后续 `2026-07-13-m3-theme-contrast.md` 中继续收口。原生键盘/读屏和 Windows forced-colors 抽查仍属于后续 M3。

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Windows native Desktop startup smoke with an isolated Reames Agent home.
+"""Windows native Desktop cold and warm startup smoke with an isolated home.
 
 This proves that a built Desktop executable starts, owns a responsive native
-window for the observation period, confines state to ``--home``, and can be
-stopped after observation. It does not claim to exercise the Wails command
-bridge, user clicks, or a zero exit status on ``WM_CLOSE``.
+window for the observation period, can relaunch against the same warmed
+WebView profile, confines state to ``--home``, and can be stopped after each
+observation. It does not claim to exercise the Wails command bridge or user
+clicks.
 """
 
 from __future__ import annotations
@@ -26,12 +27,14 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MIN_OBSERVATION_SECONDS = 10
 MAX_OBSERVATION_SECONDS = 300
 MIN_STARTUP_BUDGET_SECONDS = 1.0
 MAX_STARTUP_BUDGET_SECONDS = 60.0
 DEFAULT_STARTUP_BUDGET_SECONDS = 8.0
+DEFAULT_WARM_STARTUP_BUDGET_SECONDS = 6.0
+WARM_RELAUNCH_SETTLE_SECONDS = 1.0
 POLL_INTERVAL_SECONDS = 0.5
 REQUIRED_CONSECUTIVE_RESPONSES = 3
 TEMP_CLEANUP_RETRY_SECONDS = (
@@ -103,6 +106,19 @@ class SmokeResult:
     first_responsive_seconds: float | None = None
     stable_responsive_seconds: float | None = None
     startup_budget_met: bool = False
+    warm_startup_budget_seconds: float = DEFAULT_WARM_STARTUP_BUDGET_SECONDS
+    warm_launch_attempted: bool = False
+    warm_observed_seconds: float = 0.0
+    warm_first_visible_seconds: float | None = None
+    warm_first_responsive_seconds: float | None = None
+    warm_stable_responsive_seconds: float | None = None
+    warm_startup_budget_met: bool = False
+    warm_responding: bool = False
+    warm_process_alive_after_observation: bool = False
+    warm_observed_exit_code: int | None = None
+    warm_cleanup_exit_code: int | None = None
+    warm_cleanup_method: str = ""
+    warm_cleanup_ok: bool = False
     responding: bool = False
     responsive_checks: int = 0
     window_checks: int = 0
@@ -420,6 +436,35 @@ def observe_process(
     return observation
 
 
+def classify_startup_observation(
+    observation: Observation, budget_seconds: float, warm: bool = False
+) -> tuple[str, str] | None:
+    """Return the stable failure code/message for one native launch."""
+    prefix = "warm-" if warm else ""
+    phase = "warm " if warm else ""
+    if observation.early_exit_code is not None:
+        return (
+            f"{prefix}early-exit",
+            f"{phase}process exited with code {observation.early_exit_code} before the observation window ended",
+        )
+    if not observation.responding:
+        return (
+            f"{prefix}no-response",
+            f"{phase}native window did not produce three consecutive bounded message-pump responses through the final check",
+        )
+    if (
+        observation.stable_responsive_seconds is None
+        or observation.stable_responsive_seconds > budget_seconds
+    ):
+        elapsed = observation.stable_responsive_seconds
+        elapsed_text = "no stable response" if elapsed is None else f"{elapsed:.3f}s"
+        return (
+            f"{prefix}startup-budget",
+            f"{phase}native window needed {elapsed_text} to become stably responsive; budget is {budget_seconds:.3f}s",
+        )
+    return None
+
+
 def cleanup_process(proc: subprocess.Popen, errors: list[str]) -> tuple[bool, str]:
     if proc.poll() is not None:
         return True, "already-exited"
@@ -459,6 +504,7 @@ def run_smoke(
     exe_path: str,
     observation_seconds: int = 12,
     max_startup_seconds: float = DEFAULT_STARTUP_BUDGET_SECONDS,
+    max_warm_startup_seconds: float = DEFAULT_WARM_STARTUP_BUDGET_SECONDS,
     keep_temp: bool = False,
     artifact_path: str | None = None,
 ) -> SmokeResult:
@@ -466,6 +512,7 @@ def run_smoke(
         platform=sys.platform,
         observation_seconds=observation_seconds,
         startup_budget_seconds=max_startup_seconds,
+        warm_startup_budget_seconds=max_warm_startup_seconds,
         kept_temp=keep_temp,
     )
     proc: subprocess.Popen | None = None
@@ -474,6 +521,7 @@ def run_smoke(
     try:
         validate_observation_seconds(observation_seconds)
         validate_startup_budget_seconds(max_startup_seconds)
+        validate_startup_budget_seconds(max_warm_startup_seconds)
     except ValueError as exc:
         _fail(result, "invalid-arguments", str(exc))
         result.finished_at = utc_now()
@@ -562,24 +610,11 @@ def run_smoke(
                 result.max_visible_windows = observation.max_visible_windows
                 result.observed_exit_code = observation.early_exit_code
                 result.process_alive_after_observation = proc.poll() is None
-                if observation.early_exit_code is not None:
-                    _fail(
-                        result,
-                        "early-exit",
-                        f"process exited with code {observation.early_exit_code} before the observation window ended",
-                    )
-                elif not observation.responding:
-                    _fail(
-                        result,
-                        "no-response",
-                        "native window did not produce three consecutive bounded message-pump responses through the final check",
-                    )
-                elif not result.startup_budget_met:
-                    _fail(
-                        result,
-                        "startup-budget",
-                        f"native window needed {result.stable_responsive_seconds:.3f}s to become stably responsive; budget is {max_startup_seconds:.3f}s",
-                    )
+                failure = classify_startup_observation(
+                    observation, max_startup_seconds
+                )
+                if failure is not None:
+                    _fail(result, *failure)
             except Exception as exc:
                 _fail(result, "no-response", f"window response probe failed: {exc}")
             finally:
@@ -589,6 +624,62 @@ def run_smoke(
                 result.cleanup_exit_code = proc.poll()
                 if not result.cleanup_ok:
                     _fail(result, "cleanup-failure", "Desktop process could not be stopped")
+
+        if result.failure_kind is None and result.cleanup_ok:
+            result.warm_launch_attempted = True
+            time.sleep(WARM_RELAUNCH_SETTLE_SECONDS)
+            warm_proc: subprocess.Popen | None = None
+            try:
+                warm_proc = subprocess.Popen(
+                    [str(exe), "--home", str(home)],
+                    env=env,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            except OSError as exc:
+                _fail(result, "warm-startup-failure", f"warm relaunch failed: {exc}")
+            else:
+                try:
+                    warm = observe_process(warm_proc, observation_seconds)
+                    result.warm_observed_seconds = round(warm.elapsed_seconds, 3)
+                    result.warm_first_visible_seconds = (
+                        round(warm.first_visible_seconds, 3)
+                        if warm.first_visible_seconds is not None
+                        else None
+                    )
+                    result.warm_first_responsive_seconds = (
+                        round(warm.first_responsive_seconds, 3)
+                        if warm.first_responsive_seconds is not None
+                        else None
+                    )
+                    result.warm_stable_responsive_seconds = (
+                        round(warm.stable_responsive_seconds, 3)
+                        if warm.stable_responsive_seconds is not None
+                        else None
+                    )
+                    result.warm_startup_budget_met = (
+                        warm.stable_responsive_seconds is not None
+                        and warm.stable_responsive_seconds <= max_warm_startup_seconds
+                    )
+                    result.warm_responding = warm.responding
+                    result.warm_observed_exit_code = warm.early_exit_code
+                    result.warm_process_alive_after_observation = warm_proc.poll() is None
+                    failure = classify_startup_observation(
+                        warm, max_warm_startup_seconds, warm=True
+                    )
+                    if failure is not None:
+                        _fail(result, *failure)
+                except Exception as exc:
+                    _fail(result, "warm-no-response", f"warm window response probe failed: {exc}")
+                finally:
+                    result.warm_cleanup_ok, result.warm_cleanup_method = cleanup_process(
+                        warm_proc, result.errors
+                    )
+                    result.warm_cleanup_exit_code = warm_proc.poll()
+                    if not result.warm_cleanup_ok:
+                        _fail(result, "warm-cleanup-failure", "warm Desktop process could not be stopped")
 
         result.home_files = list_home_files(home)
         if not any(
@@ -625,6 +716,16 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Observation duration ({MIN_OBSERVATION_SECONDS}-{MAX_OBSERVATION_SECONDS} seconds)",
     )
     parser.add_argument(
+        "--max-warm-startup-seconds",
+        type=float,
+        default=DEFAULT_WARM_STARTUP_BUDGET_SECONDS,
+        help=(
+            "Maximum time for the same-home warm relaunch to reach three "
+            "consecutive responsive window probes "
+            f"({MIN_STARTUP_BUDGET_SECONDS:g}-{MAX_STARTUP_BUDGET_SECONDS:g} seconds)"
+        ),
+    )
+    parser.add_argument(
         "--max-startup-seconds",
         type=float,
         default=DEFAULT_STARTUP_BUDGET_SECONDS,
@@ -642,6 +743,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         validate_observation_seconds(args.observation_seconds)
         validate_startup_budget_seconds(args.max_startup_seconds)
+        validate_startup_budget_seconds(args.max_warm_startup_seconds)
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -649,6 +751,7 @@ def main(argv: list[str] | None = None) -> int:
         args.exe,
         observation_seconds=args.observation_seconds,
         max_startup_seconds=args.max_startup_seconds,
+        max_warm_startup_seconds=args.max_warm_startup_seconds,
         keep_temp=args.keep_temp,
         artifact_path=args.artifact,
     )

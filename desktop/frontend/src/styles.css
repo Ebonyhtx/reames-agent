@@ -1472,6 +1472,59 @@
   }
 }
 
+/* Accessibility contrast floor.
+ * Theme palettes above own the visual direction; this final token layer owns
+ * small-text and focus visibility. Keeping it centralized prevents the forced
+ * light and auto-light copies from drifting below WCAG AA independently. */
+:root[data-theme-style]:not([data-theme-style=""]) {
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+:root[data-theme-style="graphite"] { --fg-faint: #7d8088; }
+:root[data-theme-style="aurora"] { --fg-faint: #817b9d; }
+:root[data-theme-style="slate"] { --fg-faint: #788292; }
+:root[data-theme-style="carbon"] { --fg-faint: #817b71; }
+:root[data-theme-style="nocturne"] { --fg-faint: #817c99; }
+:root[data-theme-style="amber"] { --fg-faint: #858b96; }
+
+:root[data-theme="light"][data-theme-style] {
+  --ok: #187a45;
+  --warn: #975b0b;
+  --err: #c7352a;
+  --add-fg: var(--ok);
+  --del-fg: var(--err);
+  --control-primary-bg: var(--accent);
+}
+:root[data-theme="light"][data-theme-style="graphite"] { --fg-faint: #676a72; --accent: #bd3f18; }
+:root[data-theme="light"][data-theme-style="aurora"] { --fg-faint: #6c657f; --accent: #5948df; }
+:root[data-theme="light"][data-theme-style="slate"] { --fg-faint: #656e7d; --accent: #255fc2; }
+:root[data-theme="light"][data-theme-style="carbon"] { --fg-faint: #6b645b; --accent: #08766d; }
+:root[data-theme="light"][data-theme-style="nocturne"] { --fg-faint: #6b667f; --accent: #5255d5; }
+:root[data-theme="light"][data-theme-style="amber"] { --fg-faint: #5f6876; --accent: #b9441c; }
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme-style]:not([data-theme]) {
+    --ok: #187a45;
+    --warn: #975b0b;
+    --err: #c7352a;
+    --add-fg: var(--ok);
+    --del-fg: var(--err);
+    --control-primary-bg: var(--accent);
+  }
+  :root[data-theme-style="graphite"]:not([data-theme]) { --fg-faint: #676a72; --accent: #bd3f18; }
+  :root[data-theme-style="aurora"]:not([data-theme]) { --fg-faint: #6c657f; --accent: #5948df; }
+  :root[data-theme-style="slate"]:not([data-theme]) { --fg-faint: #656e7d; --accent: #255fc2; }
+  :root[data-theme-style="carbon"]:not([data-theme]) { --fg-faint: #6b645b; --accent: #08766d; }
+  :root[data-theme-style="nocturne"]:not([data-theme]) { --fg-faint: #6b667f; --accent: #5255d5; }
+  :root[data-theme-style="amber"]:not([data-theme]) {
+    --bg: #e9edf3;
+    --fg: #121722;
+    --fg-dim: #4d5666;
+    --fg-faint: #5f6876;
+    --accent: #b9441c;
+  }
+}
+
 :root[data-theme="dark"][data-theme-style] .app--creation {
   --stage: #06080b;
   --surface: #101318;
@@ -1858,6 +1911,48 @@
     --control-primary-bg: #d4632f;
     --grad: linear-gradient(120deg, #d4632f, #de7a4b);
   }
+}
+
+/* Creation mode deliberately owns a quieter canvas, but its inherited text,
+ * status, primary-control and focus contracts must remain as readable as the
+ * classic shell. These overrides mirror the root accessibility floor above. */
+:root[data-theme="dark"][data-theme-style] .app--creation {
+  --fg-faint: #7d8490;
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+:root[data-theme="light"][data-theme-style] .app--creation {
+  --fg-faint: #6c6c75;
+  --control-primary-bg: var(--accent);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+:root[data-theme="light"][data-theme-style="graphite"] .app--creation { --accent: #bd3f18; }
+:root[data-theme="light"][data-theme-style="aurora"] .app--creation { --accent: #5948df; }
+:root[data-theme="light"][data-theme-style="slate"] .app--creation { --accent: #255fc2; }
+:root[data-theme="light"][data-theme-style="carbon"] .app--creation { --accent: #08766d; }
+:root[data-theme="light"][data-theme-style="nocturne"] .app--creation { --accent: #5255d5; }
+:root[data-theme="light"][data-theme-style="amber"] .app--creation { --accent: #b9441c; }
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme-style]:not([data-theme]) .app--creation {
+    --fg-faint: #7d8490;
+    --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme-style]:not([data-theme]) .app--creation {
+    --fg-faint: #6c6c75;
+    --control-primary-bg: var(--accent);
+    --control-primary-fg: #ffffff;
+    --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  }
+  :root[data-theme-style="graphite"]:not([data-theme]) .app--creation { --accent: #bd3f18; }
+  :root[data-theme-style="aurora"]:not([data-theme]) .app--creation { --accent: #5948df; }
+  :root[data-theme-style="slate"]:not([data-theme]) .app--creation { --accent: #255fc2; }
+  :root[data-theme-style="carbon"]:not([data-theme]) .app--creation { --accent: #08766d; }
+  :root[data-theme-style="nocturne"]:not([data-theme]) .app--creation { --accent: #5255d5; }
+  :root[data-theme-style="amber"]:not([data-theme]) .app--creation { --accent: #b9441c; }
 }
 
 :root[data-text-size="small"] {
@@ -3308,7 +3403,7 @@ a[href] {
   background: color-mix(in srgb, currentColor 9%, transparent);
 }
 .notice-line__action:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 .notice-line__action:disabled {
@@ -9190,6 +9285,14 @@ body > .mermaid-diagram--fullscreen {
 
 :where(button, a, input, textarea, select):focus-visible {
   outline-color: var(--accent);
+}
+
+@media (forced-colors: active) {
+  :is(button, a, input, textarea, select, [tabindex]):focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+    box-shadow: none !important;
+  }
 }
 
 @media (max-width: 760px) {

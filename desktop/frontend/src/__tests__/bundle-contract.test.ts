@@ -83,6 +83,10 @@ ok(
   "lazy command palette receives the opener captured before its chunk mounts",
 );
 ok(
+  (appSource.match(/data-dialog-return-focus="settings"/g) ?? []).length === 2,
+  "workbench and creation settings openers share a stable remount focus key",
+);
+ok(
   !appSource.includes('import "./custom/features/heartbeat/heartbeat.css"') &&
     heartbeatSurfaceSource.includes('import "./heartbeat.css"'),
   "heartbeat styles follow the deferred feature chunk",

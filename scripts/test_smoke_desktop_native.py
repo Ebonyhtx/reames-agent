@@ -49,6 +49,15 @@ class DesktopNativeSmokeTests(unittest.TestCase):
             "first_responsive_seconds",
             "stable_responsive_seconds",
             "startup_budget_met",
+            "warm_startup_budget_seconds",
+            "warm_launch_attempted",
+            "warm_first_visible_seconds",
+            "warm_first_responsive_seconds",
+            "warm_stable_responsive_seconds",
+            "warm_startup_budget_met",
+            "warm_responding",
+            "warm_cleanup_method",
+            "warm_cleanup_ok",
             "responding",
             "cleanup_method",
             "cleanup_ok",
@@ -88,6 +97,10 @@ class DesktopNativeSmokeTests(unittest.TestCase):
         for invalid in (0, 0.5, 61):
             with self.assertRaises(ValueError):
                 smoke.validate_startup_budget_seconds(invalid)
+        self.assertLess(
+            smoke.DEFAULT_WARM_STARTUP_BUDGET_SECONDS,
+            smoke.DEFAULT_STARTUP_BUDGET_SECONDS,
+        )
 
     def test_managed_home_cleans_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as parent:
@@ -244,6 +257,30 @@ class DesktopNativeSmokeTests(unittest.TestCase):
         )
         self.assertEqual(result.early_exit_code, 17)
         self.assertFalse(result.responding)
+
+    def test_classify_startup_observation_distinguishes_cold_and_warm_failures(self) -> None:
+        healthy = smoke.Observation(
+            final_check_responsive=True,
+            max_consecutive_responses=3,
+            stable_responsive_seconds=2.0,
+        )
+        self.assertIsNone(smoke.classify_startup_observation(healthy, 8.0))
+        self.assertEqual(
+            smoke.classify_startup_observation(healthy, 1.5, warm=True)[0],
+            "warm-startup-budget",
+        )
+
+        exited = smoke.Observation(early_exit_code=17)
+        self.assertEqual(
+            smoke.classify_startup_observation(exited, 6.0, warm=True)[0],
+            "warm-early-exit",
+        )
+
+        unresponsive = smoke.Observation()
+        self.assertEqual(
+            smoke.classify_startup_observation(unresponsive, 8.0)[0],
+            "no-response",
+        )
 
     def test_missing_executable_is_startup_failure(self) -> None:
         result = smoke.run_smoke("definitely-missing.exe")

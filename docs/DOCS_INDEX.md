@@ -88,6 +88,8 @@
 | [M3 Desktop 性能预算审计](audits/2026-07-12-m3-desktop-bundle-budget.md) | 按需界面拆包、真实产物预算、Windows 冷启动硬门槛与交互证据 |
 | [M3 模态焦点与可访问性审计](audits/2026-07-13-m3-modal-focus-accessibility.md) | 共享焦点生命周期、Tab 围栏、退出动画恢复、读屏语义与真实浏览器证据 |
 | [M3 Windows 显示缩放持久化审计](audits/2026-07-13-m3-display-zoom-persistence.md) | 缩放写入合并、原子持久化、待重启状态、直接重启与浏览器交互证据 |
+| [M3 主题对比度与焦点审计](audits/2026-07-13-m3-theme-contrast.md) | 六主题深浅色、普通/创作模式对比度合同、双层焦点环、forced-colors 与重挂载焦点恢复 |
+| [M3 Windows warm startup 审计](audits/2026-07-13-m3-windows-warm-startup.md) | 同 HOME/WebView2 profile 原生二次启动、schema v3、6 秒预算、清理与边界证据 |
 | [外部 Agent 批次验收](audits/2026-07-11-external-agent-batch-acceptance.md) | 大批提交的保留/撤回范围、真实性修复和全量本地验证 |
 | [Control transport boundary ratchet audit](audits/2026-07-10-control-boundary-ratchet.md) | Desktop/CLI/Serve/Bot/ACP 对 runtime 内部直连的精确依赖基线和 CI 收缩棘轮 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |

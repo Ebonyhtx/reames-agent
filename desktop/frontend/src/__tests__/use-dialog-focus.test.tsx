@@ -20,7 +20,7 @@ function ok(value: boolean, label: string) {
 }
 
 function installDom() {
-  const dom = new JSDOM("<!doctype html><html><body><button id='opener'>Open</button><div id='root'></div><div id='nested'></div></body></html>", {
+  const dom = new JSDOM("<!doctype html><html><body><button id='opener' data-dialog-return-focus='settings'>Open</button><div id='root'></div><div id='nested'></div></body></html>", {
     pretendToBeVisual: true,
     url: "http://localhost/",
   });
@@ -77,6 +77,25 @@ console.log("\ndialog focus lifecycle");
 
   await act(async () => root.unmount());
   ok(document.activeElement === opener, "closing restores focus to the opener");
+  dom.window.close();
+}
+
+{
+  const dom = installDom();
+  const opener = document.getElementById("opener") as HTMLButtonElement;
+  opener.focus();
+  const root = createRoot(document.getElementById("root")!);
+  await render(root, <TestDialog id="remounted-opener" />);
+
+  opener.remove();
+  const replacement = document.createElement("button");
+  replacement.id = "replacement-opener";
+  replacement.setAttribute("data-dialog-return-focus", "settings");
+  replacement.textContent = "Open";
+  document.body.prepend(replacement);
+
+  await act(async () => root.unmount());
+  ok(document.activeElement === replacement, "closing restores focus to a semantically equivalent remounted opener");
   dom.window.close();
 }
 

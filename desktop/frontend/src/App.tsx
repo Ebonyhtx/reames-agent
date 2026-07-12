@@ -3119,6 +3119,7 @@ export default function App() {
                   <button
                     className="sidebar__utility-button"
                     type="button"
+                    data-dialog-return-focus="settings"
                     onClick={() => {
                       closeTransientOverlays();
                       setSettingsTarget("general");
@@ -3181,6 +3182,7 @@ export default function App() {
               <Tooltip label={t("topbar.settings")} fill side="right" disabled={sidebarNavTooltipDisabled}>
                 <button
                   className="sidebar__navitem"
+                  data-dialog-return-focus="settings"
                   onClick={() => {
                     closeTransientOverlays();
                     setSettingsTarget("general");

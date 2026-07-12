@@ -2,7 +2,7 @@
 
 > 状态：当前唯一执行路线
 >
-> 更新：2026-07-12
+> 更新：2026-07-13
 >
 > 规划方式：先关闭真实用户闭环，再扩展能力面
 
@@ -108,7 +108,9 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 - [x] 建立 Windows 原生 Desktop 冷启动硬门槛：candidate workflow 和本地 smoke 均要求 8 秒内达到连续三次响应；当前 production Wails 实测首次可见/响应 1.016 秒、稳定响应 2.016 秒，隔离 HOME 边界无泄漏（见同一审计）。
 - [x] 可访问性首批：统一真正模态层的初始焦点、Tab/Shift+Tab 围栏、嵌套顶层判定、退出动画后 opener 恢复和 `aria-modal`/读屏关联；命令面板补 combobox/listbox active-descendant 合同，设置/历史/图片/首次引导/快捷键帮助共用同一生命周期（见 `audits/2026-07-13-m3-modal-focus-accessibility.md`）。
 - [x] Windows 显示缩放闭环：连续滑动按最后选择串行合并写入，Go 偏好使用原子替换并拒绝非有限值；设置页区分启动已应用/保存中/待重启，提供立即重启与失败回滚，组件和真实浏览器覆盖 100% → 105% → 100% 状态（见 `audits/2026-07-13-m3-display-zoom-persistence.md`）。
-- [ ] 性能后续：在可重复的原生 harness 中建立热启动门槛，并继续评估 locale、主工作流与 CSS 拆分；补齐 Linux/macOS candidate 启动预算证据，不为数字牺牲首屏可用性。
+- [x] 主题对比度与焦点纵向合同：六套视觉风格同时覆盖深/浅色、普通/创作模式的小文本、状态色、主按钮与焦点指示器，自动浅色必须与显式浅色一致；补 forced-colors 焦点规则、局部画布焦点环重算和入口重挂载后的语义焦点恢复，并用真实浏览器切换 Graphite/Carbon/Amber 及创作模式核验最终计算值（见 `audits/2026-07-13-m3-theme-contrast.md`）。
+- [x] Windows warm relaunch 门槛：native smoke schema v3 在冷启动关闭后复用同一隔离 HOME/WebView2 profile 启动第二个真实进程，独立记录可见/响应/稳定时间、预算、早退和清理；candidate 同时强制冷启动 8 秒与 warm 6 秒预算，当前源码 production Wails 两轮稳定响应均为 1.516 秒（见 `audits/2026-07-13-m3-windows-warm-startup.md`）。
+- [ ] 性能后续：继续评估 locale、主工作流与 CSS 拆分；补齐 Linux/macOS candidate 启动预算证据，不为数字牺牲首屏可用性。
 
 UI 改动必须同时提供组件测试和一次真实浏览器或 Wails 点击验证。
 
