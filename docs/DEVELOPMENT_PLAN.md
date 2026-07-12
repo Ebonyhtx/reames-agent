@@ -110,7 +110,8 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 - [x] Windows 显示缩放闭环：连续滑动按最后选择串行合并写入，Go 偏好使用原子替换并拒绝非有限值；设置页区分启动已应用/保存中/待重启，提供立即重启与失败回滚，组件和真实浏览器覆盖 100% → 105% → 100% 状态（见 `audits/2026-07-13-m3-display-zoom-persistence.md`）。
 - [x] 主题对比度与焦点纵向合同：六套视觉风格同时覆盖深/浅色、普通/创作模式的小文本、状态色、主按钮与焦点指示器，自动浅色必须与显式浅色一致；补 forced-colors 焦点规则、局部画布焦点环重算和入口重挂载后的语义焦点恢复，并用真实浏览器切换 Graphite/Carbon/Amber 及创作模式核验最终计算值（见 `audits/2026-07-13-m3-theme-contrast.md`）。
 - [x] Windows warm relaunch 门槛：native smoke schema v3 在冷启动关闭后复用同一隔离 HOME/WebView2 profile 启动第二个真实进程，独立记录可见/响应/稳定时间、预算、早退和清理；candidate 同时强制冷启动 8 秒与 warm 6 秒预算，当前源码 production Wails 两轮稳定响应均为 1.516 秒（见 `audits/2026-07-13-m3-windows-warm-startup.md`）。
-- [ ] 性能后续：继续评估 locale、主工作流与 CSS 拆分；补齐 Linux/macOS candidate 启动预算证据，不为数字牺牲首屏可用性。
+- [ ] Linux/macOS 启动预算：candidate smoke schema v2 已在本地完成，两个平台均要求隔离 HOME 的 Desktop 状态连续三次就绪且不泄漏默认状态，Linux 同时要求最终仍有可见窗口；workflow 固定 10 秒门槛。关闭本项仍需新一轮三平台 candidate 的真实 runner 证据（见 `audits/2026-07-13-m3-linux-macos-startup-readiness.md`）。
+- [ ] 性能后续：继续评估 locale、主工作流与 CSS 拆分，不为数字牺牲首屏可用性。
 
 UI 改动必须同时提供组件测试和一次真实浏览器或 Wails 点击验证。
 

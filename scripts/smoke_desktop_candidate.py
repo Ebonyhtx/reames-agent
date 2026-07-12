@@ -24,11 +24,15 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MIN_OBSERVATION_SECONDS = 10
 MAX_OBSERVATION_SECONDS = 300
+MIN_STARTUP_BUDGET_SECONDS = 1.0
+MAX_STARTUP_BUDGET_SECONDS = 60.0
+DEFAULT_STARTUP_BUDGET_SECONDS = 10.0
 POLL_INTERVAL_SECONDS = 0.5
 REQUIRED_WINDOW_CHECKS = 3
+REQUIRED_CONSECUTIVE_READY_CHECKS = 3
 SMOKE_CONFIG = """\
 [desktop]
 close_behavior = "quit"
@@ -57,6 +61,22 @@ class Observation:
     window_checks: int = 0
     max_visible_windows: int = 0
     early_exit_code: int | None = None
+    state_checks: int = 0
+    ready_checks: int = 0
+    max_consecutive_ready_checks: int = 0
+    final_ready: bool = False
+    first_state_ready_seconds: float | None = None
+    first_visible_seconds: float | None = None
+    stable_ready_seconds: float | None = None
+
+    @property
+    def ready(self) -> bool:
+        return (
+            self.early_exit_code is None
+            and self.final_ready
+            and self.max_consecutive_ready_checks
+            >= REQUIRED_CONSECUTIVE_READY_CHECKS
+        )
 
 
 @dataclass
@@ -75,6 +95,13 @@ class CandidateSmokeResult:
     executable_size: int = 0
     observation_seconds: int = 0
     observed_seconds: float = 0.0
+    startup_budget_seconds: float = DEFAULT_STARTUP_BUDGET_SECONDS
+    first_state_ready_seconds: float | None = None
+    first_visible_seconds: float | None = None
+    stable_ready_seconds: float | None = None
+    startup_budget_met: bool = False
+    ready: bool = False
+    readiness_kind: str = ""
     process_alive_after_observation: bool = False
     observed_exit_code: int | None = None
     window_required: bool = False
@@ -112,9 +139,26 @@ def validate_observation_seconds(value: int) -> int:
     return value
 
 
+def validate_startup_budget_seconds(value: float) -> float:
+    if not MIN_STARTUP_BUDGET_SECONDS <= value <= MAX_STARTUP_BUDGET_SECONDS:
+        raise ValueError(
+            f"startup budget seconds must be between {MIN_STARTUP_BUDGET_SECONDS:g} "
+            f"and {MAX_STARTUP_BUDGET_SECONDS:g}"
+        )
+    return value
+
+
 def prepare_smoke_home(home: Path) -> None:
     home.mkdir(parents=True, exist_ok=True)
     (home / "config.toml").write_text(SMOKE_CONFIG, encoding="utf-8")
+
+
+def desktop_state_ready(home: Path) -> bool:
+    """Return true once Desktop has written a state file inside its isolated home."""
+    return any(
+        path.is_file() and path.name.startswith("desktop-")
+        for path in home.glob("desktop-*")
+    )
 
 
 def list_home_files(home: Path) -> list[str]:
@@ -221,29 +265,84 @@ def observe_process(
     proc: subprocess.Popen,
     seconds: int,
     window_probe: Callable[[int], list[str]] | None = None,
+    state_probe: Callable[[], bool] | None = None,
     clock: Callable[[], float] = time.monotonic,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> Observation:
     observation = Observation()
     start = clock()
+    consecutive_ready = 0
     while clock() - start < seconds:
         exit_code = proc.poll()
         if exit_code is not None:
             observation.early_exit_code = exit_code
             break
         observation.checks += 1
+        elapsed = max(0.0, clock() - start)
+        state_ready = state_probe() if state_probe is not None else True
+        if state_ready:
+            observation.state_checks += 1
+            if observation.first_state_ready_seconds is None:
+                observation.first_state_ready_seconds = elapsed
+        visible_ready = True
         if window_probe is not None:
             windows = window_probe(proc.pid)
+            visible_ready = bool(windows)
             if windows:
                 observation.window_checks += 1
+                if observation.first_visible_seconds is None:
+                    observation.first_visible_seconds = elapsed
             observation.max_visible_windows = max(
                 observation.max_visible_windows, len(windows)
             )
+        ready_now = state_ready and visible_ready
+        observation.final_ready = ready_now
+        if ready_now:
+            observation.ready_checks += 1
+            consecutive_ready += 1
+            observation.max_consecutive_ready_checks = max(
+                observation.max_consecutive_ready_checks, consecutive_ready
+            )
+            if (
+                consecutive_ready >= REQUIRED_CONSECUTIVE_READY_CHECKS
+                and observation.stable_ready_seconds is None
+            ):
+                observation.stable_ready_seconds = elapsed
+        else:
+            consecutive_ready = 0
         remaining = seconds - (clock() - start)
         if remaining > 0:
             sleeper(min(POLL_INTERVAL_SECONDS, remaining))
     observation.elapsed_seconds = max(0.0, clock() - start)
     return observation
+
+
+def classify_startup_observation(
+    observation: Observation, budget_seconds: float, platform_name: str
+) -> tuple[str, str] | None:
+    if observation.early_exit_code is not None:
+        return "early-exit", f"process exited with code {observation.early_exit_code}"
+    if not observation.ready:
+        requirement = (
+            "isolated Desktop state and a visible window"
+            if platform_name == "linux"
+            else "isolated Desktop state"
+        )
+        return (
+            "startup-not-ready",
+            f"{platform_name} candidate did not sustain {requirement} through the final check",
+        )
+    if (
+        observation.stable_ready_seconds is None
+        or observation.stable_ready_seconds > budget_seconds
+    ):
+        elapsed = observation.stable_ready_seconds
+        elapsed_text = "no stable readiness" if elapsed is None else f"{elapsed:.3f}s"
+        return (
+            "startup-budget",
+            f"{platform_name} candidate needed {elapsed_text}; budget is {budget_seconds:.3f}s",
+        )
+    return None
 
 
 def cleanup_process(
@@ -295,19 +394,23 @@ def run_smoke(
     executable_path: str,
     platform_name: str,
     observation_seconds: int = 12,
+    max_startup_seconds: float = DEFAULT_STARTUP_BUDGET_SECONDS,
     keep_temp: bool = False,
 ) -> CandidateSmokeResult:
     result = CandidateSmokeResult(
         platform=platform_name,
         observation_seconds=observation_seconds,
+        startup_budget_seconds=max_startup_seconds,
         kept_temp=keep_temp,
         window_required=platform_name == "linux",
+        readiness_kind="state+visible-window" if platform_name == "linux" else "state",
     )
     proc: subprocess.Popen | None = None
     home: Path | None = None
 
     try:
         validate_observation_seconds(observation_seconds)
+        validate_startup_budget_seconds(max_startup_seconds)
     except ValueError as exc:
         _fail(result, "invalid-arguments", str(exc))
         result.finished_at = utc_now()
@@ -375,27 +478,45 @@ def run_smoke(
         else:
             try:
                 probe = linux_window_ids if platform_name == "linux" else None
-                observation = observe_process(proc, observation_seconds, probe)
+                observation = observe_process(
+                    proc,
+                    observation_seconds,
+                    window_probe=probe,
+                    state_probe=lambda: desktop_state_ready(home),
+                )
                 result.observed_seconds = round(observation.elapsed_seconds, 3)
                 result.observed_exit_code = observation.early_exit_code
+                result.first_state_ready_seconds = (
+                    round(observation.first_state_ready_seconds, 3)
+                    if observation.first_state_ready_seconds is not None
+                    else None
+                )
+                result.first_visible_seconds = (
+                    round(observation.first_visible_seconds, 3)
+                    if observation.first_visible_seconds is not None
+                    else None
+                )
+                result.stable_ready_seconds = (
+                    round(observation.stable_ready_seconds, 3)
+                    if observation.stable_ready_seconds is not None
+                    else None
+                )
+                result.startup_budget_met = (
+                    observation.stable_ready_seconds is not None
+                    and observation.stable_ready_seconds <= max_startup_seconds
+                )
+                result.ready = observation.ready
                 result.window_checks = observation.window_checks
                 result.max_visible_windows = observation.max_visible_windows
                 result.window_observed = (
                     observation.window_checks >= REQUIRED_WINDOW_CHECKS
                 )
                 result.process_alive_after_observation = proc.poll() is None
-                if observation.early_exit_code is not None:
-                    _fail(
-                        result,
-                        "early-exit",
-                        f"process exited with code {observation.early_exit_code}",
-                    )
-                elif result.window_required and not result.window_observed:
-                    _fail(
-                        result,
-                        "window-missing",
-                        "Linux candidate did not expose a visible Reames Agent window",
-                    )
+                failure = classify_startup_observation(
+                    observation, max_startup_seconds, platform_name
+                )
+                if failure is not None:
+                    _fail(result, *failure)
             except Exception as exc:
                 _fail(result, "observation-failure", str(exc))
             finally:
@@ -435,10 +556,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--exe", required=True)
     parser.add_argument("--out")
     parser.add_argument("--observation-seconds", type=int, default=12)
+    parser.add_argument(
+        "--max-startup-seconds",
+        type=float,
+        default=DEFAULT_STARTUP_BUDGET_SECONDS,
+    )
     parser.add_argument("--keep-temp", action="store_true")
     args = parser.parse_args(argv)
     try:
         validate_observation_seconds(args.observation_seconds)
+        validate_startup_budget_seconds(args.max_startup_seconds)
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -447,6 +574,7 @@ def main(argv: list[str] | None = None) -> int:
         args.exe,
         args.platform,
         args.observation_seconds,
+        args.max_startup_seconds,
         args.keep_temp,
     )
     evidence = result.to_dict()

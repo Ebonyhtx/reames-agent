@@ -44,6 +44,7 @@ def check_desktop_candidate_workflow(failures: list[str]) -> None:
     require("sudo dpkg -i" in workflow and "xvfb-run" in workflow and "xdotool" in workflow, "desktop candidate must install and window-smoke the Linux deb.", failures)
     require("hdiutil attach" in workflow and "codesign --verify" in workflow and "lipo " in workflow and "-verify_arch x86_64 arm64" in workflow, "desktop candidate must mount and smoke the universal macOS dmg.", failures)
     require("scripts/smoke_desktop_candidate.py" in workflow, "desktop candidate must run the Linux/macOS native smoke script.", failures)
+    require(workflow.count("--max-startup-seconds 10") == 2, "desktop candidate must enforce Linux and macOS readiness budgets.", failures)
     require("scripts/smoke_desktop_native.py" in workflow, "desktop candidate must run the Windows native smoke script.", failures)
     require("--max-startup-seconds 8" in workflow and "--max-warm-startup-seconds 6" in workflow, "desktop candidate must enforce cold and same-home warm startup budgets.", failures)
     require("scripts/smoke_desktop_interaction.py" in workflow, "desktop candidate must run the Windows screenshot-free interaction smoke.", failures)

@@ -40,6 +40,13 @@ class CandidateSmokeTests(unittest.TestCase):
         for field in (
             "artifact_sha256",
             "executable_sha256",
+            "startup_budget_seconds",
+            "first_state_ready_seconds",
+            "first_visible_seconds",
+            "stable_ready_seconds",
+            "startup_budget_met",
+            "ready",
+            "readiness_kind",
             "window_required",
             "window_observed",
             "cleanup_method",
@@ -67,6 +74,9 @@ class CandidateSmokeTests(unittest.TestCase):
             self.assertIn("onboarding_dismissed = true", config)
             self.assertIn('language = "en"', config)
             self.assertNotIn("key", config.lower())
+            self.assertFalse(smoke.desktop_state_ready(home))
+            (home / "desktop-tabs.json").write_text("{}", encoding="utf-8")
+            self.assertTrue(smoke.desktop_state_ready(home))
 
     def test_snapshot_reports_metadata_only(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -111,11 +121,63 @@ class CandidateSmokeTests(unittest.TestCase):
         process = FakeProcess()
         observations = iter([[], ["10"], ["10"], ["10"], ["10"]])
         result = smoke.observe_process(
-            process, 3, lambda _pid: next(observations, ["10"]), clock.monotonic, clock.sleep
+            process,
+            3,
+            window_probe=lambda _pid: next(observations, ["10"]),
+            clock=clock.monotonic,
+            sleeper=clock.sleep,
         )
         self.assertIsNone(result.early_exit_code)
         self.assertGreaterEqual(result.window_checks, smoke.REQUIRED_WINDOW_CHECKS)
         self.assertEqual(result.max_visible_windows, 1)
+        self.assertTrue(result.ready)
+
+    def test_observe_records_state_window_and_stable_readiness(self) -> None:
+        clock = FakeClock()
+        states = iter([False, False, True, True, True, True])
+        windows = iter([[], ["10"], ["10"], ["10"], ["10"], ["10"]])
+        result = smoke.observe_process(
+            FakeProcess(),
+            3,
+            window_probe=lambda _pid: next(windows, ["10"]),
+            state_probe=lambda: next(states, True),
+            clock=clock.monotonic,
+            sleeper=clock.sleep,
+        )
+        self.assertEqual(result.first_visible_seconds, 0.5)
+        self.assertEqual(result.first_state_ready_seconds, 1.0)
+        self.assertEqual(result.stable_ready_seconds, 2.0)
+        self.assertTrue(result.ready)
+
+    def test_observe_resets_readiness_after_window_disappears(self) -> None:
+        clock = FakeClock()
+        windows = iter([["10"], ["10"], [], ["10"], ["10"], ["10"]])
+        result = smoke.observe_process(
+            FakeProcess(),
+            3,
+            window_probe=lambda _pid: next(windows, ["10"]),
+            state_probe=lambda: True,
+            clock=clock.monotonic,
+            sleeper=clock.sleep,
+        )
+        self.assertEqual(result.stable_ready_seconds, 2.5)
+        self.assertEqual(result.max_consecutive_ready_checks, 3)
+        self.assertTrue(result.ready)
+
+    def test_observe_macos_state_only_readiness(self) -> None:
+        clock = FakeClock()
+        states = iter([False, True, True, True, True])
+        result = smoke.observe_process(
+            FakeProcess(),
+            3,
+            state_probe=lambda: next(states, True),
+            clock=clock.monotonic,
+            sleeper=clock.sleep,
+        )
+        self.assertEqual(result.first_state_ready_seconds, 0.5)
+        self.assertIsNone(result.first_visible_seconds)
+        self.assertEqual(result.stable_ready_seconds, 1.5)
+        self.assertTrue(result.ready)
 
     def test_observe_classifies_early_exit(self) -> None:
         clock = FakeClock()
@@ -123,8 +185,8 @@ class CandidateSmokeTests(unittest.TestCase):
             FakeProcess(exit_after=2),
             3,
             None,
-            clock.monotonic,
-            clock.sleep,
+            clock=clock.monotonic,
+            sleeper=clock.sleep,
         )
         self.assertEqual(result.early_exit_code, 17)
 
@@ -133,6 +195,26 @@ class CandidateSmokeTests(unittest.TestCase):
         for invalid in (0, 9, 301):
             with self.assertRaises(ValueError):
                 smoke.validate_observation_seconds(invalid)
+        self.assertEqual(smoke.validate_startup_budget_seconds(10), 10)
+        for invalid in (0, 0.5, 61):
+            with self.assertRaises(ValueError):
+                smoke.validate_startup_budget_seconds(invalid)
+
+    def test_classification_requires_stable_readiness_and_budget(self) -> None:
+        ready = smoke.Observation(
+            final_ready=True,
+            max_consecutive_ready_checks=3,
+            stable_ready_seconds=2.0,
+        )
+        self.assertIsNone(smoke.classify_startup_observation(ready, 10, "darwin"))
+        self.assertEqual(
+            smoke.classify_startup_observation(ready, 1, "darwin")[0],
+            "startup-budget",
+        )
+        self.assertEqual(
+            smoke.classify_startup_observation(smoke.Observation(), 10, "linux")[0],
+            "startup-not-ready",
+        )
 
     def test_platform_mismatch_fails_before_reading_inputs(self) -> None:
         requested = "darwin" if smoke.host_platform() != "darwin" else "linux"

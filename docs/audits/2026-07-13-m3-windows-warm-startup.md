@@ -2,7 +2,7 @@
 
 日期：2026-07-13
 
-状态：完整本地门禁和当前源码 production Wails 实测通过；commit 与远端 candidate 证据待完成
+状态：已交付（commit `fb37db1`；普通 CI `29209093041` 8/8、CodeQL `29209093033` 3/3）；远端 installer candidate 待手动 workflow
 
 ## 缺口
 

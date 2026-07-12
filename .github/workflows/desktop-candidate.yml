@@ -97,6 +97,7 @@ jobs:
               --platform linux \
               --artifact "dist/Reames Agent-linux-amd64.deb" \
               --exe /usr/bin/reames-agent-desktop \
+              --max-startup-seconds 10 \
               --out artifacts/desktop-linux-native-smoke.json
 
       - name: Smoke installed macOS candidate
@@ -120,6 +121,7 @@ jobs:
             --platform darwin \
             --artifact "$dmg" \
             --exe "$app/Contents/MacOS/reames-agent-desktop" \
+            --max-startup-seconds 10 \
             --out artifacts/desktop-darwin-native-smoke.json
 
       - name: Smoke installed Windows candidate
