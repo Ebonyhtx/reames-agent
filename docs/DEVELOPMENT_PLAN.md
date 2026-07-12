@@ -111,6 +111,7 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 - [x] 主题对比度与焦点纵向合同：六套视觉风格同时覆盖深/浅色、普通/创作模式的小文本、状态色、主按钮与焦点指示器，自动浅色必须与显式浅色一致；补 forced-colors 焦点规则、局部画布焦点环重算和入口重挂载后的语义焦点恢复，并用真实浏览器切换 Graphite/Carbon/Amber 及创作模式核验最终计算值（见 `audits/2026-07-13-m3-theme-contrast.md`）。
 - [x] Windows warm relaunch 门槛：native smoke schema v3 在冷启动关闭后复用同一隔离 HOME/WebView2 profile 启动第二个真实进程，独立记录可见/响应/稳定时间、预算、早退和清理；托管安装器 candidate 强制冷启动 15 秒与 warm 6 秒预算，本地源码 production 仍保持冷启动 8 秒，当前源码两轮稳定响应均为 1.516 秒（见 `audits/2026-07-13-m3-windows-warm-startup.md`）。
 - [x] Linux/macOS 启动预算：candidate smoke schema v2 要求隔离 HOME 的 Desktop 状态连续三次就绪且不泄漏默认状态，Linux 同时要求最终仍有可见窗口；run `29209723618` 的 Linux 首次状态/窗口就绪为 4.538 秒、稳定就绪 5.567 秒，macOS 首次状态就绪 0.575 秒、稳定就绪 1.872 秒，均通过 10 秒门槛。macOS 证据只声明状态 readiness，不冒充窗口可见性（见 `audits/2026-07-13-m3-linux-macos-startup-readiness.md`）。
+- [x] Desktop 重启恢复竞态：前端首次 `ListTabs` 必须等待后端 `tabsRestored` 门闩，不能在异步恢复完成前发布空 tab 快照；补门闩并发测试、canonical event log 半行容错与 UIA Send fallback，当前 production Wails 已完成 19 请求、五类失败恢复、停止和原会话/工作区/消息重启恢复的原生闭环。hosted candidate 复核仍单独记录（见 `audits/2026-07-13-m3-desktop-restart-restore-race.md`）。
 - [ ] 性能后续：继续评估 locale、主工作流与 CSS 拆分，不为数字牺牲首屏可用性。
 
 UI 改动必须同时提供组件测试和一次真实浏览器或 Wails 点击验证。

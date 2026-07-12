@@ -2,7 +2,7 @@
 
 日期：2026-07-13
 
-状态：本地与合同已交付；首轮远端 installer candidate 暴露托管冷启动观察窗偏短，校准后待复跑
+状态：启动预算校准已在远端 installer candidate 通过；同一 run 暴露的交互重启恢复竞态由后续批次收口
 
 ## 缺口
 
@@ -36,4 +36,8 @@ commit de893c0 ordinary CI / CodeQL                            PASS (8/8, 3/3)
 
 远端 `Desktop candidate` run `29209723618` 的 Windows job 安装并启动了真实 NSIS 产物，首次可见/响应为 11.531 秒；旧 12 秒观察期在收集连续三次响应前结束，因此以 `no-response` 失败。进程仍存活、窗口可关闭、状态边界变化为 0，说明这是 harness 观察窗与托管首次安装预算不匹配，不是早退或产品崩溃。该 run 的 Linux/macOS jobs 均成功。
 
-随后把该远端 job 上传的同一 installer（SHA-256 `BF14D29A79D5F28D5A2C3BE201660A447E8EC405B94B31AD2411CFA5D3E981E6`）下载到本地 Windows，实际静默安装后用 20/15/6 秒参数复核：冷启动稳定响应 2.000 秒，warm 稳定响应 1.500 秒，状态边界变化为 0，安装后进程清理和卸载均成功。该证据验证校准参数与真实候选工件，但不冒充 hosted runner 复跑；复跑结果仍需单独记录。
+随后把该远端 job 上传的同一 installer（SHA-256 `BF14D29A79D5F28D5A2C3BE201660A447E8EC405B94B31AD2411CFA5D3E981E6`）下载到本地 Windows，实际静默安装后用 20/15/6 秒参数复核：冷启动稳定响应 2.000 秒，warm 稳定响应 1.500 秒，状态边界变化为 0，安装后进程清理和卸载均成功。该证据先验证校准参数与真实候选工件；hosted runner 结果由下一段的后续 run 单独给出。
+
+校准后的 commit `f502c66` 在 `Desktop candidate` run `29210320483` 上形成 hosted Windows 成功启动证据：cold 首次可见/响应 8.047 秒、稳定响应 9.047 秒，warm 首次可见/响应 1.015 秒、稳定响应 2.015 秒，15/6 秒预算均满足；两轮持续响应、清理成功、边界变化为 0。该 run 的 Linux/macOS jobs 也成功，普通 CI `29210316655` 8/8、CodeQL `29210316676` 3/3。
+
+矩阵最终仍因后续 interaction smoke 的“重启后消息不可见”失败。启动 JSON 已独立通过，不能把交互失败误写成启动预算失败；交互根因、修复与后续 hosted 复核见 `2026-07-13-m3-desktop-restart-restore-race.md`。

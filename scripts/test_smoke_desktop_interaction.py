@@ -147,6 +147,26 @@ class DesktopInteractionSmokeTests(unittest.TestCase):
                 smoke.durable_session_has_message(str(path), "user", "marker-123")
             )
 
+    def test_durable_session_message_check_keeps_valid_prefix_during_append(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "session.jsonl"
+            path.write_text("", encoding="utf-8")
+            path.with_name("session.events.jsonl").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "type": "replace",
+                        "messages": [{"role": "user", "content": "marker-123"}],
+                    }
+                )
+                + "\n"
+                + '{"schema_version":1,"type":"append"',
+                encoding="utf-8",
+            )
+            self.assertTrue(
+                smoke.durable_session_has_message(str(path), "user", "marker-123")
+            )
+
     def test_loopback_provider_success_records_request(self) -> None:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with smoke.local_openai_server() as (base_url, requests):
@@ -261,6 +281,50 @@ class DesktopInteractionSmokeTests(unittest.TestCase):
             }
         )
         self.assertEqual(smoke.request_scenario(payload), "stream_interruption")
+
+    def test_submit_prompt_falls_back_to_stable_send_control_for_dropped_enter(self) -> None:
+        class DroppedEnterUIA:
+            def __init__(self) -> None:
+                self.actions: list[tuple[str, str]] = []
+
+            def type_text(self, value: str, *, automation_id: str) -> None:
+                self.actions.append(("type", f"{automation_id}:{value}"))
+
+            def wait_enabled(self, *, automation_id: str, timeout_seconds: float) -> None:
+                self.actions.append(("enabled", f"{automation_id}:{timeout_seconds}"))
+
+            def press_enter(self, *, automation_id: str, timeout_seconds: float) -> None:
+                self.actions.append(("enter", f"{automation_id}:{timeout_seconds}"))
+                raise RuntimeError("UIA Enter did not submit composer: 'Message'")
+
+            def invoke(self, *, automation_id: str, timeout_seconds: float) -> None:
+                self.actions.append(("invoke", f"{automation_id}:{timeout_seconds}"))
+
+        uia = DroppedEnterUIA()
+        smoke.submit_prompt(uia, "hello", 30)
+        self.assertEqual(
+            uia.actions,
+            [
+                ("type", f"{smoke.COMPOSER_AUTOMATION_ID}:hello"),
+                ("enabled", f"{smoke.SEND_AUTOMATION_ID}:30"),
+                ("enter", f"{smoke.COMPOSER_AUTOMATION_ID}:30"),
+                ("invoke", f"{smoke.SEND_AUTOMATION_ID}:30"),
+            ],
+        )
+
+    def test_submit_prompt_does_not_mask_unrelated_uia_failure(self) -> None:
+        class BrokenUIA:
+            def type_text(self, _value: str, *, automation_id: str) -> None:
+                return None
+
+            def wait_enabled(self, *, automation_id: str, timeout_seconds: float) -> None:
+                return None
+
+            def press_enter(self, *, automation_id: str, timeout_seconds: float) -> None:
+                raise RuntimeError("composer focus failed")
+
+        with self.assertRaisesRegex(RuntimeError, "composer focus failed"):
+            smoke.submit_prompt(BrokenUIA(), "hello", 30)
 
     def test_timeout_contract(self) -> None:
         self.assertEqual(smoke.validate_timeout(30), 30)

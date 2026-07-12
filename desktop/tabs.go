@@ -1522,6 +1522,15 @@ func (a *App) tabMeta(tab *WorkspaceTab, active bool) TabMeta {
 
 // ListTabs returns every open view container's metadata for the frontend chrome and sidebar.
 func (a *App) ListTabs() []TabMeta {
+	// The frontend calls ListTabs as soon as the WebView bridge becomes
+	// available. On a fast renderer that can beat the asynchronous startup
+	// restore and return an empty list even though desktop-tabs.json contains a
+	// session. If the later agent:ready event is emitted before the frontend's
+	// subscription is live, the restored transcript stays invisible for the
+	// entire process lifetime. Wait for the same restore gate used by recovery
+	// GC so the first observable tab snapshot is authoritative. Apps that have
+	// not entered startup (most unit tests) receive an already-closed signal.
+	<-a.tabsRestoredSignal()
 	a.mu.RLock()
 	out := make([]TabMeta, 0, len(a.tabs))
 	ordered, needsRepair := a.orderedTabIDsSnapshotLocked()

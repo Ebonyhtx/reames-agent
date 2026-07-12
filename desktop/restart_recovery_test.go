@@ -70,6 +70,43 @@ func TestRestoreOrBuildTabsWorkbenchRestoresOnlyActiveProjectSession(t *testing.
 	assertRestoredRestartProjectTab(t, restarted, restoredProject, fixture)
 }
 
+func TestListTabsWaitsForStartupRestoreBeforePublishingSnapshot(t *testing.T) {
+	app := NewApp()
+	app.tabsRestored = make(chan struct{})
+
+	started := make(chan struct{})
+	listed := make(chan []TabMeta, 1)
+	go func() {
+		close(started)
+		listed <- app.ListTabs()
+	}()
+	<-started
+
+	select {
+	case tabs := <-listed:
+		t.Fatalf("ListTabs returned before restore completed: %+v", tabs)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	tab := app.createTabEntryWithID("global", globalTabWorkspaceRoot(), "", "restored")
+	app.mu.Lock()
+	app.tabs[tab.ID] = tab
+	app.tabOrder = []string{tab.ID}
+	app.activeTabID = tab.ID
+	app.mu.Unlock()
+	app.markTabsRestored()
+
+	select {
+	case tabs := <-listed:
+		assertTabIDs(t, tabs, tab.ID)
+		if !tabs[0].Active {
+			t.Fatalf("restored tab is not active: %+v", tabs[0])
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ListTabs did not unblock after startup restore")
+	}
+}
+
 func saveRestartTabsFixture(t *testing.T) savedRestartTabsFixture {
 	t.Helper()
 	projectRoot := t.TempDir()

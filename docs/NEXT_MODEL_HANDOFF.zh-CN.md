@@ -31,7 +31,7 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
 - M2 已关闭：依赖棘轮 allowlist 已归零，结构化错误、版本化 command/event/display DTO、prompt metadata、会话持久化、Desktop/ACP/CLI 装配和终端渲染边界均已收口；完整本地门禁及远端 CI/CodeQL 已通过。
-- M3 进行中：性能、模态焦点、显示缩放、主题对比度以及 Windows 本地 cold/warm 启动批次均已远端全绿。commit `de893c0` 又为 Linux/macOS candidate 建立隔离状态 readiness 与 10 秒预算，普通 CI `29209717326` 为 8/8、CodeQL `29209717324` 为 3/3；candidate run `29209723618` 的 Linux/macOS 原生 jobs 已通过，Windows job 暴露托管首次安装观察窗偏短，当前批正在校准并复跑。
+- M3 进行中：性能、模态焦点、显示缩放、主题对比度以及三平台启动 readiness 已形成分层证据。commit `f502c66` 的普通 CI `29210316655` 为 8/8、CodeQL `29210316676` 为 3/3；candidate run `29210320483` 的三平台启动 smoke 均通过，其中 Windows cold 稳定 9.047 秒、warm 稳定 2.015 秒，但后续 interaction smoke 暴露重启恢复竞态。当前未提交批次已修复首次 `ListTabs` 早于异步 tab restore 的空快照问题，并完成本地 production 原生闭环。
 - M6 进行中：Gateway service、headless smoke 和 feedback 本地闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
@@ -63,16 +63,17 @@ python -m unittest scripts.test_smoke_desktop_native      PASS (21)
 python scripts/check_release_contracts.py                 PASS
 Linux native candidate runner                             PASS (4.538s first / 5.567s stable)
 macOS native candidate runner                             PASS (0.575s first / 1.872s stable)
-Windows hosted installer candidate                        FAIL (11.531s first; old 12s observation)
+Windows hosted startup candidate                          PASS (8.047s first / 9.047s stable; warm 2.015s stable)
+Windows hosted interaction recovery                       FAIL (pre-fix restart transcript invisible)
 完整 root/Desktop/frontend/docs 门禁                      PASS
 ```
 
-当前远端 `main` 为 `de893c0`。Linux 证据包含隔离状态与可见 X11 窗口；macOS 只声明隔离状态 readiness。Windows 远端同一 installer 已在本地安装复核，20 秒观察窗、15 秒 cold/6 秒 warm 参数下稳定响应分别为 2.000/1.500 秒，待 hosted runner 复跑。
+当前远端 `main` 为 `f502c66`。Linux 证据包含隔离状态与可见 X11 窗口；macOS 只声明隔离状态 readiness。Windows 启动预算已在 hosted runner 通过，不能因同一 job 后续 interaction 失败而回退该结论。interaction 修复的本地 production Wails 已通过 19 请求、五类失败恢复、停止和同会话重启恢复，hosted installer 复核待下一次集中 push 后执行。
 
 ## 下一执行顺序
 
-1. 将 Windows hosted installer candidate 改为 20 秒观察窗、15 秒 cold/6 秒 warm 预算，保持本地源码默认 8/6 秒；定向门禁通过后集中 commit/push 一次。
-2. 只手动复跑一次三平台 `Desktop candidate` 并读取原生 JSON；Windows 必须在 hosted runner 形成连续三次响应和同 HOME warm 证据，Linux/macOS 应保持回归通过。
+1. 完整验证并提交 `ListTabs` 恢复门闩、interaction event-log 并发采样和 Send fallback 批次；保持受保护文件排除。
+2. 集中 push 一次后，只手动复跑一次三平台 `Desktop candidate` 并读取两个 Windows JSON；启动三平台应保持通过，interaction 必须在 hosted installer 上恢复原会话/工作区/用户与助手消息。
 3. 后续补 Windows High Contrast/屏幕阅读器原生抽查；M3 主体验充分后再进入干净云节点 CLI + Gateway + feedback 与真实飞书回环。
 
 ## 长期未关闭项
@@ -85,6 +86,6 @@ Windows hosted installer candidate                        FAIL (11.531s first; o
 
 长期 GOAL 尚未完成。即使本批全绿，也只能声明该批验收完成，不能声明整个项目完成。
 
-## 当前未提交 Windows candidate 校准批次
+## 当前未提交 Desktop restart recovery 批次
 
-`smoke_desktop_native.py` 的本地默认值不变。workflow 单独把首次安装后的 hosted cold 预算从 8 秒调为 15 秒、观察期从 12 秒调为 20 秒，warm 继续保持 6 秒；发布合同同步冻结三项参数。依据是 run `29209723618` 首次响应 11.531 秒但观察窗不足以形成稳定三连，以及同一远端 installer 的本地真实安装复核。完成定向测试、一次 commit/push 和三平台复跑前不得声明 Windows installer candidate 已通过；受保护文件继续排除。
+`ListTabs()` 现在等待已有的 `tabsRestored` 门闩，使前端首次快照不可能抢在异步 `restoreOrBuildTabs()` 前返回空列表；并发单测冻结阻塞/解锁语义。interaction harness 对正在追加的 canonical event log 保留有效前缀，WebView2 丢失 Enter 时只对该明确错误回退到稳定 Send 控件，其他 UIA 错误继续失败。当前 production Wails SHA-256 `2401FBEE739A6752684AF9AFCD8BE11C5D68D54812D46AE54286BF9CB131D631` 已完成原生完整交互并验证重启前后 session path 一致、边界变化为 0。root build/vet/internal tests、Desktop vet/full tests、frontend typecheck/test:all/build、52 个 smoke 单测和 docs/public/release 合同均通过；commit/push 与 hosted candidate 复核待完成，受保护文件继续排除。
