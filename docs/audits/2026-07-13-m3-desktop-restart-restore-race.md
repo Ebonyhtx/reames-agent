@@ -2,7 +2,7 @@
 
 日期：2026-07-13
 
-状态：两层生产修复、确定性测试与本地原生交互通过；hosted installer candidate 复核待完成
+状态：已交付（commits `0cdfef1`、`9d31735`；普通 CI `29211678562` 8/8、CodeQL `29211678591` 3/3；candidate `29211681563` 三平台全绿）
 
 ## 触发证据
 
@@ -39,4 +39,6 @@ ready-event / missed-ready / tab-switch / new-session tests   PASS (6 / 8 / 61 /
 
 partial fix commit `0cdfef1` 的普通 CI run `29211082959` 8/8、CodeQL run `29211082955` 3/3。candidate run `29211086907` 的 Linux/macOS jobs 成功，Windows native startup 也再次通过（cold 首次/稳定 5.032/6.032 秒，warm 首次/稳定 1.000/2.000 秒），但修复前 frontend 仍使 interaction recovery 失败。该失败是第二层竞态的远端触发证据，不是启动预算回归。
 
-当前本地证据证明最新源码 production Wails 和确定性 loopback/UIA 路径，不冒充 hosted installer。下一次集中 push 后只复跑一次三平台 candidate，并以 Windows native 与 interaction 两份 JSON 作为远端关闭证据。
+最终 `Desktop candidate` run `29211681563` 三平台全部成功。Windows installer SHA-256 为 `1D84CB0D503E86E437B54C5806647D2ADDE8549E3CD8349A2C4255C3BA1A095E`，安装后二进制 SHA-256 为 `9CA1C61A468CA0B3D066B4AA497E68B75A131E482CFE36BF4BEFC84D3EEFCA99`。native startup cold 首次/稳定响应为 11.016/12.016 秒，warm 为 1.000/2.000 秒，满足 15/6 秒 hosted 预算。
+
+同一 Windows job 的 interaction JSON `outcome=passed`、`failure_kind=null`，19 次 provider 请求和五类失败场景全部完成可见信号、idle 恢复与后续成功 turn；marker/assistant 均持久化、停止完成、`recovery_verified=true`，重启前后 session path 完全一致。native 与 interaction 两份证据均清理进程和临时 HOME，默认状态边界变化为 0，errors 为空。本批远端复核关闭，未为纯证据另行 push。

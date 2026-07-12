@@ -46,7 +46,7 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 - 核心、Desktop 和前端已建立本地与远端 CI 基线，并有六目标 CLI candidate、三平台 Desktop candidate 及原生安装 smoke 记录。
 - M1 真实任务闭环已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复以及五类原生失败恢复均有分层证据。
 - 24 个内置工具，具备权限、沙箱、检查点、记忆、技能、插件、定时任务、LSP 和证据账本等模块。
-- M3 已进入 Desktop 日用化：关闭态/次级界面已按需拆包并受真实产物硬预算保护，入口 JS 较基线下降 43.6%；Windows 本地源码 production Wails 受 8 秒冷启动和 6 秒同 HOME warm relaunch 门槛保护，托管 runner 首次安装候选按独立证据使用 15/6 秒门槛，当前本地两轮稳定响应均实测 1.516 秒；Linux/macOS candidate 已在真实 runner 通过 10 秒隔离状态 readiness 门槛，Linux 还验证持续可见窗口，macOS 只声明状态就绪；Desktop 首次 tab 查询受后端恢复门闩保护，前端又在 restored controller ready 前延迟 transcript hydrate，避免重启时偶发空快照使持久消息整轮不可见；模态焦点、键盘围栏与读屏语义已统一，Windows 显示缩放具备原子持久化、最后选择胜出、待重启提示和直接重启闭环；六套视觉风格的深浅色、普通/创作模式已有可重复对比度和焦点环合同，主题切换导致入口重挂载时仍能恢复焦点。
+- M3 已进入 Desktop 日用化：关闭态/次级界面与简中/繁中词典已按需拆包并受真实产物硬预算保护，英文同步兜底；首帧前先读取权威保存语言，auto 才使用 OS，只预取最终词典。当前 base initial JS 为 984,616 B，含 locale 传递依赖的最坏本地化首启为 1,100,036 B。Windows 本地源码 production Wails 受 8 秒冷启动和 6 秒同 HOME warm relaunch 门槛保护，托管 runner 首次安装候选按独立证据使用 15/6 秒门槛，Linux/macOS candidate 已在真实 runner 通过 10 秒隔离状态 readiness 门槛，Linux 还验证持续可见窗口，macOS 只声明状态就绪；Desktop 首次 tab 查询受后端恢复门闩保护，前端又在 restored controller ready 前延迟 transcript hydrate，远端 installer 已验证 19 请求后的原会话/工作区/消息重启恢复；模态焦点、键盘围栏与读屏语义已统一，Windows 显示缩放具备原子持久化、最后选择胜出、待重启提示和直接重启闭环；六套视觉风格的深浅色、普通/创作模式已有可重复对比度和焦点环合同，主题切换导致入口重挂载时仍能恢复焦点。
 - 当前最大风险不是“缺功能”，而是 Desktop 日用化细节、插件供应链、远程入口加固和真实 IM 回环尚未完全闭环；统一 control 边界已关闭并有远端 CI/CodeQL 证据，transport 对 `agent/provider/tool` 的生产直连为零，版本化 command/event/display DTO、prompt metadata、会话持久化/复制、Desktop session-store、ACP/CLI 装配和终端渲染路径已收口。
 - `site/`、`workers/` 等遗留产品面仍需按运行引用、发布依赖和替代实现逐批判断，不能一次性盲删。
 

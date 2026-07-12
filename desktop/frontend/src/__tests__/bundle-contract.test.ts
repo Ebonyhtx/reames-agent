@@ -24,6 +24,8 @@ const settingsSource = readFileSync(resolve(here, "../components/SettingsPanel.t
 const markdownSource = readFileSync(resolve(here, "../components/Markdown.tsx"), "utf8");
 const heartbeatSurfaceSource = readFileSync(resolve(here, "../custom/features/heartbeat/HeartbeatPanelSurface.tsx"), "utf8");
 const scrollManagerSource = readFileSync(resolve(here, "../lib/useScrollManager.ts"), "utf8");
+const i18nSource = readFileSync(resolve(here, "../lib/i18n.tsx"), "utf8");
+const mainSource = readFileSync(resolve(here, "../main.tsx"), "utf8");
 const packageSource = readFileSync(resolve(here, "../../package.json"), "utf8");
 const wordmarkSource = readFileSync(resolve(here, "../assets/logo-wordmark.svg"), "utf8");
 
@@ -126,6 +128,29 @@ ok(
 ok(
   markdownSource.includes('import("./MarkdownRenderer")'),
   "Markdown wrapper loads markdown renderer on demand",
+);
+ok(
+  !/import\s+\{\s*zh\s*\}\s+from\s+["']\.\.\/locales\/zh["']/.test(i18nSource) &&
+    !/import\s+\{\s*zhTW\s*\}\s+from\s+["']\.\.\/locales\/zh-TW["']/.test(i18nSource),
+  "i18n keeps non-English dictionaries out of the initial module graph",
+);
+ok(
+  i18nSource.includes('import("../locales/zh")') &&
+    i18nSource.includes('import("../locales/zh-TW")'),
+  "i18n loads non-English dictionaries on demand",
+);
+ok(
+  mainSource.includes("await app.DesktopStartupSettings()") &&
+    mainSource.includes("return saved || readLegacyLangPref()") &&
+    mainSource.indexOf("await app.DesktopStartupSettings()") < mainSource.indexOf("return saved || readLegacyLangPref()") &&
+    mainSource.indexOf("await app.DesktopStartupSettings()") < mainSource.indexOf("await preloadInitialLocale(initialLocalePref)"),
+  "Desktop resolves the saved language before choosing the startup locale chunk",
+);
+ok(
+  mainSource.includes("await preloadInitialLocale(initialLocalePref)") &&
+    mainSource.includes("<LocaleProvider initialPref={initialLocalePref}>") &&
+    mainSource.indexOf("await preloadInitialLocale(initialLocalePref)") < mainSource.indexOf("createRoot(rootElement).render("),
+  "Desktop preloads and mounts the resolved locale before the first React frame",
 );
 ok(
   wordmarkSource.includes('data-brand="reames-agent"') &&

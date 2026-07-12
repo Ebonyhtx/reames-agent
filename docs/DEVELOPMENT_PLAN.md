@@ -105,14 +105,15 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 - 原生体验：窗口生命周期、快捷键、拖放、文件选择、通知和自动更新。
 - 可访问性：键盘导航、焦点、对比度、缩放和屏幕阅读语义。
 - [x] 性能首批：关闭态/次级界面按真实打开状态拆包，构建后强制 entry、初始 JS/CSS、最大 chunk 与请求数预算；入口 chunk 从 1,103,017 B 降至 621,270 B，初始 JS 从 1,342,548 B 降至 1,209,699 B（见 `audits/2026-07-12-m3-desktop-bundle-budget.md`）。
-- [x] 建立 Windows 原生 Desktop 冷启动硬门槛：本地源码 production smoke 要求 8 秒内达到连续三次响应；托管 runner 的首次安装候选依据 11.531 秒首次响应实测采用 15 秒门槛与 20 秒观察窗，两层不得互相替代。当前源码 production Wails 实测首次可见/响应 1.016 秒、稳定响应 2.016 秒，隔离 HOME 边界无泄漏（见同一审计）。
+- [x] 建立 Windows 原生 Desktop 冷启动硬门槛：本地源码 production smoke 要求 8 秒内达到连续三次响应；托管 runner 的首次安装候选依据 11.531 秒首次响应实测采用 15 秒门槛与 20 秒观察窗，两层不得互相替代。当前本批候选 production Wails 实测首次可见/响应 0.516 秒、稳定响应 1.516 秒，隔离 HOME 边界无泄漏（见同一审计及 `audits/2026-07-13-m3-lazy-locale-budget.md`）。
 - [x] 可访问性首批：统一真正模态层的初始焦点、Tab/Shift+Tab 围栏、嵌套顶层判定、退出动画后 opener 恢复和 `aria-modal`/读屏关联；命令面板补 combobox/listbox active-descendant 合同，设置/历史/图片/首次引导/快捷键帮助共用同一生命周期（见 `audits/2026-07-13-m3-modal-focus-accessibility.md`）。
 - [x] Windows 显示缩放闭环：连续滑动按最后选择串行合并写入，Go 偏好使用原子替换并拒绝非有限值；设置页区分启动已应用/保存中/待重启，提供立即重启与失败回滚，组件和真实浏览器覆盖 100% → 105% → 100% 状态（见 `audits/2026-07-13-m3-display-zoom-persistence.md`）。
 - [x] 主题对比度与焦点纵向合同：六套视觉风格同时覆盖深/浅色、普通/创作模式的小文本、状态色、主按钮与焦点指示器，自动浅色必须与显式浅色一致；补 forced-colors 焦点规则、局部画布焦点环重算和入口重挂载后的语义焦点恢复，并用真实浏览器切换 Graphite/Carbon/Amber 及创作模式核验最终计算值（见 `audits/2026-07-13-m3-theme-contrast.md`）。
-- [x] Windows warm relaunch 门槛：native smoke schema v3 在冷启动关闭后复用同一隔离 HOME/WebView2 profile 启动第二个真实进程，独立记录可见/响应/稳定时间、预算、早退和清理；托管安装器 candidate 强制冷启动 15 秒与 warm 6 秒预算，本地源码 production 仍保持冷启动 8 秒，当前源码两轮稳定响应均为 1.516 秒（见 `audits/2026-07-13-m3-windows-warm-startup.md`）。
+- [x] Windows warm relaunch 门槛：native smoke schema v3 在冷启动关闭后复用同一隔离 HOME/WebView2 profile 启动第二个真实进程，独立记录可见/响应/稳定时间、预算、早退和清理；托管安装器 candidate 强制冷启动 15 秒与 warm 6 秒预算，本地源码 production 仍保持冷启动 8 秒，当前本批候选冷/warm 稳定响应为 1.516/1.500 秒（见 `audits/2026-07-13-m3-windows-warm-startup.md` 与 `audits/2026-07-13-m3-lazy-locale-budget.md`）。
 - [x] Linux/macOS 启动预算：candidate smoke schema v2 要求隔离 HOME 的 Desktop 状态连续三次就绪且不泄漏默认状态，Linux 同时要求最终仍有可见窗口；run `29209723618` 的 Linux 首次状态/窗口就绪为 4.538 秒、稳定就绪 5.567 秒，macOS 首次状态就绪 0.575 秒、稳定就绪 1.872 秒，均通过 10 秒门槛。macOS 证据只声明状态 readiness，不冒充窗口可见性（见 `audits/2026-07-13-m3-linux-macos-startup-readiness.md`）。
-- [x] Desktop 重启恢复竞态：后端首次 `ListTabs` 等待 `tabsRestored` 门闩，前端在 restored controller `ready=true` 前不读取 history，避免空 tab 或空 transcript 快照成为整轮最终状态；补两层竞态合同、canonical event log 半行容错与 UIA Send fallback，当前 production Wails 已完成 19 请求、五类失败恢复、停止和原会话/工作区/消息重启恢复的原生闭环。hosted candidate 复核仍单独记录（见 `audits/2026-07-13-m3-desktop-restart-restore-race.md`）。
-- [ ] 性能后续：继续评估 locale、主工作流与 CSS 拆分，不为数字牺牲首屏可用性。
+- [x] Desktop 重启恢复竞态：后端首次 `ListTabs` 等待 `tabsRestored` 门闩，前端在 restored controller `ready=true` 前不读取 history，避免空 tab 或空 transcript 快照成为整轮最终状态；补两层竞态合同、canonical event log 半行容错与 UIA Send fallback。candidate run `29211681563` 的 Windows installer 完成 19 请求、五类失败恢复、停止和原会话/工作区/消息重启恢复，`recovery_verified=true`、清理与状态边界均通过（见 `audits/2026-07-13-m3-desktop-restart-restore-race.md`）。
+- [x] 多语言首启拆分：英文保留同步兜底，简中/繁中各自按需加载；首个 React frame 前先从轻量本地 bridge 读取权威保存语言，auto 才使用 OS，只预取最终离线 chunk；运行期切换保持旧词典直至新词典完整到达。production base initial JS 从 1,213,626 B 降至 984,616 B，最坏本地化首启为 1,100,036 B，并由 manifest 递归依赖图、双 locale chunk 数量与 1,150,000 B 本地化预算共同守卫（见 `audits/2026-07-13-m3-lazy-locale-budget.md`）。
+- [ ] 性能后续：继续评估主工作流与 CSS 拆分，不为数字牺牲首屏可用性。
 
 UI 改动必须同时提供组件测试和一次真实浏览器或 Wails 点击验证。
 

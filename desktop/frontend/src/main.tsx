@@ -3,10 +3,16 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installGlobalCrashHandlers, installPerformancePressureMonitor } from "./lib/crash";
-import { installWailsNonFileDragErrorSuppression } from "./lib/bridge";
+import { app, installWailsNonFileDragErrorSuppression } from "./lib/bridge";
 import { installBreadcrumbConsoleHook } from "./lib/breadcrumbs";
 import { installMessageSelectionCopy } from "./lib/messageSelectionCopy";
-import { LocaleProvider } from "./lib/i18n";
+import {
+  LocaleProvider,
+  normalizeLangPref,
+  preloadInitialLocale,
+  readLegacyLangPref,
+  type LangPref,
+} from "./lib/i18n";
 import { ToastProvider } from "./lib/toast";
 import { initFontFamily } from "./lib/fontFamily";
 import { initTextSize } from "./lib/textSize";
@@ -76,15 +82,40 @@ if (typeof window !== "undefined" && window.runtime) {
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
+const rootElement = root;
 
-createRoot(root).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <LocaleProvider>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
-      </LocaleProvider>
-    </ErrorBoundary>
-  </StrictMode>,
-);
+async function initialDesktopLanguage(): Promise<LangPref> {
+  try {
+    const settings = await app.DesktopStartupSettings();
+    const saved = normalizeLangPref(settings.desktopLanguage);
+    // Existing user config is authoritative. Only consult the browser-era
+    // preference when no desktop language has been persisted yet.
+    return saved || readLegacyLangPref();
+  } catch (error) {
+    console.warn("startup desktop language read failed", error);
+    return readLegacyLangPref();
+  }
+}
+
+async function mountApp() {
+  // Resolve only the saved (or OS-preferred auto) dictionary before the first
+  // usable frame. The lightweight local bridge call avoids loading a second
+  // locale after mount when the saved preference differs from the OS.
+  // load failures resolve to the synchronous English fallback, so the Desktop
+  // can still render offline even if a packaged locale chunk is damaged.
+  const initialLocalePref = await initialDesktopLanguage();
+  await preloadInitialLocale(initialLocalePref);
+  createRoot(rootElement).render(
+    <StrictMode>
+      <ErrorBoundary>
+        <LocaleProvider initialPref={initialLocalePref}>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </LocaleProvider>
+      </ErrorBoundary>
+    </StrictMode>,
+  );
+}
+
+void mountApp();

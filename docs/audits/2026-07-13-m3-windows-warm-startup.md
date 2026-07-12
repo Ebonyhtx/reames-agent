@@ -32,7 +32,7 @@ commit fb37db1 ordinary CI / CodeQL                            PASS (8/8, 3/3)
 commit de893c0 ordinary CI / CodeQL                            PASS (8/8, 3/3)
 ```
 
-当前源码 production Wails 可执行文件 SHA-256 为 `B2F956553FBA1EBAD12BAB9F34973F04A49B481B63C91F5F41BA66BF4DF08CD0`，大小 47,954,944 B。冷启动首次可见/响应为 0.500 秒、稳定响应为 1.516 秒；同 HOME warm relaunch 首次可见/响应为 0.500 秒、稳定响应为 1.516 秒。两轮各观察 10 秒，均保持单一可见窗口和最终响应，经 `WM_CLOSE` 清理；默认用户状态边界变化为 0，临时 HOME 最终删除。
+该批源码 production Wails 可执行文件 SHA-256 为 `B2F956553FBA1EBAD12BAB9F34973F04A49B481B63C91F5F41BA66BF4DF08CD0`，大小 47,954,944 B。冷启动首次可见/响应为 0.500 秒、稳定响应为 1.516 秒；同 HOME warm relaunch 首次可见/响应为 0.500 秒、稳定响应为 1.516 秒。两轮各观察 10 秒，均保持单一可见窗口和最终响应，经 `WM_CLOSE` 清理；默认用户状态边界变化为 0，临时 HOME 最终删除。最新源码候选的后续测量见 `2026-07-13-m3-lazy-locale-budget.md`。
 
 远端 `Desktop candidate` run `29209723618` 的 Windows job 安装并启动了真实 NSIS 产物，首次可见/响应为 11.531 秒；旧 12 秒观察期在收集连续三次响应前结束，因此以 `no-response` 失败。进程仍存活、窗口可关闭、状态边界变化为 0，说明这是 harness 观察窗与托管首次安装预算不匹配，不是早退或产品崩溃。该 run 的 Linux/macOS jobs 均成功。
 
@@ -41,3 +41,5 @@ commit de893c0 ordinary CI / CodeQL                            PASS (8/8, 3/3)
 校准后的 commit `f502c66` 在 `Desktop candidate` run `29210320483` 上形成 hosted Windows 成功启动证据：cold 首次可见/响应 8.047 秒、稳定响应 9.047 秒，warm 首次可见/响应 1.015 秒、稳定响应 2.015 秒，15/6 秒预算均满足；两轮持续响应、清理成功、边界变化为 0。该 run 的 Linux/macOS jobs 也成功，普通 CI `29210316655` 8/8、CodeQL `29210316676` 3/3。
 
 矩阵最终仍因后续 interaction smoke 的“重启后消息不可见”失败。启动 JSON 已独立通过，不能把交互失败误写成启动预算失败；交互根因、修复与后续 hosted 复核见 `2026-07-13-m3-desktop-restart-restore-race.md`。
+
+最终修复后的 candidate run `29211681563` 三平台全部成功；Windows cold 首次/稳定响应 11.016/12.016 秒，warm 首次/稳定响应 1.000/2.000 秒，预算、持续响应、进程与临时目录清理、状态边界全部通过。随后 interaction smoke 也通过，因此该 run 同时给出启动和重启恢复的完整远端证据。

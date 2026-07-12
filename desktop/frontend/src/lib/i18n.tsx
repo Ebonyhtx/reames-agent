@@ -10,18 +10,19 @@
 // the user-level [desktop] config; localStorage is only read once for legacy
 // migration from older desktop builds.
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { en, type DictKey } from "../locales/en";
-import { zh } from "../locales/zh";
-import { zhTW } from "../locales/zh-TW";
 
 export type Locale = "en" | "zh" | "zh-TW";
 export type { DictKey };
 // LangPref is the stored preference: "" means auto-detect from the OS.
 export type LangPref = "" | "en" | "zh" | "zh-TW";
 
-const DICTS: Record<Locale, Record<DictKey, string>> = { en, zh, "zh-TW": zhTW };
+type Dictionary = Record<DictKey, string>;
+
+const DICTS: Partial<Record<Locale, Dictionary>> = { en };
+const localeLoads = new Map<Locale, Promise<Locale>>();
 const STORAGE_KEY = "reames-agent-lang";
 
 // currentLocale mirrors the active locale for callers outside React (lib/tools.ts).
@@ -61,13 +62,47 @@ function readPref(): LangPref {
   return "";
 }
 
+export function isLocaleLoaded(locale: Locale): boolean {
+  return Boolean(DICTS[locale]);
+}
+
+// Keep non-English dictionaries out of the initial module graph. Wails serves
+// these chunks from the embedded bundle, so loading is offline and deterministic.
+// Concurrent settings/startup requests share one promise per locale.
+export function loadLocale(locale: Locale): Promise<Locale> {
+  if (isLocaleLoaded(locale)) return Promise.resolve(locale);
+  const pending = localeLoads.get(locale);
+  if (pending) return pending;
+
+  const load = locale === "zh"
+    ? import("../locales/zh").then(({ zh }) => zh)
+    : import("../locales/zh-TW").then(({ zhTW }) => zhTW);
+  const promise = load
+    .then((dict) => {
+      DICTS[locale] = dict;
+      return locale;
+    })
+    .catch(() => "en" as const)
+    .finally(() => localeLoads.delete(locale));
+  localeLoads.set(locale, promise);
+  return promise;
+}
+
+export function preloadInitialLocale(pref: LangPref = readPref()): Promise<Locale> {
+  return loadLocale(detectLocale(pref));
+}
+
 export function normalizeLangPref(v: unknown): LangPref {
   return v === "en" || v === "zh" || v === "zh-TW" ? v : "";
 }
 
 export function readLegacyLangPref(): LangPref {
-  const v = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-  return normalizeLangPref(v);
+  try {
+    const v = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+    return normalizeLangPref(v);
+  } catch {
+    return "";
+  }
 }
 
 export function clearLegacyLangPref(): void {
@@ -81,7 +116,7 @@ export function clearLegacyLangPref(): void {
 // translate resolves a key for a locale and fills {placeholders}. Missing keys fall
 // back to English, then to the raw key, so the UI never renders blank.
 function translate(locale: Locale, key: DictKey, vars?: Record<string, string | number>): string {
-  const s = DICTS[locale][key] ?? DICTS.en[key] ?? key;
+  const s = DICTS[locale]?.[key] ?? en[key] ?? key;
   if (!vars) return s;
   return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? String(vars[k]) : `{${k}}`));
 }
@@ -98,7 +133,7 @@ export function getLocale(): Locale {
 
 export type Translator = (key: DictKey, vars?: Record<string, string | number>) => string;
 
-interface I18nValue {
+export interface I18nValue {
   locale: Locale;
   pref: LangPref;
   setPref: (pref: LangPref) => void;
@@ -107,14 +142,25 @@ interface I18nValue {
 
 const I18nContext = createContext<I18nValue | null>(null);
 
-export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [pref, setPrefState] = useState<LangPref>(() => readPref());
-  const locale = detectLocale(pref);
+export function LocaleProvider({ children, initialPref }: { children: ReactNode; initialPref?: LangPref }) {
+  const [pref, setPrefState] = useState<LangPref>(() => normalizeLangPref(initialPref ?? readPref()));
+  const requestedLocale = detectLocale(pref);
+  const [locale, setLocale] = useState<Locale>(() => isLocaleLoaded(requestedLocale) ? requestedLocale : "en");
   currentLocale = locale; // keep the mirror fresh for non-React callers
 
   useEffect(() => {
+    let current = true;
+    void loadLocale(requestedLocale).then((loaded) => {
+      if (current) setLocale(loaded);
+    });
+    return () => {
+      current = false;
+    };
+  }, [requestedLocale]);
+
+  useEffect(() => {
     if (typeof document === "undefined") return;
-    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : locale;
   }, [locale]);
 
   // setPref updates only the live UI; persistence is handled by desktop config.
@@ -122,9 +168,10 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     setPrefState(normalizeLangPref(next));
   }, []);
 
-  const tt = useCallback<Translator>((key, vars) => translate(detectLocale(pref), key, vars), [pref]);
+  const tt = useCallback<Translator>((key, vars) => translate(locale, key, vars), [locale]);
 
-  return <I18nContext.Provider value={{ locale, pref, setPref, t: tt }}>{children}</I18nContext.Provider>;
+  const value = useMemo<I18nValue>(() => ({ locale, pref, setPref, t: tt }), [locale, pref, setPref, tt]);
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
 export function useI18n(): I18nValue {

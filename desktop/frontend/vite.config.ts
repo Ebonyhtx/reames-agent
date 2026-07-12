@@ -94,6 +94,8 @@ const vendorMarkdown = new RegExp(
   `${nodeModulePath}(?:react-markdown|remark-gfm|remark-math|rehype-katex|katex)(?:[\\/]|$)`,
 );
 const vendorHighlight = new RegExp(`${nodeModulePath}highlight\\.js(?:[\\/]|$)`);
+const localeZh = /[\\/]src[\\/]locales[\\/]zh\.ts$/;
+const localeZhTW = /[\\/]src[\\/]locales[\\/]zh-TW\.ts$/;
 
 // base: "./" so built asset URLs are relative. Wails serves the embedded dist from
 // the app root over the wails:// scheme, where absolute "/assets/..." URLs 404.
@@ -110,6 +112,7 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    manifest: true,
     sourcemap: "hidden",
     target: "es2021",
     // Use terser for smaller output (esbuild is faster to build but produces
@@ -136,6 +139,8 @@ export default defineConfig({
             { name: "vendor-react", test: vendorReact },
             { name: "vendor-markdown", test: vendorMarkdown },
             { name: "vendor-highlight", test: vendorHighlight },
+            { name: "locale-zh", test: localeZh },
+            { name: "locale-zh-tw", test: localeZhTW },
           ],
         },
       },
