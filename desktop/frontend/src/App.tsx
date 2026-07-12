@@ -1,11 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { ShellExpandProvider, useShellExpand } from "./lib/shellExpand";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { Flip } from "gsap/Flip";
-import { ScrollToPlugin } from "gsap/ScrollToPlugin";
-gsap.registerPlugin(useGSAP, Flip, ScrollToPlugin);
 import {
   Activity,
   CircleHelp,
@@ -44,24 +39,13 @@ import { generativeMusic, isGenerativeMusicEnabled } from "./lib/generative-musi
 import { clearAttentionChimeKeys, playAttentionChime, playSuccessChime, shouldPlayAttentionChimeForEvent } from "./lib/sound";
 import { Transcript } from "./components/Transcript";
 import { Composer } from "./components/Composer";
-import { TodoPanel } from "./components/TodoPanel";
-import { ApprovalModal } from "./components/ApprovalModal";
-import { AskCard } from "./components/AskCard";
-import { UndoRewindBanner } from "./components/UndoRewindBanner";
-import { ClearContextCard } from "./components/ClearContextCard";
 import { StatusBar } from "./components/StatusBar";
-import { CommandPalette, type PaletteItem } from "./components/CommandPalette";
+import type { PaletteItem } from "./components/CommandPalette";
 import { UpdateBanner } from "./components/UpdateBanner";
-import { ContextPanel } from "./components/ContextPanel";
-import { WorkspacePanel } from "./components/WorkspacePanel";
 import { Tooltip } from "./components/Tooltip";
 import { StartupSplash } from "./components/StartupSplash";
-import { OnboardingOverlay } from "./components/OnboardingOverlay";
 import { AppChrome } from "./components/AppChrome";
-import { ShortcutsCheatsheet } from "./components/ShortcutsCheatsheet";
 import { ProjectTree } from "./components/ProjectTree";
-import { HeartbeatPanel } from "./custom/features/heartbeat/HeartbeatPanel";
-import "./custom/features/heartbeat/heartbeat.css";
 import { CopyButton } from "./components/CopyButton";
 import { parseTodos } from "./lib/tools";
 import {
@@ -163,6 +147,17 @@ import logoWordmark from "./assets/logo-wordmark.svg";
 
 const HistoryPanel = lazy(() => import("./components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })));
 const SettingsPanel = lazy(() => import("./components/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
+const ApprovalModal = lazy(() => import("./components/ApprovalModal").then((module) => ({ default: module.ApprovalModal })));
+const AskCard = lazy(() => import("./components/AskCard").then((module) => ({ default: module.AskCard })));
+const ClearContextCard = lazy(() => import("./components/ClearContextCard").then((module) => ({ default: module.ClearContextCard })));
+const CommandPalette = lazy(() => import("./components/CommandPalette").then((module) => ({ default: module.CommandPalette })));
+const ContextPanel = lazy(() => import("./components/ContextPanel").then((module) => ({ default: module.ContextPanel })));
+const HeartbeatPanel = lazy(() => import("./custom/features/heartbeat/HeartbeatPanelSurface").then((module) => ({ default: module.HeartbeatPanel })));
+const OnboardingOverlay = lazy(() => import("./components/OnboardingOverlay").then((module) => ({ default: module.OnboardingOverlay })));
+const ShortcutsCheatsheet = lazy(() => import("./components/ShortcutsCheatsheet").then((module) => ({ default: module.ShortcutsCheatsheet })));
+const TodoPanel = lazy(() => import("./components/TodoPanel").then((module) => ({ default: module.TodoPanel })));
+const UndoRewindBanner = lazy(() => import("./components/UndoRewindBanner").then((module) => ({ default: module.UndoRewindBanner })));
+const WorkspacePanel = lazy(() => import("./components/WorkspacePanel").then((module) => ({ default: module.WorkspacePanel })));
 
 const CHAT_MIN_WIDTH = 400;
 const CHAT_COMFORT_MIN_WIDTH = 560;
@@ -3472,70 +3467,80 @@ export default function App() {
           {!sidebarImDetailConnection && (
           <footer className="footer" ref={footerRef}>
             {showTodos && (
-              <TodoPanel
-                key={scopedTodoBatch}
-                stateKey={scopedTodoBatch}
-                todos={todos}
-                onDismiss={dismissTodos}
-              />
+              <Suspense fallback={null}>
+                <TodoPanel
+                  key={scopedTodoBatch}
+                  stateKey={scopedTodoBatch}
+                  todos={todos}
+                  onDismiss={dismissTodos}
+                />
+              </Suspense>
             )}
             {rewindState && (
-              <UndoRewindBanner
-                meta={{
-                  turns: rewindState.turnDiff,
-                  filesRestored: [], // optimistic: files haven't changed yet
-                  filesRemoved: [],
-                  onUndo: () => {
-                    setRewindState(null);
-                    setComposerInsertRequest({ id: Date.now(), text: "", mode: "replace" });
-                  },
-                }}
-              />
+              <Suspense fallback={null}>
+                <UndoRewindBanner
+                  meta={{
+                    turns: rewindState.turnDiff,
+                    filesRestored: [], // optimistic: files haven't changed yet
+                    filesRemoved: [],
+                    onUndo: () => {
+                      setRewindState(null);
+                      setComposerInsertRequest({ id: Date.now(), text: "", mode: "replace" });
+                    },
+                  }}
+                />
+              </Suspense>
             )}
             {state.approval && (
-              <ApprovalModal
-                key={state.approval.id}
-                approval={state.approval}
-                cwd={state.meta?.cwd}
-                insertRequest={planRevisionInsertRequest}
-                onRevisionActiveChange={(active) => setWorkspaceInsertTarget(active ? "planRevision" : "composer")}
-                onAnswer={async (allow, session, persist) => {
-                  // Approving an exit_plan_mode plan leaves plan mode; await the
-                  // mode switch before sending the approval so the controller
-                  // observes the updated state before it unblocks.
-                  if (state.approval!.tool === "exit_plan_mode" && allow) await applyCollaborationMode("normal");
-                  approve(state.approval!.id, allow, session, persist);
-                }}
-                onRevisePlan={(text) => {
-                  setPendingPlanRevision(text);
-                  approve(state.approval!.id, false, false, false);
-                }}
-                onExitPlan={async () => {
-                  await applyCollaborationMode("normal");
-                  approve(state.approval!.id, false, false, false);
-                }}
-                onStop={() => {
-                  cancel();
-                }}
-              />
+              <Suspense fallback={null}>
+                <ApprovalModal
+                  key={state.approval.id}
+                  approval={state.approval}
+                  cwd={state.meta?.cwd}
+                  insertRequest={planRevisionInsertRequest}
+                  onRevisionActiveChange={(active) => setWorkspaceInsertTarget(active ? "planRevision" : "composer")}
+                  onAnswer={async (allow, session, persist) => {
+                    // Approving an exit_plan_mode plan leaves plan mode; await the
+                    // mode switch before sending the approval so the controller
+                    // observes the updated state before it unblocks.
+                    if (state.approval!.tool === "exit_plan_mode" && allow) await applyCollaborationMode("normal");
+                    approve(state.approval!.id, allow, session, persist);
+                  }}
+                  onRevisePlan={(text) => {
+                    setPendingPlanRevision(text);
+                    approve(state.approval!.id, false, false, false);
+                  }}
+                  onExitPlan={async () => {
+                    await applyCollaborationMode("normal");
+                    approve(state.approval!.id, false, false, false);
+                  }}
+                  onStop={() => {
+                    cancel();
+                  }}
+                />
+              </Suspense>
             )}
             {state.ask && (
-              <AskCard
-                ask={state.ask}
-                onAnswer={answerQuestion}
-                onDismiss={() => answerQuestion(state.ask!.id, [])}
-                onStop={() => {
-                  cancel();
-                }}
-              />
+              <Suspense fallback={null}>
+                <AskCard
+                  ask={state.ask}
+                  onAnswer={answerQuestion}
+                  onDismiss={() => answerQuestion(state.ask!.id, [])}
+                  onStop={() => {
+                    cancel();
+                  }}
+                />
+              </Suspense>
             )}
             {clearContextPending && (
-              <ClearContextCard
-                onCancel={cancelClearContext}
-                onConfirm={() => {
-                  void confirmClearContext();
-                }}
-              />
+              <Suspense fallback={null}>
+                <ClearContextCard
+                  onCancel={cancelClearContext}
+                  onConfirm={() => {
+                    void confirmClearContext();
+                  }}
+                />
+              </Suspense>
             )}
             <Composer
               running={state.running || rewindCommitting}
@@ -3659,42 +3664,44 @@ export default function App() {
               </div>
             </div>
             <div className="workbench-dock__body">
-              {rightDockMode === "context" ? (
-                <ContextPanel
-                  tabId={activeTabId}
-                  context={state.context}
-                  usage={state.usage}
-                  sessionTokens={state.sessionTokens}
-                  sessionCost={state.sessionCost}
-                  sessionCurrency={state.sessionCurrency}
-                  sessionTurns={sessionTurns}
-                  turnTokens={state.turnTotalTokens}
-                  turnCost={state.turnCost}
-                  balance={state.balance}
-                  sessionGen={state.sessionGen}
-                  refreshKey={dockRefreshKey}
-                />
-              ) : (
-                <WorkspacePanel
-                  open={workspacePanelRenderable}
-                  tabId={activeTabId}
-                  cwd={state.meta?.cwd}
-                  maximized={workspacePanelMaximized}
-                  panelWidth={workspacePanelRenderWidth}
-                  onClose={() => setWorkspacePanel(false)}
-                  onToggleMaximized={() => {
-                    closeTransientOverlays();
-                    setWorkspacePanelMaximized((value) => !value);
-                  }}
-                  onPreviewModeChange={handleWorkspacePreviewModeChange}
-                  onAddToChat={addWorkspaceTextToComposer}
-                  onRequestPanelWidth={ensureWorkspacePanelWidth}
-                  onFileTreeRefresh={refreshComposerFileRefs}
-                  refreshKey={dockRefreshKey}
-                  initialViewMode={rightDockMode === "changed" ? "changed" : "files"}
-                  showViewTabs={false}
-                />
-              )}
+              <Suspense fallback={null}>
+                {rightDockMode === "context" ? (
+                  <ContextPanel
+                    tabId={activeTabId}
+                    context={state.context}
+                    usage={state.usage}
+                    sessionTokens={state.sessionTokens}
+                    sessionCost={state.sessionCost}
+                    sessionCurrency={state.sessionCurrency}
+                    sessionTurns={sessionTurns}
+                    turnTokens={state.turnTotalTokens}
+                    turnCost={state.turnCost}
+                    balance={state.balance}
+                    sessionGen={state.sessionGen}
+                    refreshKey={dockRefreshKey}
+                  />
+                ) : (
+                  <WorkspacePanel
+                    open={workspacePanelRenderable}
+                    tabId={activeTabId}
+                    cwd={state.meta?.cwd}
+                    maximized={workspacePanelMaximized}
+                    panelWidth={workspacePanelRenderWidth}
+                    onClose={() => setWorkspacePanel(false)}
+                    onToggleMaximized={() => {
+                      closeTransientOverlays();
+                      setWorkspacePanelMaximized((value) => !value);
+                    }}
+                    onPreviewModeChange={handleWorkspacePreviewModeChange}
+                    onAddToChat={addWorkspaceTextToComposer}
+                    onRequestPanelWidth={ensureWorkspacePanelWidth}
+                    onFileTreeRefresh={refreshComposerFileRefs}
+                    refreshKey={dockRefreshKey}
+                    initialViewMode={rightDockMode === "changed" ? "changed" : "files"}
+                    showViewTabs={false}
+                  />
+                )}
+              </Suspense>
             </div>
           </aside>
         )}
@@ -3745,30 +3752,46 @@ export default function App() {
         </Suspense>
       )}
 
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        items={paletteItems}
-        placeholder={t("palette.placeholder")}
-        emptyText={t("palette.empty")}
-      />
+      {paletteOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette
+            open
+            onClose={() => setPaletteOpen(false)}
+            items={paletteItems}
+            placeholder={t("palette.placeholder")}
+            emptyText={t("palette.empty")}
+          />
+        </Suspense>
+      )}
 
-      <ShortcutsCheatsheet
-        open={shortcutsOpen}
-        platform={desktopPlatform}
-        onClose={() => setShortcutsOpen(false)}
-        t={t}
-      />
+      {shortcutsOpen && (
+        <Suspense fallback={null}>
+          <ShortcutsCheatsheet
+            open
+            platform={desktopPlatform}
+            onClose={() => setShortcutsOpen(false)}
+            t={t}
+          />
+        </Suspense>
+      )}
 
       {startupSplashVisible && (
         <StartupSplash hold={startupSplashHold} onDone={() => setStartupSplashVisible(false)} />
       )}
 
-      {needsOnboarding && <OnboardingOverlay onComplete={() => setNeedsOnboarding(false)} />}
+      {needsOnboarding && (
+        <Suspense fallback={null}>
+          <OnboardingOverlay onComplete={() => setNeedsOnboarding(false)} />
+        </Suspense>
+      )}
 
-      <HeartbeatPanel open={heartbeatOpen} onClose={() => setHeartbeatOpen(false)} onOpenTopic={(scope, workspaceRoot, topicId) => {
-        void handleOpenTopic(scope, workspaceRoot, topicId);
-      }} />
+      {heartbeatOpen && (
+        <Suspense fallback={null}>
+          <HeartbeatPanel open onClose={() => setHeartbeatOpen(false)} onOpenTopic={(scope, workspaceRoot, topicId) => {
+            void handleOpenTopic(scope, workspaceRoot, topicId);
+          }} />
+        </Suspense>
+      )}
       {windowsFramelessChrome && <WindowsWindowControls />}
     </div>
     </ShellExpandProvider>

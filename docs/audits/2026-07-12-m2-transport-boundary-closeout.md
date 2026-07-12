@@ -2,7 +2,7 @@
 
 日期：2026-07-12
 
-状态：本地全量验证通过；commit 与远端证据待完成
+状态：已交付；commit `453a51c`
 
 ## 当前结论
 
@@ -39,4 +39,4 @@ guarded production import scan                                      0 matches
 git diff --check                                                     PASS
 ```
 
-Python 数量仅统计 `.github/workflows/ci.yml` 显式运行的当前脚本合同；前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CI/CodeQL 尚未运行；补齐前，M2 只能标记为本地候选完成，不能声明远端里程碑关闭。
+Python 数量仅统计 `.github/workflows/ci.yml` 显式运行的当前脚本合同；前端 build 只有既有 dynamic-import/chunk-size 警告且成功。远端 CI run `29195337394` 为 8/8、CodeQL run `29195337395` 为 3/3；缓存恢复与 Node 20 弃用提示均为非阻断 annotation。本批不改变 Wails UI 或安装工件，未重复触发 Desktop candidate。M2 统一控制面里程碑关闭，长期 GOAL 继续进入 M3。

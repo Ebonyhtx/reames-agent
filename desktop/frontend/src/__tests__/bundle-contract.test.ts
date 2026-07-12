@@ -21,6 +21,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const appSource = readFileSync(resolve(here, "../App.tsx"), "utf8");
 const settingsSource = readFileSync(resolve(here, "../components/SettingsPanel.tsx"), "utf8");
 const markdownSource = readFileSync(resolve(here, "../components/Markdown.tsx"), "utf8");
+const heartbeatSurfaceSource = readFileSync(resolve(here, "../custom/features/heartbeat/HeartbeatPanelSurface.tsx"), "utf8");
+const scrollManagerSource = readFileSync(resolve(here, "../lib/useScrollManager.ts"), "utf8");
+const packageSource = readFileSync(resolve(here, "../../package.json"), "utf8");
 const wordmarkSource = readFileSync(resolve(here, "../assets/logo-wordmark.svg"), "utf8");
 
 console.log("\nbundle contract");
@@ -42,6 +45,34 @@ ok(
   appSource.includes('import("./components/SettingsPanel")') &&
     appSource.includes('import("./components/HistoryPanel")'),
   "App loads secondary drawers on demand",
+);
+const deferredSurfaces = [
+  "ApprovalModal",
+  "AskCard",
+  "ClearContextCard",
+  "CommandPalette",
+  "ContextPanel",
+  "OnboardingOverlay",
+  "ShortcutsCheatsheet",
+  "TodoPanel",
+  "UndoRewindBanner",
+  "WorkspacePanel",
+];
+ok(
+  deferredSurfaces.every((name) => appSource.includes(`import("./components/${name}")`)) &&
+    appSource.includes('import("./custom/features/heartbeat/HeartbeatPanelSurface")'),
+  "App loads closed and secondary surfaces on demand",
+);
+ok(
+  !appSource.includes('import "./custom/features/heartbeat/heartbeat.css"') &&
+    heartbeatSurfaceSource.includes('import "./heartbeat.css"'),
+  "heartbeat styles follow the deferred feature chunk",
+);
+ok(
+  !packageSource.includes('"@gsap/react"') &&
+    !appSource.includes("gsap.registerPlugin") &&
+    scrollManagerSource.includes("gsap.registerPlugin(ScrollToPlugin)"),
+  "ScrollToPlugin registration stays with its only consumer",
 );
 ok(
   !/import\s+\{[^}]*\b(?:MCPServersSettingsPage|SkillsSettingsPage|PluginsSettingsPage)\b[^}]*\}\s+from\s+["']\.\/CapabilitiesPanel["']/.test(settingsSource) &&

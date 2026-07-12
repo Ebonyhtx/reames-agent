@@ -1,0 +1,7 @@
+{
+  "maxEntryJSBytes": 650000,
+  "maxInitialJSBytes": 1250000,
+  "maxInitialCSSBytes": 620000,
+  "maxSingleJSAssetBytes": 725000,
+  "maxInitialJSFiles": 6
+}

@@ -147,6 +147,7 @@ jobs:
             python scripts/smoke_desktop_native.py `
               --artifact $installer `
               --exe $exe `
+              --max-startup-seconds 8 `
               --out artifacts/desktop-windows-native-smoke.json
             if ($LASTEXITCODE -ne 0) { throw "installed Desktop smoke failed with exit code $LASTEXITCODE" }
             python scripts/smoke_desktop_interaction.py `

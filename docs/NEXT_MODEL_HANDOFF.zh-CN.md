@@ -29,54 +29,49 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
-- M2 本地候选完成：依赖棘轮 allowlist 已归零，结构化错误、版本化 command/event/display DTO、prompt metadata、会话持久化、Desktop/ACP/CLI 装配和终端渲染边界均已收口；完整本地门禁已通过，远端证据待补齐。
+- M2 已关闭：依赖棘轮 allowlist 已归零，结构化错误、版本化 command/event/display DTO、prompt metadata、会话持久化、Desktop/ACP/CLI 装配和终端渲染边界均已收口；完整本地门禁及远端 CI/CodeQL 已通过。
+- M3 进行中：首批关闭态/次级界面拆包和真实产物 bundle 预算已形成，入口 chunk 下降 43.6%，初始 JS 下降 9.9%；Windows production Wails 已建立 8 秒冷启动门槛，当前稳定响应实测 2.016 秒。
 - M6 进行中：Gateway service、headless smoke 和 feedback 本地闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
 
-## 最近已交付 M2 批次
+## 最新已交付 M2 收官批次
 
-详见 `docs/audits/2026-07-11-m2-desktop-transcript-boundary.md`（上一批 prompt/settings 见 `docs/audits/2026-07-11-m2-prompt-settings-boundary.md`）：
+- compile-time provider 注册与 review subagent 装配归入 boot，CLI resume/rebuild 改用 opaque control handle，ANSI 输出归入 termrender。
+- TUI replay/copy/export 使用展示安全 transcript，并修复 hidden synthetic user 截断复制范围；模型切换使用新 controller system prompt。
+- transport allowlist 归零，Desktop、CLI、Serve、Bot 与 ACP 的受守卫生产文件累计收缩四十条 `agent/provider/tool` import。
 
-- Desktop history、分页、checkpoint、tool/todo replay、planner sidecar 与 legacy preview 改用展示安全 `control.TranscriptMessage`，原消息 `Index` 直接保持 checkpoint 关联。
-- `DisplayKey` 保持旧 SHA-256 sidecar key 兼容，安全 `ReplayText` 排除 referenced-context、synthetic、steer 和 Memory Compiler contract；两者均为 `json:"-"` 本地字段。
-- model/effort/token-mode rebuild 改用 opaque `SessionHistorySnapshot`；event preview/citation/tool 也不再声明 provider DTO。
-- 本批删除 Desktop app/tabs 两条 `provider` 生产依赖边，累计收缩二十一条；Serve、Bot、ACP service 无 runtime 直连，Desktop app/tabs 无 provider 直连。
+详见 `docs/audits/2026-07-12-m2-transport-boundary-closeout.md`。commit `453a51c` 已推送；本地全量门禁通过，CI run `29195337394` 为 8/8、CodeQL run `29195337395` 为 3/3。
 
-## 最新已交付批次
-
-- 新增最小稳定 `control.SessionMeta` 与 control-owned 原子 mutation，隐藏 revision/digest/writer/in-flight/listing 等持久层字段；错误 mutation 不落盘。
-- Desktop tabs 的 listing/order/index/migration/topic/profile/recovery/cleanup 路径全部改走 control，`boot.Options` 恢复回调也不再暴露 `agent.BranchMeta`。
-- `desktop/app.go` 与 `desktop/tabs.go` 均无 `agent/provider/tool` 生产直连；依赖棘轮累计收缩二十九条。
-
-详见 `docs/audits/2026-07-12-m2-desktop-tabs-session-boundary.md`。主 commit `9effae6` 与文档索引修复 `cc92f67` 已推送；本地全量门禁通过，CI run `29193741370` 为 8/8、CodeQL run `29193741351` 为 3/3。
-
-## 最新批次关键证据
+## 当前 M3 候选批次关键证据
 
 ```text
-go build ./...                                      PASS
-go vet ./...                                        PASS
-go test ./internal/... -count=1 -timeout 10m        PASS
-desktop/go test ./... -count=1 -timeout 10m         PASS (211.3s wall time)
-desktop/frontend/corepack pnpm test:all              PASS
-desktop/frontend/corepack pnpm build                 PASS (既有 chunk/dynamic-import 警告)
-Python Desktop/upstream/installer contracts          PASS (69 tests, 2 platform skips)
-upstream issue + builtin/docs/public/deploy/release  PASS
-six-target CGO_ENABLED=0 cross-compile               PASS
-.\scripts\verify-baseline.ps1 -SkipFrontendHint      PASS
+go build ./...                                           PASS
+go vet ./...                                             PASS
+go test ./internal/... -count=1 -timeout 10m             PASS
+desktop/go test ./... -count=1 -timeout 10m              PASS (206.7s wall time)
+desktop/frontend/corepack pnpm test:all                   PASS
+desktop/frontend/corepack pnpm build                      PASS (bundle budget enforced)
+Python Desktop/upstream/installer contracts               PASS (71 tests, 2 platform skips)
+docs/public/deploy/release/tool contracts                  PASS
+Wails v2.12.0 production Windows build                    PASS
+Windows native startup budget (8s)                        PASS (stable 2.016s)
+six-target CGO_ENABLED=0 cross-compile                    PASS
+.\scripts\verify-baseline.ps1 -SkipFrontendHint           PASS
+python scripts/check_upstreams.py                          PASS (changed_count=9)
 ```
 
-本批不改变 Wails UI 或安装工件，未重复触发 Desktop candidate；上一批 production Windows schema v3 candidate 已全绿。当前远端 `main` 为 `cc92f67`，普通 CI run `29193741370` 为 8/8、CodeQL run `29193741351` 为 3/3。
+当前本地候选改变 Wails UI 与 Windows native smoke schema，尚未触发远端 Desktop candidate。上一批 production Windows schema v3 interaction candidate 已全绿。当前远端 `main` 仍为 `453a51c`，普通 CI run `29195337394` 为 8/8、CodeQL run `29195337395` 为 3/3。
 
 ## 下一执行顺序
 
-1. 显式暂存当前 M2 transport 收官批次，集中提交、单次 push 并守候远端 CI/CodeQL。
-2. 远端全绿后进入 M3 原生 Desktop 日用化、可访问性和启动/bundle 性能门槛。
-3. 随后进入干净云节点 CLI + Gateway + feedback 运维闭环与真实飞书回环。
+1. 显式暂存当前 M3 性能候选，集中提交并单次 push；守候普通 CI 与 CodeQL，不为纯证据另做 push。
+2. 冷启动硬门槛已经建立；热启动与 Linux/macOS candidate 预算继续后续 M3 批次。
+3. 随后继续 M3 原生日用化/可访问性，再进入干净云节点 CLI + Gateway + feedback 运维闭环与真实飞书回环。
 
 ## 长期未关闭项
 
-- M2 仅剩当前候选批次的远端证据。
+- M3 原生 Desktop 日用化、可访问性和启动/bundle 性能门槛。
 - 干净 Linux/云节点的 CLI、Gateway、feedback、日志、备份、升级回滚。
 - 真实飞书/Lark 文本、审批、取消与恢复回环。
 - plugin 权限 manifest、内容完整性和安装预览。
@@ -84,6 +79,6 @@ six-target CGO_ENABLED=0 cross-compile               PASS
 
 长期 GOAL 尚未完成。即使本批全绿，也只能声明该批验收完成，不能声明整个项目完成。
 
-## 当前未提交批次
+## 当前未提交 M3 批次
 
-M2 transport 收官代码、测试、架构与审计批次已形成；root build/vet/internal、Desktop 全测、前端 test/build、CI-scoped Python 69 项（2 platform skips）、Node/文档/公开/部署/发布/工具合同、baseline、上游报告、空 allowlist 与六目标交叉编译均通过。commit、单次 push 和远端 CI/CodeQL 尚待完成；上一批 `9effae6`/`cc92f67` 的远端成功证据已并入本批文档，受保护文件继续排除。
+M2 收官远端证据与路线图状态回填已合并进当前 M3 批次。Desktop 前端已按需拆分 Approval/Ask/Todo/回退/清理、命令面板、快捷键、Onboarding、Heartbeat、Context/Workspace 等界面，移除未使用的 `@gsap/react`/Flip，新增真实 dist 预算与四项夹具；完整 `pnpm test:all`、production build 和本地浏览器点击已通过。最终 production 数据为 entry JS 621,270 B、initial JS 1,209,699 B、initial CSS 607,374 B、largest JS 704,186 B、initial files 5。Windows production Wails 重建成功，schema v2 原生 smoke 在隔离 HOME 下测得首次可见/响应 1.016 秒、稳定响应 2.016 秒，满足 8 秒预算且无边界变化。完整本地门禁均已通过；commit、单次 push 与远端证据尚待完成，受保护文件继续排除。

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
+import { ScrollToPlugin } from "gsap/ScrollToPlugin";
 import { DUR_FAST, EASE_OUT, prefersReducedMotion } from "./gsapAnimations";
+
+gsap.registerPlugin(ScrollToPlugin);
 
 const BOTTOM_THRESHOLD_PX = 80;
 

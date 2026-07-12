@@ -85,6 +85,7 @@
 | [M2 Desktop session-store 边界审计](audits/2026-07-11-m2-desktop-session-store-boundary.md) | Desktop app 列表/加载/租约/topic 元数据迁入 control 与 opaque handle |
 | [M2 Desktop tabs 会话边界审计](audits/2026-07-12-m2-desktop-tabs-session-boundary.md) | Desktop tabs branch/index/profile/recovery 元数据迁入稳定 control DTO 与原子 mutation |
 | [M2 transport 边界收官审计](audits/2026-07-12-m2-transport-boundary-closeout.md) | boot 注册、opaque CLI handoff、termrender、review 装配与 transport allowlist 归零 |
+| [M3 Desktop 性能预算审计](audits/2026-07-12-m3-desktop-bundle-budget.md) | 按需界面拆包、真实产物预算、Windows 冷启动硬门槛与交互证据 |
 | [外部 Agent 批次验收](audits/2026-07-11-external-agent-batch-acceptance.md) | 大批提交的保留/撤回范围、真实性修复和全量本地验证 |
 | [Control transport boundary ratchet audit](audits/2026-07-10-control-boundary-ratchet.md) | Desktop/CLI/Serve/Bot/ACP 对 runtime 内部直连的精确依赖基线和 CI 收缩棘轮 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |

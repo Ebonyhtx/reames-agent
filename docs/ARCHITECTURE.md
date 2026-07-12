@@ -80,7 +80,7 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
 | `control.SessionAPI` 的分区接口 | 新增直接 import `internal/provider` |
 | `event.Sink` 与 `internal/eventwire` | 新增直接 import `internal/tool` |
 
-该目标边界当前已达到本地候选门槛。`TestTransportRuntimeImportRatchet` 扫描 Desktop、CLI、Serve、Bot 和 ACP，历史 allowlist 已为空；新增任意 `internal/agent`、`internal/provider` 或 `internal/tool` 生产 import 都会使 CI 失败。Compile-time provider 注册与 review 装配由 `boot` 拥有；CLI resume/rebuild 使用 opaque control handle，历史展示使用 `TranscriptMessage`；终端 ANSI 输出由 `termrender` 拥有。共享 `ErrorInfo`、版本化 command/event DTO、HTTP/WS 兼容适配器和 prompt metadata 隔离继续构成跨入口合同。
+该目标边界已达到关闭门槛。`TestTransportRuntimeImportRatchet` 扫描 Desktop、CLI、Serve、Bot 和 ACP，历史 allowlist 已为空；新增任意 `internal/agent`、`internal/provider` 或 `internal/tool` 生产 import 都会使 CI 失败。Compile-time provider 注册与 review 装配由 `boot` 拥有；CLI resume/rebuild 使用 opaque control handle，历史展示使用 `TranscriptMessage`；终端 ANSI 输出由 `termrender` 拥有。共享 `ErrorInfo`、版本化 command/event DTO、HTTP/WS 兼容适配器和 prompt metadata 隔离继续构成跨入口合同。收官 commit `453a51c` 的 CI `29195337394` 为 8/8、CodeQL `29195337395` 为 3/3。
 
 迁移已经覆盖命令、event/display DTO、会话 persistence/copy/meta、Desktop rebuild/settings/history、Serve title、ACP metadata、CLI composition/review/model discovery 与终端渲染。所有受守卫 transport 生产文件均无 runtime 直连。CLI/Bot/ACP 为拥有 turn 生命周期而保留同步 `RunTurn`，它与异步 command acknowledgement 是不同语义，不强行合并成伪统一接口。
 

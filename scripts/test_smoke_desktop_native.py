@@ -44,6 +44,11 @@ class DesktopNativeSmokeTests(unittest.TestCase):
             "artifact_sha256",
             "executable_sha256",
             "observation_seconds",
+            "startup_budget_seconds",
+            "first_visible_seconds",
+            "first_responsive_seconds",
+            "stable_responsive_seconds",
+            "startup_budget_met",
             "responding",
             "cleanup_method",
             "cleanup_ok",
@@ -77,6 +82,12 @@ class DesktopNativeSmokeTests(unittest.TestCase):
         for invalid in (0, 9, 301):
             with self.assertRaises(ValueError):
                 smoke.validate_observation_seconds(invalid)
+
+    def test_startup_budget_contract(self) -> None:
+        self.assertEqual(smoke.validate_startup_budget_seconds(8), 8)
+        for invalid in (0, 0.5, 61):
+            with self.assertRaises(ValueError):
+                smoke.validate_startup_budget_seconds(invalid)
 
     def test_managed_home_cleans_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as parent:
@@ -201,6 +212,25 @@ class DesktopNativeSmokeTests(unittest.TestCase):
         self.assertTrue(result.responding)
         self.assertGreaterEqual(result.max_consecutive_responses, 3)
         self.assertTrue(result.final_check_responsive)
+
+    def test_observe_process_records_startup_milestones(self) -> None:
+        clock = FakeClock()
+        proc = FakeProcess()
+        responses = iter(
+            [(False, 0), (False, 1), (True, 1), (True, 1), (True, 1)]
+        )
+
+        result = smoke.observe_process(
+            proc,
+            3,
+            responder=lambda _pid: next(responses, (True, 1)),
+            clock=clock.monotonic,
+            sleeper=clock.sleep,
+        )
+
+        self.assertEqual(result.first_visible_seconds, 0.5)
+        self.assertEqual(result.first_responsive_seconds, 1.0)
+        self.assertEqual(result.stable_responsive_seconds, 2.0)
 
     def test_observe_process_classifies_early_exit(self) -> None:
         clock = FakeClock()

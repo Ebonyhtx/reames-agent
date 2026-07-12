@@ -6,6 +6,7 @@ import { useT } from "../lib/i18n";
 import { diffsFor, languageForToolArgs, subjectOf, summarize, summarizeFileDiff } from "../lib/tools";
 import { useShellExpand } from "../lib/shellExpand";
 import { useGSAPCollapse } from "../lib/useGSAPCollapse";
+import { app } from "../lib/bridge";
 import type { Item } from "../lib/useController";
 import { isReadOnlyTool } from "../lib/useController";
 import { ReadOnlyBatch } from "./ReadOnlyBatch";
@@ -129,11 +130,9 @@ export const ToolCard = memo(function ToolCard({ item, subcalls, tabId, displayN
   useEffect(() => {
     if (!open || !item.dataArchived || fullData || !tabId) return;
     let cancelled = false;
-    import("../lib/bridge").then(({ app }) =>
-      app.ToolResultForTab(tabId, item.id).then((d) => {
-        if (!cancelled && d) setFullData(d);
-      }).catch(() => {}),
-    ).catch(() => {});
+    app.ToolResultForTab(tabId, item.id).then((data) => {
+      if (!cancelled && data) setFullData(data);
+    }).catch(() => {});
     return () => { cancelled = true; };
   }, [open, item.id, item.dataArchived, fullData, tabId]);
 

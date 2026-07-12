@@ -26,9 +26,12 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MIN_OBSERVATION_SECONDS = 10
 MAX_OBSERVATION_SECONDS = 300
+MIN_STARTUP_BUDGET_SECONDS = 1.0
+MAX_STARTUP_BUDGET_SECONDS = 60.0
+DEFAULT_STARTUP_BUDGET_SECONDS = 8.0
 POLL_INTERVAL_SECONDS = 0.5
 REQUIRED_CONSECUTIVE_RESPONSES = 3
 TEMP_CLEANUP_RETRY_SECONDS = (
@@ -66,6 +69,9 @@ class Observation:
     max_visible_windows: int = 0
     final_check_responsive: bool = False
     early_exit_code: int | None = None
+    first_visible_seconds: float | None = None
+    first_responsive_seconds: float | None = None
+    stable_responsive_seconds: float | None = None
 
     @property
     def responding(self) -> bool:
@@ -92,6 +98,11 @@ class SmokeResult:
     executable_size: int = 0
     observation_seconds: int = 0
     observed_seconds: float = 0.0
+    startup_budget_seconds: float = DEFAULT_STARTUP_BUDGET_SECONDS
+    first_visible_seconds: float | None = None
+    first_responsive_seconds: float | None = None
+    stable_responsive_seconds: float | None = None
+    startup_budget_met: bool = False
     responding: bool = False
     responsive_checks: int = 0
     window_checks: int = 0
@@ -125,6 +136,15 @@ def validate_observation_seconds(value: int) -> int:
         raise ValueError(
             f"observation seconds must be between {MIN_OBSERVATION_SECONDS} "
             f"and {MAX_OBSERVATION_SECONDS}"
+        )
+    return value
+
+
+def validate_startup_budget_seconds(value: float) -> float:
+    if not MIN_STARTUP_BUDGET_SECONDS <= value <= MAX_STARTUP_BUDGET_SECONDS:
+        raise ValueError(
+            f"startup budget seconds must be between {MIN_STARTUP_BUDGET_SECONDS:g} "
+            f"and {MAX_STARTUP_BUDGET_SECONDS:g}"
         )
     return value
 
@@ -370,17 +390,27 @@ def observe_process(
             observation.early_exit_code = exit_code
             break
         responsive, window_count = responder(proc.pid)
+        elapsed = max(0.0, clock() - start)
         observation.checks += 1
         observation.max_visible_windows = max(
             observation.max_visible_windows, window_count
         )
         observation.final_check_responsive = responsive
+        if window_count > 0 and observation.first_visible_seconds is None:
+            observation.first_visible_seconds = elapsed
         if responsive:
+            if observation.first_responsive_seconds is None:
+                observation.first_responsive_seconds = elapsed
             observation.responsive_checks += 1
             consecutive += 1
             observation.max_consecutive_responses = max(
                 observation.max_consecutive_responses, consecutive
             )
+            if (
+                consecutive >= REQUIRED_CONSECUTIVE_RESPONSES
+                and observation.stable_responsive_seconds is None
+            ):
+                observation.stable_responsive_seconds = elapsed
         else:
             consecutive = 0
         remaining = seconds - (clock() - start)
@@ -428,12 +458,14 @@ def _fail(result: SmokeResult, kind: str, message: str) -> None:
 def run_smoke(
     exe_path: str,
     observation_seconds: int = 12,
+    max_startup_seconds: float = DEFAULT_STARTUP_BUDGET_SECONDS,
     keep_temp: bool = False,
     artifact_path: str | None = None,
 ) -> SmokeResult:
     result = SmokeResult(
         platform=sys.platform,
         observation_seconds=observation_seconds,
+        startup_budget_seconds=max_startup_seconds,
         kept_temp=keep_temp,
     )
     proc: subprocess.Popen | None = None
@@ -441,6 +473,7 @@ def run_smoke(
 
     try:
         validate_observation_seconds(observation_seconds)
+        validate_startup_budget_seconds(max_startup_seconds)
     except ValueError as exc:
         _fail(result, "invalid-arguments", str(exc))
         result.finished_at = utc_now()
@@ -504,6 +537,25 @@ def run_smoke(
             try:
                 observation = observe_process(proc, observation_seconds)
                 result.observed_seconds = round(observation.elapsed_seconds, 3)
+                result.first_visible_seconds = (
+                    round(observation.first_visible_seconds, 3)
+                    if observation.first_visible_seconds is not None
+                    else None
+                )
+                result.first_responsive_seconds = (
+                    round(observation.first_responsive_seconds, 3)
+                    if observation.first_responsive_seconds is not None
+                    else None
+                )
+                result.stable_responsive_seconds = (
+                    round(observation.stable_responsive_seconds, 3)
+                    if observation.stable_responsive_seconds is not None
+                    else None
+                )
+                result.startup_budget_met = (
+                    observation.stable_responsive_seconds is not None
+                    and observation.stable_responsive_seconds <= max_startup_seconds
+                )
                 result.responding = observation.responding
                 result.responsive_checks = observation.responsive_checks
                 result.window_checks = observation.checks
@@ -521,6 +573,12 @@ def run_smoke(
                         result,
                         "no-response",
                         "native window did not produce three consecutive bounded message-pump responses through the final check",
+                    )
+                elif not result.startup_budget_met:
+                    _fail(
+                        result,
+                        "startup-budget",
+                        f"native window needed {result.stable_responsive_seconds:.3f}s to become stably responsive; budget is {max_startup_seconds:.3f}s",
                     )
             except Exception as exc:
                 _fail(result, "no-response", f"window response probe failed: {exc}")
@@ -567,6 +625,15 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Observation duration ({MIN_OBSERVATION_SECONDS}-{MAX_OBSERVATION_SECONDS} seconds)",
     )
     parser.add_argument(
+        "--max-startup-seconds",
+        type=float,
+        default=DEFAULT_STARTUP_BUDGET_SECONDS,
+        help=(
+            "Maximum time to three consecutive responsive window probes "
+            f"({MIN_STARTUP_BUDGET_SECONDS:g}-{MAX_STARTUP_BUDGET_SECONDS:g} seconds)"
+        ),
+    )
+    parser.add_argument(
         "--keep-temp",
         action="store_true",
         help="Keep the isolated home for local debugging",
@@ -574,12 +641,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         validate_observation_seconds(args.observation_seconds)
+        validate_startup_budget_seconds(args.max_startup_seconds)
     except ValueError as exc:
         parser.error(str(exc))
 
     result = run_smoke(
         args.exe,
         observation_seconds=args.observation_seconds,
+        max_startup_seconds=args.max_startup_seconds,
         keep_temp=args.keep_temp,
         artifact_path=args.artifact,
     )

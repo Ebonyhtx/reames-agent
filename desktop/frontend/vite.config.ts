@@ -140,9 +140,9 @@ export default defineConfig({
         },
       },
     },
-    // Raise the warning limit — the markdown vendor chunk is legitimately large
-    // (katex alone is ~300KB). The manual split ensures it's cached separately.
-    chunkSizeWarningLimit: 600,
+    // Lazy Mermaid graph code is the largest async chunk. The exact 725,000-byte
+    // ceiling is enforced after every build by check-bundle-budget.mjs.
+    chunkSizeWarningLimit: 725,
   },
   server: {
     // Bind IPv4 — unset host listens on ::1, and the Wails dev proxy's [::1]
