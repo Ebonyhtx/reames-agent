@@ -191,16 +191,17 @@ await act(async () => {
 });
 
 await waitFor("initial not-ready metadata", () => controller?.activeTabId === "tab-ready" && controller.state.meta?.ready === false);
-eq(historyCalls, 1, "startup begins one active-tab history hydration");
-eq(listTabsCalls, 1, "startup fetches the active tab once");
+eq(historyCalls, 0, "startup delays active-tab history until controller readiness");
+ok(listTabsCalls >= 2, "startup begins polling the restored tab readiness");
 
 backendReady = true;
 await waitFor("ready metadata is reconciled without a ready event", () => controller?.state.meta?.ready === true);
+await waitFor("history begins after readiness", () => historyCalls === 1);
 
-ok(metaCalls >= 1, "active tab metadata is polled after a missed ready event");
-ok(metaTabIds.length > 0 && metaTabIds.every((tabId) => tabId === "tab-ready"), "ready polling is limited to the active tab");
-eq(listTabsCalls, 1, "ready polling does not re-list or activate tabs");
-eq(historyCalls, 1, "ready polling does not start another history hydration");
+eq(metaCalls, 0, "restored tab readiness does not require ancillary metadata polling");
+eq(metaTabIds.length, 0, "startup readiness is sourced from the authoritative tab snapshot");
+ok(listTabsCalls >= 2, "startup readiness polling refreshes the restored tab");
+eq(historyCalls, 1, "ready polling starts exactly one history hydration");
 eq(approvalModeCalls, 0, "ready polling does not rely on approval-mode changes");
 
 await act(async () => {

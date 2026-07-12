@@ -49,6 +49,9 @@ type SyncActiveTabOptions = {
 };
 
 const HISTORY_PAGE_TURNS = 60;
+const TAB_READY_POLL_MS = 100;
+const TAB_READY_TIMEOUT_MS = 6_000;
+const STARTUP_TAB_READY_TIMEOUT_MS = 30_000;
 
 export type Item =
   | { kind: "user"; id: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number }
@@ -1508,17 +1511,24 @@ export function useController() {
     return foregroundRunning;
   }, [dispatchTo]);
 
-  const waitForTabReady = useCallback(async (tabId: string): Promise<void> => {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
+  const waitForTabReady = useCallback(async (
+    tabId: string,
+    timeoutMs = TAB_READY_TIMEOUT_MS,
+  ): Promise<TabMeta | undefined> => {
+    let lastSeen: TabMeta | undefined;
+    const attempts = Math.max(1, Math.ceil(timeoutMs / TAB_READY_POLL_MS));
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
       const tabs = asArray(await app.ListTabs().catch(() => [] as TabMeta[]));
       const tab = tabs.find((candidate) => candidate.id === tabId);
-      if (!tab || tab.ready || tab.startupErr) return;
-      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      if (!tab || tab.ready || tab.startupErr) return tab;
+      lastSeen = tab;
+      await new Promise((resolve) => window.setTimeout(resolve, TAB_READY_POLL_MS));
     }
+    return lastSeen;
   }, []);
 
   const syncActiveTabFromBackend = useCallback(async (reset = false, guard = false, options: SyncActiveTabOptions = {}): Promise<string | undefined> => {
-    const active = await activeTabFromBackend();
+    let active = await activeTabFromBackend();
     if (!active) return undefined;
     // When guard is true, skip if the frontend already settled on a
     // different tab while we were fetching — this prevents fire-and-forget
@@ -1531,6 +1541,18 @@ export function useController() {
     activeTabIdRef.current = active.id;
     confirmBackendActiveTab(active.id);
     dispatchTo(active.id, { type: "optimistic_meta", meta: metaFromTab(active, statesRef.current.get(active.id)?.meta) });
+    // Restored tab entries become visible before their controllers finish
+    // loading the persisted session. Hydrating history from ready=false can
+    // return an empty snapshot; if agent:ready overlaps that request, the
+    // in-flight coalescer then preserves the empty result for this process.
+    // Keep the shell/tab visible, but wait for the existing readiness signal
+    // before the first transcript read and refresh metadata/sessionPath once.
+    const settled = await waitForTabReady(active.id, STARTUP_TAB_READY_TIMEOUT_MS);
+    if (settled?.id === active.id) {
+      active = settled;
+      dispatchTo(active.id, { type: "optimistic_meta", meta: metaFromTab(active, statesRef.current.get(active.id)?.meta) });
+    }
+    if (guard && activeTabIdRef.current !== active.id) return active.id;
     const preserveCachedHistory = options.preserveCachedHistory ?? !reset;
     if (!reset) dispatchRuntimeStatusForTab(active.id, active);
     await loadSessionDataForTab(active.id, reset, "startup", {
@@ -1539,7 +1561,7 @@ export function useController() {
     });
     if (reset) dispatchRuntimeStatusForTab(active.id, active);
     return active.id;
-  }, [activeTabFromBackend, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab]);
+  }, [activeTabFromBackend, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, waitForTabReady]);
 
   const reconcileTabRuntime = useCallback(async (
     tabId: string,

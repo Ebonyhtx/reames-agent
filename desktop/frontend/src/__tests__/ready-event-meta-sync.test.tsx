@@ -179,8 +179,8 @@ await act(async () => {
 });
 
 await waitFor("initial not-ready metadata", () => controller?.activeTabId === "tab-ready" && controller.state.meta?.ready === false);
-eq(historyCalls, 1, "startup begins one history hydration");
-eq(metaCalls, 0, "startup history remains in flight before ancillary meta");
+eq(historyCalls, 0, "startup does not read history before the restored controller is ready");
+eq(metaCalls, 0, "startup readiness wait does not call ancillary meta");
 
 backendReady = true;
 await act(async () => {
@@ -190,7 +190,7 @@ await act(async () => {
 await waitFor("ready metadata refreshed before history settles", () => controller?.state.meta?.ready === true);
 
 eq(listTabsCalls >= 2, true, "ready event refreshes active tab metadata from ListTabs");
-eq(historyCalls, 1, "ready event joins the in-flight hydrate instead of reloading history");
+eq(historyCalls, 1, "ready event starts one history hydration after controller readiness");
 eq(metaCalls, 0, "ready event does not wait for ancillary MetaForTab before unlocking send");
 
 await act(async () => {
