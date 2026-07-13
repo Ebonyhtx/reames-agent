@@ -369,7 +369,7 @@ func TestHistoryForTabUsesPinnedSessionBeforeControllerReady(t *testing.T) {
 	}
 }
 
-func TestHistoryForTabFallsBackToCanonicalEventLogBeforeControllerTranscript(t *testing.T) {
+func TestHistoryForTabPrefersMoreCompleteCanonicalEventLogOverPartialController(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	root := globalTabWorkspaceRoot()
 	dir := desktopSessionDir(root)
@@ -386,6 +386,11 @@ func TestHistoryForTabFallsBackToCanonicalEventLogBeforeControllerTranscript(t *
 	if err := session.SaveSnapshot(path); err != nil {
 		t.Fatalf("SaveSnapshot event suffix: %v", err)
 	}
+	session.Add(provider.Message{Role: provider.RoleUser, Content: "second event prompt"})
+	session.Add(provider.Message{Role: provider.RoleAssistant, Content: "second event answer"})
+	if err := session.SaveSnapshot(path); err != nil {
+		t.Fatalf("SaveSnapshot second event suffix: %v", err)
+	}
 	if info, err := os.Stat(path); err != nil || info.Size() != 0 {
 		t.Fatalf("checkpoint size = %v, %v; want zero-byte compatibility checkpoint", info, err)
 	}
@@ -393,8 +398,10 @@ func TestHistoryForTabFallsBackToCanonicalEventLogBeforeControllerTranscript(t *
 		t.Fatalf("event log size = %v, %v; want non-empty canonical log", info, err)
 	}
 
-	blank := agent.NewSession("")
-	ag := agent.New(stubProvider{}, tool.NewRegistry(), blank, agent.Options{}, event.Discard)
+	partial := agent.NewSession("")
+	partial.Add(provider.Message{Role: provider.RoleUser, Content: "partial controller prompt"})
+	partial.Add(provider.Message{Role: provider.RoleAssistant, Content: "partial controller answer"})
+	ag := agent.New(stubProvider{}, tool.NewRegistry(), partial, agent.Options{}, event.Discard)
 	ctrl := control.New(control.Options{Executor: ag, SessionDir: dir, SessionPath: path, Sink: event.Discard})
 	app := NewApp()
 	tab := &WorkspaceTab{
@@ -411,12 +418,12 @@ func TestHistoryForTabFallsBackToCanonicalEventLogBeforeControllerTranscript(t *
 	app.activeTabID = tab.ID
 
 	page := app.HistoryPageForTab(tab.ID, 0, 60)
-	if len(page.Messages) != 2 || page.TotalTurns != 1 || page.Messages[0].Content != "event prompt" || page.Messages[1].Content != "event answer" {
-		t.Fatalf("event-log history page = %+v, want restored prompt and answer", page)
+	if len(page.Messages) != 4 || page.TotalTurns != 2 || page.Messages[0].Content != "event prompt" || page.Messages[3].Content != "second event answer" {
+		t.Fatalf("event-log history page = %+v, want both durable turns instead of partial controller history", page)
 	}
 	messages := app.HistoryForTab(tab.ID)
-	if len(messages) != 2 || messages[0].Content != "event prompt" || messages[1].Content != "event answer" {
-		t.Fatalf("event-log history = %+v, want restored prompt and answer", messages)
+	if len(messages) != 4 || messages[0].Content != "event prompt" || messages[3].Content != "second event answer" {
+		t.Fatalf("event-log history = %+v, want both durable turns instead of partial controller history", messages)
 	}
 }
 

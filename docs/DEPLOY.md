@@ -112,6 +112,17 @@ env、访问控制和连接记录，再执行
 
 `<Reames Agent home>/.env` 是 provider key 的运行时来源。不要把真实 key 写入项目仓库、项目 `.env`、systemd unit 或 shell 历史可见的位置。长期使用时，可以把 `export REAMES_AGENT_HOME="$HOME/.reames-agent"` 写入该用户的 shell profile。
 
+源码检出还可以先运行 credential-free 运维预检：
+
+```bash
+python scripts/smoke_gateway_headless.py --out artifacts/headless-gateway-smoke.json
+```
+
+它用实际 CLI 二进制和隔离 home 验证 Gateway 配置/诊断/service plan、localhost
+Provider 一次性任务与会话落盘，以及 feedback 提交/聚合/脱敏/本地草稿。报告中的
+`external_blocked` 仍需在真实云节点、Provider 和 IM 应用中补证；该命令不会创建
+synthetic `.env`，也不会启动或发布外部服务。
+
 ### 4. 像本机一样使用 CLI
 
 ```bash
@@ -351,4 +362,4 @@ reames-agent gateway status
 
 `reames-agent bot start` 仍可作为旧命名兼容入口。推荐形态是：SSH/CLI/TUI 用于交互式任务，`gateway run` 用于前台调试，`gateway install/start/status` 管理独立后台 Gateway service。这样社交通道进程不会占用或阻塞用户 CLI、Desktop 或可选的 `serve` 入口。
 
-当前仍需在干净 Linux 服务器上补一次完整实战验证：安装二进制、配置 `REAMES_AGENT_HOME` 与真实 provider key、安装 gateway service、检查日志、发送一次真实渠道消息并完成 `/status` 或 `/current` 往返。
+当前仍需在干净 Linux 服务器上补一次完整实战验证：安装二进制、配置 `REAMES_AGENT_HOME` 与真实 provider key、安装并执行 gateway service 的 start/status/restart/status、检查日志、验证 feedback 运维产物，再发送一次真实渠道消息并完成 `/status` 或 `/current` 往返。credential-free smoke 不能替代这项证据。

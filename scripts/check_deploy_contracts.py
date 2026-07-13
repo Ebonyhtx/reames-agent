@@ -137,6 +137,10 @@ def check() -> list[str]:
     require("gateway" in gateway_smoke and "run" in gateway_smoke and "home_overrides_ambient_env" in gateway_smoke, "headless Gateway smoke must exercise foreground gateway run --home.", failures)
     require("install" in gateway_smoke and "--dry-run" in gateway_smoke, "headless Gateway smoke must exercise gateway install --dry-run.", failures)
     require("service definitions do not embed secret values" in gateway_smoke, "headless Gateway smoke must guard the no-secret service contract.", failures)
+    require("cli_run" in gateway_smoke and "provider_bound_to_loopback" in gateway_smoke and "session_persisted" in gateway_smoke, "headless Gateway smoke must exercise a localhost-backed one-shot CLI turn and persist its session.", failures)
+    require("feedback" in gateway_smoke and "duplicate_groups" in gateway_smoke and "draft_persisted" in gateway_smoke, "headless Gateway smoke must exercise the feedback submit-summary-draft lifecycle.", failures)
+    require("sensitive_values_redacted" in gateway_smoke and "external_publish_attempted" in gateway_smoke, "headless Gateway smoke must prove feedback redaction and local-only draft generation.", failures)
+    require("external_blocked" in gateway_smoke and "real provider API round trip" in gateway_smoke, "headless Gateway evidence must keep real external verification explicitly blocked.", failures)
     require("--out" in gateway_smoke and "json.dumps" in gateway_smoke, "headless Gateway smoke must support a JSON evidence report.", failures)
 
     return failures

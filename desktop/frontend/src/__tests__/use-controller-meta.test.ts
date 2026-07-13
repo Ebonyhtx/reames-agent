@@ -1,6 +1,6 @@
 // Run: tsx src/__tests__/use-controller-meta.test.ts
 
-import { effortSwitchNoticeText, foregroundRunningFromRuntimeMeta, historyMessagesToItems, initialState, localizedBackendNoticeText, metaFromTab, modelSwitchNoticeText, reducer, sameMeta, shouldReconcileStaleTurn, tokenModeSwitchNoticeText } from "../lib/useController";
+import { effortSwitchNoticeText, foregroundRunningFromRuntimeMeta, hasReusableCachedTranscript, historyMessagesToItems, initialState, localizedBackendNoticeText, metaFromTab, modelSwitchNoticeText, reducer, sameMeta, shouldReconcileStaleTurn, tokenModeSwitchNoticeText } from "../lib/useController";
 import type { HistoryMessage, Meta, TabMeta, WireUsage } from "../lib/types";
 
 type LooseTabMeta = Omit<TabMeta, "toolApprovalMode"> & { toolApprovalMode?: TabMeta["toolApprovalMode"] | "" };
@@ -81,6 +81,18 @@ function usage(source: string): WireUsage {
 }
 
 console.log("\nuse controller meta");
+
+{
+  const noticeOnly = reducer(initialState, { type: "event", e: { kind: "notice", level: "warn", text: "startup warning" } });
+  eq(hasReusableCachedTranscript(noticeOnly), false, "startup notices do not masquerade as a reusable transcript");
+  const userHistory = reducer(initialState, {
+    type: "history_page",
+    mode: "replace",
+    page: { messages: [{ role: "user", content: "persisted task" }], startTurn: 0, endTurn: 1, totalTurns: 1, hasOlder: false },
+  });
+  eq(hasReusableCachedTranscript(userHistory), true, "persisted conversation content can reuse startup history");
+  eq(hasReusableCachedTranscript({ ...userHistory, meta: meta({ sessionPath: "/repo/a.jsonl" }) }, "/repo/b.jsonl"), false, "cached transcript from another session is not reused");
+}
 
 {
   eq(

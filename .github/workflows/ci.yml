@@ -94,7 +94,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Validate server deployment contracts
-        run: python scripts/check_deploy_contracts.py
+        run: |
+          python scripts/check_deploy_contracts.py
+          python -m unittest scripts.test_smoke_gateway_headless -v
       - name: Validate Unix installer dry-run
         run: |
           python -m unittest scripts.test_installers.InstallerDryRunTests.test_unix_gateway_dry_run_preserves_home_and_credential_boundary -v
@@ -104,7 +106,7 @@ jobs:
         run: |
           python -m unittest scripts.test_installers.InstallerDryRunTests.test_powershell_gateway_dry_run_preserves_home_and_credential_boundary -v
           python -m unittest scripts.test_installers.InstallerDryRunTests.test_powershell_release_dry_run_verifies_checksum -v
-      - name: Smoke headless Gateway deployment
+      - name: Smoke clean-node CLI, Gateway, and feedback operations
         run: python scripts/smoke_gateway_headless.py --out artifacts/headless-gateway-smoke.json
       - uses: actions/upload-artifact@v4
         if: always()

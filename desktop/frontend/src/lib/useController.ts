@@ -270,8 +270,8 @@ function hasCachedLiveTurn(state: State | undefined): boolean {
   );
 }
 
-function hasReusableCachedTranscript(state: State | undefined, sessionPath?: string): boolean {
-  if (!state || state.items.length === 0) return false;
+export function hasReusableCachedTranscript(state: State | undefined, sessionPath?: string): boolean {
+  if (!state || !state.items.some((item) => item.kind === "user" || item.kind === "assistant")) return false;
   const expectedSessionPath = (sessionPath ?? "").trim();
   if (!expectedSessionPath) return true;
   return (state.meta?.sessionPath ?? "").trim() === expectedSessionPath;

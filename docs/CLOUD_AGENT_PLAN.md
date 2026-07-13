@@ -187,6 +187,9 @@ flowchart TD
 - 补齐阿里云 ECS 部署说明：安全组、systemd、Docker Compose、Nginx/TLS、日志和备份。
 - 提供 `serve` / `gateway run` / `run` 三种入口的最小健康检查。
 - 验证 DeepSeek API Key 只来自服务器环境变量或加密凭据，不写入仓库。
+- credential-free 预检已用同一隔离 home 纵向验证实际 CLI 二进制的一次性
+  localhost Provider 任务、会话持久化、Gateway 配置/诊断/service plan 和
+  feedback 本地维护草稿；真实 Linux service-manager 与 Provider 仍需云节点补证。
 
 完成门槛：一台干净 Linux 服务器可以启动 `serve`，SSH 可以运行 `reames-agent run`，健康检查通过。
 
@@ -196,7 +199,8 @@ flowchart TD
 - 支持文本任务、状态查询、取消、审批和会话恢复。
 - IM 用户、群、项目 workspace 和审批角色可配置；`gateway setup` 已为
   飞书/Lark、QQ 和微信提供 fail-closed、幂等、原子且脱敏的无界面配置事务，
-  下一步是在干净云节点执行 setup → doctor → service install/run 实战。
+  credential-free smoke 已执行 setup → doctor → service-plan；下一步是在干净
+  Linux 云节点执行 service install/start/status/restart/status 实战。
 - 飞书卡片只承载交互，不污染模型 prompt。
 - 建立 Linux systemd / Windows Scheduled Task / macOS launchd 的后台服务安装、启动、停止和状态查询。
 
@@ -222,7 +226,7 @@ flowchart TD
 ### C4：遥测与反馈中心
 
 - 自托管 crash/metrics/feedback endpoint。
-- 当前已具备第一阶段：`serve` 提供 `POST /api/feedback`、`GET /api/feedback/summary` 和 `POST /api/feedback/draft`，`reames-agent feedback submit|summary|draft --home PATH` 提供 SSH/CLI 运维入口；两者都使用 `<Reames Agent home>/feedback/feedback.jsonl`，并在落盘前脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token；维护草稿写入 `<Reames Agent home>/feedback/drafts/*.md`，不自动外发。
+- 当前已具备第一阶段：`serve` 提供 `POST /api/feedback`、`GET /api/feedback/summary` 和 `POST /api/feedback/draft`，`reames-agent feedback submit|summary|draft --home PATH` 提供 SSH/CLI 运维入口；两者都使用 `<Reames Agent home>/feedback/feedback.jsonl`，并在落盘前脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token；维护草稿写入 `<Reames Agent home>/feedback/drafts/*.md`，不自动外发。credential-free 预检已证明两条重复 Gateway 反馈聚为一个 group、本地草稿落盘且 fixture 敏感值不进入证据。
 - 默认关闭内容上报，只收集结构化、脱敏、可解释字段。
 - 将重复失败聚类为 Issue 或维护任务。
 - 为桌面端、CLI、Server 和 Gateway 使用同一套事件 schema。
