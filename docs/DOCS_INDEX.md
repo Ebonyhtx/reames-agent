@@ -93,6 +93,7 @@
 | [M3 Linux/macOS startup readiness 审计](audits/2026-07-13-m3-linux-macos-startup-readiness.md) | 隔离状态 readiness、Linux 可见窗口、连续稳定采样、10 秒预算与 candidate 证据边界 |
 | [M3 Desktop 重启恢复竞态审计](audits/2026-07-13-m3-desktop-restart-restore-race.md) | 首次 tab 快照恢复门闩、canonical event log 并发采样与 Windows UIA 重启恢复证据 |
 | [M3 多语言按需加载与预算审计](audits/2026-07-13-m3-lazy-locale-budget.md) | 保存语言优先与 auto 系统语言预取、运行期原子切换、双 locale chunk 合同与本地化首启预算 |
+| [M3 主首启图与设置 CSS 拆分审计](audits/2026-07-13-m3-main-graph-css-split.md) | browser mock、VirtualMenu/TanStack、SettingsPanelRoute CSS 延迟加载与递归首次使用图预算 |
 | [外部 Agent 批次验收](audits/2026-07-11-external-agent-batch-acceptance.md) | 大批提交的保留/撤回范围、真实性修复和全量本地验证 |
 | [Control transport boundary ratchet audit](audits/2026-07-10-control-boundary-ratchet.md) | Desktop/CLI/Serve/Bot/ACP 对 runtime 内部直连的精确依赖基线和 CI 收缩棘轮 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |

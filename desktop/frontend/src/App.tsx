@@ -146,7 +146,7 @@ import { composerDraftKeyForTab } from "./lib/composerDraftKey";
 import logoWordmark from "./assets/logo-wordmark.svg";
 
 const HistoryPanel = lazy(() => import("./components/HistoryPanel").then((module) => ({ default: module.HistoryPanel })));
-const SettingsPanel = lazy(() => import("./components/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
+const SettingsPanel = lazy(() => import("./components/SettingsPanelRoute").then((module) => ({ default: module.SettingsPanel })));
 const ApprovalModal = lazy(() => import("./components/ApprovalModal").then((module) => ({ default: module.ApprovalModal })));
 const AskCard = lazy(() => import("./components/AskCard").then((module) => ({ default: module.AskCard })));
 const ClearContextCard = lazy(() => import("./components/ClearContextCard").then((module) => ({ default: module.ClearContextCard })));

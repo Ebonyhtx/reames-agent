@@ -2,7 +2,7 @@
 
 日期：2026-07-13
 
-状态：本地验收完成；等待集中推送与远端 CI
+状态：已交付；commit `bbdddde`，普通 CI `29214262280` 8/8、CodeQL `29214262276` 3/3
 
 ## 缺口
 
@@ -19,7 +19,7 @@ Desktop 虽已将关闭态界面拆出首启路径，但 `i18n.tsx` 仍静态导
 ## 结果与预算
 
 ```text
-                              拆分前       当前候选        变化
+                              拆分前     已交付 bbdddde      变化
 entry JS                    624,409 B      623,577 B        -832 B
 base initial JS           1,213,626 B      984,616 B    -229,010 B (-18.9%)
 worst localized startup   1,213,626 B    1,100,036 B    -113,590 B (-9.4%)
@@ -63,4 +63,4 @@ smoke_desktop_interaction.py --timeout-seconds 45             PASS
 
 最终 Windows production 可执行文件大小为 48,044,032 B，SHA-256 为 `7CE473389D54DA662299DB03BE80FD571D95E7AA3A1E671FC8855866E67D0783`。隔离 HOME 的冷启动首次/稳定响应为 0.516/1.516 秒，同 HOME warm relaunch 为 0.500/1.500 秒，均满足 8/6 秒本地门槛；进程、临时目录和默认状态边界检查通过。最终 UIA 交互完成 19 次 loopback provider 请求、五类失败恢复、停止和同 session path 重启恢复，`recovery_verified=true`、清理成功、边界变化与 errors 均为空。原生 UIA 使用保存英文的既有稳定夹具，证明新启动 preflight 与打包资源没有破坏主流程；OS 繁中与保存简中不一致时的单词典、保存值优先，以及恢复 auto 后按 OS 加载繁中的正确性由组件、source contract 和真实 manifest 产物共同证明，不把英文原生交互冒充中文 UI 证据。
 
-这些证据证明当前 Windows 源码 production 的离线词典首启和主流程，没有替代三平台安装候选、签名发布或真实公网 Provider。远端普通 CI/CodeQL 将在本批集中 push 后核验。
+这些证据证明该批 Windows 源码 production 的离线词典首启和主流程，没有替代三平台安装候选、签名发布或真实公网 Provider。commit `bbdddde` 已推送到 `origin/main`；普通 CI run `29214262280` 的 8 个 jobs 与 CodeQL run `29214262276` 的 3 个分析目标均通过。后续首启图拆分应以本页的已交付产物作为比较基线，不回写或冒充本批历史结果。

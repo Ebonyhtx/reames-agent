@@ -1,6 +1,6 @@
 // Run: tsx src/__tests__/bridge-mock-approval-mode.test.ts
 
-import { mockToolApprovalModeAfterModeChange } from "../lib/bridge";
+import { mockToolApprovalModeAfterModeChange } from "../lib/bridgeMock";
 
 let passed = 0;
 let failed = 0;

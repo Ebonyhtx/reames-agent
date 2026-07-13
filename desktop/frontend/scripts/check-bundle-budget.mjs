@@ -56,6 +56,21 @@ async function allJSAssets(dir, root = dir) {
   return files;
 }
 
+async function allCSSAssets(dir, root = dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await allCSSAssets(fullPath, root));
+    } else if (entry.isFile() && entry.name.endsWith(".css")) {
+      const info = await stat(fullPath);
+      files.push({ file: path.relative(root, fullPath).replaceAll(path.sep, "/"), bytes: info.size });
+    }
+  }
+  return files;
+}
+
 async function bundleManifest(distDir) {
   const source = await readFile(path.join(distDir, ".vite", "manifest.json"), "utf8");
   const manifest = JSON.parse(source);
@@ -65,24 +80,61 @@ async function bundleManifest(distDir) {
   return manifest;
 }
 
-function staticDependencyFiles(manifest, entryFile) {
-  const root = Object.entries(manifest).find(([, entry]) => entry?.file === entryFile)?.[0];
-  if (!root) throw new Error(`bundle manifest has no entry for ${entryFile}`);
+function staticDependencyAssets(manifest, entryKeyOrFile) {
+  const root = manifest[entryKeyOrFile]
+    ? entryKeyOrFile
+    : Object.entries(manifest).find(([, entry]) => entry?.file === entryKeyOrFile)?.[0];
+  if (!root) throw new Error(`bundle manifest has no entry for ${entryKeyOrFile}`);
   const visited = new Set();
-  const files = new Set();
+  const js = new Set();
+  const css = new Set();
   const visit = (key) => {
     if (visited.has(key)) return;
     visited.add(key);
     const entry = manifest[key];
     if (!entry || typeof entry !== "object") throw new Error(`bundle manifest import is missing: ${key}`);
-    if (typeof entry.file === "string" && entry.file.endsWith(".js")) files.add(entry.file);
+    if (typeof entry.file === "string" && entry.file.endsWith(".js")) js.add(entry.file);
+    for (const file of Array.isArray(entry.css) ? entry.css : []) {
+      if (typeof file !== "string" || !file.endsWith(".css")) throw new Error(`bundle manifest CSS is invalid: ${key}`);
+      css.add(file);
+    }
     for (const imported of Array.isArray(entry.imports) ? entry.imports : []) {
       if (typeof imported !== "string") throw new Error(`bundle manifest import is invalid: ${key}`);
       visit(imported);
     }
   };
   visit(root);
-  return files;
+  return { root, js, css };
+}
+
+function routeStartup(manifest, entryKey, initialJSBytes, initialCSSBytes, initialJSFiles, initialCSSFiles, jsByFile, cssByFile) {
+  const graph = staticDependencyAssets(manifest, entryKey);
+  const entry = manifest[graph.root];
+  if (entry.isDynamicEntry !== true) throw new Error(`bundle route must stay a dynamic entry: ${entryKey}`);
+  if (initialJSFiles.has(entry.file)) throw new Error(`bundle route JS leaked into the initial graph: ${entryKey}`);
+  for (const file of Array.isArray(entry.css) ? entry.css : []) {
+    if (initialCSSFiles.has(file)) throw new Error(`bundle route CSS leaked into the initial graph: ${entryKey}`);
+  }
+  const additionalJSBytes = [...graph.js].reduce((sum, file) => {
+    if (initialJSFiles.has(file)) return sum;
+    const asset = jsByFile.get(file);
+    if (!asset) throw new Error(`bundle manifest JS is missing from dist: ${file}`);
+    return sum + asset.bytes;
+  }, 0);
+  const additionalCSSBytes = [...graph.css].reduce((sum, file) => {
+    if (initialCSSFiles.has(file)) return sum;
+    const asset = cssByFile.get(file);
+    if (!asset) throw new Error(`bundle manifest CSS is missing from dist: ${file}`);
+    return sum + asset.bytes;
+  }, 0);
+  return {
+    entryKey,
+    file: entry.file,
+    jsBytes: initialJSBytes + additionalJSBytes,
+    cssBytes: initialCSSBytes + additionalCSSBytes,
+    jsFiles: [...graph.js],
+    cssFiles: [...graph.css],
+  };
 }
 
 export async function inspectBundle(distDir) {
@@ -95,8 +147,10 @@ export async function inspectBundle(distDir) {
   const initialJS = assets.filter((asset) => asset.kind === "entry-js" || asset.kind === "preload-js");
   const initialCSS = assets.filter((asset) => asset.kind === "initial-css");
   const jsAssets = await allJSAssets(distDir);
+  const cssAssets = await allCSSAssets(distDir);
   const manifest = await bundleManifest(distDir);
   const jsByFile = new Map(jsAssets.map((asset) => [asset.file, asset]));
+  const cssByFile = new Map(cssAssets.map((asset) => [asset.file, asset]));
   const largestJS = jsAssets.reduce((largest, asset) => asset.bytes > largest.bytes ? asset : largest, { file: "", bytes: 0 });
   const localeJS = jsAssets.filter((asset) => /^assets\/locale-(?:zh|zh-tw)-.+\.js$/i.test(asset.file));
   const largestLocaleJS = localeJS.reduce(
@@ -104,9 +158,11 @@ export async function inspectBundle(distDir) {
     { file: "", bytes: 0 },
   );
   const initialJSBytes = initialJS.reduce((sum, asset) => sum + asset.bytes, 0);
+  const initialCSSBytes = initialCSS.reduce((sum, asset) => sum + asset.bytes, 0);
   const initialFiles = new Set(initialJS.map((asset) => asset.file));
+  const initialCSSFiles = new Set(initialCSS.map((asset) => asset.file));
   const localeStartupJS = localeJS.map((locale) => {
-    const files = [...staticDependencyFiles(manifest, locale.file)];
+    const files = [...staticDependencyAssets(manifest, locale.file).js];
     const additionalBytes = files.reduce((sum, file) => {
       if (initialFiles.has(file)) return sum;
       const asset = jsByFile.get(file);
@@ -119,6 +175,9 @@ export async function inspectBundle(distDir) {
     (largest, asset) => asset.bytes > largest.bytes ? asset : largest,
     { file: "", bytes: initialJSBytes, files: [] },
   );
+  const bridgeMockStartup = routeStartup(manifest, "src/lib/bridgeMock.ts", initialJSBytes, initialCSSBytes, initialFiles, initialCSSFiles, jsByFile, cssByFile);
+  const virtualMenuStartup = routeStartup(manifest, "src/components/VirtualMenuImpl.tsx", initialJSBytes, initialCSSBytes, initialFiles, initialCSSFiles, jsByFile, cssByFile);
+  const settingsStartup = routeStartup(manifest, "src/components/SettingsPanelRoute.tsx", initialJSBytes, initialCSSBytes, initialFiles, initialCSSFiles, jsByFile, cssByFile);
 
   return {
     entryJS: entries[0],
@@ -129,8 +188,11 @@ export async function inspectBundle(distDir) {
     localeStartupJS,
     largestLocaleStartup,
     localizedInitialJSBytes: largestLocaleStartup.bytes,
+    bridgeMockStartup,
+    virtualMenuStartup,
+    settingsStartup,
     initialCSS,
-    initialCSSBytes: initialCSS.reduce((sum, asset) => sum + asset.bytes, 0),
+    initialCSSBytes,
     largestJS,
   };
 }
@@ -141,6 +203,10 @@ export function evaluateBundleBudget(metrics, budget) {
     ["initial JS", metrics.initialJSBytes, budget.maxInitialJSBytes],
     ["localized initial JS", metrics.localizedInitialJSBytes, budget.maxLocalizedInitialJSBytes],
     ["initial CSS", metrics.initialCSSBytes, budget.maxInitialCSSBytes],
+    ["browser mock startup JS", metrics.bridgeMockStartup.jsBytes, budget.maxBridgeMockStartupJSBytes],
+    ["virtual menu startup JS", metrics.virtualMenuStartup.jsBytes, budget.maxVirtualMenuStartupJSBytes],
+    ["settings startup JS", metrics.settingsStartup.jsBytes, budget.maxSettingsStartupJSBytes],
+    ["settings startup CSS", metrics.settingsStartup.cssBytes, budget.maxSettingsStartupCSSBytes],
     ["largest JS asset", metrics.largestJS.bytes, budget.maxSingleJSAssetBytes],
     ["initial JS files", metrics.initialJS.length, budget.maxInitialJSFiles],
   ];
@@ -181,6 +247,9 @@ async function main() {
   console.log(`Bundle initial JS: ${formatBytes(metrics.initialJSBytes)} across ${metrics.initialJS.length} files`);
   console.log(`Bundle localized initial JS: ${formatBytes(metrics.localizedInitialJSBytes)} (${metrics.largestLocaleStartup.files.length} locale-graph files; direct chunk ${formatBytes(metrics.largestLocaleJS.bytes)})`);
   console.log(`Bundle initial CSS: ${formatBytes(metrics.initialCSSBytes)} across ${metrics.initialCSS.length} files`);
+  console.log(`Bundle browser mock startup JS: ${formatBytes(metrics.bridgeMockStartup.jsBytes)}`);
+  console.log(`Bundle virtual menu startup JS: ${formatBytes(metrics.virtualMenuStartup.jsBytes)}`);
+  console.log(`Bundle settings startup: ${formatBytes(metrics.settingsStartup.jsBytes)} JS + ${formatBytes(metrics.settingsStartup.cssBytes)} CSS`);
   console.log(`Bundle largest JS: ${formatBytes(metrics.largestJS.bytes)} (${metrics.largestJS.file})`);
   if (failures.length === 0) {
     console.log("Bundle budget check passed.");

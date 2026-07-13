@@ -21,6 +21,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const appSource = readFileSync(resolve(here, "../App.tsx"), "utf8");
 const commandPaletteSource = readFileSync(resolve(here, "../components/CommandPalette.tsx"), "utf8");
 const settingsSource = readFileSync(resolve(here, "../components/SettingsPanel.tsx"), "utf8");
+const settingsRouteSource = readFileSync(resolve(here, "../components/SettingsPanelRoute.tsx"), "utf8");
+const settingsStyles = readFileSync(resolve(here, "../components/SettingsPanel.css"), "utf8");
+const baseStyles = readFileSync(resolve(here, "../styles.css"), "utf8");
+const bridgeSource = readFileSync(resolve(here, "../lib/bridge.ts"), "utf8");
+const bridgeMockSource = readFileSync(resolve(here, "../lib/bridgeMock.ts"), "utf8");
+const virtualMenuSource = readFileSync(resolve(here, "../components/VirtualMenu.tsx"), "utf8");
+const virtualMenuImplSource = readFileSync(resolve(here, "../components/VirtualMenuImpl.tsx"), "utf8");
 const markdownSource = readFileSync(resolve(here, "../components/Markdown.tsx"), "utf8");
 const heartbeatSurfaceSource = readFileSync(resolve(here, "../custom/features/heartbeat/HeartbeatPanelSurface.tsx"), "utf8");
 const scrollManagerSource = readFileSync(resolve(here, "../lib/useScrollManager.ts"), "utf8");
@@ -45,9 +52,38 @@ ok(
   "App keeps secondary drawers out of the initial chunk",
 );
 ok(
-  appSource.includes('import("./components/SettingsPanel")') &&
+  appSource.includes('import("./components/SettingsPanelRoute")') &&
     appSource.includes('import("./components/HistoryPanel")'),
   "App loads secondary drawers on demand",
+);
+ok(
+  bridgeSource.includes('import("./bridgeMock")') &&
+    !bridgeSource.includes("function makeMockApp") &&
+    bridgeMockSource.includes("export function makeMockApp"),
+  "native bridge keeps the browser development mock out of its static module graph",
+);
+ok(
+  virtualMenuSource.includes('import("./VirtualMenuImpl")') &&
+    !virtualMenuSource.includes("@tanstack/react-virtual") &&
+    virtualMenuImplSource.includes('from "@tanstack/react-virtual"'),
+  "composer menus load the TanStack virtualizer only when a virtual menu opens",
+);
+ok(
+  settingsRouteSource.includes('import "./SettingsPanel.css"') &&
+    settingsRouteSource.includes('export { SettingsPanel } from "./SettingsPanel"') &&
+    !settingsSource.includes('import "./SettingsPanel.css"') &&
+    settingsStyles.includes("settings centre modal") &&
+    !settingsStyles.includes(".drawer--wide") &&
+    !settingsStyles.includes(".bot-detail__summary") &&
+    baseStyles.includes(".drawer--wide") &&
+    baseStyles.includes(".bot-detail__summary") &&
+    !baseStyles.includes("settings centre modal"),
+  "settings lazy route owns only settings CSS while shared responsive surfaces stay in the app shell",
+);
+ok(
+  packageSource.includes("check-css-syntax.mjs src/styles.css src/components/SettingsPanel.css") &&
+    packageSource.includes("check-z-index-tokens.mjs src/styles.css src/components/SettingsPanel.css"),
+  "every production stylesheet stays behind syntax and z-index gates",
 );
 const deferredSurfaces = [
   "ApprovalModal",
