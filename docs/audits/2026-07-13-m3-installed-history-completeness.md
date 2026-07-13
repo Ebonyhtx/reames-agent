@@ -108,3 +108,55 @@ new disk/UIA recovery field was true except the expected
 `restart_onboarding_present=false`. Strict InvokePattern accessibility also
 passed with `boundary_changes=[]` and no errors. Installed-candidate evidence is
 still required before closing M3.
+
+## Fifth installed-candidate result
+
+Commit `977050c` passed CI `29252169252` (8/8) and CodeQL `29252169424`
+(3/3). Desktop candidate `29252663874` then produced the first unambiguous
+installed failure boundary:
+
+- Linux and macOS installed candidates passed.
+- Windows native cold/warm startup passed in 7.031/2.000 seconds for installer
+  SHA-256 `8DD48FC2B4AD73ECE9ABC67D3669CD54A9471A0C3D545F5020626A304A9B3133`.
+- Windows interaction completed 19 Provider requests, all five recovery
+  scenarios, Stop, persistence and `boundary_changes=[]`.
+- Restart recovered the same project tab, workspace and session path. The disk
+  contained both the baseline user and assistant messages; UIA exposed the
+  composer, 223 elements and the user marker, but not the baseline assistant.
+  Onboarding was correctly absent. Strict accessibility therefore did not run.
+
+This rules out tab identity, workspace identity, session selection and durable
+storage. It also proves that the earlier empty `recovered_session_path` was only
+an evidence-ordering problem.
+
+## In-flight preload replacement follow-up
+
+The remaining race was in the frontend request classifier. The pre-ready
+`historyOnly` preload did not set `preserveCachedHistory`, so it was tracked as
+authoritative. If `agent:ready` arrived while that request was still pending,
+the ready refresh joined the pre-ready request instead of replacing it. A
+partial result could therefore become the only applied startup history.
+
+This follow-up:
+
+1. Marks the pre-ready preload as a cache-preserving, replaceable request. A
+   ready-time authoritative request now starts a new session-load sequence.
+2. Uses the existing sequence gate to discard a late partial preload, so it
+   cannot overwrite the complete ready-time projection.
+3. Changes the ready-event regression to fire while the first history request
+   is unresolved, then proves the second request supplies the assistant and the
+   late user-only result is ignored. The polling regression remains independent.
+4. Strengthens the Go canonical-log regression by persisting user and assistant
+   in separate snapshots, matching real autosave append cadence.
+5. Treats `SetForegroundWindow` as best-effort in the UIA helper while retaining
+   hard UIA `SetFocus` and `HasKeyboardFocus` verification; Windows foreground
+   policy can reject activation even when the target element can be focused.
+
+The rebuilt production Wails executable is 48,052,736 bytes with SHA-256
+`889986ABB11E97FDEDBFFC48700600503E6984F866E3E774B2FE751993583F24`.
+Cold/warm stable responsiveness was 1.515/1.516 seconds. The complete 19-request
+interaction/restart passed with the same session path and every disk/UIA
+recovery field true except the expected `restart_onboarding_present=false`;
+strict InvokePattern accessibility also passed. Both smokes reported
+`boundary_changes=[]` and no errors. A new installed candidate is still
+required before M3 can close.

@@ -440,9 +440,12 @@ func TestHistoryForTabPrefersCanonicalEventLogWhenVisibleTurnCountTies(t *testin
 		t.Fatalf("SaveSnapshot empty checkpoint: %v", err)
 	}
 	session.Add(provider.Message{Role: provider.RoleUser, Content: "durable prompt"})
+	if err := session.SaveSnapshot(path); err != nil {
+		t.Fatalf("SaveSnapshot durable user: %v", err)
+	}
 	session.Add(provider.Message{Role: provider.RoleAssistant, Content: "durable answer"})
 	if err := session.SaveSnapshot(path); err != nil {
-		t.Fatalf("SaveSnapshot durable turn: %v", err)
+		t.Fatalf("SaveSnapshot durable assistant suffix: %v", err)
 	}
 
 	partial := agent.NewSession("")

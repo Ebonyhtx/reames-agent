@@ -686,8 +686,10 @@ class WindowsUIAutomation:
     def _focus(self, item: dict[str, object]) -> ElementInfo:
         info: ElementInfo = item["info"]  # type: ignore[assignment]
         element: ctypes.c_void_p = item["element"]  # type: ignore[assignment]
-        if not ctypes.windll.user32.SetForegroundWindow(self.hwnd):
-            raise OSError("SetForegroundWindow failed")
+        # Windows may deny foreground activation when the calling terminal is
+        # not the foreground owner. UIA SetFocus can still succeed; the
+        # HasKeyboardFocus poll below remains the authoritative proof.
+        ctypes.windll.user32.SetForegroundWindow(self.hwnd)
         time.sleep(0.1)
         _check_hresult(_method(element, 3)(element), f"SetFocus {info.name!r}")
         deadline = time.monotonic() + 2.0

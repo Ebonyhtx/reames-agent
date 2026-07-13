@@ -1557,6 +1557,7 @@ export function useController() {
     const persistedHistory = !reset && !active.ready
       ? loadSessionDataForTab(active.id, false, "startup", {
         historyOnly: true,
+        preserveCachedHistory: true,
         sessionPath: persistedSessionPath || undefined,
       })
       : undefined;

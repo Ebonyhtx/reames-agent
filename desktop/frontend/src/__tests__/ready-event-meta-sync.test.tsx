@@ -190,31 +190,30 @@ await waitFor("initial not-ready metadata", () => controller?.activeTabId === "t
 eq(historyCalls, 1, "startup preloads pinned history by tab ID when initial session metadata is absent");
 eq(metaCalls, 0, "startup readiness wait does not call ancillary meta");
 
-await act(async () => {
-  historyGate.resolve([{ role: "user", content: "partial preload" }]);
-  await historyGate.promise;
-  await flushPromises();
-});
-await waitFor("pinned history is visible before ready", () => controller?.state.items.some((item) => item.kind === "user" && item.text === "partial preload") ?? false);
-eq(controller?.state.meta?.ready, false, "history preload does not unlock sending");
-
 backendReady = true;
 await act(async () => {
   for (const handler of readyHandlers) handler("tab-ready");
   await flushPromises();
 });
-await waitFor("ready metadata refreshed before history settles", () => controller?.state.meta?.ready === true);
+await waitFor("ready event replaces in-flight preload", () => historyCalls === 2);
+await waitFor("ready event refreshes authoritative history", () => controller?.state.items.some((item) => item.kind === "assistant" && item.text === "authoritative answer") ?? false);
+eq(controller?.state.meta?.ready, true, "ready metadata unlocks sending before the stale preload settles");
+
+await act(async () => {
+  historyGate.resolve([{ role: "user", content: "partial preload" }]);
+  await historyGate.promise;
+  await flushPromises();
+});
+await waitFor("late preload is discarded", () => !(controller?.state.items.some((item) => item.kind === "user" && item.text === "partial preload") ?? true));
 
 eq(listTabsCalls >= 2, true, "ready event refreshes active tab metadata from ListTabs");
-await waitFor("ready event requests authoritative history", () => historyCalls === 2);
-await waitFor("ready event refreshes authoritative history", () => controller?.state.items.some((item) => item.kind === "assistant" && item.text === "authoritative answer") ?? false);
-eq(historyCalls, 2, "ready event refreshes the preloaded transcript once after controller startup");
+eq(historyCalls, 2, "ready event replaces the unfinished pre-ready history request exactly once");
 eq(metaCalls, 1, "ready event starts ancillary metadata after history preload");
 eq(controller?.state.meta?.ready, true, "ready snapshot unlocks send while ancillary metadata is pending");
 
 await waitFor("history finishes", () => controller?.state.hydrating === false);
 ok(controller?.state.items.some((item) => item.kind === "user" && item.text === "hello") ?? false, "authoritative history replaces the partial preload after ready");
-ok(!(controller?.state.items.some((item) => item.kind === "user" && item.text === "partial preload") ?? true), "partial startup history does not survive the ready refresh");
+ok(!(controller?.state.items.some((item) => item.kind === "user" && item.text === "partial preload") ?? true), "late partial startup history does not overwrite the ready refresh");
 
 await act(async () => {
   metaGate.resolve(meta(true));

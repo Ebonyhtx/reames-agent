@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import unittest
 
 from scripts import windows_uia
@@ -66,6 +67,12 @@ class WindowsUIAutomationContractTests(unittest.TestCase):
             automation_id="settings-open", timeout_seconds=0.2
         )
         self.assertTrue(focused.has_keyboard_focus)
+
+    def test_focus_treats_foreground_activation_as_best_effort(self) -> None:
+        source = inspect.getsource(windows_uia.WindowsUIAutomation._focus)
+        self.assertIn("SetForegroundWindow", source)
+        self.assertNotIn('raise OSError("SetForegroundWindow failed")', source)
+        self.assertIn("UIA element did not receive keyboard focus", source)
 
     def test_strict_invoke_never_falls_back_to_bounds(self) -> None:
         value = driver()
