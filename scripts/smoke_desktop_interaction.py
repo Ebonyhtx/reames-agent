@@ -133,6 +133,15 @@ class InteractionSmokeResult:
     recovery_verified: bool = False
     initial_session_path: str = ""
     recovered_session_path: str = ""
+    restart_tab_scope: str = ""
+    restart_tab_workspace_matches: bool = False
+    restart_disk_user_present: bool = False
+    restart_disk_assistant_present: bool = False
+    restart_composer_present: bool = False
+    restart_marker_present: bool = False
+    restart_assistant_present: bool = False
+    restart_onboarding_present: bool = False
+    restart_uia_element_count: int = 0
     uia_actions: list[dict[str, object]] = field(default_factory=list)
     cleanup_methods: list[str] = field(default_factory=list)
     cleanup_exit_codes: list[int | None] = field(default_factory=list)
@@ -1094,12 +1103,45 @@ def run_smoke(
             hwnd = wait_for_window(proc.pid, timeout_seconds)
             uia = WindowsUIAutomation(hwnd)
             wait_until(
-                lambda: uia.has(name=result.marker) and uia.has(name=baseline_response),
+                lambda: uia.has(automation_id=COMPOSER_AUTOMATION_ID),
                 timeout_seconds,
-                "restarted Desktop did not restore the user and assistant messages",
+                "restarted Desktop composer did not become accessible",
             )
             recovered = active_tab(home) or {}
             result.recovered_session_path = str(recovered.get("sessionPath") or "")
+            result.restart_tab_scope = str(recovered.get("scope") or "")
+            result.restart_tab_workspace_matches = same_path(
+                recovered.get("workspaceRoot"), workspace
+            )
+            disk_path = result.recovered_session_path or result.initial_session_path
+            result.restart_disk_user_present = durable_session_has_message(
+                disk_path, "user", result.marker
+            )
+            result.restart_disk_assistant_present = durable_session_has_message(
+                disk_path, "assistant", baseline_response
+            )
+            try:
+                wait_until(
+                    lambda: uia.has(name=result.marker)
+                    and uia.has(name=baseline_response),
+                    timeout_seconds,
+                    "restarted Desktop did not restore the user and assistant messages",
+                )
+            finally:
+                elements = uia.refresh()
+                result.restart_uia_element_count = len(elements)
+                result.restart_composer_present = any(
+                    item.automation_id == COMPOSER_AUTOMATION_ID for item in elements
+                )
+                result.restart_marker_present = any(
+                    item.name == result.marker for item in elements
+                )
+                result.restart_assistant_present = any(
+                    item.name == baseline_response for item in elements
+                )
+                result.restart_onboarding_present = any(
+                    item.automation_id == ONBOARDING_AUTOMATION_ID for item in elements
+                )
             result.recovery_verified = (
                 recovered.get("scope") == "project"
                 and same_path(recovered.get("workspaceRoot"), workspace)

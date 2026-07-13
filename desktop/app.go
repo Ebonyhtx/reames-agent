@@ -4176,8 +4176,11 @@ func (a *App) HistoryPageForTab(tabID string, beforeTurn, limit int) HistoryPage
 	// transcript projection is fully populated. The pinned event log is already
 	// durable and remains the authoritative read-only fallback when it contains
 	// more complete history than the live projection.
-	if diskPage, err := previewSessionPage(sessionDir, sessionPath, beforeTurn, limit); err == nil && diskPage.TotalTurns > page.TotalTurns {
-		return diskPage
+	if diskPage, err := previewSessionPage(sessionDir, sessionPath, beforeTurn, limit); err == nil {
+		if diskPage.TotalTurns > page.TotalTurns ||
+			(diskPage.TotalTurns == page.TotalTurns && historyVisibleMessageCount(diskPage.Messages) > historyVisibleMessageCount(page.Messages)) {
+			return diskPage
+		}
 	}
 	return page
 }
@@ -4274,8 +4277,13 @@ func (a *App) HistoryForTab(tabID string) []HistoryMessage {
 	if strings.TrimSpace(sessionPath) == "" {
 		return messages
 	}
-	if diskMessages, err := previewSessionMessages(sessionDir, sessionPath); err == nil && historyMessageUserTurns(diskMessages) > historyMessageUserTurns(messages) {
-		return diskMessages
+	if diskMessages, err := previewSessionMessages(sessionDir, sessionPath); err == nil {
+		diskTurns := historyMessageUserTurns(diskMessages)
+		liveTurns := historyMessageUserTurns(messages)
+		if diskTurns > liveTurns ||
+			(diskTurns == liveTurns && historyVisibleMessageCount(diskMessages) > historyVisibleMessageCount(messages)) {
+			return diskMessages
+		}
 	}
 	return messages
 }
@@ -4288,6 +4296,16 @@ func historyMessageUserTurns(messages []HistoryMessage) int {
 		}
 	}
 	return turns
+}
+
+func historyVisibleMessageCount(messages []HistoryMessage) int {
+	count := 0
+	for _, message := range messages {
+		if message.Role != "system" {
+			count++
+		}
+	}
+	return count
 }
 
 func (a *App) HistoryCheckpointTurnsForTab(tabID string) []int {

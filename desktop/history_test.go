@@ -427,6 +427,52 @@ func TestHistoryForTabPrefersMoreCompleteCanonicalEventLogOverPartialController(
 	}
 }
 
+func TestHistoryForTabPrefersCanonicalEventLogWhenVisibleTurnCountTies(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	root := globalTabWorkspaceRoot()
+	dir := desktopSessionDir(root)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir: %v", err)
+	}
+	path := filepath.Join(dir, "tied-event-controller.jsonl")
+	session := agent.NewSession("")
+	if err := session.SaveSnapshot(path); err != nil {
+		t.Fatalf("SaveSnapshot empty checkpoint: %v", err)
+	}
+	session.Add(provider.Message{Role: provider.RoleUser, Content: "durable prompt"})
+	session.Add(provider.Message{Role: provider.RoleAssistant, Content: "durable answer"})
+	if err := session.SaveSnapshot(path); err != nil {
+		t.Fatalf("SaveSnapshot durable turn: %v", err)
+	}
+
+	partial := agent.NewSession("")
+	partial.Add(provider.Message{Role: provider.RoleUser, Content: "partial prompt"})
+	ag := agent.New(stubProvider{}, tool.NewRegistry(), partial, agent.Options{}, event.Discard)
+	ctrl := control.New(control.Options{Executor: ag, SessionDir: dir, SessionPath: path, Sink: event.Discard})
+	app := NewApp()
+	tab := &WorkspaceTab{
+		ID:            "tied-event",
+		Scope:         "global",
+		WorkspaceRoot: root,
+		SessionPath:   path,
+		Ctrl:          ctrl,
+		Ready:         true,
+		disabledMCP:   map[string]ServerView{},
+	}
+	app.tabs[tab.ID] = tab
+	app.tabOrder = []string{tab.ID}
+	app.activeTabID = tab.ID
+
+	page := app.HistoryPageForTab(tab.ID, 0, 60)
+	if len(page.Messages) != 2 || page.TotalTurns != 1 || page.Messages[0].Content != "durable prompt" || page.Messages[1].Content != "durable answer" {
+		t.Fatalf("tied event-log history page = %+v, want complete durable turn", page)
+	}
+	messages := app.HistoryForTab(tab.ID)
+	if len(messages) != 2 || messages[0].Content != "durable prompt" || messages[1].Content != "durable answer" {
+		t.Fatalf("tied event-log history = %+v, want complete durable turn", messages)
+	}
+}
+
 func historyMemoryCompilerContract(t *testing.T, sourceEvent string) string {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{

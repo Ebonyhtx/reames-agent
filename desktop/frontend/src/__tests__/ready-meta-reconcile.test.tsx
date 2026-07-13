@@ -205,13 +205,13 @@ eq(controller?.state.meta?.ready, false, "pinned history does not mark the contr
 
 backendReady = true;
 await waitFor("ready metadata is reconciled without a ready event", () => controller?.state.meta?.ready === true);
-await waitFor("history begins after readiness", () => historyCalls === 1);
+await waitFor("authoritative history refresh begins after readiness", () => historyCalls === 2);
 
 eq(metaCalls, 1, "restored tab starts ancillary metadata after pinned history is visible");
 eq(metaTabIds[0], "tab-ready", "ancillary metadata stays bound to the restored tab");
 eq(controller?.state.meta?.ready, true, "authoritative tab readiness does not wait for ancillary metadata");
 ok(listTabsCalls >= 2, "startup readiness polling refreshes the restored tab");
-eq(historyCalls, 1, "ready polling reuses exactly one pinned history hydration");
+eq(historyCalls, 2, "ready polling refreshes the pinned history exactly once after startup");
 eq(approvalModeCalls, 0, "ready polling does not rely on approval-mode changes");
 
 await waitFor("history finishes", () => controller?.state.hydrating === false);

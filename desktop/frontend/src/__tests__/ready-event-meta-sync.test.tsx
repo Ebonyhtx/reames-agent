@@ -125,6 +125,10 @@ const checkpoints: CheckpointMeta[] = [];
 const readyHandlers: Array<(tabId?: string) => void> = [];
 const historyGate = deferred<HistoryMessage[]>();
 const metaGate = deferred<Meta>();
+const authoritativeHistory: HistoryMessage[] = [
+  { role: "user", content: "hello" },
+  { role: "assistant", content: "authoritative answer" },
+];
 let backendReady = false;
 let listTabsCalls = 0;
 let historyCalls = 0;
@@ -156,7 +160,7 @@ window.go = {
       HistoryForTab: async () => historyGate.promise,
       HistoryPageForTab: async () => {
         historyCalls += 1;
-        const messages = await historyGate.promise;
+        const messages = historyCalls === 1 ? await historyGate.promise : authoritativeHistory;
         return { messages, startTurn: 0, endTurn: messages.filter((message) => message.role === "user").length, totalTurns: messages.filter((message) => message.role === "user").length, hasOlder: false };
       },
       HistoryCheckpointTurnsForTab: async () => [],
@@ -187,11 +191,11 @@ eq(historyCalls, 1, "startup preloads pinned history by tab ID when initial sess
 eq(metaCalls, 0, "startup readiness wait does not call ancillary meta");
 
 await act(async () => {
-  historyGate.resolve([{ role: "user", content: "hello" }]);
+  historyGate.resolve([{ role: "user", content: "partial preload" }]);
   await historyGate.promise;
   await flushPromises();
 });
-await waitFor("pinned history is visible before ready", () => controller?.state.items.some((item) => item.kind === "user" && item.text === "hello") ?? false);
+await waitFor("pinned history is visible before ready", () => controller?.state.items.some((item) => item.kind === "user" && item.text === "partial preload") ?? false);
 eq(controller?.state.meta?.ready, false, "history preload does not unlock sending");
 
 backendReady = true;
@@ -202,12 +206,15 @@ await act(async () => {
 await waitFor("ready metadata refreshed before history settles", () => controller?.state.meta?.ready === true);
 
 eq(listTabsCalls >= 2, true, "ready event refreshes active tab metadata from ListTabs");
-eq(historyCalls, 1, "ready event reuses the preloaded transcript instead of reading it twice");
+await waitFor("ready event requests authoritative history", () => historyCalls === 2);
+await waitFor("ready event refreshes authoritative history", () => controller?.state.items.some((item) => item.kind === "assistant" && item.text === "authoritative answer") ?? false);
+eq(historyCalls, 2, "ready event refreshes the preloaded transcript once after controller startup");
 eq(metaCalls, 1, "ready event starts ancillary metadata after history preload");
 eq(controller?.state.meta?.ready, true, "ready snapshot unlocks send while ancillary metadata is pending");
 
 await waitFor("history finishes", () => controller?.state.hydrating === false);
-ok(controller?.state.items.some((item) => item.kind === "user" && item.text === "hello") ?? false, "history still hydrates after the ready metadata sync");
+ok(controller?.state.items.some((item) => item.kind === "user" && item.text === "hello") ?? false, "authoritative history replaces the partial preload after ready");
+ok(!(controller?.state.items.some((item) => item.kind === "user" && item.text === "partial preload") ?? true), "partial startup history does not survive the ready refresh");
 
 await act(async () => {
   metaGate.resolve(meta(true));

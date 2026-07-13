@@ -45,7 +45,7 @@ export type MessageActionScope = "fork" | "summ-from" | "summ-upto" | "conversat
 export type MessageActionState = { turn: number; scope: MessageActionScope };
 export type HydrateReason = "switch-tab" | "new-session" | "resume-session" | "open-topic" | "startup";
 type SyncActiveTabOptions = {
-  preserveCachedHistory?: boolean;
+  refreshPersistedHistory?: boolean;
 };
 
 const HISTORY_PAGE_TURNS = 60;
@@ -1257,6 +1257,7 @@ export function useController() {
   const stateRef = useRef(activeState);
   const backendActiveTabIdRef = useRef<string | undefined>(undefined);
   const backendActivationPromises = useRef(new Map<string, Promise<boolean>>());
+  const startupAuthoritativeRefreshPending = useRef(true);
   const readyMetaReconcileSeq = useRef(0);
   const readyMetaReconcileActive = useRef<{ tabId: string; seq: number } | undefined>(undefined);
   activeTabIdRef.current = activeTabId;
@@ -1299,7 +1300,7 @@ export function useController() {
 
   const checkpointRefreshSeq = useRef(new Map<string, number>());
   const sessionLoadSeq = useRef(new Map<string, number>());
-  const sessionLoadInFlight = useRef(new Map<string, { sessionPath: string; promise: Promise<void> }>());
+  const sessionLoadInFlight = useRef(new Map<string, { sessionPath: string; authoritativeHistory: boolean; promise: Promise<void> }>());
   const bumpSessionLoadSeq = useCallback((tabId: string): number => {
     const seq = (sessionLoadSeq.current.get(tabId) ?? 0) + 1;
     sessionLoadSeq.current.set(tabId, seq);
@@ -1329,9 +1330,14 @@ export function useController() {
     const sessionPath = (options.sessionPath ?? statesRef.current.get(tabId)?.meta?.sessionPath ?? "").trim();
     const canJoinInFlight = !reset && !options.skipHistory;
     const shouldTrackInFlight = !options.skipHistory;
+    const authoritativeHistory = !options.skipHistory && (reset || !options.preserveCachedHistory);
     if (canJoinInFlight) {
       const existing = sessionLoadInFlight.current.get(tabId);
-      if (existing?.sessionPath === sessionPath) return existing.promise;
+      if (
+        existing?.sessionPath === sessionPath &&
+        (!authoritativeHistory || existing.authoritativeHistory)
+      ) return existing.promise;
+      sessionLoadInFlight.current.delete(tabId);
     } else {
       sessionLoadInFlight.current.delete(tabId);
     }
@@ -1453,7 +1459,7 @@ export function useController() {
         .catch((err) => { noteFailure("balance", err); });
     })();
     if (shouldTrackInFlight) {
-      sessionLoadInFlight.current.set(tabId, { sessionPath, promise });
+      sessionLoadInFlight.current.set(tabId, { sessionPath, authoritativeHistory, promise });
     }
     try {
       await promise;
@@ -1562,9 +1568,11 @@ export function useController() {
     if (guard && activeTabIdRef.current !== active.id) return active.id;
     await persistedHistory;
     if (guard && activeTabIdRef.current !== active.id) return active.id;
-    const preserveCachedHistory = options.preserveCachedHistory ?? !reset;
+    const preserveCachedHistory = !options.refreshPersistedHistory && !reset;
+    const skipHistory = !reset && hasCachedLiveTurn(statesRef.current.get(active.id));
     if (!reset) dispatchRuntimeStatusForTab(active.id, active);
     await loadSessionDataForTab(active.id, reset, "startup", {
+      skipHistory,
       preserveCachedHistory,
       sessionPath: active.sessionPath,
     });
@@ -1675,10 +1683,15 @@ export function useController() {
       }
       // A ready event can race the initial hydrate. Refresh the tab metadata
       // first so a stale ready=false snapshot does not keep the composer locked.
-      void syncActiveTabFromBackend(false, true, { preserveCachedHistory: true });
+      void syncActiveTabFromBackend(false, true, {
+        refreshPersistedHistory: startupAuthoritativeRefreshPending.current,
+      });
     });
 
-    void syncActiveTabFromBackend(false, true);
+    void syncActiveTabFromBackend(false, true, { refreshPersistedHistory: true })
+      .finally(() => {
+        startupAuthoritativeRefreshPending.current = false;
+      });
     // The event subscription is live now, so ask the backend to re-emit any
     // approval/ask prompt that was already blocking a tab before this load —
     // otherwise a session left mid-confirmation shows "waiting" with no modal
