@@ -159,6 +159,11 @@ jobs:
               --exe $exe `
               --out artifacts/desktop-windows-interaction-smoke.json
             if ($LASTEXITCODE -ne 0) { throw "installed Desktop interaction smoke failed with exit code $LASTEXITCODE" }
+            python scripts/smoke_desktop_accessibility.py `
+              --artifact $installer `
+              --exe $exe `
+              --out artifacts/desktop-windows-accessibility-smoke.json
+            if ($LASTEXITCODE -ne 0) { throw "installed Desktop accessibility smoke failed with exit code $LASTEXITCODE" }
           } finally {
             if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
               $uninstall = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
@@ -184,5 +189,6 @@ jobs:
             dist/*
             artifacts/desktop-*-native-smoke.json
             artifacts/desktop-*-interaction-smoke.json
+            artifacts/desktop-*-accessibility-smoke.json
           if-no-files-found: error
           retention-days: 14

@@ -1225,6 +1225,7 @@ export const zhTW: Record<DictKey, string> = {
   "turnActions.summary": "總結",
   "turnActions.rewind": "回溯",
   "transcript.jumpToBottom": "跳到底部",
+  "transcript.label": "對話記錄",
   "transcript.showEarlierHistory": "展開前 {n} 輪對話",
   "transcript.toolCount": "{n} 個工具",
   "transcript.processed": "已處理",

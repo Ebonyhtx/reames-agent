@@ -53,9 +53,9 @@ python scripts/check_desktop_artifacts.py path/to/expanded-artifacts/
 
 这个离线检查会验证 Windows portable zip 包含 `reames-agent-update-helper.exe`，Linux tar/deb 和 macOS zip/dmg 的关键文件结构也符合 `scripts/desktop-build.sh` 的约定。
 
-同一 workflow 随后在原生 runner 上执行安装/启动 smoke：Linux 安装实际 `.deb` 并在 Xvfb 中要求可见窗口；macOS 挂载实际 `.dmg`、复制和校验 universal `.app` 后启动；Windows 静默安装实际 NSIS、验证 per-user 注册与 update helper、检查窗口消息泵，再运行截图无关的 UIA 交互链路，最后静默卸载。
+同一 workflow 随后在原生 runner 上执行安装/启动 smoke：Linux 安装实际 `.deb` 并在 Xvfb 中要求可见窗口；macOS 挂载实际 `.dmg`、复制和校验 universal `.app` 后启动；Windows 静默安装实际 NSIS、验证 per-user 注册与 update helper、检查窗口消息泵，再运行截图无关的 UIA 交互链路和严格 InvokePattern 可访问性链路，最后静默卸载。
 
-`scripts/smoke_desktop_candidate.py`、`scripts/smoke_desktop_native.py` 与 `scripts/smoke_desktop_interaction.py` 都使用隔离 home 并检查默认状态边界。Linux/macOS candidate 必须在 10 秒内连续三次观察到隔离 Desktop 状态就绪，Linux 还必须同时保持可见 X11 窗口；macOS 当前不把状态 readiness 冒充窗口可见性。Windows 托管 runner 的首次安装 candidate 使用 20 秒观察窗，强制 15 秒冷启动和 6 秒同 HOME warm relaunch 响应预算；本地源码 production smoke 仍保持更严格的 8/6 秒门槛。Windows 交互 smoke 还使用仅监听 `127.0.0.1`、不含 API key 的确定性 OpenAI 兼容端点，验证新建项目会话、输入/发送、canonical 事件账本持久化、本地长命令停止，以及关闭重启后的工作区和会话恢复。workflow 会随候选 artifact 上传 artifact/executable SHA-256、`desktop-*-native-smoke.json` 和 `desktop-*-interaction-smoke.json`。这些证据仍不等于签名发布或真实公网模型 E2E；真实 Provider 证据单独审计。
+`scripts/smoke_desktop_candidate.py`、`scripts/smoke_desktop_native.py`、`scripts/smoke_desktop_interaction.py` 与 `scripts/smoke_desktop_accessibility.py` 都使用隔离 home 并检查默认状态边界。Linux/macOS candidate 必须在 10 秒内连续三次观察到隔离 Desktop 状态就绪，Linux 还必须同时保持可见 X11 窗口；macOS 当前不把状态 readiness 冒充窗口可见性。Windows 托管 runner 的首次安装 candidate 使用 20 秒观察窗，强制 15 秒冷启动和 6 秒同 HOME warm relaunch 响应预算；本地源码 production smoke 仍保持更严格的 8/6 秒门槛。Windows 交互 smoke 还使用仅监听 `127.0.0.1`、不含 API key 的确定性 OpenAI 兼容端点，验证新建项目会话、输入/发送、canonical 事件账本持久化、本地长命令停止，以及关闭重启后的工作区和会话恢复；可访问性 smoke 严格使用 UIA InvokePattern，验证主界面/对话日志语义、跳转焦点、设置 dialog、背景从辅助技术树隔离和 opener 恢复，不允许坐标点击回退。workflow 会随候选 artifact 上传 artifact/executable SHA-256、`desktop-*-native-smoke.json`、`desktop-*-interaction-smoke.json` 和 `desktop-*-accessibility-smoke.json`。这些自动证据仍不能替代 NVDA/Narrator 实际听感、Windows High Contrast、签名发布或真实公网模型 E2E；真实 Provider 证据单独审计。
 
 ## 版本号来源
 
@@ -119,7 +119,7 @@ vMAJOR.MINOR.PATCH-rc.N
 
 | 通道 | 作用 | 当前状态 |
 |---|---|---|
-| Candidate | CI 工件；不公开发布 | CLI 已启用 |
+| Candidate | CI 工件；不公开发布 | CLI/Desktop 已启用（人工 workflow） |
 | Canary | 维护者/测试者主动安装 | 未启用 |
 | Stable | 面向普通用户 | 未启用 |
 

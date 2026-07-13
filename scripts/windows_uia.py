@@ -53,6 +53,12 @@ class ElementInfo:
     automation_id: str
     control_type: int
     enabled: bool
+    localized_control_type: str
+    has_keyboard_focus: bool
+    is_keyboard_focusable: bool
+    is_offscreen: bool
+    aria_role: str
+    aria_properties: str
 
 
 class _MouseInput(ctypes.Structure):
@@ -289,6 +295,12 @@ class WindowsUIAutomation:
                         automation_id=self._current_bstr(element, 29),
                         control_type=self._current_int(element, 21),
                         enabled=bool(self._current_int(element, 28)),
+                        localized_control_type=self._current_bstr(element, 22),
+                        has_keyboard_focus=bool(self._current_int(element, 26)),
+                        is_keyboard_focusable=bool(self._current_int(element, 27)),
+                        is_offscreen=bool(self._current_int(element, 38)),
+                        aria_role=self._current_bstr(element, 45),
+                        aria_properties=self._current_bstr(element, 46),
                     )
                 except OSError:
                     _release(element)
@@ -351,6 +363,44 @@ class WindowsUIAutomation:
             for item in self.refresh()
         )
 
+    def element_info(
+        self,
+        *,
+        name: str | Iterable[str] = "",
+        automation_id: str = "",
+        occurrence: int = 0,
+        timeout_seconds: float = 10.0,
+    ) -> ElementInfo:
+        item = self._find(
+            name=name,
+            automation_id=automation_id,
+            occurrence=occurrence,
+            timeout_seconds=timeout_seconds,
+        )
+        return item["info"]  # type: ignore[return-value]
+
+    def wait_focused(
+        self,
+        *,
+        name: str | Iterable[str] = "",
+        automation_id: str = "",
+        timeout_seconds: float = 10.0,
+    ) -> ElementInfo:
+        names = self._names(name)
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            for item in self.refresh():
+                if (
+                    (not names or item.name in names)
+                    and (not automation_id or item.automation_id == automation_id)
+                    and item.has_keyboard_focus
+                ):
+                    return item
+            time.sleep(0.05)
+        raise TimeoutError(
+            f"UIA element did not receive focus: {names or automation_id!r}"
+        )
+
     def wait_absent(
         self,
         *,
@@ -389,20 +439,7 @@ class WindowsUIAutomation:
             f"UIA element did not become enabled: {names or automation_id!r}"
         )
 
-    def invoke(
-        self,
-        *,
-        name: str | Iterable[str] = "",
-        automation_id: str = "",
-        occurrence: int = 0,
-        timeout_seconds: float = 10.0,
-    ) -> str:
-        item = self._find(
-            name=name,
-            automation_id=automation_id,
-            occurrence=occurrence,
-            timeout_seconds=timeout_seconds,
-        )
+    def _invoke_pattern_for_item(self, item: dict[str, object]) -> bool:
         info: ElementInfo = item["info"]  # type: ignore[assignment]
         element: ctypes.c_void_p = item["element"]  # type: ignore[assignment]
         pattern = ctypes.c_void_p()
@@ -418,35 +455,82 @@ class WindowsUIAutomation:
             ctypes.byref(IID_INVOKE_PATTERN),
             ctypes.byref(pattern),
         )
-        if hr >= 0 and pattern.value:
-            try:
-                invoke_hr = _method(pattern, 3)(pattern)
-            finally:
-                _release(pattern)
-            if invoke_hr >= 0:
-                action = "invoke-pattern"
-            else:
-                action = ""
+        if hr < 0 or not pattern.value:
+            _release(pattern)
+            return False
+        try:
+            _check_hresult(_method(pattern, 3)(pattern), f"InvokePattern.Invoke {info.name!r}")
+        finally:
+            _release(pattern)
+        return True
+
+    def _invoke_by_bounds(self, item: dict[str, object]) -> None:
+        info: ElementInfo = item["info"]  # type: ignore[assignment]
+        element: ctypes.c_void_p = item["element"]  # type: ignore[assignment]
+        rect = wintypes.RECT()
+        _check_hresult(
+            _method(element, 43, ctypes.POINTER(wintypes.RECT))(
+                element, ctypes.byref(rect)
+            ),
+            f"BoundingRectangle {info.name!r}",
+        )
+        if rect.right <= rect.left or rect.bottom <= rect.top:
+            raise RuntimeError(f"UIA element has no clickable bounds: {info.name!r}")
+        if not ctypes.windll.user32.SetForegroundWindow(self.hwnd):
+            raise OSError("SetForegroundWindow failed")
+        x = (rect.left + rect.right) // 2
+        y = (rect.top + rect.bottom) // 2
+        if not ctypes.windll.user32.SetCursorPos(x, y):
+            raise OSError("SetCursorPos failed")
+        ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
+        ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
+
+    def invoke_pattern(
+        self,
+        *,
+        name: str | Iterable[str] = "",
+        automation_id: str = "",
+        occurrence: int = 0,
+        timeout_seconds: float = 10.0,
+    ) -> str:
+        item = self._find(
+            name=name,
+            automation_id=automation_id,
+            occurrence=occurrence,
+            timeout_seconds=timeout_seconds,
+        )
+        info: ElementInfo = item["info"]  # type: ignore[assignment]
+        if not self._invoke_pattern_for_item(item):
+            raise RuntimeError(f"UIA InvokePattern unavailable: {info.name!r}")
+        self.actions.append(
+            {
+                "action": "invoke-pattern",
+                "name": info.name,
+                "automation_id": info.automation_id,
+                "occurrence": occurrence,
+            }
+        )
+        return "invoke-pattern"
+
+    def invoke(
+        self,
+        *,
+        name: str | Iterable[str] = "",
+        automation_id: str = "",
+        occurrence: int = 0,
+        timeout_seconds: float = 10.0,
+    ) -> str:
+        item = self._find(
+            name=name,
+            automation_id=automation_id,
+            occurrence=occurrence,
+            timeout_seconds=timeout_seconds,
+        )
+        info: ElementInfo = item["info"]  # type: ignore[assignment]
+        if self._invoke_pattern_for_item(item):
+            action = "invoke-pattern"
         else:
-            action = ""
-        if not action:
-            rect = wintypes.RECT()
-            _check_hresult(
-                _method(element, 43, ctypes.POINTER(wintypes.RECT))(
-                    element, ctypes.byref(rect)
-                ),
-                f"BoundingRectangle {info.name!r}",
-            )
-            if rect.right <= rect.left or rect.bottom <= rect.top:
-                raise RuntimeError(f"UIA element has no clickable bounds: {info.name!r}")
-            if not ctypes.windll.user32.SetForegroundWindow(self.hwnd):
-                raise OSError("SetForegroundWindow failed")
-            x = (rect.left + rect.right) // 2
-            y = (rect.top + rect.bottom) // 2
-            if not ctypes.windll.user32.SetCursorPos(x, y):
-                raise OSError("SetCursorPos failed")
-            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
-            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
+            self._invoke_by_bounds(item)
             action = "uia-bounds-click"
         self.actions.append(
             {

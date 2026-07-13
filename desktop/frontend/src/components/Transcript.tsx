@@ -17,10 +17,12 @@ import { useScrollManager } from "../lib/useScrollManager";
 import { buildStepGroups, buildTurnGroups, compactQuestionText, createWarmLayerState, lastQuestionTurn, questionAnchorId, questionTurnsById, scrollVersion, warmColdPageForTurn, warmLayerWithColdPageAtLeast, warmLayerWithExpandedTurn, warmLayerWithNextColdPage, warmPagination, warmUserPreview, type QuestionAnchor, type TurnGroup, type WarmLayerState } from "../lib/transcriptGrouping";
 import { appendTurnActionCopyText } from "../lib/turnActionCopy";
 import { RuntimeErrorNotice } from "./RuntimeErrorNotice";
+import { EMPTY_TRANSCRIPT_ANNOUNCEMENT_STATE, resolveTranscriptAnnouncement } from "../lib/transcriptAnnouncement";
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
 type AssistantItem = Extract<Item, { kind: "assistant" }>;
 type OpenTurnAction = { turn: number; menu: "summary" | "rewind" };
+type AssistantAnnouncement = { id: string; text: string };
 
 const QUESTION_NAV_MIN_COUNT = 2;
 const LiveStreamContext = createContext<LiveStream | undefined>(undefined);
@@ -82,6 +84,7 @@ export function Transcript({
   items,
   live,
   tabId,
+  sessionGen = 0,
   footerHeight = 0,
   onPrompt,
   onOpenErrorSettings,
@@ -98,6 +101,9 @@ export function Transcript({
   rewindSignal = 0,
   revealSignal = 0,
   hydrating = false,
+  announcementSuppressed = false,
+  logId = "transcript-log",
+  announcerId = "transcript-announcer",
   hasOlderHistory = false,
   olderHistoryCount = 0,
   loadingOlderHistory = false,
@@ -106,6 +112,7 @@ export function Transcript({
   items: Item[];
   live?: LiveStream;
   tabId?: string;
+  sessionGen?: number;
   footerHeight?: number;
   onPrompt: (text: string) => void;
   onOpenErrorSettings?: () => void;
@@ -122,6 +129,9 @@ export function Transcript({
   rewindSignal?: number;
   revealSignal?: number;
   hydrating?: boolean;
+  announcementSuppressed?: boolean;
+  logId?: string;
+  announcerId?: string | null;
   hasOlderHistory?: boolean;
   olderHistoryCount?: number;
   loadingOlderHistory?: boolean;
@@ -144,6 +154,8 @@ export function Transcript({
   const autoScrollFrame = useRef<number | null>(null);
   const pendingRevealBottomScroll = useRef(false);
   const pendingQuestionJump = useRef<QuestionAnchor | null>(null);
+  const announcementState = useRef(EMPTY_TRANSCRIPT_ANNOUNCEMENT_STATE);
+  const [assistantAnnouncement, setAssistantAnnouncement] = useState<AssistantAnnouncement | null>(null);
   const sessionKey = useMemo(() => `${items[0]?.id ?? ""}|${items[items.length - 1]?.id ?? ""}`, [items]);
   const warmLayerSessionKey = useMemo(() => `${tabId ?? ""}|${revealSignal}|${items[0]?.id ?? ""}`, [items, revealSignal, tabId]);
   const entranceRef = useEntranceAnimation<HTMLDivElement>(sessionKey, items.length);
@@ -162,6 +174,32 @@ export function Transcript({
     return anchors;
   }, [items]);
   const showQuestionNav = questionNavigator && questions.length >= QUESTION_NAV_MIN_COUNT;
+  const latestCompletedAssistant = useMemo(() => {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      if (item.kind === "assistant" && !item.streaming && item.text.trim()) return item;
+    }
+    return undefined;
+  }, [items]);
+
+  // The visible log stays out of live announcements while tokens stream. When
+  // a turn completes, announce the final assistant text once from a separate
+  // atomic status region; loading or switching sessions never replays history.
+  useEffect(() => {
+    if (announcerId === null) {
+      announcementState.current = EMPTY_TRANSCRIPT_ANNOUNCEMENT_STATE;
+      setAssistantAnnouncement(null);
+      return;
+    }
+    const key = `${tabId ?? ""}|${sessionGen}|${revealSignal}`;
+    const resolution = resolveTranscriptAnnouncement(announcementState.current, key, running, hydrating || announcementSuppressed, latestCompletedAssistant);
+    announcementState.current = resolution.state;
+    if (resolution.sessionChanged) {
+      setAssistantAnnouncement(null);
+      return;
+    }
+    if (resolution.announcement) setAssistantAnnouncement(resolution.announcement);
+  }, [announcementSuppressed, announcerId, hydrating, latestCompletedAssistant?.id, latestCompletedAssistant?.text, revealSignal, running, sessionGen, tabId]);
 
   // Track question count and auto-scroll on new messages.
   useEffect(() => { trackQuestions(questions.length); }, [questions.length, trackQuestions]);
@@ -608,9 +646,14 @@ export function Transcript({
   return (
     <div className="transcript-shell">
       <div
+        id={logId}
         className={`transcript${empty ? " transcript--empty" : ""}`}
         ref={scrollRef}
         onScroll={onScroll}
+        role="log"
+        aria-label={t("transcript.label")}
+        aria-live="off"
+        aria-busy={running || hydrating}
       >
         {empty && !hydrating && <Welcome onPrompt={onPrompt} variant={welcomeVariant} />}
 
@@ -660,6 +703,12 @@ export function Transcript({
           </div>
         </LiveStreamContext.Provider>
       </div>
+
+      {announcerId !== null && (
+        <div id={announcerId} className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {assistantAnnouncement && <span key={assistantAnnouncement.id}>{assistantAnnouncement.text}</span>}
+        </div>
+      )}
 
       {!empty && showQuestionNav && (
         <QuestionJumpBar questions={questions} onJump={handleJumpToQuestion} />

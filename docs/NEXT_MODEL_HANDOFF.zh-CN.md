@@ -31,7 +31,7 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
 - M2 已关闭：依赖棘轮 allowlist 已归零，结构化错误、版本化 command/event/display DTO、prompt metadata、会话持久化、Desktop/ACP/CLI 装配和终端渲染边界均已收口；完整本地门禁及远端 CI/CodeQL 已通过。
-- M3 进行中：性能、模态焦点、显示缩放、主题对比度、三平台启动 readiness 与 Desktop 重启恢复竞态已形成分层证据。commits `0cdfef1`、`9d31735` 关闭后端 tab restore 与前端 controller-ready 两层门槛；candidate run `29211681563` 三平台全部成功，Windows interaction `recovery_verified=true`。多语言按需加载已在 `bbdddde` 交付，普通 CI `29214262280` 为 8/8、CodeQL `29214262276` 为 3/3。当前未提交候选继续将 browser dev mock、VirtualMenu/TanStack 和设置中心 CSS 移出基础首启图，并新增递归首次使用图预算；frontend、Go、Python、合同、production Wails、原生启动与 19 请求交互的完整本地验收均已通过。
+- M3 进行中：性能、模态焦点、显示缩放、主题对比度、三平台启动 readiness 与 Desktop 重启恢复竞态已形成分层证据。主首启图/CSS 拆分已由 `7d07c89` 交付，普通 CI `29216174519` 为 8/8、CodeQL `29216174514` 为 3/3。当前未提交候选继续关闭真正模态背景隔离、Transcript 最终答复语义和 Windows 严格 UIA accessibility smoke；localhost Browser、production Wails accessibility/native/interaction 与完整 frontend/Python/Go/Desktop/docs 门禁已通过，本批远端结果仍待收口。
 - M6 进行中：Gateway service、headless smoke 和 feedback 本地闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
@@ -60,25 +60,32 @@ commit `fb37db1` 已推送；普通 CI run `29209093041` 为 8/8、CodeQL run `2
 
 commit `bbdddde` 已推送；普通 CI run `29214262280` 为 8/8、CodeQL run `29214262276` 为 3/3。详见 `docs/audits/2026-07-13-m3-lazy-locale-budget.md`。
 
+- commit `7d07c89` 将 browser dev mock、VirtualMenu/TanStack 和设置中心 CSS 移出基础首启图，并用递归 manifest 图守卫 base、本地化和三条首次使用路径。
+- 该批 production 数据：entry 624,876 B、base initial JS 865,678 B、最坏本地化 981,098 B、initial CSS 511,305 B；browser mock 960,568 B、VirtualMenu 890,931 B、Settings 1,053,773 B JS + 611,477 B CSS。
+
+commit `7d07c89` 已推送；普通 CI run `29216174519` 为 8/8、CodeQL run `29216174514` 为 3/3。详见 `docs/audits/2026-07-13-m3-main-graph-css-split.md`。
+
 ## 当前 M3 候选批次关键证据
 
 ```text
 python -m unittest scripts.test_smoke_desktop_candidate   PASS (14)
 python -m unittest scripts.test_smoke_desktop_native      PASS (21)
+python -m unittest scripts.test_smoke_desktop_accessibility PASS (10)
 python scripts/check_release_contracts.py                 PASS
 Linux native candidate runner                             PASS (4.538s first / 5.567s stable)
 macOS native candidate runner                             PASS (0.575s first / 1.872s stable)
 Windows hosted startup candidate                          PASS (11.016s first / 12.016s stable; warm 2.000s stable)
 Windows hosted interaction recovery                       PASS (19 requests / recovery_verified=true)
+Windows source production strict accessibility             PASS (3 InvokePattern actions)
 完整 root/Desktop/frontend/docs 门禁                      PASS
 ```
 
-当前远端 `main` 为 `bbdddde`。Linux 证据包含隔离状态与可见 X11 窗口；macOS 只声明隔离状态 readiness。Windows installer 的 native 与 interaction 两份 JSON 均通过，重启前后 session path 一致、清理成功、边界变化为 0、errors 为空。这些历史 candidate 证据与 `bbdddde` 的普通 CI/CodeQL 均不能替代当前未提交性能批次的原生和远端验收。
+当前远端 `main` 为 `7d07c89`；普通 CI `29216174519` 8/8、CodeQL `29216174514` 3/3。Linux 证据包含隔离状态与可见 X11 窗口；macOS 只声明隔离状态 readiness。Windows installer 的历史 native/interaction JSON 均通过，但本批新增 accessibility workflow 尚未触发安装器 candidate，不能用本地源码 Wails 或普通 CI 冒充。
 
 ## 下一执行顺序
 
-1. 只显式暂存当前主首启图批次文件，集中 commit/push 一次并守候普通 CI 与 CodeQL；远端全部通过前不得声明本批已交付。
-2. 下一批补模态背景 `inert`/`aria-hidden` 隔离、稳定 dialog ID、transcript `role=log` 与 Windows UIA 可访问性 smoke；High Contrast/屏幕阅读器结论仍保留手动或外部证据边界。
+1. 最终审查当前 accessibility 批次 diff，只显式暂存本批路径，集中 commit/push 一次并守候普通 CI 与 CodeQL。
+2. 远端全绿后继续 M3 原生 Desktop 日用化；安装器 accessibility candidate、NVDA/Narrator 与 Windows High Contrast 分别保留远端人工/外部证据边界，不为纯证据单独碎片 push。
 3. M3 主体验充分后再进入干净云节点 CLI + Gateway + feedback 与真实飞书回环。
 
 ## 长期未关闭项
@@ -93,12 +100,14 @@ Windows hosted interaction recovery                       PASS (19 requests / re
 
 ## 当前未提交证据与下一批边界
 
-当前未提交性能批次把 browser dev mock 改为首次使用时动态加载，把 `@tanstack/react-virtual` 留在 `VirtualMenuImpl` 延迟 chunk，并由新的 lazy `SettingsPanelRoute.tsx` 装载设置中心约 120 KB 源码 CSS，使直接导入 SettingsPanel 的组件测试不依赖 CSS loader。共享 responsive `.drawer--wide` 与 App BotDetail 规则仍留在 `styles.css`，避免异步 CSS 到达顺序改变级联。production bundle 为 entry 624,876 B、base initial JS 865,678 B（5 files）、最坏本地化首启 981,098 B、initial CSS 511,305 B、largest JS 704,186 B；相对已交付 `bbdddde`，base 与 localized initial 均减少 118,938 B，CSS 减少 100,119 B，entry 因共享模块重分组增加 1,299 B。首次使用图为 browser mock 960,568 B、VirtualMenu 890,931 B、Settings 1,053,773 B JS + 611,477 B CSS，均受递归 manifest 硬预算保护。
+当前未提交 accessibility 批次为七个真正模态层提供稳定 ID：`command-palette-dialog`、`settings-dialog`、`history-dialog`、`shortcuts-cheatsheet-dialog`、`image-viewer-dialog`、`onboarding-dialog`、`heartbeat-dialog`。`useDialogFocus` 以每次打开独立 lease 管理顶层，沿 dialog→body 路径用 `inert`/`aria-hidden` 隔离背景并精确恢复原属性，覆盖嵌套、退出动画、快速重开、动态 portal 和 inert portal 首次聚焦重试；lease 继承直接父控件与原始 opener 链，模态替换或 StrictMode effect 重放后不会把焦点丢到 body。只有顶层响应 Escape，`PromptShelf aria-modal=false` 保持非阻断。
 
-完整本地证据：`pnpm test:all` 与 `pnpm build` 在 `SettingsPanelRoute` 修复后通过；Go build/vet/internal tests、Desktop `go test .`、Python 脚本套件（79 tests、2 skipped）、upstream issue 合同（3）、docs/public/release/deploy/tool contracts 与 Wails production build 全部通过。localhost 已证明 browser mock 启动、Settings 延迟 CSS 最终布局和 VirtualMenu 键盘交互，console 无 warning/error。
+主 Transcript 使用唯一 `transcript-log`、`role=log`、`aria-live=off`、运行/加载 busy 状态；独立 `transcript-announcer` 只在真实运行结束后提交一次最终 assistant 文本。hydration、tab/session 切换、history append、rewind/undo 和 `/clear` generation 不回放历史。History 预览使用唯一 `history-preview-transcript-log` 并禁用第二个 announcer。
 
-最终 Windows production 可执行文件为 48,045,568 B，SHA-256 `0F5E5BB8BCC4F7605D387F84D69079F54192A2E67C1F288056BBFBC8B6A12CE3`。native startup smoke 的 cold 首次可见/响应 1.015 秒、稳定 2.015 秒（8 秒预算），warm 首次可见/响应 0.516 秒、稳定 1.516 秒（6 秒预算），清理、临时目录和状态边界均干净。interaction smoke 完成 19 次 loopback provider 请求，覆盖成功、invalid key、rate limit、stream interruption/retry、permission denial/write blocked、tool timeout、stop/recovery、持久化，以及 production Wails 中 Settings lazy route 的真实打开/关闭；boundary/errors 为空且清理成功。
+Windows UIA 驱动新增 localized control type、focused/focusable、offscreen、ARIA role/properties，并提供严格 `invoke_pattern()`，缺失或调用失败时不允许坐标回退。新 accessibility smoke 以隔离 HOME 验证 `app-main`、log/status、skip→composer、Settings dialog/关闭焦点、六个背景 ID 从 UIA 树消失、关闭后 opener 恢复；candidate Windows job 已接线并上传独立 JSON，但本批未触发安装器 candidate。
 
-当前批次本地验证已完整闭合，只剩显式暂存、集中 commit/push 与本批远端 CI/CodeQL。当前改动尚未 commit/push，不能借用 `bbdddde` 的远端结果声明本批已交付。详见 `docs/audits/2026-07-13-m3-main-graph-css-split.md`。
+当前定向与 production 证据：dialog focus 35 + palette 2、Transcript 54、accessibility smoke 单测 10、`pnpm build` 通过。最终 bundle 为 entry 628,571 B、base initial JS 869,373 B（5 files）、最坏本地化 984,827 B、initial CSS 511,305 B、browser mock 964,263 B、VirtualMenu 894,626 B、Settings 1,057,628 B JS + 611,477 B CSS、largest JS 704,186 B，均在硬预算内。无热更新 localhost Browser 的嵌套隔离、双 Escape、opener 恢复和唯一 Transcript seam 通过，warning/error 为 0。
 
-下一批可访问性方向是模态背景隔离、稳定 dialog ID、transcript 日志语义和 Windows UIA 合同；Windows High Contrast/屏幕阅读器实际行为保持手动或外部证据边界。受保护文件继续排除，只显式暂存本批路径。
+最终 Windows production 可执行文件为 48,050,176 B，SHA-256 `8E008415A9D331ABFFA63864CD67B5818FFC74F8FD5D8984790C7371F8590CD7`。严格 accessibility smoke 的 3 个动作全部为 InvokePattern，所有断言、清理和状态边界通过；native cold 首次可见/响应 0.500 秒、稳定 1.500 秒，warm 0.500/1.500 秒，满足 8/6 秒预算；interaction smoke 完成 19 请求、五类失败恢复、停止、持久化和重启恢复，`boundary_changes=[]`、`errors=[]`。
+
+当前改动尚未 commit/push，不能借用 `7d07c89` 的远端结果声明本批已交付。完整 frontend/Python/Go/Desktop/docs 门禁已通过；只显式暂存本批路径并集中 push，受保护的 `.agents/`、`artifacts/`、`docs/audits/2026-07-09-reference-feature-gap-map.md` 继续排除。NVDA/Narrator 实际听感、Windows High Contrast、签名安装器和本批三平台 candidate 仍是独立手动或外部证据。详见 `docs/audits/2026-07-13-m3-modal-isolation-transcript-uia.md`。

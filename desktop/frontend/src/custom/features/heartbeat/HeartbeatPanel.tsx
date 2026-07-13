@@ -29,6 +29,7 @@ import {
 } from "./heartbeat.bridge";
 import type { HeartbeatTask } from "./heartbeat.types";
 import type { WorkspaceView } from "../../../lib/types";
+import { isTopModalDialog, useDialogFocus } from "../../../lib/useDialogFocus";
 
 const INTERVAL_MS: Record<"s" | "m" | "h", number> = {
   s: 1000,
@@ -144,7 +145,11 @@ export function HeartbeatPanel({ open, onClose, startNew, onOpenTopic }: Heartbe
   const statusFilterRef = useRef<HTMLButtonElement>(null);
   const [workspaceMap, setWorkspaceMap] = useState<Record<string, string>>({});
   const backdropRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const startedRef = useRef(false);
+
+  useDialogFocus(open, dialogRef, closeRef);
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
@@ -277,7 +282,10 @@ export function HeartbeatPanel({ open, onClose, startNew, onOpenTopic }: Heartbe
   useEffect(() => {
     if (!open) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape" || !isTopModalDialog(dialogRef.current)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -299,7 +307,15 @@ export function HeartbeatPanel({ open, onClose, startNew, onOpenTopic }: Heartbe
 
   return (
     <div ref={backdropRef} className="heartbeat-backdrop" onClick={handleBackdrop}>
-      <div className="heartbeat-modal">
+      <div
+        id="heartbeat-dialog"
+        ref={dialogRef}
+        className="heartbeat-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="heartbeat-dialog-title"
+        tabIndex={-1}
+      >
         <header className="heartbeat-modal__header">
           {editing ? (
             <button className="heartbeat-modal__back" onClick={() => setEditing(null)}>
@@ -308,8 +324,9 @@ export function HeartbeatPanel({ open, onClose, startNew, onOpenTopic }: Heartbe
           ) : (
             <Activity size={16} />
           )}
-          <span>{editing ? t("heartbeat.editTask") : "自动化任务"}</span>
+          <span id="heartbeat-dialog-title">{editing ? t("heartbeat.editTask") : t("heartbeat.title")}</span>
           <button
+            ref={closeRef}
             className="heartbeat-modal__close"
             onClick={onClose}
             aria-label={t("common.close")}

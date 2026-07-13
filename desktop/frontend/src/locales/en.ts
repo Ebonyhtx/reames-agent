@@ -1889,6 +1889,7 @@ export const en = {
   "turnActions.summary": "Summary",
   "turnActions.rewind": "Rewind",
   "transcript.jumpToBottom": "Jump to bottom",
+  "transcript.label": "Conversation",
   "transcript.showEarlierHistory": "Show {n} earlier turns",
   "transcript.toolCount": "{n} tools",
   "transcript.processed": "Processed",

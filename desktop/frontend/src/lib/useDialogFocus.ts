@@ -10,6 +10,22 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 const RETURN_FOCUS_ATTRIBUTE = "data-dialog-return-focus";
 
+type IsolationRecord = {
+  element: HTMLElement;
+  ariaHidden: string | null;
+  inert: string | null;
+};
+
+type ModalLease = {
+  dialog: HTMLElement;
+  restoreTargets: HTMLElement[];
+  released: boolean;
+};
+
+const activeModalLeases: ModalLease[] = [];
+let currentIsolation: IsolationRecord[] = [];
+let isolationObserver: MutationObserver | null = null;
+
 function focusableElements(dialog: HTMLElement): HTMLElement[] {
   return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
     (element) => !element.hidden && element.getAttribute("aria-hidden") !== "true" && element.tabIndex >= 0,
@@ -17,8 +33,91 @@ function focusableElements(dialog: HTMLElement): HTMLElement[] {
 }
 
 function topModalDialog(): HTMLElement | null {
-  const dialogs = document.querySelectorAll<HTMLElement>('[aria-modal="true"]');
-  return dialogs.length > 0 ? dialogs[dialogs.length - 1] : null;
+  for (let index = activeModalLeases.length - 1; index >= 0; index -= 1) {
+    const lease = activeModalLeases[index];
+    if (!lease.released && lease.dialog.isConnected && lease.dialog.getAttribute("aria-modal") === "true") return lease.dialog;
+  }
+  return null;
+}
+
+export function isTopModalDialog(dialog: HTMLElement | null | undefined): boolean {
+  return Boolean(dialog) && topModalDialog() === dialog;
+}
+
+function restoreIsolation(): void {
+  for (const record of currentIsolation) {
+    if (record.ariaHidden === null) record.element.removeAttribute("aria-hidden");
+    else record.element.setAttribute("aria-hidden", record.ariaHidden);
+    if (record.inert === null) record.element.removeAttribute("inert");
+    else record.element.setAttribute("inert", record.inert);
+  }
+  currentIsolation = [];
+}
+
+function recomputeIsolation(): void {
+  isolationObserver?.disconnect();
+  isolationObserver = null;
+  restoreIsolation();
+  const dialog = topModalDialog();
+  if (!dialog) return;
+
+  const records: IsolationRecord[] = [];
+  const pathParents = new Set<HTMLElement>();
+  let pathNode: HTMLElement | null = dialog;
+  while (pathNode?.parentElement) {
+    const parent: HTMLElement = pathNode.parentElement;
+    pathParents.add(parent);
+    for (const sibling of Array.from(parent.children)) {
+      if (!(sibling instanceof HTMLElement) || sibling === pathNode) continue;
+      records.push({
+        element: sibling,
+        ariaHidden: sibling.getAttribute("aria-hidden"),
+        inert: sibling.getAttribute("inert"),
+      });
+      sibling.setAttribute("aria-hidden", "true");
+      sibling.setAttribute("inert", "");
+    }
+    if (parent === dialog.ownerDocument.body) break;
+    pathNode = parent;
+  }
+  currentIsolation = records;
+
+  const Observer = dialog.ownerDocument.defaultView?.MutationObserver ?? (typeof MutationObserver === "undefined" ? undefined : MutationObserver);
+  if (Observer) {
+    isolationObserver = new Observer((mutations) => {
+      if (mutations.some((mutation) => pathParents.has(mutation.target as HTMLElement))) recomputeIsolation();
+    });
+    isolationObserver.observe(dialog.ownerDocument.documentElement, { childList: true, subtree: true });
+  }
+}
+
+function restoreTargetChain(target: HTMLElement | null): HTMLElement[] {
+  if (!target) return [];
+  const targets = [target];
+  for (let index = activeModalLeases.length - 1; index >= 0; index -= 1) {
+    const parent = activeModalLeases[index];
+    if (parent.released || !parent.dialog.contains(target)) continue;
+    for (const candidate of parent.restoreTargets) {
+      if (!targets.includes(candidate)) targets.push(candidate);
+    }
+    break;
+  }
+  return targets;
+}
+
+function activateModalDialog(dialog: HTMLElement, restoreTargets: HTMLElement[]): ModalLease {
+  const lease = { dialog, restoreTargets, released: false };
+  activeModalLeases.push(lease);
+  recomputeIsolation();
+  return lease;
+}
+
+function deactivateModalDialog(lease: ModalLease): void {
+  if (lease.released) return;
+  lease.released = true;
+  const index = activeModalLeases.indexOf(lease);
+  if (index >= 0) activeModalLeases.splice(index, 1);
+  recomputeIsolation();
 }
 
 function focusElement(element: HTMLElement | null): void {
@@ -33,22 +132,41 @@ function currentRestoreTarget(target: HTMLElement): HTMLElement | null {
   if (target.isConnected) return target;
   const key = target.getAttribute(RETURN_FOCUS_ATTRIBUTE);
   if (!key) return null;
-  return Array.from(document.querySelectorAll<HTMLElement>(`[${RETURN_FOCUS_ATTRIBUTE}]`))
+  return Array.from(target.ownerDocument.querySelectorAll<HTMLElement>(`[${RETURN_FOCUS_ATTRIBUTE}]`))
     .find((candidate) => candidate.getAttribute(RETURN_FOCUS_ATTRIBUTE) === key && candidate.isConnected) ?? null;
 }
 
-function restoreAfterRemoval(dialog: HTMLElement, target: HTMLElement): void {
-  if (typeof MutationObserver === "undefined" || !dialog.isConnected) return;
+function availableRestoreTarget(targets: HTMLElement[], topDialog: HTMLElement | null): HTMLElement | null {
+  for (const target of targets) {
+    const current = currentRestoreTarget(target);
+    if (current && (!topDialog || topDialog.contains(current))) return current;
+  }
+  return null;
+}
+
+function afterDialogRemoval(dialog: HTMLElement, callback: () => void): void {
+  if (!dialog.isConnected || typeof MutationObserver === "undefined") {
+    callback();
+    return;
+  }
+  let completed = false;
+  const finish = () => {
+    if (completed) return;
+    completed = true;
+    observer.disconnect();
+    ownerWindow.clearTimeout(timeout);
+    callback();
+  };
   const observer = new MutationObserver(() => {
     if (dialog.isConnected) return;
-    observer.disconnect();
-    window.clearTimeout(timeout);
-    const topDialog = topModalDialog();
-    const currentTarget = currentRestoreTarget(target);
-    if (currentTarget && (!topDialog || topDialog.contains(currentTarget))) focusElement(currentTarget);
+    finish();
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  const timeout = window.setTimeout(() => observer.disconnect(), 1000);
+  const ownerWindow = dialog.ownerDocument.defaultView ?? window;
+  observer.observe(dialog.ownerDocument.documentElement, { childList: true, subtree: true });
+  const timeout = ownerWindow.setTimeout(finish, 1000);
+  ownerWindow.queueMicrotask(() => {
+    if (!dialog.isConnected) finish();
+  });
 }
 
 // Owns focus movement and Tab containment for an aria-modal dialog. Escape
@@ -69,13 +187,23 @@ export function useDialogFocus(
         ? document.activeElement
         : null;
     let ownedDialog: HTMLElement | null = null;
+    let modalLease: ModalLease | null = null;
 
     const moveFocusInside = (): boolean => {
       const dialog = dialogRef.current;
       if (!dialog) return false;
       ownedDialog = dialog;
-      if (dialog.contains(document.activeElement)) return true;
-      focusElement(initialFocusRef?.current ?? focusableElements(dialog)[0] ?? dialog);
+      const focusTarget = initialFocusRef?.current ?? focusableElements(dialog)[0] ?? dialog;
+      if (!dialog.contains(document.activeElement)) {
+        focusElement(focusTarget);
+      }
+      if (!modalLease) {
+        modalLease = activateModalDialog(dialog, restoreTargetChain(previouslyFocused));
+        // A nested dialog can mount inside a portal branch that the parent
+        // modal had already made inert. Chromium rejects that first focus;
+        // recomputing isolation exposes the child path, so retry once.
+        if (!dialog.contains(document.activeElement)) focusElement(focusTarget);
+      }
       return true;
     };
     let frame: number | null = null;
@@ -116,11 +244,13 @@ export function useDialogFocus(
       if (frame !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
       document.removeEventListener("keydown", containTab, { capture: true });
       const dialog = dialogRef.current ?? ownedDialog;
-      const currentTarget = previouslyFocused ? currentRestoreTarget(previouslyFocused) : null;
-      if (dialog && topModalDialog() === dialog && currentTarget && previouslyFocused) {
-        focusElement(currentTarget);
-        restoreAfterRemoval(dialog, previouslyFocused);
-      }
+      const lease = modalLease;
+      if (!dialog || !lease) return;
+      afterDialogRemoval(dialog, () => {
+        deactivateModalDialog(lease);
+        const topDialog = topModalDialog();
+        focusElement(availableRestoreTarget(lease.restoreTargets, topDialog));
+      });
     };
   }, [open, dialogRef, initialFocusRef, restoreFocusRef]);
 }

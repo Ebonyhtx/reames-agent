@@ -8,7 +8,7 @@ import { historyMessagesToItems, type Item } from "../lib/useController";
 import { Transcript } from "./Transcript";
 import { ContextMenu, contextMenuPointFromEvent, type ContextMenuItem, type ContextMenuPoint } from "./ContextMenu";
 import { useDeferredClose } from "../lib/useMountTransition";
-import { useDialogFocus } from "../lib/useDialogFocus";
+import { isTopModalDialog, useDialogFocus } from "../lib/useDialogFocus";
 import { ModalCloseButton } from "./ModalCloseButton";
 
 type HistoryScopeFilter = "all" | "project" | "global";
@@ -349,6 +349,7 @@ export function HistoryPanel({
   return (
     <div className="management-modal-backdrop history-modal-backdrop" data-state={status} onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
       <section
+        id="history-dialog"
         ref={dialogRef}
         className="management-modal history-modal"
         data-state={status}
@@ -357,6 +358,13 @@ export function HistoryPanel({
         aria-labelledby="history-modal-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" || editing || menuSession || blankMenuPoint || !isTopModalDialog(dialogRef.current)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.nativeEvent.stopImmediatePropagation();
+          requestClose();
+        }}
       >
       <header className="management-modal__head history-modal__head">
         <div>
@@ -455,7 +463,10 @@ export function HistoryPanel({
                             onChange={(e) => setDraft(e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") commitRename(s.path);
-                              if (e.key === "Escape") setEditing(null);
+                              if (e.key === "Escape") {
+                                e.stopPropagation();
+                                setEditing(null);
+                              }
                             }}
                             onBlur={() => commitRename(s.path)}
                             placeholder={tr("history.namePlaceholder")}
@@ -546,7 +557,13 @@ export function HistoryPanel({
                 ) : previewItems.length === 0 ? (
                   <div className="mem-empty">{tr("history.previewEmpty")}</div>
                 ) : (
-                  <Transcript items={previewItems} onPrompt={() => {}} questionNavigator={false} />
+                  <Transcript
+                    items={previewItems}
+                    onPrompt={() => {}}
+                    questionNavigator={false}
+                    logId="history-preview-transcript-log"
+                    announcerId={null}
+                  />
                 )}
               </div>
               </>

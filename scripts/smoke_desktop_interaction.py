@@ -63,7 +63,7 @@ TOOL_DENY_AUTOMATION_ID = "tool-approval-deny"
 RETRY_STATUS_PREFIX = "retrying ("
 AUTH_SETTINGS_ACTION_AUTOMATION_ID = "error-action-settings-provider_auth"
 STREAM_RETRY_ACTION_AUTOMATION_ID = "error-action-retry-stream_interrupted"
-SETTINGS_MODAL_AUTOMATION_ID = "settings-modal"
+SETTINGS_MODAL_AUTOMATION_ID = "settings-dialog"
 SETTINGS_CLOSE_AUTOMATION_ID = "settings-modal-close"
 
 FAILURE_SCENARIOS = (

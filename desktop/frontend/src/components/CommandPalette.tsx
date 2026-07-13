@@ -3,7 +3,7 @@ import type { ReactNode, RefObject } from "react";
 import { Command, Search } from "lucide-react";
 import { useT } from "../lib/i18n";
 import { useMountTransition } from "../lib/useMountTransition";
-import { useDialogFocus } from "../lib/useDialogFocus";
+import { isTopModalDialog, useDialogFocus } from "../lib/useDialogFocus";
 
 // CommandPalette is a ⌘K / Ctrl+K modal that surfaces the desktop app's
 // long-tail navigation surface. Tabs through sessions, slash-commands, and
@@ -156,10 +156,12 @@ export function CommandPalette({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      if (!isTopModalDialog(dialogRef.current)) return;
       const closeButtonHasFocus = e.target instanceof HTMLElement && Boolean(e.target.closest("[data-palette-close]"));
       if (closeButtonHasFocus && (e.key === "Enter" || e.key === " ")) return;
       if (e.key === "Escape") {
         e.preventDefault();
+        e.stopImmediatePropagation();
         onClose();
         return;
       }
@@ -198,7 +200,7 @@ export function CommandPalette({
       onClick={onClose}
       role="presentation"
     >
-      <div ref={dialogRef} className="palette" data-state={status} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={placeholder} tabIndex={-1}>
+      <div id="command-palette-dialog" ref={dialogRef} className="palette" data-state={status} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={placeholder} tabIndex={-1}>
         <div className="palette__inputrow">
           <Search className="palette__search-icon" size={18} aria-hidden="true" />
           <input

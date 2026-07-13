@@ -49,9 +49,25 @@ def check_desktop_candidate_workflow(failures: list[str]) -> None:
     require("--observation-seconds 20" in workflow, "desktop candidate must leave enough time to observe stable Windows readiness.", failures)
     require("--max-startup-seconds 15" in workflow and "--max-warm-startup-seconds 6" in workflow, "desktop candidate must enforce installed cold and same-home warm startup budgets.", failures)
     require("scripts/smoke_desktop_interaction.py" in workflow, "desktop candidate must run the Windows screenshot-free interaction smoke.", failures)
+    accessibility_command = "python scripts/smoke_desktop_accessibility.py"
+    require(workflow.count(accessibility_command) == 1, "desktop candidate must run the Windows strict UIA accessibility smoke exactly once.", failures)
+    accessibility_start = workflow.find(accessibility_command)
+    accessibility_end = workflow.find("} finally {", accessibility_start)
+    accessibility_block = workflow[accessibility_start:accessibility_end] if accessibility_start >= 0 and accessibility_end > accessibility_start else ""
+    windows_step_start = workflow.rfind("- name: Smoke installed Windows candidate", 0, accessibility_start)
+    windows_step = workflow[windows_step_start:accessibility_start] if windows_step_start >= 0 and accessibility_start >= 0 else ""
+    require("if: runner.os == 'Windows'" in windows_step, "strict UIA accessibility smoke must stay in the Windows candidate step.", failures)
+    for token in [
+        "--artifact $installer",
+        "--exe $exe",
+        "--out artifacts/desktop-windows-accessibility-smoke.json",
+        'if ($LASTEXITCODE -ne 0) { throw "installed Desktop accessibility smoke failed with exit code $LASTEXITCODE" }',
+    ]:
+        require(token in accessibility_block, f"Windows accessibility smoke must retain {token!r}.", failures)
     require("Start-Process -FilePath $installer" in workflow and "uninstall.exe" in workflow and "InstallLocation" in workflow, "desktop candidate must install, smoke, and uninstall the Windows NSIS package.", failures)
     require("artifacts/desktop-*-native-smoke.json" in workflow, "desktop candidate must upload native smoke evidence.", failures)
     require("artifacts/desktop-*-interaction-smoke.json" in workflow, "desktop candidate must upload Windows interaction evidence.", failures)
+    require("artifacts/desktop-*-accessibility-smoke.json" in workflow, "desktop candidate must upload Windows accessibility evidence.", failures)
     forbidden = [
         "gh release create",
         "GITHUB_TOKEN:",
@@ -87,6 +103,7 @@ def check_release_docs(failures: list[str]) -> None:
         "scripts/smoke_desktop_candidate.py",
         "scripts/smoke_desktop_native.py",
         "scripts/smoke_desktop_interaction.py",
+        "scripts/smoke_desktop_accessibility.py",
         "Sigstore/cosign",
         "OIDC keyless signing",
         "fail closed",

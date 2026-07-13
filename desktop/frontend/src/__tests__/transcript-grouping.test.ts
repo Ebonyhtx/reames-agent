@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { buildStepGroups, buildTurnGroups, createWarmLayerState, lastQuestionTurn, questionTurnsById, warmColdPageForTurn, warmLayerForSession, warmLayerWithColdPageAtLeast, warmLayerWithExpandedTurn, warmLayerWithNextColdPage, warmPagination } from "../lib/transcriptGrouping";
+import { EMPTY_TRANSCRIPT_ANNOUNCEMENT_STATE, resolveTranscriptAnnouncement } from "../lib/transcriptAnnouncement";
 import type { Item } from "../lib/useController";
 
 let passed = 0;
@@ -57,6 +58,48 @@ console.log("\ntranscript grouping contract");
   const groupingPath = resolve(here, "../lib/transcriptGrouping.ts");
   const source = readFileSync(groupingPath, "utf8");
   ok(!source.includes(".findIndex("), "turn grouping does not scan a second collection for each item");
+}
+
+{
+  const here = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(resolve(here, "../components/Transcript.tsx"), "utf8");
+  ok(source.includes('logId = "transcript-log"') && source.includes("id={logId}"), "transcript exposes a stable default automation id");
+  ok(source.includes('role="log"'), "transcript exposes conversation log semantics");
+  ok(source.includes('aria-label={t("transcript.label")}'), "conversation log has a localized accessible name");
+  ok(source.includes('aria-live="off"') && source.includes("aria-busy={running || hydrating}"), "streaming and hydration suppress token chatter and report busy state");
+  ok(source.includes('announcerId = "transcript-announcer"') && source.includes("id={announcerId}") && source.includes('role="status"') && source.includes('aria-atomic="true"'), "completed assistant output uses one stable atomic announcement region");
+  ok(source.includes("resolveTranscriptAnnouncement"), "transcript delegates completion announcements to the tested state contract");
+}
+
+{
+  const history = { id: "assistant-history", text: "old answer" };
+  const initial = resolveTranscriptAnnouncement(EMPTY_TRANSCRIPT_ANNOUNCEMENT_STATE, "tab-a|0", false, false, history);
+  ok(initial.sessionChanged && !initial.announcement, "initial session history is not announced");
+
+  const streaming = resolveTranscriptAnnouncement(initial.state, "tab-a|0", true, false, { id: "assistant-new", text: "partial" });
+  ok(!streaming.announcement, "streaming assistant text is not announced");
+
+  const completed = resolveTranscriptAnnouncement(streaming.state, "tab-a|0", false, false, { id: "assistant-new", text: "final answer" });
+  eq(completed.announcement?.text, "final answer", "completed assistant text is announced once");
+  ok(!resolveTranscriptAnnouncement(completed.state, "tab-a|0", false, false, { id: "assistant-new", text: "final answer" }).announcement, "completed assistant text is not replayed");
+  ok(!resolveTranscriptAnnouncement(completed.state, "tab-b|1", false, false, { id: "assistant-other", text: "other history" }).announcement, "switching sessions does not replay another transcript");
+
+  const emptyIdle = resolveTranscriptAnnouncement(EMPTY_TRANSCRIPT_ANNOUNCEMENT_STATE, "tab-hydrate|0", false, false);
+  const hydrating = resolveTranscriptAnnouncement(emptyIdle.state, "tab-hydrate|0", false, true, history);
+  const hydrated = resolveTranscriptAnnouncement(hydrating.state, "tab-hydrate|0", false, false, history);
+  ok(!hydrating.announcement && !hydrated.announcement, "same-session hydration never announces restored history");
+
+  const idleHistoryAppend = resolveTranscriptAnnouncement(initial.state, "tab-a|0", false, false, { id: "assistant-paged", text: "older page" });
+  ok(!idleHistoryAppend.announcement, "history added without a running turn is baselined, not announced");
+
+  const suppressedRewind = resolveTranscriptAnnouncement(completed.state, "tab-a|0", false, true, { id: "assistant-old", text: "rewound answer" });
+  const restoredAfterRewind = resolveTranscriptAnnouncement(suppressedRewind.state, "tab-a|0", false, false, { id: "assistant-new", text: "final answer" });
+  ok(!suppressedRewind.announcement && !restoredAfterRewind.announcement, "optimistic rewind and undo only update the announcement baseline");
+
+  const reset = resolveTranscriptAnnouncement(completed.state, "tab-a|1", false, false);
+  const rerun = resolveTranscriptAnnouncement(reset.state, "tab-a|1", true, false);
+  const reusedId = resolveTranscriptAnnouncement(rerun.state, "tab-a|1", false, false, { id: "assistant-new", text: "answer after clear" });
+  eq(reusedId.announcement?.text, "answer after clear", "a new session generation announces an answer even when its item id is reused");
 }
 
 {

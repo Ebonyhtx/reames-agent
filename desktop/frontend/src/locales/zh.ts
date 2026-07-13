@@ -1891,6 +1891,7 @@ export const zh: Record<DictKey, string> = {
   "turnActions.summary": "总结",
   "turnActions.rewind": "回溯",
   "transcript.jumpToBottom": "跳到底部",
+  "transcript.label": "对话记录",
   "transcript.showEarlierHistory": "展开前 {n} 轮对话",
   "transcript.toolCount": "{n} 个工具",
   "transcript.processed": "已处理",

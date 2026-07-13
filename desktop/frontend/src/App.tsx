@@ -970,6 +970,7 @@ export default function App() {
   const paletteOpen = useOverlayStore((s) => s.paletteOpen);
   const [paletteLoaded, setPaletteLoaded] = useState(false);
   const paletteRestoreFocusRef = useRef<HTMLElement | null>(null);
+  const settingsRestoreFocusRef = useRef<HTMLElement | null>(null);
   const setPaletteOpen = useOverlayStore((s) => s.setPaletteOpen);
   const shortcutsOpen = useOverlayStore((s) => s.shortcutsOpen);
   const setShortcutsOpen = useOverlayStore((s) => s.setShortcutsOpen);
@@ -2962,7 +2963,7 @@ export default function App() {
             onOpenPalette={(opener) => void openPalette(opener)}
           />
         )}
-        <a className="skip-to-composer" href="#composer-input">
+        <a id="skip-to-composer" className="skip-to-composer" href="#composer-input">
           {t("shortcuts.skipToComposer")}
         </a>
 
@@ -3117,10 +3118,12 @@ export default function App() {
                 </Tooltip>
                 <Tooltip label={t("topbar.settings")} fill side="top">
                   <button
+                    id="settings-open"
                     className="sidebar__utility-button"
                     type="button"
                     data-dialog-return-focus="settings"
-                    onClick={() => {
+                    onClick={(event) => {
+                      settingsRestoreFocusRef.current = event.currentTarget;
                       closeTransientOverlays();
                       setSettingsTarget("general");
                     }}
@@ -3181,9 +3184,11 @@ export default function App() {
               )}
               <Tooltip label={t("topbar.settings")} fill side="right" disabled={sidebarNavTooltipDisabled}>
                 <button
+                  id="settings-open"
                   className="sidebar__navitem"
                   data-dialog-return-focus="settings"
-                  onClick={() => {
+                  onClick={(event) => {
+                    settingsRestoreFocusRef.current = event.currentTarget;
                     closeTransientOverlays();
                     setSettingsTarget("general");
                   }}
@@ -3437,7 +3442,7 @@ export default function App() {
 
           <UpdateBanner enabled={startupUpdateChecksEnabled === true} />
 
-          <main className="main">
+          <main id="app-main" className="main">
             {sidebarImDetailConnection ? (
               <SidebarImConnectionDetail
                 connection={sidebarImDetailConnection}
@@ -3451,6 +3456,7 @@ export default function App() {
                 items={displayItems}
                 live={state.live}
                 tabId={activeTabId}
+                sessionGen={state.sessionGen}
                 footerHeight={footerHeight}
                 onPrompt={handleTranscriptPrompt}
                 onOpenErrorSettings={() => setSettingsTarget("models")}
@@ -3466,6 +3472,7 @@ export default function App() {
                 rewindSignal={rewindSignal}
                 revealSignal={transcriptRevealSignal}
                 hydrating={transcriptHydrating}
+                announcementSuppressed={rewindState != null || rewindCommitting || state.messageAction != null}
                 hasOlderHistory={state.historyHasOlder && !rewindState}
                 olderHistoryCount={state.historyStartTurn}
                 loadingOlderHistory={state.historyOlderLoading}
@@ -3742,7 +3749,9 @@ export default function App() {
             initialFocus={settingsFocus ?? undefined}
             agentRunning={state.running}
             desktopPlatform={desktopPlatform}
+            restoreFocusRef={settingsRestoreFocusRef}
             onClose={() => {
+              settingsRestoreFocusRef.current = null;
               setSettingsFocus(null);
               setSettingsTarget(null);
             }}

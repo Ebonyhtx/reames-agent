@@ -64,6 +64,7 @@ export function OnboardingOverlay({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="onboarding">
       <div
+        id="onboarding-dialog"
         ref={dialogRef}
         className="onboarding__card"
         role="dialog"

@@ -87,6 +87,7 @@
 | [M2 transport 边界收官审计](audits/2026-07-12-m2-transport-boundary-closeout.md) | boot 注册、opaque CLI handoff、termrender、review 装配与 transport allowlist 归零 |
 | [M3 Desktop 性能预算审计](audits/2026-07-12-m3-desktop-bundle-budget.md) | 按需界面拆包、真实产物预算、Windows 冷启动硬门槛与交互证据 |
 | [M3 模态焦点与可访问性审计](audits/2026-07-13-m3-modal-focus-accessibility.md) | 共享焦点生命周期、Tab 围栏、退出动画恢复、读屏语义与真实浏览器证据 |
+| [M3 模态隔离、Transcript 与原生 UIA 可访问性审计](audits/2026-07-13-m3-modal-isolation-transcript-uia.md) | 真正模态背景隔离、嵌套/重开生命周期、最终答复通知语义、严格 InvokePattern 与 Windows production smoke |
 | [M3 Windows 显示缩放持久化审计](audits/2026-07-13-m3-display-zoom-persistence.md) | 缩放写入合并、原子持久化、待重启状态、直接重启与浏览器交互证据 |
 | [M3 主题对比度与焦点审计](audits/2026-07-13-m3-theme-contrast.md) | 六主题深浅色、普通/创作模式对比度合同、双层焦点环、forced-colors 与重挂载焦点恢复 |
 | [M3 Windows warm startup 审计](audits/2026-07-13-m3-windows-warm-startup.md) | 同 HOME/WebView2 profile 原生二次启动、schema v3、6 秒预算、清理与边界证据 |

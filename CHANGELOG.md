@@ -12,6 +12,10 @@
 - Added a manual native Desktop candidate workflow that builds short-lived Wails artifacts without publishing or signing.
 - Added public-readiness gates for telemetry/crash-reporting boundaries so feedback upload stays disabled until a Reames-owned endpoint exists.
 
+### Desktop
+
+- Added true-modal background isolation, stable dialog identities, inherited opener restore chains, transcript accessibility semantics, and a strict Windows UIA accessibility smoke. Actual NVDA/Narrator listening and Windows High Contrast validation remain manual evidence.
+
 ### Deployment
 
 - Hardened cloud serve deployment contracts around token-based authentication, Docker health checks, systemd environment loading, and loopback defaults.

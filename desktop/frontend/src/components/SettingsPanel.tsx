@@ -1,8 +1,8 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent, type ReactNode } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { Bot as BotIcon, Check, CheckCircle2, ChevronDown, ChevronUp, Clipboard, GripVertical, KeyRound, Loader2, MessageCircle, Minus, Play, Plus, QrCode, RefreshCw, RotateCcw, Send } from "lucide-react";
 import { asArray } from "../lib/array";
 import { useDeferredClose } from "../lib/useMountTransition";
-import { useDialogFocus } from "../lib/useDialogFocus";
+import { isTopModalDialog, useDialogFocus } from "../lib/useDialogFocus";
 import { app } from "../lib/bridge";
 import { normalizeLangPref, useI18n, useT, type DictKey, type LangPref } from "../lib/i18n";
 import { apiKeyEnvFromProviderName, inferredVisionModels, mergedFetchedProviderModels, providerApiKeyEnvForSave, providerDefaultModel, providerIsConfigured, providerModelCandidates, providerRequiresKey } from "../lib/providerModels";
@@ -77,6 +77,7 @@ export function SettingsPanel({
   initialFocus,
   agentRunning = false,
   desktopPlatform,
+  restoreFocusRef,
 }: {
   onClose: () => void;
   onChanged: (settings?: SettingsView | null) => void;
@@ -84,6 +85,7 @@ export function SettingsPanel({
   initialFocus?: SettingsInitialFocus;
   agentRunning?: boolean;
   desktopPlatform: DesktopPlatform;
+  restoreFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const t = useT();
   const [s, setS] = useState<SettingsView | null>(null);
@@ -109,7 +111,7 @@ export function SettingsPanel({
   const { status, requestClose } = useDeferredClose(onClose, 240);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  useDialogFocus(true, dialogRef, closeRef);
+  useDialogFocus(true, dialogRef, closeRef, restoreFocusRef);
   const zoomEditSeq = useRef(0);
   const zoomPersistedRef = useRef<ZoomLevel>(getRestartZoom());
   const zoomWriteQueue = useMemo(() => createZoomWriteQueue((value) => app.SetDesktopZoomFactor(value)), []);
@@ -235,7 +237,10 @@ export function SettingsPanel({
   // Close on Esc
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector("[data-anchored-popover='active']")) requestClose();
+      if (e.key !== "Escape" || !isTopModalDialog(dialogRef.current) || document.querySelector("[data-anchored-popover='active']")) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      requestClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -250,7 +255,7 @@ export function SettingsPanel({
 
   return (
     <div id="settings-modal" className="management-modal-backdrop settings-modal-backdrop" data-state={status} onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
-      <div ref={dialogRef} className="management-modal settings-modal" data-state={status} role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" tabIndex={-1}>
+      <div id="settings-dialog" ref={dialogRef} className="management-modal settings-modal" data-state={status} role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" tabIndex={-1}>
         <header className="management-modal__head settings-modal__head">
           <div id="settings-modal-title" className="management-modal__title settings-modal__title">{t("settings.title")}</div>
           <ModalCloseButton ref={closeRef} id="settings-modal-close" label={t("common.close")} onClick={requestClose} />
@@ -269,7 +274,7 @@ export function SettingsPanel({
               </button>
             ))}
           </nav>
-          <main className="settings-center__content">
+          <section className="settings-center__content" aria-label={settingsTabLabel(tab, t)}>
             {needsSettings && settingsLoadFailed && (
               <div className="banner banner--error settings-load-error" role="alert">
                 <span>{t("settings.loadFailed")}</span>
@@ -360,7 +365,7 @@ export function SettingsPanel({
                 )}
               </>
             )}
-          </main>
+          </section>
         </div>
       </div>
     </div>

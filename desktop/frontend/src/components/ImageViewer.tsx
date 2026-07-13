@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useT } from "../lib/i18n";
-import { useDialogFocus } from "../lib/useDialogFocus";
+import { isTopModalDialog, useDialogFocus } from "../lib/useDialogFocus";
 
 export interface ImageViewerProps {
   open: boolean;
@@ -46,7 +46,10 @@ export function ImageViewer({ open, imageUrl, imageName, onClose }: ImageViewerP
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape" || !isTopModalDialog(dialogRef.current)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -73,6 +76,7 @@ export function ImageViewer({ open, imageUrl, imageName, onClose }: ImageViewerP
 
   const overlay = (
     <div
+      id="image-viewer-dialog"
       ref={dialogRef}
       className={`image-viewer-backdrop${visible ? " image-viewer--enter" : ""}`}
       onClick={handleBackdropClick}

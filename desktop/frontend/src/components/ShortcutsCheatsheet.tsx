@@ -8,7 +8,7 @@ import {
 import type { DictKey, Translator } from "../lib/i18n";
 import { ModalCloseButton } from "./ModalCloseButton";
 import { ShortcutComboDisplay } from "./ShortcutComboDisplay";
-import { useDialogFocus } from "../lib/useDialogFocus";
+import { isTopModalDialog, useDialogFocus } from "../lib/useDialogFocus";
 
 const SECTION_ORDER: ShortcutSection[] = ["global", "session", "view", "tools", "help"];
 const SECTION_LABEL_KEYS: Record<ShortcutSection, DictKey> = {
@@ -45,7 +45,9 @@ export function ShortcutsCheatsheet({
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (!isTopModalDialog(dialogRef.current)) return;
       event.preventDefault();
+      event.stopImmediatePropagation();
       onClose();
     };
     document.addEventListener("keydown", onKey, { capture: true });
@@ -57,6 +59,7 @@ export function ShortcutsCheatsheet({
   return (
     <div className="drawer-backdrop shortcuts-cheatsheet-backdrop" onClick={onClose} role="presentation">
       <aside
+        id="shortcuts-cheatsheet-dialog"
         ref={dialogRef}
         className="drawer drawer--wide shortcuts-cheatsheet"
         role="dialog"

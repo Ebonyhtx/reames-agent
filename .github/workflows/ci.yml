@@ -130,6 +130,8 @@ jobs:
           python -m unittest scripts.test_smoke_desktop_candidate -v
           python -m unittest scripts.test_smoke_desktop_native -v
           python -m unittest scripts.test_smoke_desktop_interaction -v
+          python -m unittest scripts.test_windows_uia -v
+          python -m unittest scripts.test_smoke_desktop_accessibility -v
 
   public-readiness:
     name: Public readiness and docs
