@@ -39,8 +39,15 @@ class DesktopInteractionSmokeTests(unittest.TestCase):
             "restart_disk_user_present",
             "restart_disk_assistant_present",
             "restart_composer_present",
+            "restart_marker_present_before_jump",
+            "restart_assistant_present_before_jump",
+            "restart_marker_on_screen_before_jump",
+            "restart_assistant_on_screen_before_jump",
+            "restart_first_question_invoked",
             "restart_marker_present",
             "restart_assistant_present",
+            "restart_marker_on_screen",
+            "restart_assistant_on_screen",
             "restart_onboarding_present",
             "restart_uia_element_count",
             "uia_actions",
@@ -388,6 +395,30 @@ class DesktopInteractionSmokeTests(unittest.TestCase):
         self.assertIn(f'automationId="{smoke.TOOL_APPROVAL_AUTOMATION_ID}"', approval)
         self.assertIn(f'automationId="{smoke.TOOL_DENY_AUTOMATION_ID}"', approval)
         self.assertIn("tool-error-${item.id}", tool_card)
+
+    def test_restart_navigation_uses_stable_first_history_question(self) -> None:
+        self.assertEqual(
+            smoke.FIRST_QUESTION_JUMP_NAMES,
+            ("Jump to question 1", "跳转到问题 1", "跳轉到問題 1"),
+        )
+        repo = Path(__file__).parents[1]
+        locale_contracts = {
+            "en.ts": '"questionNav.jump": "Jump to question {n}"',
+            "zh.ts": '"questionNav.jump": "跳转到问题 {n}"',
+            "zh-TW.ts": '"questionNav.jump": "跳轉到問題 {n}"',
+        }
+        for filename, contract in locale_contracts.items():
+            source = (
+                repo / "desktop" / "frontend" / "src" / "locales" / filename
+            ).read_text(encoding="utf-8")
+            self.assertIn(contract, source)
+        transcript = (
+            repo / "desktop" / "frontend" / "src" / "components" / "Transcript.tsx"
+        ).read_text(encoding="utf-8")
+        self.assertIn('aria-label={t("questionNav.jump", { n: question.turn + 1 })}', transcript)
+        smoke_source = Path(smoke.__file__).read_text(encoding="utf-8")
+        self.assertIn("name=FIRST_QUESTION_JUMP_NAMES", smoke_source)
+        self.assertIn("restored_pair_is_on_screen", smoke_source)
 
     @unittest.skipIf(sys.platform == "win32", "non-Windows classification")
     def test_run_smoke_rejects_non_windows_before_inputs(self) -> None:

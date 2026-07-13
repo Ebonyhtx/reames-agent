@@ -40,6 +40,11 @@ COMPOSER_AUTOMATION_ID = "composer-input"
 SEND_AUTOMATION_ID = "composer-send"
 STOP_AUTOMATION_ID = "composer-stop"
 ONBOARDING_AUTOMATION_ID = "onboarding-key"
+FIRST_QUESTION_JUMP_NAMES = (
+    "Jump to question 1",
+    "跳转到问题 1",
+    "跳轉到問題 1",
+)
 LOOPBACK_PROVIDER_NAME = "native-smoke"
 LOOPBACK_MODEL = "native-smoke-model"
 LOOPBACK_RESPONSE = "Native Desktop interaction smoke response"
@@ -138,8 +143,15 @@ class InteractionSmokeResult:
     restart_disk_user_present: bool = False
     restart_disk_assistant_present: bool = False
     restart_composer_present: bool = False
+    restart_marker_present_before_jump: bool = False
+    restart_assistant_present_before_jump: bool = False
+    restart_marker_on_screen_before_jump: bool = False
+    restart_assistant_on_screen_before_jump: bool = False
+    restart_first_question_invoked: bool = False
     restart_marker_present: bool = False
     restart_assistant_present: bool = False
+    restart_marker_on_screen: bool = False
+    restart_assistant_on_screen: bool = False
     restart_onboarding_present: bool = False
     restart_uia_element_count: int = 0
     uia_actions: list[dict[str, object]] = field(default_factory=list)
@@ -1120,12 +1132,44 @@ def run_smoke(
             result.restart_disk_assistant_present = durable_session_has_message(
                 disk_path, "assistant", baseline_response
             )
+            initial_restart_elements = uia.refresh()
+            result.restart_marker_present_before_jump = any(
+                item.name == result.marker for item in initial_restart_elements
+            )
+            result.restart_assistant_present_before_jump = any(
+                item.name == baseline_response for item in initial_restart_elements
+            )
+            result.restart_marker_on_screen_before_jump = any(
+                item.name == result.marker and not item.is_offscreen
+                for item in initial_restart_elements
+            )
+            result.restart_assistant_on_screen_before_jump = any(
+                item.name == baseline_response and not item.is_offscreen
+                for item in initial_restart_elements
+            )
+            uia.invoke_pattern(
+                name=FIRST_QUESTION_JUMP_NAMES,
+                timeout_seconds=timeout_seconds,
+            )
+            result.restart_first_question_invoked = True
+
+            def restored_pair_is_on_screen() -> bool:
+                current = uia.refresh()
+                marker_on_screen = any(
+                    item.name == result.marker and not item.is_offscreen
+                    for item in current
+                )
+                assistant_on_screen = any(
+                    item.name == baseline_response and not item.is_offscreen
+                    for item in current
+                )
+                return marker_on_screen and assistant_on_screen
+
             try:
                 wait_until(
-                    lambda: uia.has(name=result.marker)
-                    and uia.has(name=baseline_response),
+                    restored_pair_is_on_screen,
                     timeout_seconds,
-                    "restarted Desktop did not restore the user and assistant messages",
+                    "restarted Desktop did not expose the first user and assistant messages on screen after question navigation",
                 )
             finally:
                 elements = uia.refresh()
@@ -1139,6 +1183,14 @@ def run_smoke(
                 result.restart_assistant_present = any(
                     item.name == baseline_response for item in elements
                 )
+                result.restart_marker_on_screen = any(
+                    item.name == result.marker and not item.is_offscreen
+                    for item in elements
+                )
+                result.restart_assistant_on_screen = any(
+                    item.name == baseline_response and not item.is_offscreen
+                    for item in elements
+                )
                 result.restart_onboarding_present = any(
                     item.automation_id == ONBOARDING_AUTOMATION_ID for item in elements
                 )
@@ -1146,7 +1198,14 @@ def run_smoke(
                 recovered.get("scope") == "project"
                 and same_path(recovered.get("workspaceRoot"), workspace)
                 and result.recovered_session_path == result.initial_session_path
-                and not uia.has(automation_id=ONBOARDING_AUTOMATION_ID)
+                and result.restart_disk_user_present
+                and result.restart_disk_assistant_present
+                and result.restart_composer_present
+                and result.restart_marker_present
+                and result.restart_assistant_present
+                and result.restart_marker_on_screen
+                and result.restart_assistant_on_screen
+                and not result.restart_onboarding_present
             )
             if not result.recovery_verified:
                 raise RuntimeError("session/workspace recovery state does not match")

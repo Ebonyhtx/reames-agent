@@ -31,7 +31,7 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
 - M2 已关闭：依赖棘轮 allowlist 已归零，结构化错误、版本化 command/event/display DTO、prompt metadata、会话持久化、Desktop/ACP/CLI 装配和终端渲染边界均已收口；完整本地门禁及远端 CI/CodeQL 已通过。
-- M3 进行中：commit `977050c` 的普通 CI `29252169252` 8/8、CodeQL `29252169424` 3/3。candidate `29252663874` 的 Linux/macOS installed 与 Windows native 通过；Windows interaction 的 tab/workspace/session、磁盘 user/assistant 和 UIA user 均正确，只有 UIA assistant 缺失，accessibility 未执行。当前未提交 follow-up 已定位并修复 ready 误复用未完成 pre-ready history 请求的竞态，本地 production native/interaction/accessibility 全绿，仍需新 commit 的 installed candidate。
+- M3 进行中：commit `bb13da3` 的普通 CI `29256586177` 8/8、CodeQL `29256588974` 3/3。candidate `29257178248` 的 Linux/macOS installed 与 Windows native 通过；Windows interaction 的 tab/workspace/session、磁盘 user/assistant 和 UIA user 均正确，只有直接检查首轮 UIA assistant 缺失，accessibility 未执行。pre-ready history replacement 已证明是有效硬化，但 installed 失败保持不变，不能再称为已确认根因。当前未提交 smoke 通过可访问问题导航定位首轮后验证 user/assistant，本地 production 已复现跳转前双消息 offscreen、跳转后双消息 onscreen 并全绿，仍需新 commit 的 installed candidate。
 - M6 进行中：Gateway service、headless smoke、feedback 和本批四渠道 `gateway setup` 确定性闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
@@ -67,15 +67,15 @@ commit `7d07c89` 已推送；普通 CI run `29216174519` 为 8/8、CodeQL run `2
 
 ## 当前 M3 + M6 批次
 
-- M3：pre-ready history 预载明确标为可取代；ready event 在旧请求未完成时启动新的权威 sequence，迟到的 user-only 结果不能覆盖完整 user/assistant。后端同轮次时按可见消息数选择更完整 canonical event log，Go 回归使用分段 user/assistant autosave。
+- M3：`bb13da3` 已交付 pre-ready history 可取代机制及对应 ready event/polling/分段 autosave 回归，但新 installed candidate 仍在相同 UIA 断点失败。Transcript 的 `.msg` 使用 `content-visibility: auto`，重启后首轮会话可能离屏；当前 smoke 先分别记录跳转前 UIA presence/onscreen，再严格 InvokePattern 调用英文/简中/繁中的“问题 1”导航，要求首轮 user/assistant 同时 onscreen，最终综合门禁还要求磁盘双消息、同 session、composer 和 onboarding 缺失。
 - M6：新增 `internal/gatewaysetup` 和 `reames-agent gateway setup`，覆盖 Feishu/Lark、QQ、Weixin、workspace/model/connection ID、secret-env-only、显式 access、`--reset-access`、redacted dry-run、严格 TOML、原子幂等写入。
 - 测试：四渠道、状态保留、byte-for-byte 幂等、损坏配置和误传 secret fail closed、setup → doctor → service dry-run；ready-event/missed-ready/pinned page；完整前端与本地 production Wails native/accessibility/interaction。
 
-candidate `29252663874` 的 installer SHA-256 为 `8DD48FC2B4AD73ECE9ABC67D3669CD54A9471A0C3D545F5020626A304A9B3133`；Windows native 7.031/2.000 秒通过，interaction 完成 19 请求后只缺 UIA assistant。当前 follow-up 即使完成本地门禁，也不能把源码 Wails 证据冒充 installed candidate。
+candidate `29257178248` 的 installer SHA-256 为 `2531E828C0A3464DF3CE9BD220889BA37128EA30E7DD5228746BF290E2F58A22`，installed executable SHA-256 为 `58C530024C87B2DA34C745EE2709997CF736FDFB0DF2A4ACD0CE27944DD41D0D`；Windows native 13.047/2.016 秒通过，interaction 完成 19 请求后仍只缺直接 UIA assistant。当前 follow-up 即使完成本地门禁，也不能把源码 Wails 证据冒充 installed candidate。
 
 ## 下一执行顺序
 
-1. 跑完整本地门禁，显式暂存、集中提交并 push 当前 in-flight replacement follow-up，随后守候普通 CI/CodeQL。
+1. 跑完整本地门禁，显式暂存、集中提交并 push 当前 viewport-aware UIA smoke 与证据修正，随后守候普通 CI/CodeQL。
 2. 对新 commit 只运行一次 Desktop candidate，必须让 Windows installed interaction 通过并实际执行 strict accessibility step。
 3. 远端关闭后进入干净云节点 CLI + gateway setup/doctor/service + feedback，再做真实飞书回环。
 
@@ -91,6 +91,6 @@ candidate `29252663874` 的 installer SHA-256 为 `8DD48FC2B4AD73ECE9ABC67D3669C
 
 ## 当前证据边界
 
-新 Wails executable 为 48,052,736 B，SHA-256 `889986ABB11E97FDEDBFFC48700600503E6984F866E3E774B2FE751993583F24`；native cold/warm 稳定响应 1.515/1.516 秒，strict accessibility 3/3 InvokePattern，interaction 19 请求与五类失败恢复、停止和同 session path 重启 user/assistant 恢复通过，边界变化和 errors 为空。
+新 Wails executable 为 48,052,736 B，SHA-256 `889986ABB11E97FDEDBFFC48700600503E6984F866E3E774B2FE751993583F24`；native cold/warm 稳定响应 1.515/1.516 秒，strict accessibility 3/3 InvokePattern。最新 interaction 用 52.1 秒完成 19 请求、五类失败恢复、停止和同 session path 重启；跳转前 user/assistant 均存在 UIA 树但均 offscreen，调用问题 1 后均 onscreen，`recovery_verified=true`，边界变化和 errors 为空。
 
-这些仍是本地源码 production 证据。新 commit 的安装器 candidate、NVDA/Narrator、Windows High Contrast、真实云节点、真实飞书和签名安装器仍分别是远端或 `external-blocked` 证据。受保护的 `.agents/`、`artifacts/`、`docs/audits/2026-07-09-reference-feature-gap-map.md` 禁止暂存。
+这些仍是本地源码 production 证据；`bb13da3` 的 installed candidate 已运行且在直接首轮 UIA assistant 断言处失败，当前 viewport-aware smoke commit 的新 candidate 尚未运行。NVDA/Narrator、Windows High Contrast、真实云节点、真实飞书和签名安装器仍分别是远端或 `external-blocked` 证据。受保护的 `.agents/`、`artifacts/`、`docs/audits/2026-07-09-reference-feature-gap-map.md` 禁止暂存。

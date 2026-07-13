@@ -131,7 +131,7 @@ an evidence-ordering problem.
 
 ## In-flight preload replacement follow-up
 
-The remaining race was in the frontend request classifier. The pre-ready
+One reproducible uncovered race was in the frontend request classifier. The pre-ready
 `historyOnly` preload did not set `preserveCachedHistory`, so it was tracked as
 authoritative. If `agent:ready` arrived while that request was still pending,
 the ready refresh joined the pre-ready request instead of replacing it. A
@@ -160,3 +160,58 @@ recovery field true except the expected `restart_onboarding_present=false`;
 strict InvokePattern accessibility also passed. Both smokes reported
 `boundary_changes=[]` and no errors. A new installed candidate is still
 required before M3 can close.
+
+## Sixth installed-candidate result
+
+The follow-up landed as commit `bb13da3`. CI `29256586177` passed 8/8 and
+CodeQL `29256588974` passed 3/3. Desktop candidate `29257178248` did not change
+the installed interaction boundary:
+
+- Linux and macOS installed candidates passed.
+- Windows native cold/warm startup passed in 13.047/2.016 seconds for installer
+  SHA-256 `2531E828C0A3464DF3CE9BD220889BA37128EA30E7DD5228746BF290E2F58A22`
+  and installed executable SHA-256
+  `58C530024C87B2DA34C745EE2709997CF736FDFB0DF2A4ACD0CE27944DD41D0D`.
+- Windows interaction completed 19 Provider requests, all five recovery
+  scenarios, Stop and persistence with `boundary_changes=[]`.
+- Restart recovered the same project tab, workspace and session path. Disk
+  contained the baseline user and assistant; UIA exposed the composer and user
+  marker but not the baseline assistant. Strict accessibility therefore did
+  not run.
+
+The preload replacement remains useful race hardening with direct regression
+coverage. The unchanged installed boundary proves it was not sufficient and
+does not support calling it the confirmed root cause.
+
+## Viewport-aware UIA follow-up
+
+Transcript messages use `content-visibility: auto`. After restart the
+transcript restores at the bottom, so the first assistant response may remain
+outside the rendered accessibility subtree until the viewport moves to it.
+The user marker alone is insufficient evidence that the first message element
+is rendered because the same text can also appear in topic UI.
+
+The existing `QuestionJumpBar` exposes localized accessible buttons for
+`Jump to question 1`, `跳转到问题 1`, and `跳轉到問題 1`. The interaction smoke
+now:
+
+1. Records user-marker and assistant visibility before navigation for
+   diagnostics.
+2. Invokes the first-question button through strict UIA InvokePattern.
+3. Waits for the baseline assistant after the transcript has navigated to the
+   first turn, while retaining the independent disk, project, workspace,
+   session, composer and onboarding assertions.
+
+The 48,052,736-byte local production Wails executable with SHA-256
+`889986ABB11E97FDEDBFFC48700600503E6984F866E3E774B2FE751993583F24`
+completed the strict revised smoke in 52.1 seconds. It made 19 Provider
+requests, verified all recovery scenarios and Stop, retained the same session
+path, and reported `boundary_changes=[]` with no errors. Before navigation both
+the user marker and assistant were present in the UIA tree but both reported
+`is_offscreen=true`. After strict InvokePattern activated the first-question
+control, both reported `is_offscreen=false`; the final composite recovery gate,
+which also requires the disk pair, composer and absent onboarding, passed.
+This locally reproduces the offscreen condition, but only a new installed
+runner can prove the previously failing candidate. M3 remains open until
+Windows installed interaction and the subsequent strict accessibility step
+both pass.
