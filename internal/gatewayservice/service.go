@@ -9,10 +9,13 @@ import (
 	"html"
 	"os"
 	"os/exec"
+	pathpkg "path"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+
+	"reames-agent/internal/fileutil"
 )
 
 const (
@@ -49,12 +52,13 @@ type Command struct {
 
 // Plan is the full set of writes and commands for a lifecycle operation.
 type Plan struct {
-	GOOS     string
-	Action   string
-	Files    []File
-	Deletes  []string
-	Commands []Command
-	Notes    []string
+	GOOS         string
+	Action       string
+	Files        []File
+	Deletes      []string
+	Commands     []Command
+	PostCommands []Command
+	Notes        []string
 }
 
 // Result reports what happened while applying a plan.
@@ -103,6 +107,9 @@ func BuildPlan(goos string, opts Options) (Plan, error) {
 	if goos == "" {
 		goos = runtime.GOOS
 	}
+	if err := validateInstallPaths(goos, opts); err != nil {
+		return Plan{}, err
+	}
 	var plan Plan
 	switch goos {
 	case "linux":
@@ -119,6 +126,32 @@ func BuildPlan(goos string, opts Options) (Plan, error) {
 	}
 	appendCredentialNotes(&plan, opts)
 	return plan, nil
+}
+
+func validateInstallPaths(goos string, opts Options) error {
+	if opts.Action != "install" {
+		return nil
+	}
+	for name, value := range map[string]string{
+		"executable": opts.Executable,
+		"home":       opts.Home,
+		"dir":        opts.Dir,
+	} {
+		if value != "" && !targetPathIsAbs(goos, value) {
+			return fmt.Errorf("gateway service %s must be an absolute %s path: %q", name, goos, value)
+		}
+	}
+	return nil
+}
+
+func targetPathIsAbs(goos, value string) bool {
+	if goos != "windows" {
+		return pathpkg.IsAbs(value)
+	}
+	if strings.HasPrefix(value, `\\`) || strings.HasPrefix(value, `//`) {
+		return true
+	}
+	return len(value) >= 3 && ((value[0] >= 'A' && value[0] <= 'Z') || (value[0] >= 'a' && value[0] <= 'z')) && value[1] == ':' && (value[2] == '\\' || value[2] == '/')
 }
 
 // Apply builds and applies a lifecycle operation. With DryRun, it only returns
@@ -138,19 +171,16 @@ func Apply(ctx context.Context, opts Options) (Result, error) {
 		if err := os.MkdirAll(filepath.Dir(f.Path), 0o755); err != nil {
 			return Result{Plan: plan}, err
 		}
-		if err := os.WriteFile(f.Path, []byte(f.Content), f.Mode); err != nil {
+		if err := fileutil.AtomicWriteFile(f.Path, []byte(f.Content), f.Mode); err != nil {
 			return Result{Plan: plan}, err
 		}
 	}
 	var outputs []string
 	for _, c := range plan.Commands {
-		cmd := exec.CommandContext(ctx, c.Name, c.Args...)
-		out, err := cmd.CombinedOutput()
-		if len(out) > 0 {
-			outputs = append(outputs, strings.TrimSpace(string(out)))
-		}
+		var err error
+		outputs, err = runCommand(ctx, outputs, c)
 		if err != nil {
-			return Result{Plan: plan, Outputs: outputs}, fmt.Errorf("%s %s: %w", c.Name, strings.Join(c.Args, " "), err)
+			return Result{Plan: plan, Outputs: outputs}, err
 		}
 	}
 	for _, path := range plan.Deletes {
@@ -158,7 +188,26 @@ func Apply(ctx context.Context, opts Options) (Result, error) {
 			return Result{Plan: plan, Outputs: outputs}, err
 		}
 	}
+	for _, c := range plan.PostCommands {
+		var err error
+		outputs, err = runCommand(ctx, outputs, c)
+		if err != nil {
+			return Result{Plan: plan, Outputs: outputs}, err
+		}
+	}
 	return Result{Plan: plan, Outputs: outputs}, nil
+}
+
+func runCommand(ctx context.Context, outputs []string, c Command) ([]string, error) {
+	cmd := exec.CommandContext(ctx, c.Name, c.Args...)
+	out, err := cmd.CombinedOutput()
+	if len(out) > 0 {
+		outputs = append(outputs, strings.TrimSpace(string(out)))
+	}
+	if err != nil {
+		return outputs, fmt.Errorf("%s %s: %w", c.Name, strings.Join(c.Args, " "), err)
+	}
+	return outputs, nil
 }
 
 // FormatPlan returns a stable human-readable representation for dry-runs and logs.
@@ -175,11 +224,14 @@ func FormatPlan(plan Plan) string {
 			b.WriteByte('\n')
 		}
 	}
+	for _, c := range plan.Commands {
+		fmt.Fprintf(&b, "run: %s\n", shellLine(c))
+	}
 	for _, path := range plan.Deletes {
 		fmt.Fprintf(&b, "delete %s\n", path)
 	}
-	for _, c := range plan.Commands {
-		fmt.Fprintf(&b, "run: %s\n", shellLine(c))
+	for _, c := range plan.PostCommands {
+		fmt.Fprintf(&b, "run after delete: %s\n", shellLine(c))
 	}
 	return b.String()
 }
@@ -193,12 +245,16 @@ func linuxPlan(opts Options) (Plan, error) {
 		plan.Files = append(plan.Files, File{Path: unitPath, Mode: 0o644, Content: systemdUnit(opts)})
 		plan.Commands = append(plan.Commands, Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "daemon-reload")})
 		if opts.StartNow {
-			plan.Commands = append(plan.Commands, Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "enable", "--now", serviceName)})
+			plan.Commands = append(plan.Commands,
+				Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "enable", serviceName)},
+				Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "restart", serviceName)},
+				Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "is-active", "--quiet", serviceName)},
+			)
 		}
 	case "uninstall":
 		plan.Commands = append(plan.Commands, Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "disable", "--now", serviceName)})
-		plan.Commands = append(plan.Commands, Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "daemon-reload")})
 		plan.Deletes = append(plan.Deletes, unitPath)
+		plan.PostCommands = append(plan.PostCommands, Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "daemon-reload")})
 	case "start", "stop", "restart", "status":
 		plan.Commands = append(plan.Commands, Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, opts.Action, serviceName)})
 	default:
@@ -316,7 +372,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=` + joinQuoted(gatewayArgs(opts)) + `
+ExecStart=` + joinSystemdExecArgs(gatewayArgs(opts)) + `
 ` + systemdEnvironment(opts) + `Restart=always
 RestartSec=5
 WorkingDirectory=` + systemdWorkingDirectory(opts) + `
@@ -369,7 +425,7 @@ func systemdEnvironment(opts Options) string {
 	if opts.Home == "" {
 		return ""
 	}
-	return "Environment=REAMES_AGENT_HOME=" + quoteSystemd(opts.Home) + "\n"
+	return "Environment=" + quoteSystemdWord("REAMES_AGENT_HOME="+opts.Home) + "\n"
 }
 
 func launchdEnvironment(opts Options) string {
@@ -415,7 +471,7 @@ func systemctlArgs(scope string, args ...string) []string {
 
 func systemdWorkingDirectory(opts Options) string {
 	if opts.Dir != "" {
-		return quoteSystemd(opts.Dir)
+		return escapeSystemdPath(opts.Dir)
 	}
 	return "~"
 }
@@ -440,8 +496,27 @@ func joinQuoted(args []string) string {
 	return strings.Join(out, " ")
 }
 
-func quoteSystemd(arg string) string {
-	return strconv.Quote(arg)
+func joinSystemdExecArgs(args []string) string {
+	out := make([]string, 0, len(args))
+	for _, arg := range args {
+		out = append(out, quoteSystemdExecArg(arg))
+	}
+	return strings.Join(out, " ")
+}
+
+func quoteSystemdExecArg(value string) string {
+	return quoteSystemdWord(strings.ReplaceAll(value, `$`, `$$`))
+}
+
+func quoteSystemdWord(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `"`, `\"`)
+	value = strings.ReplaceAll(value, `%`, `%%`)
+	return `"` + value + `"`
+}
+
+func escapeSystemdPath(path string) string {
+	return strings.ReplaceAll(path, "%", "%%")
 }
 
 func joinWindowsQuoted(args []string) string {

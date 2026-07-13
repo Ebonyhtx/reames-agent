@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	ghOwner        = "esengine"
-	ghRepo         = "DeepSeek-Reames Agent"
+	ghOwner        = "Ebonyhtx"
+	ghRepo         = "reames-agent"
 	ghAPIReleases  = "https://api.github.com/repos/" + ghOwner + "/" + ghRepo + "/releases"
 	ghDownloadBase = "https://github.com/" + ghOwner + "/" + ghRepo + "/releases/download"
 	upgradeTimeout = 60 * time.Second
@@ -106,16 +106,10 @@ func upgradeCommand(args []string, version string) int {
 	}
 
 	// 5. Find the asset for the current platform.
-	base := fmt.Sprintf("reamesAgent-%s-%s", runtime.GOOS, runtime.GOARCH)
-	var asset *ghAsset
-	for i := range rel.Assets {
-		if strings.HasPrefix(rel.Assets[i].Name, base) {
-			asset = &rel.Assets[i]
-			break
-		}
-	}
+	assetName := releaseAssetName(runtime.GOOS, runtime.GOARCH)
+	asset := findReleaseAsset(rel.Assets, assetName)
 	if asset == nil {
-		fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeNoAssetFmt+"\n", i18n.M.ErrorPrefix, base)
+		fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeNoAssetFmt+"\n", i18n.M.ErrorPrefix, assetName)
 		return 1
 	}
 
@@ -143,10 +137,7 @@ func upgradeCommand(args []string, version string) int {
 	}
 
 	// 9. Extract binary from archive.
-	binName := "reames-agent"
-	if runtime.GOOS == "windows" {
-		binName = "reamesAgent.exe"
-	}
+	binName := releaseBinaryName(runtime.GOOS)
 	binary, err := extractBinary(archiveData, asset.Name, binName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeExtractFailed+"\n", i18n.M.ErrorPrefix, err)
@@ -162,6 +153,30 @@ func upgradeCommand(args []string, version string) int {
 
 	fmt.Println(upgradeSuccessMessage(cur, latest))
 	return 0
+}
+
+func releaseAssetName(goos, goarch string) string {
+	extension := ".tar.gz"
+	if goos == "windows" {
+		extension = ".zip"
+	}
+	return fmt.Sprintf("reames-agent-%s-%s%s", goos, goarch, extension)
+}
+
+func releaseBinaryName(goos string) string {
+	if goos == "windows" {
+		return "reames-agent.exe"
+	}
+	return "reames-agent"
+}
+
+func findReleaseAsset(assets []ghAsset, name string) *ghAsset {
+	for i := range assets {
+		if assets[i].Name == name {
+			return &assets[i]
+		}
+	}
+	return nil
 }
 
 func upgradeSuccessMessage(cur, latest string) string {

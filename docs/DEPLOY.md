@@ -52,6 +52,8 @@ Gateway TOML、不创建 synthetic `.env`，doctor 应准确报告 secret 环境
 因此适合作为无真实 IM secret 的服务器部署预检；加上
 `--out artifacts/headless-gateway-smoke.json` 可保存机器可读的部署预检证据。
 
+Linux 上还可运行 `python scripts/smoke_gateway_service_linux.py --binary /absolute/path/to/reames-agent --out artifacts/gateway-systemd-user-smoke.json`，用随机本地 Feishu webhook challenge 验证真实 systemd user service 的安装、同名重装、status、restart、stop/start、journal 和 uninstall。该 smoke 不需要真实 Provider/IM 凭据，但必须在已经运行的 systemd user manager 中执行；报告中的 `linger_state` 和 `external_blocked` 必须保留，登录会话内通过不等于 SSH 断开或云主机重启后仍常驻。
+
 未来开启稳定 GitHub Release 后，安装器已经预留“预构建产物优先”的显式路径，但默认仍保持源码构建，避免在 pre-stable 阶段给用户制造已经发布稳定二进制的错觉：
 
 ```bash
@@ -177,9 +179,10 @@ reames-agent gateway run --home "$REAMES_AGENT_HOME"  # 前台运行，适合调
 reames-agent gateway doctor --deep --home "$REAMES_AGENT_HOME"  # 只读检查配置、凭据 env、访问控制和连接记录
 reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project
 reames-agent gateway install --start-now --home "$REAMES_AGENT_HOME"    # 安装并启动后台服务
-reames-agent gateway status                 # 查看后台服务和平台连接状态
+reames-agent gateway status                 # 查看 service-manager 状态
 reames-agent gateway restart                # 重启服务，不影响用户 CLI 终端
 reames-agent gateway uninstall              # 卸载后台服务
+journalctl --user -u reames-agent-gateway.service -f  # Linux 实时日志
 ```
 
 `gateway install --dry-run` 会在计划里显示绑定的 `REAMES_AGENT_HOME` 和
@@ -193,7 +196,7 @@ Scheduled Task 不会嵌入 secret 值。
 - 每个平台 adapter 独立连接和重连；
 - 每个 chat/user/thread 映射到自己的 Agent session；
 - 支持审批、取消、状态、恢复和 allowlist；
-- 日志写入 Reames Agent home；
+- 前台运行时日志写入 stderr；service-manager 部署时由 journald、launchd 或 Scheduled Task 对应日志设施接管；
 - 与 CLI、Desktop、serve 共用配置、凭据、会话和权限模型，但进程互相隔离。
 
 实现前的临时服务器方案：
@@ -362,4 +365,4 @@ reames-agent gateway status
 
 `reames-agent bot start` 仍可作为旧命名兼容入口。推荐形态是：SSH/CLI/TUI 用于交互式任务，`gateway run` 用于前台调试，`gateway install/start/status` 管理独立后台 Gateway service。这样社交通道进程不会占用或阻塞用户 CLI、Desktop 或可选的 `serve` 入口。
 
-当前仍需在干净 Linux 服务器上补一次完整实战验证：安装二进制、配置 `REAMES_AGENT_HOME` 与真实 provider key、安装并执行 gateway service 的 start/status/restart/status、检查日志、验证 feedback 运维产物，再发送一次真实渠道消息并完成 `/status` 或 `/current` 往返。credential-free smoke 不能替代这项证据。
+WSL2 已完成登录会话内的 credential-free systemd user service 实启、同名重装、status/restart/stop/start、journal、webhook readiness 和卸载验证，但测试用户 `Linger=no`。当前仍需在干净 Linux 服务器上以 linger-enabled 低权限用户补 logout/reboot 常驻、真实 provider key、feedback 运维产物、备份恢复和升级回滚演练，再发送一次真实渠道消息并完成 `/status` 或 `/current` 往返。credential-free smoke 不能替代这些外部证据。

@@ -428,9 +428,11 @@ func TestGatewayDoctorHomeInspectsSelectedReamesAgentHome(t *testing.T) {
 func TestGatewayInstallDryRunPrintsPlan(t *testing.T) {
 	isolateCLIConfigHome(t)
 	t.Setenv("REAMES_AGENT_HOME", filepath.Join(t.TempDir(), "agent-home"))
+	executable := filepath.Join(t.TempDir(), "reames-agent")
+	workDir := filepath.Join(t.TempDir(), "work repo")
 
 	out := captureStdout(t, func() {
-		if rc := Run([]string{"gateway", "install", "--dry-run", "--exe", "reames-agent", "--channels", "feishu", "--dir", "F:\\work repo"}, "test-version"); rc != 0 {
+		if rc := Run([]string{"gateway", "install", "--dry-run", "--exe", executable, "--channels", "feishu", "--dir", workDir}, "test-version"); rc != 0 {
 			t.Fatalf("gateway install --dry-run rc = %d, want 0", rc)
 		}
 	})

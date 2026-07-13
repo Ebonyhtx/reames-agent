@@ -97,6 +97,7 @@ jobs:
         run: |
           python scripts/check_deploy_contracts.py
           python -m unittest scripts.test_smoke_gateway_headless -v
+          python -m unittest scripts.test_smoke_gateway_service_linux -v
       - name: Validate Unix installer dry-run
         run: |
           python -m unittest scripts.test_installers.InstallerDryRunTests.test_unix_gateway_dry_run_preserves_home_and_credential_boundary -v

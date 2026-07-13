@@ -442,13 +442,16 @@ func TestBotAdapterBindingsIsolateRequestedFeishuDomain(t *testing.T) {
 }
 
 func TestGatewayInstallDryRunPrintsServiceLifecyclePlan(t *testing.T) {
+	root := t.TempDir()
+	executable := filepath.Join(root, "reames-agent")
+	workDir := filepath.Join(root, "project")
 	out := captureStdout(t, func() {
 		rc := gatewayCommand([]string{
 			"install",
 			"--dry-run",
-			"--exe", "/opt/reames-agent/bin/reames-agent",
+			"--exe", executable,
 			"--channels", "feishu",
-			"--dir", "/srv/project",
+			"--dir", workDir,
 			"--model", "deepseek-pro",
 			"--start-now",
 		}, "test-version")
@@ -464,7 +467,7 @@ func TestGatewayInstallDryRunPrintsServiceLifecyclePlan(t *testing.T) {
 		"--channels",
 		"feishu",
 		"--dir",
-		"/srv/project",
+		filepath.Base(workDir),
 		"--model",
 		"deepseek-pro",
 	} {

@@ -23,6 +23,8 @@
 - Added `reames-agent gateway run` as the foreground social gateway entrypoint; `reames-agent bot start` remains compatible.
 - Added `reames-agent gateway install/start/stop/restart/status/uninstall` with dry-run service plans for systemd, launchd, and Windows Scheduled Task.
 - Added `reames-agent gateway setup` for atomic, idempotent, fail-closed headless connection configuration across Feishu/Lark, QQ, and WeChat. It accepts secret environment-variable names only and provides redacted no-write previews.
+- Hardened Linux Gateway user services with directive-aware systemd rendering, absolute persistent paths, atomic unit writes, immediate same-name reinstall restart/readiness checks, correct uninstall reload ordering, and a credential-free installed lifecycle smoke.
+- Repaired CLI self-upgrade discovery to use the official Reames Agent repository and exact six-platform GoReleaser archive/binary names.
 - Replaced inherited Hermes installer scripts with Reames source-build installers for Unix, PowerShell, and CMD.
 - Audited Reasonix, Hermes, and Reames install/deploy entrypoints; fixed stale Chinese README gateway and API-key examples.
 

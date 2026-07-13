@@ -107,6 +107,7 @@
 | [Setup Gateway preflight audit](audits/2026-07-10-setup-gateway-preflight.md) | `reames-agent setup` 完成后提示 Gateway doctor 和 service dry-run 的交接证据 |
 | [M6 Gateway setup 配置闭环审计](audits/2026-07-13-m6-gateway-setup.md) | 四渠道无界面配置、secret-env-only、访问控制、原子幂等更新与部署纵向 fixture 证据 |
 | [M6 clean-node 运维预检审计](audits/2026-07-13-m6-clean-node-operations-preflight.md) | schema v2 credential-free 实际二进制预检、全 home 敏感值扫描与真实外部证据非声明 |
+| [M6 Linux systemd user lifecycle audit](audits/2026-07-13-m6-linux-systemd-lifecycle.md) | WSL2 真实 user-service 安装、同名重装、restart/stop/start/uninstall、webhook readiness 与升级资产合同证据 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 

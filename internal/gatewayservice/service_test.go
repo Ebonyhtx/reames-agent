@@ -28,7 +28,8 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 		`"--channels" "feishu,qq"`,
 		`"--dir" "/srv/work repo"`,
 		`"--model" "deepseek-pro"`,
-		`Environment=REAMES_AGENT_HOME="/home/reames/.reames-agent"`,
+		`Environment="REAMES_AGENT_HOME=/home/reames/.reames-agent"`,
+		`WorkingDirectory=/srv/work repo`,
 		"/home/reames/.reames-agent/.env",
 		"service definitions do not embed secret values",
 		"Restart=always",
@@ -40,11 +41,35 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 	if strings.Contains(unit, "DEEPSEEK_API_KEY") || strings.Contains(unit, "FEISHU_BOT_APP_SECRET") {
 		t.Fatalf("systemd unit embedded secret env names:\n%s", unit)
 	}
-	if len(plan.Commands) != 2 || plan.Commands[0].Name != "systemctl" {
-		t.Fatalf("commands = %#v, want daemon-reload + enable", plan.Commands)
+	if len(plan.Commands) != 4 || plan.Commands[0].Name != "systemctl" {
+		t.Fatalf("commands = %#v, want daemon-reload + enable + restart + is-active", plan.Commands)
 	}
-	if got := strings.Join(plan.Commands[1].Args, " "); !strings.Contains(got, "enable --now reames-agent-gateway.service") {
-		t.Fatalf("enable command args = %q", got)
+	formatted := FormatPlan(plan)
+	for _, want := range []string{
+		`"systemctl" "--user" "enable" "reames-agent-gateway.service"`,
+		`"systemctl" "--user" "restart" "reames-agent-gateway.service"`,
+		`"systemctl" "--user" "is-active" "--quiet" "reames-agent-gateway.service"`,
+	} {
+		if !strings.Contains(formatted, want) {
+			t.Fatalf("install plan missing %q:\n%s", want, formatted)
+		}
+	}
+}
+
+func TestSystemdUnitEscapesDirectiveSpecificValues(t *testing.T) {
+	unit := systemdUnit(Options{
+		Executable: `/opt/Reames Agent/reames-agent`,
+		Home:       `/home/reames/$USER/100% ready`,
+		Dir:        `/srv/work "quoted"`,
+	})
+	for _, want := range []string{
+		`ExecStart="/opt/Reames Agent/reames-agent" "gateway" "run"`,
+		`Environment="REAMES_AGENT_HOME=/home/reames/$USER/100%% ready"`,
+		`WorkingDirectory=/srv/work "quoted"`,
+	} {
+		if !strings.Contains(unit, want) {
+			t.Fatalf("systemd unit missing %q:\n%s", want, unit)
+		}
 	}
 }
 
@@ -267,6 +292,42 @@ func TestInvalidScopeIsRejected(t *testing.T) {
 	}
 }
 
+func TestInstallRejectsRelativePersistentPaths(t *testing.T) {
+	tests := []struct {
+		name string
+		goos string
+		opts Options
+	}{
+		{
+			name: "linux executable",
+			goos: "linux",
+			opts: Options{Action: "install", Executable: "bin/reames-agent", Home: "/home/reames/.reames-agent", Dir: "/srv/work"},
+		},
+		{
+			name: "linux home",
+			goos: "linux",
+			opts: Options{Action: "install", Executable: "/opt/reames-agent", Home: ".reames-agent", Dir: "/srv/work"},
+		},
+		{
+			name: "linux working directory",
+			goos: "linux",
+			opts: Options{Action: "install", Executable: "/opt/reames-agent", Home: "/home/reames/.reames-agent", Dir: "work"},
+		},
+		{
+			name: "windows working directory",
+			goos: "windows",
+			opts: Options{Action: "install", Executable: `C:\Program Files\Reames Agent\reames-agent.exe`, Home: `C:\Users\reames\.reames-agent`, Dir: "work"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := BuildPlan(tt.goos, tt.opts); err == nil || !strings.Contains(err.Error(), "must be an absolute") {
+				t.Fatalf("BuildPlan error = %v, want absolute-path rejection", err)
+			}
+		})
+	}
+}
+
 func TestUninstallPlanDeletesServiceDefinition(t *testing.T) {
 	linux, err := BuildPlan("linux", Options{Action: "uninstall", Executable: "reames-agent"})
 	if err != nil {
@@ -274,6 +335,16 @@ func TestUninstallPlanDeletesServiceDefinition(t *testing.T) {
 	}
 	if len(linux.Deletes) != 1 || !strings.HasSuffix(linux.Deletes[0], "reames-agent-gateway.service") {
 		t.Fatalf("linux uninstall deletes = %#v, want service unit", linux.Deletes)
+	}
+	if len(linux.Commands) != 1 || len(linux.PostCommands) != 1 {
+		t.Fatalf("linux uninstall commands = %#v post = %#v, want disable then post-delete reload", linux.Commands, linux.PostCommands)
+	}
+	formatted := FormatPlan(linux)
+	disableAt := strings.Index(formatted, `"disable" "--now"`)
+	deleteAt := strings.Index(formatted, "delete ")
+	reloadAt := strings.Index(formatted, `run after delete: "systemctl" "--user" "daemon-reload"`)
+	if disableAt < 0 || deleteAt <= disableAt || reloadAt <= deleteAt {
+		t.Fatalf("linux uninstall order must be disable -> delete -> daemon-reload:\n%s", formatted)
 	}
 
 	darwin, err := BuildPlan("darwin", Options{Action: "uninstall", Executable: "reames-agent"})

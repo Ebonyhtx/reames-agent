@@ -40,25 +40,66 @@ func TestVerifyChecksum(t *testing.T) {
 	hash := hex.EncodeToString(sum[:])
 
 	t.Run("match", func(t *testing.T) {
-		checksumFile := []byte(fmt.Sprintf("%s  reamesAgent-linux-amd64.tar.gz\n", hash))
-		if err := verifyChecksum(content, "reamesAgent-linux-amd64.tar.gz", checksumFile); err != nil {
+		checksumFile := []byte(fmt.Sprintf("%s  reames-agent-linux-amd64.tar.gz\n", hash))
+		if err := verifyChecksum(content, "reames-agent-linux-amd64.tar.gz", checksumFile); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("mismatch", func(t *testing.T) {
-		checksumFile := []byte(fmt.Sprintf("%s  reamesAgent-linux-amd64.tar.gz\n", "0000000000000000000000000000000000000000000000000000000000000000"))
-		if err := verifyChecksum(content, "reamesAgent-linux-amd64.tar.gz", checksumFile); err == nil {
+		checksumFile := []byte(fmt.Sprintf("%s  reames-agent-linux-amd64.tar.gz\n", "0000000000000000000000000000000000000000000000000000000000000000"))
+		if err := verifyChecksum(content, "reames-agent-linux-amd64.tar.gz", checksumFile); err == nil {
 			t.Error("expected checksum mismatch error")
 		}
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		checksumFile := []byte(fmt.Sprintf("%s  reamesAgent-darwin-arm64.tar.gz\n", hash))
-		if err := verifyChecksum(content, "reamesAgent-linux-amd64.tar.gz", checksumFile); err == nil {
+		checksumFile := []byte(fmt.Sprintf("%s  reames-agent-darwin-arm64.tar.gz\n", hash))
+		if err := verifyChecksum(content, "reames-agent-linux-amd64.tar.gz", checksumFile); err == nil {
 			t.Error("expected not-found error")
 		}
 	})
+}
+
+func TestOfficialReleaseContract(t *testing.T) {
+	if ghAPIReleases != "https://api.github.com/repos/Ebonyhtx/reames-agent/releases" {
+		t.Fatalf("release API = %q, want official Reames Agent repository", ghAPIReleases)
+	}
+	if ghDownloadBase != "https://github.com/Ebonyhtx/reames-agent/releases/download" {
+		t.Fatalf("download base = %q, want official Reames Agent repository", ghDownloadBase)
+	}
+
+	tests := []struct {
+		goos, goarch string
+		archive      string
+		binary       string
+	}{
+		{"linux", "amd64", "reames-agent-linux-amd64.tar.gz", "reames-agent"},
+		{"linux", "arm64", "reames-agent-linux-arm64.tar.gz", "reames-agent"},
+		{"darwin", "amd64", "reames-agent-darwin-amd64.tar.gz", "reames-agent"},
+		{"darwin", "arm64", "reames-agent-darwin-arm64.tar.gz", "reames-agent"},
+		{"windows", "amd64", "reames-agent-windows-amd64.zip", "reames-agent.exe"},
+		{"windows", "arm64", "reames-agent-windows-arm64.zip", "reames-agent.exe"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.goos+"-"+tt.goarch, func(t *testing.T) {
+			if got := releaseAssetName(tt.goos, tt.goarch); got != tt.archive {
+				t.Fatalf("releaseAssetName = %q, want %q", got, tt.archive)
+			}
+			if got := releaseBinaryName(tt.goos); got != tt.binary {
+				t.Fatalf("releaseBinaryName = %q, want %q", got, tt.binary)
+			}
+		})
+	}
+
+	assets := []ghAsset{
+		{Name: "reames-agent-linux-amd64.tar.gz.sig"},
+		{Name: "reames-agent-linux-amd64.tar.gz"},
+	}
+	asset := findReleaseAsset(assets, releaseAssetName("linux", "amd64"))
+	if asset == nil || asset.Name != "reames-agent-linux-amd64.tar.gz" {
+		t.Fatalf("findReleaseAsset selected %#v, want exact archive match", asset)
+	}
 }
 
 func TestUpgradeSuccessMessageIncludesCurrentAndLatestVersions(t *testing.T) {

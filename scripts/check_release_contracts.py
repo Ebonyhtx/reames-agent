@@ -90,6 +90,12 @@ def check_goreleaser_contract(failures: list[str]) -> None:
     require("goarch: [amd64, arm64]" in config, "GoReleaser must build amd64/arm64.", failures)
     require("SHA256SUMS" in config, "GoReleaser must emit SHA256SUMS.", failures)
 
+    upgrade = read("internal/cli/upgrade.go")
+    require('ghOwner        = "Ebonyhtx"' in upgrade, "CLI upgrade must use the official Reames Agent GitHub owner.", failures)
+    require('ghRepo         = "reames-agent"' in upgrade, "CLI upgrade must use the official Reames Agent repository.", failures)
+    require('fmt.Sprintf("reames-agent-%s-%s%s"' in upgrade, "CLI upgrade asset names must match GoReleaser archives.", failures)
+    require('return "reames-agent.exe"' in upgrade, "CLI upgrade must extract the GoReleaser Windows binary name.", failures)
+
 
 def check_release_docs(failures: list[str]) -> None:
     releasing = read("docs/RELEASING.md")
