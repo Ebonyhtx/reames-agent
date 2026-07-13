@@ -95,6 +95,7 @@
 | [M3 Desktop 重启恢复竞态审计](audits/2026-07-13-m3-desktop-restart-restore-race.md) | 首次 tab 快照恢复门闩、canonical event log 并发采样与 Windows UIA 重启恢复证据 |
 | [M3 多语言按需加载与预算审计](audits/2026-07-13-m3-lazy-locale-budget.md) | 保存语言优先与 auto 系统语言预取、运行期原子切换、双 locale chunk 合同与本地化首启预算 |
 | [M3 主首启图与设置 CSS 拆分审计](audits/2026-07-13-m3-main-graph-css-split.md) | browser mock、VirtualMenu/TanStack、SettingsPanelRoute CSS 延迟加载与递归首次使用图预算 |
+| [M3 安装器历史完整性后续审计](audits/2026-07-13-m3-installed-history-completeness.md) | 部分 controller 投影、0 B checkpoint、canonical event log 完整性比较与 production interaction/accessibility 证据边界 |
 | [外部 Agent 批次验收](audits/2026-07-11-external-agent-batch-acceptance.md) | 大批提交的保留/撤回范围、真实性修复和全量本地验证 |
 | [Control transport boundary ratchet audit](audits/2026-07-10-control-boundary-ratchet.md) | Desktop/CLI/Serve/Bot/ACP 对 runtime 内部直连的精确依赖基线和 CI 收缩棘轮 |
 | [Gateway service home binding audit](audits/2026-07-09-gateway-home-binding.md) | 后台 gateway service 与 CLI 共用 `REAMES_AGENT_HOME` 的部署一致性证据 |
@@ -102,9 +103,10 @@
 | [Gateway command contract audit](audits/2026-07-10-gateway-command-contract.md) | IM Gateway 平台无关命令解析、`/current` 状态别名和前缀误触发防回归证据 |
 | [Installer release artifact mode audit](audits/2026-07-09-installer-release-mode.md) | 安装器默认源码构建、显式 release artifact 模式与 SHA256SUMS 校验证据 |
 | [Installer dry-run contract audit](audits/2026-07-10-installer-dry-run-contract.md) | 一键安装器 dry-run 的 Gateway home 绑定、`.env` 凭据来源和 release 校验契约 |
-| [Headless Gateway smoke audit](audits/2026-07-10-headless-gateway-smoke.md) | 隔离 `REAMES_AGENT_HOME` 下真实 CLI 的 setup 零落盘/原子幂等、缺失凭据 doctor 与 service dry-run 烟测 |
+| [Headless CLI、Gateway 与反馈 smoke 审计](audits/2026-07-10-headless-gateway-smoke.md) | 隔离 `REAMES_AGENT_HOME` 下真实 CLI 的 setup/doctor/service plan、localhost Provider 会话与 feedback 本地维护链路 |
 | [Setup Gateway preflight audit](audits/2026-07-10-setup-gateway-preflight.md) | `reames-agent setup` 完成后提示 Gateway doctor 和 service dry-run 的交接证据 |
 | [M6 Gateway setup 配置闭环审计](audits/2026-07-13-m6-gateway-setup.md) | 四渠道无界面配置、secret-env-only、访问控制、原子幂等更新与部署纵向 fixture 证据 |
+| [M6 clean-node 运维预检审计](audits/2026-07-13-m6-clean-node-operations-preflight.md) | schema v2 credential-free 实际二进制预检、全 home 敏感值扫描与真实外部证据非声明 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 
