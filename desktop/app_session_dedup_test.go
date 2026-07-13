@@ -437,6 +437,7 @@ func installStubControllerWithCurrentPrompt(t *testing.T, app *App, tab *Workspa
 		SystemPrompt:  sys,
 		Sink:          event.Discard,
 	})
+	t.Cleanup(ctrl.Close)
 	tab.Ctrl = ctrl
 	app.bindControllerDisplayRecorder(ctrl)
 	return ctrl

@@ -71,6 +71,7 @@ commit `7d07c89` 已推送；普通 CI run `29216174519` 为 8/8、CodeQL run `2
 - M6：新增 `internal/gatewaysetup` 和 `reames-agent gateway setup`，覆盖 Feishu/Lark、QQ、Weixin、workspace/model/connection ID、secret-env-only、显式 access、`--reset-access`、redacted dry-run、严格 TOML、原子幂等写入。
 - M6 Linux：修复 uninstall 的 disable → delete → daemon-reload 顺序、systemd 指令编码和绝对路径门禁；unit 使用 crash-safe 原子写，`install --start-now` 会显式 enable/restart/is-active。同名重装后旧 webhook 必须失效、新 webhook 必须生效。
 - 发布：修复 CLI updater 的官方仓库、`reames-agent-<os>-<arch>` 精确资产名和 Windows `reames-agent.exe` 包内名称，并纳入 release contract。
+- CI 稳定性：hosted Windows 暴露 Fork/Rewind workspace prompt 测试的 1 秒 turn 等待上限和 stub controller 清理缺口；测试现为替换 controller 注册 `Close`，并仅在慢 runner 失败路径上放宽到 10 秒。
 - 测试：四渠道、状态保留、byte-for-byte 幂等、损坏配置和误传 secret fail closed、setup → doctor → service dry-run；ready-event/missed-ready/pinned page；完整前端与本地 production Wails native/accessibility/interaction。
 
 candidate `29262541971` 的 installer SHA-256 为 `2BDAA4E9FC5E87CD498A9E528D49F480B8277B7D9B4514081EF11E2C674D6C19`，installed executable SHA-256 为 `927FEF13D22B0F609DDC72FA35D0BF07451CAC6402BA2CBEBA38456E8D8010F1`；Windows native 7.031/2.016 秒通过。interaction 跳转前 marker present 但 offscreen、assistant absent，调用问题 1 后双消息 present + onscreen；strict accessibility 的 skip focus、dialog、背景隔离、dialog focus、opener focus 和 strict invoke 均通过。三份 smoke 均无边界变化和 errors。

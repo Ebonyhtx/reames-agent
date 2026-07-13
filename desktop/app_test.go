@@ -7982,7 +7982,7 @@ func startNonCooperativeSessionJob(t *testing.T, jm *jobs.Manager, sessionPath s
 
 func waitNotRunning(t *testing.T, ctrl control.SessionAPI) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for ctrl.Running() {
 		if time.Now().After(deadline) {
 			t.Fatal("controller still running")
