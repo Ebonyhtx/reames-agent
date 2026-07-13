@@ -81,6 +81,8 @@ type Store struct {
 	restoreWrite func(string, []byte, os.FileMode) error
 	// stateWrite is a fault-injection seam for durable truncate tests.
 	stateWrite func(string, []byte, os.FileMode) error
+	// recordWrite is a fault-injection seam for turn/runtime snapshot tests.
+	recordWrite func(string, []byte, os.FileMode) error
 }
 
 type seenFile struct {
@@ -180,26 +182,31 @@ func checkpointTurnFromFilename(name string) (int, bool) {
 
 // Begin opens a checkpoint for a new user turn, finalizing the previous one. The
 // prompt labels it in the picker; msgIndex is the conversation-rewind boundary.
-func (s *Store) Begin(turn int, prompt string, msgIndex int, runtime ...json.RawMessage) {
+func (s *Store) Begin(turn int, prompt string, msgIndex int, runtime ...json.RawMessage) error {
 	var state json.RawMessage
 	if len(runtime) > 0 {
 		state = runtime[0]
 	}
-	s.BeginAnchored(turn, prompt, msgIndex, "", state)
+	return s.BeginAnchored(turn, prompt, msgIndex, "", state)
 }
 
 // BeginAnchored records the digest of the transcript prefix ending at msgIndex.
 // Conversation rewind and fork require this anchor to detect same-length
 // rewrites that an integer boundary alone cannot distinguish.
-func (s *Store) BeginAnchored(turn int, prompt string, msgIndex int, transcriptDigest string, runtime json.RawMessage) {
+func (s *Store) BeginAnchored(turn int, prompt string, msgIndex int, transcriptDigest string, runtime json.RawMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if turn < 0 || msgIndex < 0 || turn < s.nextTurn {
-		return
+		return fmt.Errorf("invalid checkpoint boundary turn=%d message_index=%d next_turn=%d", turn, msgIndex, s.nextTurn)
 	}
 	if s.cur != nil {
 		s.done = append(s.done, s.cur)
 	}
+	s.cur = nil
+	s.seen = map[string]bool{}
+	s.seenFiles = nil
+	oldNext := s.nextTurn
+	oldFrom, oldTo, oldHas := s.retiredFrom, s.retiredTo, s.hasRetired
 	if turn >= s.nextTurn {
 		s.nextTurn = turn + 1
 	}
@@ -212,17 +219,22 @@ func (s *Store) BeginAnchored(turn int, prompt string, msgIndex int, transcriptD
 		}
 	}
 	if err := s.persistStateLocked(); err != nil {
+		s.nextTurn = oldNext
+		s.retiredFrom, s.retiredTo, s.hasRetired = oldFrom, oldTo, oldHas
 		slog.Warn("checkpoint: persist allocation state", "turn", turn, "err", err)
-		return
+		return fmt.Errorf("persist checkpoint allocation state: %w", err)
 	}
 	s.stateCorrupt = false
-	s.cur = &Checkpoint{
+	candidate := &Checkpoint{
 		Turn: turn, Time: time.Now(), Prompt: prompt, MsgIndex: msgIndex,
 		TranscriptDigest: transcriptDigest, Runtime: append(json.RawMessage(nil), runtime...),
 	}
-	s.seen = map[string]bool{}
-	s.seenFiles = nil
-	s.persist(s.cur)
+	if err := s.persist(candidate); err != nil {
+		slog.Warn("checkpoint: persist turn boundary", "turn", turn, "err", err)
+		return err
+	}
+	s.cur = candidate
+	return nil
 }
 
 // Runtime returns the session runtime projection captured at turn start.
@@ -275,9 +287,9 @@ func (s *Store) Bounds() map[int]int {
 
 // Snapshot records the pre-edit state of the file a writer is about to change.
 // Only the first touch of a path in the current turn is kept (that is its
-// turn-start content). A no-op before the first Begin.
-func (s *Store) Snapshot(ch diff.Change) {
-	s.snapshot(ch, nil)
+// turn-start content). It fails when no durable turn is active.
+func (s *Store) Snapshot(ch diff.Change) error {
+	return s.snapshot(ch, nil)
 }
 
 // CurrentTurn returns the active checkpoint turn. Callers can use the value
@@ -293,28 +305,27 @@ func (s *Store) CurrentTurn() (int, bool) {
 
 // SnapshotForTurn records ch only while turn remains the active checkpoint.
 // It prevents a late background writer from landing in a newer turn.
-func (s *Store) SnapshotForTurn(turn int, ch diff.Change) {
-	s.snapshot(ch, &turn)
+func (s *Store) SnapshotForTurn(turn int, ch diff.Change) error {
+	return s.snapshot(ch, &turn)
 }
 
-func (s *Store) snapshot(ch diff.Change, expectedTurn *int) {
+func (s *Store) snapshot(ch diff.Change, expectedTurn *int) error {
 	if ch.Path == "" {
-		return
+		return fmt.Errorf("checkpoint snapshot path is empty")
 	}
 	abs, pathErr := safePath(s.root, ch.Path)
+	if pathErr != nil {
+		return fmt.Errorf("checkpoint snapshot path %q: %w", ch.Path, pathErr)
+	}
 	identity := canonicalPathIdentity(ch.Path)
 	var identityInfo os.FileInfo
-	if pathErr == nil {
-		identity = canonicalPathIdentity(abs)
-		identityInfo, _ = os.Stat(abs)
-	}
+	identity = canonicalPathIdentity(abs)
+	identityInfo, _ = os.Stat(abs)
 	var enc *fileenc.Kind
 	var mode *uint32
 	if ch.Kind != diff.Create {
-		if pathErr == nil {
-			enc = s.detectEncoding(abs)
-		}
-		if info, err := os.Lstat(abs); pathErr == nil && err == nil && info.Mode().IsRegular() {
+		enc = s.detectEncoding(abs)
+		if info, err := os.Lstat(abs); err == nil && info.Mode().IsRegular() {
 			m := uint32(info.Mode().Perm())
 			mode = &m
 		}
@@ -322,8 +333,14 @@ func (s *Store) snapshot(ch diff.Change, expectedTurn *int) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.cur == nil || (expectedTurn != nil && s.cur.Turn != *expectedTurn) || s.seen[identity] {
-		return
+	if s.cur == nil {
+		return fmt.Errorf("checkpoint snapshot has no active turn")
+	}
+	if expectedTurn != nil && s.cur.Turn != *expectedTurn {
+		return fmt.Errorf("checkpoint turn %d is no longer active (current turn %d)", *expectedTurn, s.cur.Turn)
+	}
+	if s.seen[identity] {
+		return nil
 	}
 	var content *string
 	if ch.Kind != diff.Create { // create == file didn't exist → leave nil (restore deletes)
@@ -341,7 +358,13 @@ func (s *Store) snapshot(ch diff.Change, expectedTurn *int) {
 	s.seen[identity] = true
 	s.seenFiles = append(s.seenFiles, seenFile{identity: identity, info: identityInfo, snap: snap})
 	s.cur.Files = append(s.cur.Files, snap)
-	s.persist(s.cur)
+	if err := s.persist(s.cur); err != nil {
+		delete(s.seen, identity)
+		s.seenFiles = s.seenFiles[:len(s.seenFiles)-1]
+		s.cur.Files = s.cur.Files[:len(s.cur.Files)-1]
+		return err
+	}
+	return nil
 }
 
 func (s *Store) detectEncoding(p string) *fileenc.Kind {
@@ -357,17 +380,22 @@ func (s *Store) detectEncoding(p string) *fileenc.Kind {
 	return &enc
 }
 
-func (s *Store) persist(c *Checkpoint) {
+func (s *Store) persist(c *Checkpoint) error {
 	if s.dir == "" {
-		return
+		return nil
 	}
 	b, err := json.Marshal(c)
 	if err != nil {
-		return
+		return fmt.Errorf("marshal checkpoint turn %d: %w", c.Turn, err)
 	}
-	if err := fileutil.AtomicWriteFile(filepath.Join(s.dir, fmt.Sprintf("turn-%d.json", c.Turn)), b, 0o644); err != nil {
-		slog.Warn("checkpoint: persist failed", "turn", c.Turn, "err", err)
+	writeFile := s.recordWrite
+	if writeFile == nil {
+		writeFile = fileutil.AtomicWriteFile
 	}
+	if err := writeFile(filepath.Join(s.dir, fmt.Sprintf("turn-%d.json", c.Turn)), b, 0o644); err != nil {
+		return fmt.Errorf("persist checkpoint turn %d: %w", c.Turn, err)
+	}
+	return nil
 }
 
 func (s *Store) persistStateLocked() error {

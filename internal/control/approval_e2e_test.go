@@ -195,6 +195,90 @@ func TestApprovalRealWriteFilePreviewDiskAndRewindEndToEnd(t *testing.T) {
 	}
 }
 
+func TestPreviewableWriterFailsClosedOnRecoveryPersistenceFailures(t *testing.T) {
+	tests := []struct {
+		name   string
+		inject func(*Controller, string) error
+		want   string
+	}{
+		{
+			name: "checkpoint",
+			inject: func(_ *Controller, sessionPath string) error {
+				return os.WriteFile(ckptDir(sessionPath), []byte("not a directory"), 0o644)
+			},
+			want: "checkpoint snapshot",
+		},
+		{
+			name: "runtime sidecar",
+			inject: func(c *Controller, _ string) error {
+				c.goals.stateWrite = func(string, []byte, os.FileMode) error {
+					return errors.New("injected runtime persistence failure")
+				}
+				return nil
+			},
+			want: "runtime sidecar",
+		},
+		{
+			name: "in-flight marker",
+			inject: func(c *Controller, sessionPath string) error {
+				// A stale marker must not satisfy the current turn's writer gate
+				// when persisting the replacement marker fails.
+				if err := agent.MarkSessionInFlightTurn(sessionPath, 999, false); err != nil {
+					return err
+				}
+				c.inFlightMark = func(string, int, bool) error {
+					return errors.New("injected in-flight marker failure")
+				}
+				return nil
+			},
+			want: "in-flight turn marker",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspace := t.TempDir()
+			sessionDir := t.TempDir()
+			target := filepath.Join(workspace, "blocked.txt")
+			args, err := json.Marshal(map[string]string{"path": "blocked.txt", "content": "must not land"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			reg := tool.NewRegistry()
+			for _, tl := range (builtin.Workspace{Dir: workspace}).Tools("write_file") {
+				reg.Add(tl)
+			}
+			prov := &scriptedTurns{turns: [][]provider.Chunk{
+				toolCallTurn("w-blocked", "write_file", string(args)),
+				textTurn("The write was blocked."),
+			}}
+			ag := agent.New(prov, reg, agent.NewSession("sys"), agent.Options{}, event.Discard)
+			c := New(Options{Runner: ag, Executor: ag, SessionDir: sessionDir, WorkspaceRoot: workspace})
+			sessionPath := agent.NewSessionPath(sessionDir, "persistence-gate")
+			c.SetSessionPath(sessionPath)
+			if err := tt.inject(c, sessionPath); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := c.runTurnWithRaw(context.Background(), "write the file", "write the file"); err != nil {
+				t.Fatalf("runTurnWithRaw: %v", err)
+			}
+			if _, err := os.Stat(target); !os.IsNotExist(err) {
+				t.Fatalf("writer touched disk despite %s failure: %v", tt.name, err)
+			}
+			var toolResult string
+			for _, msg := range c.History() {
+				if msg.Role == provider.RoleTool && msg.ToolCallID == "w-blocked" {
+					toolResult = msg.Content
+				}
+			}
+			if !strings.Contains(toolResult, tt.want) {
+				t.Fatalf("tool result = %q, want %q persistence context", toolResult, tt.want)
+			}
+		})
+	}
+}
+
 // TestApprovalTimeoutDeniesWhenUnanswered verifies a positive ApprovalTimeout
 // turns an unanswered prompt into a denial (error) instead of blocking forever
 // (#4626, #4402). Ask shares the same wait context as tool-approval prompts.

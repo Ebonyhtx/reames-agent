@@ -113,6 +113,7 @@
 | [M4 子代理共享委派预算审计](audits/2026-07-14-m4-delegation-budget.md) | 整棵委派树共享并发、step、token、duration 与 cancellation 预算，覆盖嵌套、后台任务和 compaction |
 | [M4 可写子代理 Effects 归并审计](audits/2026-07-14-m4-writable-subagent-effects.md) | child read/write/command receipt、父 checkpoint、mutation boundary 与跨 turn 防污染证据 |
 | [M4 跨 continuation 最小证据审计](audits/2026-07-14-m4-durable-evidence.md) | writer epoch、项目检查哈希/tool-call 引用、exact-anchor crash-resume 与失效语义 |
+| [M4 Writer 持久化门禁审计](audits/2026-07-14-m4-writer-persistence-gate.md) | checkpoint/runtime/in-flight 写失败阻断、stale marker 拒绝、重试回滚、session handoff 串行与进程中断恢复边界 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 

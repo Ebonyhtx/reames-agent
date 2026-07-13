@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 
 	"reames-agent/internal/diff"
 	"reames-agent/internal/evidence"
@@ -20,7 +21,7 @@ type subagentEffectLedger struct {
 // this boundary.
 type SubagentEffects struct {
 	ledgers      []subagentEffectLedger
-	preEditHooks []func(diff.Change)
+	preEditHooks []PreEditHook
 	parentCallID string
 }
 
@@ -78,15 +79,17 @@ func appendUniqueLedger(dst []subagentEffectLedger, ledger *evidence.Ledger, gen
 	return append(dst, subagentEffectLedger{ledger: ledger, generation: generation})
 }
 
-func (e *SubagentEffects) snapshot(change diff.Change) {
+func (e *SubagentEffects) snapshot(change diff.Change) error {
 	if e == nil {
-		return
+		return nil
 	}
+	var snapshotErr error
 	for _, hook := range e.preEditHooks {
 		if hook != nil {
-			hook(change)
+			snapshotErr = errors.Join(snapshotErr, hook(change))
 		}
 	}
+	return snapshotErr
 }
 
 func (e *SubagentEffects) record(receipt evidence.Receipt, depth int) {

@@ -286,7 +286,14 @@ func TestRestoreRejectsPathEscape(t *testing.T) {
 	write(t, outside, "keep")
 	s := New("", root)
 	s.Begin(0, "p", 0)
-	s.Snapshot(diff.Change{Path: outside, Kind: diff.Modify, OldText: "hacked"})
+	if err := s.Snapshot(diff.Change{Path: outside, Kind: diff.Modify, OldText: "hacked"}); err == nil {
+		t.Fatal("Snapshot should reject a path outside the workspace")
+	}
+	// RestoreCode independently rejects an untrusted record loaded from disk.
+	content := "hacked"
+	s.mu.Lock()
+	s.cur.Files = append(s.cur.Files, FileSnap{Path: outside, Content: &content})
+	s.mu.Unlock()
 	if _, _, err := s.RestoreCode(0); err == nil {
 		t.Fatal("RestoreCode should reject a path outside the workspace")
 	}
@@ -557,6 +564,80 @@ func TestRuntimeProjectionPersistsWithCheckpoint(t *testing.T) {
 	got, ok := reloaded.Runtime(0)
 	if !ok || !bytes.Equal(got, runtimeState) {
 		t.Fatalf("runtime projection = %s ok=%v, want %s", got, ok, runtimeState)
+	}
+}
+
+func TestBeginPersistenceFailureLeavesNoActiveCheckpoint(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "session.ckpt")
+	s := New(dir, t.TempDir())
+	s.stateWrite = func(string, []byte, os.FileMode) error {
+		return errors.New("injected allocation persistence failure")
+	}
+
+	if err := s.Begin(0, "edit", 0); err == nil || !strings.Contains(err.Error(), "injected") {
+		t.Fatalf("Begin error = %v, want injected persistence failure", err)
+	}
+	if _, ok := s.CurrentTurn(); ok {
+		t.Fatal("failed checkpoint allocation left an active turn")
+	}
+	if err := s.Snapshot(diff.Change{Path: filepath.Join(s.root, "blocked.txt"), Kind: diff.Create}); err == nil {
+		t.Fatal("Snapshot succeeded without a durable active checkpoint")
+	}
+}
+
+func TestSnapshotPersistenceFailureRollsBackAndCanRetry(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "session.ckpt")
+	path := filepath.Join(root, "retry.txt")
+	s := New(dir, root)
+	if err := s.Begin(0, "edit", 0); err != nil {
+		t.Fatal(err)
+	}
+	s.recordWrite = func(string, []byte, os.FileMode) error {
+		return errors.New("injected checkpoint record failure")
+	}
+	change := diff.Change{Path: path, Kind: diff.Create}
+	if err := s.Snapshot(change); err == nil || !strings.Contains(err.Error(), "injected") {
+		t.Fatalf("Snapshot error = %v, want injected persistence failure", err)
+	}
+	if got := s.List(); len(got) != 1 || len(got[0].Paths) != 0 {
+		t.Fatalf("failed snapshot remained in memory: %+v", got)
+	}
+	if got := New(dir, root).List(); len(got) != 1 || len(got[0].Paths) != 0 {
+		t.Fatalf("failed snapshot reached disk: %+v", got)
+	}
+
+	s.recordWrite = nil
+	if err := s.Snapshot(change); err != nil {
+		t.Fatalf("Snapshot retry: %v", err)
+	}
+	if got := New(dir, root).List(); len(got) != 1 || len(got[0].Paths) != 1 || got[0].Paths[0] != path {
+		t.Fatalf("retried snapshot was not durable: %+v", got)
+	}
+}
+
+func TestPersistedSnapshotRecoversPartialWriterAfterProcessRestart(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "session.ckpt")
+	path := filepath.Join(root, "interrupted.txt")
+	write(t, path, "before")
+	s := New(dir, root)
+	if err := s.Begin(0, "edit", 0, json.RawMessage(`{"version":2,"status":"running"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Snapshot(diff.Change{Path: path, Kind: diff.Modify, OldText: "before"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a process disappearing after the writer touched the destination
+	// but before it could append a tool result or run in-process cleanup.
+	write(t, path, "partial-after-crash")
+	reloaded := New(dir, root)
+	if _, _, err := reloaded.RestoreCode(0); err != nil {
+		t.Fatalf("RestoreCode after restart: %v", err)
+	}
+	if got := read(t, path); got != "before" {
+		t.Fatalf("restored content = %q, want pre-writer bytes", got)
 	}
 }
 

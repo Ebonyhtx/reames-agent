@@ -166,8 +166,11 @@ func TestBackgroundWritableSubagentCarriesEffectsIntoJobContext(t *testing.T) {
 	parentLedger := evidence.NewLedger()
 	var changes []diff.Change
 	effects := &SubagentEffects{
-		ledgers:      []subagentEffectLedger{{ledger: parentLedger, generation: parentLedger.Generation()}},
-		preEditHooks: []func(diff.Change){func(change diff.Change) { changes = append(changes, change) }},
+		ledgers: []subagentEffectLedger{{ledger: parentLedger, generation: parentLedger.Generation()}},
+		preEditHooks: []PreEditHook{func(change diff.Change) error {
+			changes = append(changes, change)
+			return nil
+		}},
 		parentCallID: "task-background",
 	}
 	manager := jobs.NewManager(event.Discard)
@@ -204,6 +207,49 @@ func TestSubagentEffectsRejectReceiptsFromAnOlderParentTurn(t *testing.T) {
 	effects.record(evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Paths: []string{"late.txt"}}, 1)
 	if parentLedger.Len() != 0 {
 		t.Fatalf("old-turn child receipt contaminated current turn: %+v", parentLedger.Receipts(10))
+	}
+}
+
+func TestPreEditPersistenceFailureBlocksWriter(t *testing.T) {
+	workspace := t.TempDir()
+	path := filepath.Join(workspace, "blocked.txt")
+	reg := tool.NewRegistry()
+	writer := &effectsWriter{}
+	reg.Add(writer)
+	a := New(nil, reg, NewSession("sys"), Options{}, event.Discard)
+	a.SetPreEditHook(func(diff.Change) error {
+		return errors.New("injected durable snapshot failure")
+	})
+
+	outcome := a.executeOne(context.Background(), provider.ToolCall{
+		ID: "write-blocked", Name: "write_file", Arguments: mustEffectWriterArgs(t, path, "should not land"),
+	})
+	if !outcome.blocked || !strings.Contains(outcome.output, "injected durable snapshot failure") {
+		t.Fatalf("writer outcome = %+v, want persistence refusal", outcome)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("blocked writer touched disk: %v", err)
+	}
+}
+
+func TestAncestorPreEditPersistenceFailureBlocksChildWriter(t *testing.T) {
+	workspace := t.TempDir()
+	path := filepath.Join(workspace, "child-blocked.txt")
+	reg := tool.NewRegistry()
+	reg.Add(&effectsWriter{})
+	effects := &SubagentEffects{preEditHooks: []PreEditHook{func(diff.Change) error {
+		return errors.New("injected ancestor checkpoint failure")
+	}}}
+	a := New(nil, reg, NewSession("sys"), Options{SubagentEffects: effects}, event.Discard)
+
+	outcome := a.executeOne(context.Background(), provider.ToolCall{
+		ID: "child-write-blocked", Name: "write_file", Arguments: mustEffectWriterArgs(t, path, "should not land"),
+	})
+	if !outcome.blocked || !strings.Contains(outcome.output, "injected ancestor checkpoint failure") {
+		t.Fatalf("child writer outcome = %+v, want ancestor persistence refusal", outcome)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("blocked child writer touched disk: %v", err)
 	}
 }
 

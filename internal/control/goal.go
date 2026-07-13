@@ -401,10 +401,11 @@ func (g *goalMachine) snapshotData(runtime goalRuntimeProjection) json.RawMessag
 
 // writeState persists pre-marshaled goal-state bytes to disk, OFF mu and
 // serialized by writeMu so concurrent saves don't interleave or land out of
-// order. Best-effort: failures are logged, not surfaced.
-func (g *goalMachine) writeState(path string, data []byte, revision uint64) {
+// order. Callers that guard a writer propagate the returned error; background
+// refresh callers may keep their existing best-effort behavior.
+func (g *goalMachine) writeState(path string, data []byte, revision uint64) error {
 	if path == "" || data == nil {
-		return
+		return nil
 	}
 	g.writeMu.Lock()
 	defer g.writeMu.Unlock()
@@ -417,21 +418,21 @@ func (g *goalMachine) writeState(path string, data []byte, revision uint64) {
 		g.writtenRevision = make(map[string]uint64)
 	}
 	if last, exists := g.writtenRevision[path]; exists && revision <= last {
-		return
+		return nil
 	}
 	if current, err := os.ReadFile(path); err == nil {
 		state, parseErr := ReadGoalStateForResume(current)
 		if parseErr != nil {
 			slog.Warn("controller: preserve unreadable goal state", "path", path, "err", parseErr)
-			return
+			return fmt.Errorf("preserve unreadable goal state %q: %w", path, parseErr)
 		}
 		if revision <= state.Revision {
 			g.writtenRevision[path] = state.Revision
-			return
+			return nil
 		}
 	} else if !os.IsNotExist(err) {
 		slog.Warn("controller: inspect goal state revision", "path", path, "err", err)
-		return
+		return fmt.Errorf("inspect goal state revision %q: %w", path, err)
 	}
 	writeFile := g.stateWrite
 	if writeFile == nil {
@@ -439,20 +440,22 @@ func (g *goalMachine) writeState(path string, data []byte, revision uint64) {
 	}
 	if err := writeFile(path, data, 0o644); err != nil {
 		slog.Warn("controller: write goal state", "err", err)
-		return
+		return fmt.Errorf("write goal state %q: %w", path, err)
 	}
 	g.writtenRevision[path] = revision
+	return nil
 }
 
 // persistRuntime writes the current Goal FSM together with Plan/Todo state.
-func (g *goalMachine) persistRuntime(runtime goalRuntimeProjection) {
+func (g *goalMachine) persistRuntime(runtime goalRuntimeProjection) error {
 	g.mu.Lock()
 	g.revision++
 	path, data, revision, ok := g.buildStateLocked(runtime)
 	g.mu.Unlock()
 	if ok {
-		g.writeState(path, data, revision)
+		return g.writeState(path, data, revision)
 	}
+	return nil
 }
 
 // readSessionState reads one persisted runtime projection. Invalid or future
@@ -714,11 +717,11 @@ func (c *Controller) goalRuntimeProjection() goalRuntimeProjection {
 // persistGoalState writes a freshly built goal state to disk, off c.mu. The
 // executor guard preserves the original behavior of skipping persistence when
 // no executor is attached.
-func (c *Controller) persistGoalState(path string, data []byte, revision uint64, ok bool) {
+func (c *Controller) persistGoalState(path string, data []byte, revision uint64, ok bool) error {
 	if !ok || c.executor == nil {
-		return
+		return nil
 	}
-	c.goals.writeState(path, data, revision)
+	return c.goals.writeState(path, data, revision)
 }
 
 func (c *Controller) restoreSessionRuntime(sessionPath string) {

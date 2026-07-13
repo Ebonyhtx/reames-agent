@@ -830,6 +830,15 @@ and are revalidated against an exact transcript anchor on recovery. Shell
 commands have no static file preview, so child `bash` has the same per-file
 checkpoint limitation as root `bash`.
 
+Before a previewable file writer runs, Reames must durably record its checkpoint.
+Root turns also refresh the runtime sidecar and verify that the in-flight turn
+marker matches the current session and turn boundary, rather than accepting a
+stale marker from an older turn.
+If any of those writes fail, the tool is blocked before it touches the target and
+the failure is returned to the model. Retry only after the session/checkpoint
+storage is writable again. This protects the recoverable pre-edit bytes across a
+process interruption; it does not make arbitrary shell writes crash-atomic.
+
 Use `read_only_task` when planning needs isolated, deeper research without
 granting write-capable delegation. Use `read_only_skill` when the same need is
 best expressed through an existing skill. Both run ephemeral read-only

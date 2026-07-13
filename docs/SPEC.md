@@ -381,6 +381,15 @@ func (p Policy) Decide(toolName string, readOnly bool, args json.RawMessage) Dec
   reference only when the transcript count/digest matches exactly and the ID
   resolves to that check's latest successful tool result after the latest
   writer. Append/rewrite divergence and child-only receipts require rechecking.
+  Previewable writers have a separate pre-execution recovery gate: checkpoint
+  allocation/record persistence must succeed, and root writers also require the
+  latest runtime sidecar plus an in-flight turn marker on the same session path
+  that matches the current message boundary and preserve-user mode; a stale
+  marker from an older turn cannot satisfy this gate.
+  Preview, persistence, or ancestor callback failure returns a blocked tool
+  result without calling the writer. A persisted pre-edit record can restore a
+  partial file write after process restart; this does not make shell commands
+  with unknown targets or the transcript/runtime/workspace set crash-atomic.
   Goals that look like long-horizon research, debugging, optimization, or
   implementation work automatically add an AutoResearch protocol to the same
   transient active-goal user block. AutoResearch is a Goal strategy, not a

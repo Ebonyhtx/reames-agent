@@ -11,15 +11,23 @@ func TestCheckpointManagerScopedSnapshotRejectsLaterTurn(t *testing.T) {
 	root := t.TempDir()
 	var manager checkpointManager
 	manager.rebind("", root)
-	manager.begin("first", 0, "digest-0", nil)
+	if err := manager.begin("first", 0, "digest-0", nil); err != nil {
+		t.Fatal(err)
+	}
 	lateSnapshot := manager.scopedSnapshot()
 	if lateSnapshot == nil {
 		t.Fatal("scoped snapshot was not captured")
 	}
-	manager.begin("second", 2, "digest-1", nil)
+	if err := manager.begin("second", 2, "digest-1", nil); err != nil {
+		t.Fatal(err)
+	}
 
-	lateSnapshot(diff.Change{Path: filepath.Join(root, "late.txt"), Kind: diff.Create})
-	manager.snapshot(diff.Change{Path: filepath.Join(root, "current.txt"), Kind: diff.Create})
+	if err := lateSnapshot(diff.Change{Path: filepath.Join(root, "late.txt"), Kind: diff.Create}); err == nil {
+		t.Fatal("late checkpoint hook accepted a retired turn")
+	}
+	if err := manager.snapshot(diff.Change{Path: filepath.Join(root, "current.txt"), Kind: diff.Create}); err != nil {
+		t.Fatal(err)
+	}
 	metas := manager.list()
 	if len(metas) != 2 {
 		t.Fatalf("checkpoint metadata = %+v, want two turns", metas)

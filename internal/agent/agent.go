@@ -291,11 +291,11 @@ type Agent struct {
 	// file's pre-edit content. Only fires for non-ReadOnly tools that implement
 	// tool.Previewer (so bash, whose targets are unknowable, is never tracked).
 	// Set via SetPreEditHook.
-	onPreEdit func(diff.Change)
+	onPreEdit PreEditHook
 	// subagentPreEditHook captures a turn-scoped checkpoint callback for a
 	// delegated writer. The controller uses it to reject late background effects
 	// after another turn or session has become current.
-	subagentPreEditHook func() func(diff.Change)
+	subagentPreEditHook func() PreEditHook
 
 	// jobs, when non-nil, is the session's background-job manager. executeOne
 	// stamps it onto each tool call's context so the background tools (bash
@@ -444,6 +444,10 @@ type Agent struct {
 	// error for the failure-only storm breaker to see.
 	repeatSuccessCounts map[string]int
 }
+
+// PreEditHook must durably capture the recovery state required before a
+// previewable writer may execute. Returning an error blocks the writer.
+type PreEditHook func(diff.Change) error
 
 // KeepPolicy is a bitmask controlling which messages are preserved beyond the
 // recent tail during compaction.
@@ -711,11 +715,11 @@ func (a *Agent) SetMemoryQueue(q memory.Queue) { a.memQueue = q }
 
 // SetPreEditHook installs the pre-edit snapshot hook (see onPreEdit). The
 // controller wires it to its per-session checkpoint store; nil disables capture.
-func (a *Agent) SetPreEditHook(fn func(diff.Change)) { a.onPreEdit = fn }
+func (a *Agent) SetPreEditHook(fn PreEditHook) { a.onPreEdit = fn }
 
 // SetSubagentPreEditHookFactory installs the turn-scoped checkpoint callback
 // factory used only by delegated writers. Root writers keep using SetPreEditHook.
-func (a *Agent) SetSubagentPreEditHookFactory(fn func() func(diff.Change)) {
+func (a *Agent) SetSubagentPreEditHookFactory(fn func() PreEditHook) {
 	a.subagentPreEditHook = fn
 }
 
@@ -2707,20 +2711,39 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	}
 	// Checkpoint the file this writer is about to change, so the turn can be
 	// rewound. Fires after all gating (the edit is cleared to run) and only for
-	// tools that can describe their change; a Preview error means the edit will
-	// likely fail anyway, so we skip rather than snapshot a stale state.
+	// tools that can describe their change. Preview or persistence failure blocks
+	// the writer: executing without a trustworthy pre-edit state would make a
+	// process interruption indistinguishable from an untracked mutation.
 	mutationAttempt := false
 	if !t.ReadOnly() {
 		if pv, ok := t.(tool.Previewer); ok {
-			if change, perr := pv.Preview(json.RawMessage(call.Arguments)); perr == nil {
-				mutationAttempt = true
-				if a.onPreEdit != nil {
-					a.onPreEdit(change)
-				}
-				if a.subagentEffects != nil {
-					a.subagentEffects.snapshot(change)
+			change, perr := pv.Preview(json.RawMessage(call.Arguments))
+			if perr != nil {
+				return toolOutcome{
+					output:  fmt.Sprintf("blocked: writer preview failed: %v", perr),
+					blocked: true,
+					errMsg:  "blocked: writer preview failed",
 				}
 			}
+			if a.onPreEdit != nil {
+				if err := a.onPreEdit(change); err != nil {
+					return toolOutcome{
+						output:  fmt.Sprintf("blocked: writer recovery state could not be persisted: %v", err),
+						blocked: true,
+						errMsg:  "blocked: writer recovery persistence failed",
+					}
+				}
+			}
+			if a.subagentEffects != nil {
+				if err := a.subagentEffects.snapshot(change); err != nil {
+					return toolOutcome{
+						output:  fmt.Sprintf("blocked: writer recovery state could not be persisted: %v", err),
+						blocked: true,
+						errMsg:  "blocked: writer recovery persistence failed",
+					}
+				}
+			}
+			mutationAttempt = true
 		}
 	}
 	cctx := withCallContext(ctx, call.ID, a.sink, a.asker, a.planMode.Load())

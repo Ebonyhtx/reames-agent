@@ -35,7 +35,6 @@ import (
 	"reames-agent/internal/checkpoint"
 	"reames-agent/internal/command"
 	"reames-agent/internal/config"
-	"reames-agent/internal/diff"
 	"reames-agent/internal/event"
 	"reames-agent/internal/evidence"
 	"reames-agent/internal/guardian"
@@ -118,6 +117,11 @@ type Controller struct {
 	onSessionRecovered                func(SessionRecoveryInfo) error
 	// branchMetaSave is a fault-injection seam for post-transcript branch cleanup tests.
 	branchMetaSave func(string, agent.BranchMeta) error
+	// inFlightMark is a fault-injection seam for writer crash-window tests.
+	inFlightMark func(string, int, bool) error
+	inFlightMu   sync.Mutex
+	inFlightPath string
+	inFlightTurn *agent.InFlightTurnMeta
 
 	// balanceURL/balanceKey target the active provider's optional wallet-balance
 	// endpoint (empty when the provider declares none). Captured at build so a
@@ -469,9 +473,7 @@ func New(opts Options) *Controller {
 	cmdsInit := opts.Commands
 	c.commands.Store(&cmdsInit)
 	if c.executor != nil {
-		c.executor.SetPreEditHook(func(ch diff.Change) {
-			c.checkpoints.snapshot(ch)
-		})
+		c.executor.SetPreEditHook(c.persistWriterRecoveryState)
 		c.executor.SetSubagentPreEditHookFactory(c.checkpoints.scopedSnapshot)
 		c.executor.SetMemoryQueue(c)
 	}
@@ -573,7 +575,9 @@ func (c *Controller) beginCheckpoint(input string) {
 		return
 	}
 	messageCount, transcriptDigest := c.executor.Session().TranscriptAnchor()
-	c.checkpoints.begin(input, messageCount, transcriptDigest, c.goals.snapshotData(c.goalRuntimeProjection()))
+	if err := c.checkpoints.begin(input, messageCount, transcriptDigest, c.goals.snapshotData(c.goalRuntimeProjection())); err != nil {
+		slog.Warn("controller: begin checkpoint", "err", err)
+	}
 }
 
 // --- commands (frontend → controller) ---
@@ -3271,16 +3275,68 @@ func (c *Controller) messageCount() int {
 
 func (c *Controller) markInFlightTurn(startMessageIndex int, preserveUser bool) {
 	path := c.SessionPath()
+	c.inFlightMu.Lock()
+	c.inFlightPath = ""
+	c.inFlightTurn = nil
+	c.inFlightMu.Unlock()
 	if path == "" {
 		return
 	}
-	if err := agent.MarkSessionInFlightTurn(path, startMessageIndex, preserveUser); err != nil {
-		slog.Warn("controller: mark in-flight turn", "err", err)
+	mark := c.inFlightMark
+	if mark == nil {
+		mark = agent.MarkSessionInFlightTurn
 	}
+	if err := mark(path, startMessageIndex, preserveUser); err != nil {
+		slog.Warn("controller: mark in-flight turn", "err", err)
+		return
+	}
+	c.inFlightMu.Lock()
+	c.inFlightPath = path
+	c.inFlightTurn = &agent.InFlightTurnMeta{
+		StartMessageIndex: startMessageIndex,
+		PreserveUser:      preserveUser,
+	}
+	c.inFlightMu.Unlock()
+}
+
+func (c *Controller) ensureInFlightTurnPersisted() error {
+	path := c.SessionPath()
+	if path == "" {
+		return nil
+	}
+	c.inFlightMu.Lock()
+	expectedPath := c.inFlightPath
+	var expected *agent.InFlightTurnMeta
+	if c.inFlightTurn != nil {
+		copy := *c.inFlightTurn
+		expected = &copy
+	}
+	c.inFlightMu.Unlock()
+	if expected == nil || expectedPath != path {
+		return fmt.Errorf("session %q has no current in-flight turn marker", agent.BranchID(path))
+	}
+	meta, ok, err := agent.LoadBranchMeta(path)
+	if err != nil {
+		return err
+	}
+	if !ok || meta.InFlightTurn == nil {
+		return fmt.Errorf("session %q has no durable in-flight turn marker", agent.BranchID(path))
+	}
+	if meta.InFlightTurn.StartMessageIndex != expected.StartMessageIndex || meta.InFlightTurn.PreserveUser != expected.PreserveUser {
+		return fmt.Errorf(
+			"session %q in-flight turn marker does not match current turn",
+			agent.BranchID(path),
+		)
+	}
+	return nil
 }
 
 func (c *Controller) clearInFlightTurn() {
 	path := c.SessionPath()
+	c.inFlightMu.Lock()
+	c.inFlightPath = ""
+	c.inFlightTurn = nil
+	c.inFlightMu.Unlock()
 	if path == "" {
 		return
 	}

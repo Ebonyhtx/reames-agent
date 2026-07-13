@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"reames-agent/internal/agent"
 	"reames-agent/internal/checkpoint"
 	"reames-agent/internal/diff"
 )
@@ -60,18 +61,28 @@ func (m *checkpointManager) enabled() bool {
 
 // begin opens a checkpoint for the turn about to run, recording msgIndex as the
 // conversation-rewind boundary. No-op when checkpoints are disabled.
-func (m *checkpointManager) begin(input string, msgIndex int, transcriptDigest string, runtime json.RawMessage) {
+func (m *checkpointManager) begin(input string, msgIndex int, transcriptDigest string, runtime json.RawMessage) error {
 	m.mu.Lock()
 	store := m.store
 	if store == nil {
 		m.mu.Unlock()
-		return
+		return nil
 	}
 	turn := m.turn
-	m.turn++
-	m.bound[turn] = msgIndex
 	m.mu.Unlock()
-	store.BeginAnchored(turn, input, msgIndex, transcriptDigest, runtime)
+	err := store.BeginAnchored(turn, input, msgIndex, transcriptDigest, runtime)
+	next := store.NextTurn()
+	m.mu.Lock()
+	if m.store == store {
+		m.turn = next
+		if err == nil {
+			m.bound[turn] = msgIndex
+		} else {
+			delete(m.bound, turn)
+		}
+	}
+	m.mu.Unlock()
+	return err
 }
 
 func (m *checkpointManager) runtime(turn int) (json.RawMessage, bool) {
@@ -144,19 +155,20 @@ func (m *checkpointManager) restoreCode(turn int) (written, deleted []string, er
 
 // snapshot records a pre-edit file change into the open checkpoint — the
 // executor's pre-edit hook. No-op when disabled.
-func (m *checkpointManager) snapshot(ch diff.Change) {
+func (m *checkpointManager) snapshot(ch diff.Change) error {
 	m.mu.Lock()
 	store := m.store
 	m.mu.Unlock()
-	if store != nil {
-		store.Snapshot(ch)
+	if store == nil {
+		return nil
 	}
+	return store.Snapshot(ch)
 }
 
 // scopedSnapshot captures the current store and checkpoint turn for delegated
 // writers. A background child that finishes after a later turn starts cannot
 // append its pre-edit bytes to that later turn's checkpoint.
-func (m *checkpointManager) scopedSnapshot() func(diff.Change) {
+func (m *checkpointManager) scopedSnapshot() agent.PreEditHook {
 	m.mu.Lock()
 	store := m.store
 	m.mu.Unlock()
@@ -165,11 +177,35 @@ func (m *checkpointManager) scopedSnapshot() func(diff.Change) {
 	}
 	turn, ok := store.CurrentTurn()
 	if !ok {
-		return nil
+		return func(diff.Change) error {
+			return fmt.Errorf("checkpoint has no active turn")
+		}
 	}
-	return func(ch diff.Change) {
-		store.SnapshotForTurn(turn, ch)
+	return func(ch diff.Change) error {
+		return store.SnapshotForTurn(turn, ch)
 	}
+}
+
+// persistWriterRecoveryState is the root writer's fail-closed pre-edit gate.
+// The checkpoint captures workspace bytes and turn-start runtime; the sidecar
+// refresh captures the latest transcript anchor. The in-flight marker lets a
+// resumed process distinguish a partial turn from a completed one.
+func (c *Controller) persistWriterRecoveryState(ch diff.Change) error {
+	// A mid-turn autosave may recover onto a new session path and rebind the
+	// checkpoint store. Keep the checkpoint, sidecar, and marker on one path by
+	// sharing the same handoff lock used by snapshot recovery and session swaps.
+	c.snapshotMu.Lock()
+	defer c.snapshotMu.Unlock()
+	if err := c.checkpoints.snapshot(ch); err != nil {
+		return fmt.Errorf("checkpoint snapshot: %w", err)
+	}
+	if err := c.goals.persistRuntime(c.goalRuntimeProjection()); err != nil {
+		return fmt.Errorf("runtime sidecar: %w", err)
+	}
+	if err := c.ensureInFlightTurnPersisted(); err != nil {
+		return fmt.Errorf("in-flight turn marker: %w", err)
+	}
+	return nil
 }
 
 // truncateFrom renumbers future turns from `turn` and drops every boundary at or
