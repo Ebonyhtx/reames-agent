@@ -48,6 +48,35 @@ func TestSessionAdd(t *testing.T) {
 	}
 }
 
+func TestTranscriptAnchorIgnoresLeadingSystemRefresh(t *testing.T) {
+	original := NewSession("system v1")
+	original.Add(provider.Message{Role: provider.RoleUser, Content: "hello"})
+	original.Add(provider.Message{Role: provider.RoleAssistant, Content: "world"})
+	count, digest := original.TranscriptAnchor()
+
+	refreshed := NewSession("system v2")
+	refreshed.Add(provider.Message{Role: provider.RoleUser, Content: "hello"})
+	refreshed.Add(provider.Message{Role: provider.RoleAssistant, Content: "world"})
+	equal, extends := refreshed.CompareTranscriptAnchor(count, digest)
+	if !equal || extends {
+		t.Fatalf("refreshed system relation = equal %v extends %v", equal, extends)
+	}
+
+	refreshed.Add(provider.Message{Role: provider.RoleUser, Content: "new turn"})
+	equal, extends = refreshed.CompareTranscriptAnchor(count, digest)
+	if equal || !extends {
+		t.Fatalf("appended relation = equal %v extends %v", equal, extends)
+	}
+
+	diverged := NewSession("system v2")
+	diverged.Add(provider.Message{Role: provider.RoleUser, Content: "different"})
+	diverged.Add(provider.Message{Role: provider.RoleAssistant, Content: "world"})
+	equal, extends = diverged.CompareTranscriptAnchor(count, digest)
+	if equal || extends {
+		t.Fatalf("diverged relation = equal %v extends %v", equal, extends)
+	}
+}
+
 // --- Session.HasContent ---
 
 func TestHasContentEmpty(t *testing.T) {

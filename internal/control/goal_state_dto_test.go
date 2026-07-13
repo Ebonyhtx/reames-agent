@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"reames-agent/internal/evidence"
 )
 
-func TestGoalStateV1RoundTrip(t *testing.T) {
-	original := GoalStateV1{
+func TestGoalStateV2RoundTrip(t *testing.T) {
+	original := GoalStateV2{
 		Version:            GoalStateVersion,
 		Goal:               "fix the build",
 		Status:             GoalStatusRunning,
@@ -20,6 +22,8 @@ func TestGoalStateV1RoundTrip(t *testing.T) {
 		Blocks:             0,
 		Strict:             true,
 		Todos:              []evidence.TodoItem{{Content: "verify persistence", Status: "completed"}},
+		MessageCount:       4,
+		TranscriptDigest:   "abc123",
 	}
 
 	data, err := json.Marshal(original)
@@ -27,7 +31,7 @@ func TestGoalStateV1RoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var restored GoalStateV1
+	var restored GoalStateV2
 	if err := json.Unmarshal(data, &restored); err != nil {
 		t.Fatal(err)
 	}
@@ -47,10 +51,13 @@ func TestGoalStateV1RoundTrip(t *testing.T) {
 	if len(restored.Todos) != 1 || restored.Todos[0].Content != "verify persistence" {
 		t.Fatalf("Todos = %+v, want persisted todo", restored.Todos)
 	}
+	if restored.MessageCount != 4 || restored.TranscriptDigest != "abc123" {
+		t.Fatalf("transcript anchor = count %d digest %q", restored.MessageCount, restored.TranscriptDigest)
+	}
 }
 
-func TestGoalStateV1ToGoalStateAndBack(t *testing.T) {
-	v1 := GoalStateV1{
+func TestGoalStateV2ToGoalStateAndBack(t *testing.T) {
+	v2 := GoalStateV2{
 		Version:      GoalStateVersion,
 		Goal:         "audit security",
 		Status:       GoalStatusBlocked,
@@ -61,17 +68,17 @@ func TestGoalStateV1ToGoalStateAndBack(t *testing.T) {
 		Todos:        []evidence.TodoItem{{Content: "provide key", Status: "pending"}},
 	}
 
-	gs := v1.ToGoalState()
+	gs := v2.ToGoalState()
 	back := FromGoalState(gs)
 
-	if back.Goal != v1.Goal {
-		t.Fatalf("Goal round-trip: %q → %q", v1.Goal, back.Goal)
+	if back.Goal != v2.Goal {
+		t.Fatalf("Goal round-trip: %q → %q", v2.Goal, back.Goal)
 	}
-	if back.Status != v1.Status {
-		t.Fatalf("Status round-trip: %q → %q", v1.Status, back.Status)
+	if back.Status != v2.Status {
+		t.Fatalf("Status round-trip: %q → %q", v2.Status, back.Status)
 	}
-	if back.Block != v1.Block {
-		t.Fatalf("Block round-trip: %q → %q", v1.Block, back.Block)
+	if back.Block != v2.Block {
+		t.Fatalf("Block round-trip: %q → %q", v2.Block, back.Block)
 	}
 	if len(back.Todos) != 1 || back.Todos[0].Status != "pending" {
 		t.Fatalf("Todos round-trip: %+v", back.Todos)
@@ -83,16 +90,16 @@ func TestGoalStatePersistence(t *testing.T) {
 	path := filepath.Join(dir, "goal-state.json")
 
 	// Write.
-	state := GoalStateV1{
+	state := GoalStateV2{
 		Goal:   "test persistence",
 		Status: GoalStatusRunning,
 	}
-	if err := WriteGoalStateV1(path, state); err != nil {
+	if err := WriteGoalStateV2(path, state); err != nil {
 		t.Fatal(err)
 	}
 
 	// Read back.
-	restored, err := ReadGoalStateV1(path)
+	restored, err := ReadGoalStateV2(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +114,7 @@ func TestGoalStatePersistence(t *testing.T) {
 	}
 
 	// Non-existent file should return zero value.
-	missing, err := ReadGoalStateV1(filepath.Join(dir, "nonexistent.json"))
+	missing, err := ReadGoalStateV2(filepath.Join(dir, "nonexistent.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,8 +126,8 @@ func TestGoalStatePersistence(t *testing.T) {
 func TestGoalStateV0BackwardCompat(t *testing.T) {
 	// Version 0 (no version field) should be accepted.
 	v0Data := []byte(`{"goal":"old goal","status":"running","turns":3}`)
-	var state GoalStateV1
-	if err := json.Unmarshal(v0Data, &state); err != nil {
+	state, err := ReadGoalStateForResume(v0Data)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if state.Goal != "old goal" {
@@ -132,13 +139,9 @@ func TestGoalStateV0BackwardCompat(t *testing.T) {
 	if state.Turns != 3 {
 		t.Fatalf("Turns = %d", state.Turns)
 	}
-	// Version should default to 0.
-	if state.Version != 0 {
-		t.Fatalf("Version = %d, want 0 for v0 data", state.Version)
-	}
 }
 
-func TestGoalStateV1RejectsFutureVersion(t *testing.T) {
+func TestGoalStateV2RejectsFutureVersion(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "future.json")
 
@@ -147,7 +150,7 @@ func TestGoalStateV1RejectsFutureVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := ReadGoalStateV1(path)
+	_, err := ReadGoalStateV2(path)
 	if err == nil {
 		t.Fatal("should reject future version")
 	}
@@ -219,5 +222,237 @@ func TestReadGoalStateForResumeV0Fallback(t *testing.T) {
 	}
 	if gs.Status != GoalStatusBlocked {
 		t.Fatalf("Status = %q", gs.Status)
+	}
+}
+
+func TestGoalContinuationStateSurvivesCrashResume(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	runtime := goalRuntimeProjection{
+		todos:        []evidence.TodoItem{{Content: "wait for operator", Status: "in_progress"}},
+		messageCount: 4,
+	}
+	var first goalMachine
+	first.setStatePath(goalStatePath(sessionPath))
+	path, data, revision, ok := first.set("deploy safely", GoalResearchOff, "", runtime)
+	first.writeState(path, data, revision)
+	if !ok {
+		t.Fatal("initial goal state was not persisted")
+	}
+	for range 2 {
+		res := first.advance(goalAdvanceInput{
+			status: GoalStatusBlocked, reason: "operator approval", toolCalled: true,
+			todos: runtime.todos, messageCount: runtime.messageCount,
+		})
+		first.writeState(res.path, res.data, res.revision)
+		if res.notice != "" {
+			t.Fatalf("goal blocked before third identical report: %q", res.notice)
+		}
+	}
+
+	var resumed goalMachine
+	resumed.setStatePath(goalStatePath(sessionPath))
+	state, ok := resumed.restoreSessionState(sessionPath)
+	if !ok || state.Turns != 2 || state.Blocks != 2 || state.Block != "operator approval" {
+		t.Fatalf("restored continuation state = %+v, ok=%v", state, ok)
+	}
+	res := resumed.advance(goalAdvanceInput{
+		status: GoalStatusBlocked, reason: "operator approval", toolCalled: true,
+		todos: runtime.todos, messageCount: runtime.messageCount,
+	})
+	if res.notice != "goal blocked: operator approval" || resumed.statusForDisplay() != GoalStatusBlocked {
+		t.Fatalf("third blocker after resume = notice %q status %q", res.notice, resumed.statusForDisplay())
+	}
+}
+
+func TestGoalCompletionInterceptSurvivesCrashAndCannotOverrideEvidence(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	todos := []evidence.TodoItem{{Content: "run verification", Status: "in_progress"}}
+	var first goalMachine
+	first.setStatePath(goalStatePath(sessionPath))
+	path, data, revision, _ := first.set("ship", GoalResearchOff, "", goalRuntimeProjection{todos: todos})
+	first.writeState(path, data, revision)
+	res := first.advance(goalAdvanceInput{status: GoalStatusComplete, toolCalled: true, todos: todos})
+	first.writeState(res.path, res.data, res.revision)
+
+	var resumed goalMachine
+	resumed.setStatePath(goalStatePath(sessionPath))
+	state, ok := resumed.restoreSessionState(sessionPath)
+	if !ok || state.Intercepts != 1 || state.InterceptMsg == "" {
+		t.Fatalf("completion intercept did not survive: %+v ok=%v", state, ok)
+	}
+	res = resumed.advance(goalAdvanceInput{status: GoalStatusComplete, toolCalled: true, todos: todos})
+	if !res.cont || res.notice != "" || resumed.statusForDisplay() != GoalStatusRunning {
+		t.Fatalf("repeated completion bypassed evidence: result=%+v status=%q", res, resumed.statusForDisplay())
+	}
+}
+
+func TestGoalStateWriterRejectsOlderRevision(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "goal.json")
+	var first goalMachine
+	first.writeState(path, []byte(`{"version":2,"status":"running","revision":2}`), 2)
+	// A different controller/process has no in-memory writtenRevision entry. The
+	// disk revision must still prevent its stale write from winning.
+	var stale goalMachine
+	stale.writeState(path, []byte(`{"version":2,"status":"stopped","revision":1}`), 1)
+	state, err := ReadGoalStateV2(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Revision != 2 || state.Status != GoalStatusRunning {
+		t.Fatalf("older revision overwrote newer state: %+v", state)
+	}
+}
+
+func TestGoalStateWriterSerializesRevisionCheckAcrossControllers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "goal.json")
+	staleEntered := make(chan struct{})
+	releaseStale := make(chan struct{})
+	var stale goalMachine
+	stale.stateWrite = func(path string, data []byte, mode os.FileMode) error {
+		close(staleEntered)
+		<-releaseStale
+		return os.WriteFile(path, data, mode)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		stale.writeState(path, []byte(`{"version":2,"status":"stopped","revision":1}`), 1)
+	}()
+	<-staleEntered
+
+	freshDone := make(chan struct{})
+	go func() {
+		defer wg.Done()
+		var fresh goalMachine
+		fresh.writeState(path, []byte(`{"version":2,"status":"running","revision":2}`), 2)
+		close(freshDone)
+	}()
+	select {
+	case <-freshDone:
+		t.Fatal("newer writer bypassed the older writer's revision transaction")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseStale)
+	wg.Wait()
+
+	state, err := ReadGoalStateV2(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Revision != 2 || state.Status != GoalStatusRunning {
+		t.Fatalf("concurrent stale write won: %+v", state)
+	}
+}
+
+func TestGoalStateWriterPreservesMalformedSidecar(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "goal.json")
+	want := []byte(`{"version":"broken","status":"running"}`)
+	if err := os.WriteFile(path, want, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var machine goalMachine
+	machine.writeState(path, []byte(`{"version":2,"status":"stopped","revision":3}`), 3)
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("malformed sidecar was overwritten: %s", got)
+	}
+}
+
+func TestGoalTurnLimitSurvivesCrashResume(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	runtime := goalRuntimeProjection{messageCount: 3}
+	var first goalMachine
+	first.setStatePath(goalStatePath(sessionPath))
+	path, data, revision, _ := first.set("finish reliably", GoalResearchOff, "", runtime)
+	first.writeState(path, data, revision)
+	for range maxGoalAutoTurns - 1 {
+		res := first.advance(goalAdvanceInput{toolCalled: true, messageCount: runtime.messageCount})
+		first.writeState(res.path, res.data, res.revision)
+		if res.notice != "" {
+			t.Fatalf("goal stopped before turn limit: %q", res.notice)
+		}
+	}
+
+	var resumed goalMachine
+	resumed.setStatePath(goalStatePath(sessionPath))
+	state, ok := resumed.restoreSessionState(sessionPath)
+	if !ok || state.Turns != maxGoalAutoTurns-1 {
+		t.Fatalf("restored turn budget = %+v ok=%v", state, ok)
+	}
+	res := resumed.advance(goalAdvanceInput{toolCalled: true, messageCount: runtime.messageCount})
+	if res.notice != "goal continuation limit reached" || resumed.statusForDisplay() != GoalStatusBlocked {
+		t.Fatalf("turn limit after resume = result %+v status %q", res, resumed.statusForDisplay())
+	}
+}
+
+func TestGoalIdleReminderSurvivesCrashResume(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	var first goalMachine
+	first.setStatePath(goalStatePath(sessionPath))
+	path, data, revision, _ := first.set("make progress", GoalResearchOff, "", goalRuntimeProjection{})
+	first.writeState(path, data, revision)
+	res := first.advance(goalAdvanceInput{})
+	first.writeState(res.path, res.data, res.revision)
+
+	var resumed goalMachine
+	resumed.setStatePath(goalStatePath(sessionPath))
+	state, ok := resumed.restoreSessionState(sessionPath)
+	if !ok || state.IdleTurns != 1 {
+		t.Fatalf("restored idle budget = %+v ok=%v", state, ok)
+	}
+	res = resumed.advance(goalAdvanceInput{})
+	if !res.cont {
+		t.Fatalf("idle reminder should continue the goal: %+v", res)
+	}
+	state, err := ReadGoalStateForResume(res.data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.InterceptMsg == "" || state.IdleTurns != 0 {
+		t.Fatalf("second idle turn after resume = %+v", state)
+	}
+}
+
+func TestStrictGoalRequiresActualSelfCheckTurnAfterCrash(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	todos := []evidence.TodoItem{{Content: "verify release", Status: "completed"}}
+	runtime := goalRuntimeProjection{todos: todos, messageCount: 4}
+	var first goalMachine
+	first.setStatePath(goalStatePath(sessionPath))
+	path, data, revision, _ := first.set("ship", GoalResearchOff, "", runtime)
+	first.writeState(path, data, revision)
+	path, data, revision, _ = first.setStrict(true, runtime)
+	first.writeState(path, data, revision)
+	res := first.advance(goalAdvanceInput{status: GoalStatusComplete, toolCalled: true, todos: todos, messageCount: 4})
+	first.writeState(res.path, res.data, res.revision)
+
+	var resumed goalMachine
+	resumed.setStatePath(goalStatePath(sessionPath))
+	state, ok := resumed.restoreSessionState(sessionPath)
+	if !ok || !state.SelfCheckPending || state.InterceptMsg != goalSelfCheckTurn {
+		t.Fatalf("restored self-check phase = %+v ok=%v", state, ok)
+	}
+	// A normal turn that merely repeats completion cannot stand in for the
+	// host-issued strict self-check after a crash.
+	res = resumed.advance(goalAdvanceInput{status: GoalStatusComplete, toolCalled: true, todos: todos, messageCount: 6})
+	if !res.cont || resumed.statusForDisplay() != GoalStatusRunning {
+		t.Fatalf("ordinary completion bypassed self-check: result=%+v status=%q", res, resumed.statusForDisplay())
+	}
+	if msg, ok := resumed.takeIntercept(); !ok || msg != goalSelfCheckTurn {
+		t.Fatalf("self-check intercept = %q ok=%v", msg, ok)
+	}
+	res = resumed.advance(goalAdvanceInput{status: GoalStatusComplete, toolCalled: true, selfCheckTurn: true, todos: todos, messageCount: 8})
+	if res.notice != goalCompleteNotice || resumed.statusForDisplay() != GoalStatusComplete {
+		t.Fatalf("actual self-check did not complete: result=%+v status=%q", res, resumed.statusForDisplay())
 	}
 }

@@ -116,6 +116,8 @@ type Controller struct {
 	onRememberPlanModeReadOnlyCommand func(prefix string) PlanModeReadOnlyCommandTrustResult
 	sessionRecoveryMeta               func(SessionRecoveryRequest) SessionMeta
 	onSessionRecovered                func(SessionRecoveryInfo) error
+	// branchMetaSave is a fault-injection seam for post-transcript branch cleanup tests.
+	branchMetaSave func(string, agent.BranchMeta) error
 
 	// balanceURL/balanceKey target the active provider's optional wallet-balance
 	// endpoint (empty when the provider declares none). Captured at build so a
@@ -569,7 +571,8 @@ func (c *Controller) beginCheckpoint(input string) {
 	if c.executor == nil {
 		return
 	}
-	c.checkpoints.begin(input, len(c.executor.Session().Messages))
+	messageCount, transcriptDigest := c.executor.Session().TranscriptAnchor()
+	c.checkpoints.begin(input, messageCount, transcriptDigest, c.goals.snapshotData(c.goalRuntimeProjection()))
 }
 
 // --- commands (frontend → controller) ---
@@ -723,8 +726,8 @@ func (c *Controller) toolWasCalledLastTurn() bool {
 }
 
 func (c *Controller) stopGoal(status string) {
-	path, data, ok := c.goals.stop(status, c.goalTodos())
-	c.persistGoalState(path, data, ok)
+	path, data, revision, ok := c.goals.stop(status, c.goalRuntimeProjection())
+	c.persistGoalState(path, data, revision, ok)
 }
 
 // lastAssistantText returns the content of the most recent assistant message with
@@ -1357,31 +1360,7 @@ func (c *Controller) notice(text string) {
 // headless `reames-agent run` path, where the Sink renders to stdout and the caller
 // just needs the exit status — no TurnDone event, no cancel bookkeeping.
 func (c *Controller) Run(ctx context.Context, input string) error {
-	c.maybeSessionStart(ctx)
-	parentSession := c.parentSessionID()
-	ctx = agent.WithParentSession(ctx, parentSession)
-	ctx = jobs.WithSession(ctx, parentSession)
-	ctx = agent.WithUserImages(ctx, c.inputImages(input))
-	rawInput := input
-	input = c.Compose(input)
-	startMessages := c.messageCount()
-	defer c.snapshotActivityIfChanged(startMessages)
-	if c.guardianSess != nil {
-		c.guardianSess.ResetTurn()
-	}
-	if c.hooks.Enabled() {
-		c.mu.Lock()
-		c.turn++
-		turn := c.turn
-		c.mu.Unlock()
-		if block, _ := c.hooks.PromptSubmit(ctx, input, turn); block {
-			return nil
-		}
-		defer func() { c.hooks.Stop(context.Background(), lastAssistantText(c.History()), turn) }()
-	}
-	c.markInFlightTurn(startMessages, true)
-	defer c.clearInFlightTurn()
-	return c.runner.Run(ctx, c.withCapabilityRoute(input, rawInput))
+	return newTurnOrchestrator(c).runHeadlessGoalLoopWithRaw(ctx, input, input)
 }
 
 // Cancel aborts the in-flight turn. A goroutine blocked awaiting approval
@@ -1619,6 +1598,10 @@ func (c *Controller) ReplayPendingPrompts() {
 // cache-stable prompt prefix, and remembers the state so Compose can prepend the
 // plan-mode marker to outgoing turns.
 func (c *Controller) SetPlanMode(v bool) {
+	c.setPlanMode(v, true)
+}
+
+func (c *Controller) setPlanMode(v, persist bool) {
 	c.mu.Lock()
 	c.planMode = v
 	c.mu.Unlock()
@@ -1627,6 +1610,9 @@ func (c *Controller) SetPlanMode(v bool) {
 	}
 	if setter, ok := c.runner.(interface{ SetPlanMode(bool) }); ok {
 		setter.SetPlanMode(v)
+	}
+	if persist && c.executor != nil {
+		c.goals.persistRuntime(c.goalRuntimeProjection())
 	}
 }
 
@@ -1694,11 +1680,11 @@ func (c *Controller) PlanMode() bool {
 }
 
 // GoalStrict enables or disables strict goal mode. In strict mode the agent
-// cannot override an incomplete-todo intercept — it must actually finish or
-// update all items before [goal:complete] is accepted.
+// runs one final quality self-check after the evidence gate passes. Every mode
+// requires incomplete work and project checks to be resolved before completion.
 func (c *Controller) GoalStrict(strict bool) {
-	path, data, ok := c.goals.setStrict(strict, c.goalTodos())
-	c.persistGoalState(path, data, ok)
+	path, data, revision, ok := c.goals.setStrict(strict, c.goalRuntimeProjection())
+	c.persistGoalState(path, data, revision, ok)
 }
 
 // SetGoal stores a session-scoped active goal. Compose injects it into outgoing
@@ -1710,11 +1696,11 @@ func (c *Controller) SetGoal(goal string) {
 
 func (c *Controller) SetGoalWithResearchMode(goal string, researchMode GoalResearchMode) {
 	taskID, blockReason := c.ensureAutoResearchTask(goal, researchMode)
-	path, data, ok := c.goals.set(goal, researchMode, taskID, c.goalTodos())
-	c.persistGoalState(path, data, ok)
+	path, data, revision, ok := c.goals.set(goal, researchMode, taskID, c.goalRuntimeProjection())
+	c.persistGoalState(path, data, revision, ok)
 	if blockReason != "" {
-		path, data, ok := c.goals.stop(GoalStatusBlocked, c.goalTodos())
-		c.persistGoalState(path, data, ok)
+		path, data, revision, ok := c.goals.stop(GoalStatusBlocked, c.goalRuntimeProjection())
+		c.persistGoalState(path, data, revision, ok)
 		c.notice("autoresearch resume failed: " + blockReason)
 	}
 }
@@ -2131,6 +2117,7 @@ func (c *Controller) NewSession() error {
 	}
 	c.ResetPlannerSession()
 	c.rebindCheckpoints(c.SessionPath())
+	c.restoreSessionRuntime(c.SessionPath())
 	c.snapshotMu.Unlock()
 	// A new session starts with no active goal: without this, a running goal's
 	// text kept injecting into the fresh session's first turns. The old
@@ -2197,6 +2184,7 @@ func (c *Controller) ClearSession() error {
 	}
 	c.ResetPlannerSession()
 	c.rebindCheckpoints(c.SessionPath())
+	c.restoreSessionRuntime(c.SessionPath())
 	c.snapshotMu.Unlock()
 	// Same contract as NewSession: the fresh session starts with no active goal.
 	c.ClearGoal()
@@ -2266,6 +2254,24 @@ func removeSessionArtifacts(path string) error {
 	return nil
 }
 
+func cleanupSessionCreationError(path string, cause error) error {
+	cleanupErr := removeSessionArtifacts(path)
+	// Session.Save creates its advisory lock lazily even when no runtime owns the
+	// newly allocated branch. These ephemeral files are intentionally absent from
+	// SessionSidecarFiles, so creation rollback must sweep them explicitly.
+	for _, lockPath := range []string{
+		store.SessionLockFile(path), store.SessionLeaseLock(path), store.SessionLeaseInfo(path),
+	} {
+		if err := os.Remove(lockPath); err != nil && !os.IsNotExist(err) {
+			cleanupErr = errors.Join(cleanupErr, err)
+		}
+	}
+	if cleanupErr != nil {
+		return errors.Join(cause, fmt.Errorf("cleanup partial session %q: %w", path, cleanupErr))
+	}
+	return cause
+}
+
 // ReconcileCleanupPending retries physical cleanup for logically removed
 // sessions that were left behind by a previous process.
 func ReconcileCleanupPending(dir string) error {
@@ -2303,12 +2309,15 @@ func (c *Controller) rewindFail(err error) error {
 // Rewind restores the session to the start of `turn`: Code reverts every file that
 // turn (or a later one) changed to its pre-turn content; Conversation truncates the
 // message log back to that turn; Both does both. Refused while a turn is running.
-// Conversation rewind relies on the live boundary recorded at turn start, so it is
-// unavailable for turns inherited from a resumed session (code rewind still works).
+// Conversation rewind requires a persisted turn-start boundary and transcript
+// digest; legacy or restructured checkpoints remain available for code-only rewind.
 // Frontends re-render their transcript from History after the call.
 func (c *Controller) Rewind(turn int, scope RewindScope) error {
 	if !c.checkpoints.enabled() || c.executor == nil {
 		return c.rewindFail(fmt.Errorf("checkpoints unavailable"))
+	}
+	if scope < RewindCode || scope > RewindBoth {
+		return c.rewindFail(fmt.Errorf("invalid rewind scope %d", scope))
 	}
 	// Rewind rewrites the live session (conversation scope) and restores files;
 	// hold the rotation gate across the whole operation so a turn cannot start
@@ -2321,47 +2330,113 @@ func (c *Controller) Rewind(turn int, scope RewindScope) error {
 	}
 	defer c.endRotation()
 	boundary, hasBound := c.checkpoints.boundary(turn)
+	conversation := scope == RewindConversation || scope == RewindBoth
+	code := scope == RewindCode || scope == RewindBoth
+	var originalMessages []provider.Message
+	var originalRuntime json.RawMessage
+	var session *agent.Session
+	var runtimeData json.RawMessage
+	var checkpointRuntime goalState
+	var hasCheckpointRuntime bool
 
-	if scope == RewindCode || scope == RewindBoth {
-		written, deleted, err := c.checkpoints.restoreCode(turn)
-		if err != nil {
-			return c.rewindFail(fmt.Errorf("rewind code: %w", err))
+	// Preflight every conversation condition before publishing either half of a
+	// RewindBoth. A compacted/stale boundary must leave the workspace untouched.
+	if conversation {
+		if !hasBound {
+			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: checkpoint has no conversation anchor", turn))
 		}
-		if len(written) > 0 || len(deleted) > 0 {
-			c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
-				Text: fmt.Sprintf("rewound code to turn %d — %d file(s) restored, %d removed", turn, len(written), len(deleted))})
+		if boundary < 0 {
+			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: invalid negative boundary", turn))
+		}
+		session = c.executor.Session()
+		originalMessages = session.Snapshot()
+		if boundary > len(originalMessages) {
+			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: the conversation was compacted past this point", turn))
+		}
+		checkpointDigest, hasDigest := c.checkpoints.transcriptDigest(turn)
+		if !hasDigest {
+			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: legacy checkpoint lacks a transcript digest", turn))
+		}
+		if equal, extends := session.CompareTranscriptAnchor(boundary, checkpointDigest); !equal && !extends {
+			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: transcript diverged from the checkpoint prefix", turn))
+		}
+		originalRuntime = c.goals.snapshotData(c.goalRuntimeProjection())
+		runtimeData, _ = c.checkpoints.runtime(turn)
+		if len(runtimeData) > 0 {
+			var err error
+			checkpointRuntime, err = c.goals.decodeCheckpointState(runtimeData)
+			if err != nil {
+				return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: invalid checkpoint runtime: %w", turn, err))
+			}
+			hasCheckpointRuntime = true
+		}
+	}
+
+	rollbackConversation := func() error {
+		if !conversation {
+			return nil
+		}
+		session.Replace(originalMessages)
+		c.executor.RebuildTodoState()
+		if len(originalRuntime) > 0 {
+			c.restoreCheckpointRuntime(originalRuntime)
+		}
+		return c.SnapshotRewrite()
+	}
+
+	if conversation {
+		session.Replace(append([]provider.Message(nil), originalMessages[:boundary]...))
+		c.executor.RebuildTodoState()
+		if hasCheckpointRuntime {
+			c.restoreCheckpointState(checkpointRuntime)
+		} else {
+			// Legacy checkpoints do not know historical Goal/Plan state. Clear
+			// those fields rather than retaining future state over old messages.
+			c.setPlanMode(false, false)
+			path, data, revision, ok := c.goals.set("", GoalResearchAuto, "", c.goalRuntimeProjection())
+			c.persistGoalState(path, data, revision, ok)
+		}
+		if err := c.SnapshotRewrite(); err != nil {
+			if rollbackErr := rollbackConversation(); rollbackErr != nil {
+				return c.rewindFail(fmt.Errorf("rewind conversation: %w (rollback failed: %v)", err, rollbackErr))
+			}
+			return c.rewindFail(fmt.Errorf("rewind conversation: %w", err))
+		}
+	}
+
+	var written, deleted []string
+	if code {
+		var err error
+		written, deleted, err = c.checkpoints.restoreCode(turn)
+		if err != nil {
+			if rollbackErr := rollbackConversation(); rollbackErr != nil {
+				return c.rewindFail(fmt.Errorf("rewind code: %w (conversation rollback failed: %v)", err, rollbackErr))
+			}
+			return c.rewindFail(fmt.Errorf("rewind code: %w", err))
 		}
 	}
 	if scope == RewindConversation || scope == RewindBoth {
-		if !hasBound {
-			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d (resumed session)", turn))
-		}
-		s := c.executor.Session()
-		// boundary is the message-log index at turn start; compaction shrinks the
-		// log without rewriting boundaries, so a stale boundary past the end means
-		// the turn was compacted away — fail loudly instead of skipping silently.
-		// Snapshot/Replace keep the truncation safe against concurrent History/Save
-		// readers on other goroutines.
-		msgs := s.Snapshot()
-		if boundary > len(msgs) {
-			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: the conversation was compacted past this point", turn))
-		}
-		s.Replace(msgs[:boundary])
-		c.checkpoints.truncateFrom(turn) // renumber future turns from here; later turns are gone
-		if err := c.SnapshotRewrite(); err != nil {
-			slog.Warn("controller: snapshot after rewind", "err", err)
+		if err := c.checkpoints.truncateFrom(turn); err != nil {
+			if rollbackErr := rollbackConversation(); rollbackErr != nil {
+				return c.rewindFail(fmt.Errorf("truncate checkpoints: %w (conversation rollback failed: %v)", err, rollbackErr))
+			}
+			return c.rewindFail(fmt.Errorf("truncate checkpoints: %w", err))
 		}
 		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
 			Text: fmt.Sprintf("rewound conversation to turn %d", turn)})
+	}
+	if len(written) > 0 || len(deleted) > 0 {
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
+			Text: fmt.Sprintf("rewound code to turn %d — %d file(s) restored, %d removed", turn, len(written), len(deleted))})
 	}
 	return nil
 }
 
 // Fork branches the conversation at the start of turn into a NEW session file,
 // preserving the current one as the branch point, and switches to the branch. Code
-// is untouched (it's a conversation operation). Like a conversation rewind it needs
-// the live boundary, so it is unavailable for resumed-session turns and refused
-// while a turn runs. Returns the new session path.
+// is untouched (it's a conversation operation). Like a conversation rewind it
+// needs a persisted boundary and matching transcript prefix, and is refused while
+// a turn runs. Returns the new session path.
 func (c *Controller) Fork(turn int) (string, error) {
 	return c.ForkNamed(turn, "")
 }
@@ -2396,7 +2471,27 @@ func (c *Controller) forkNamed(turn int, name string, switchToFork bool) (string
 	defer c.endRotation()
 	boundary, hasBound := c.checkpoints.boundary(turn)
 	if !hasBound {
-		return "", c.rewindFail(fmt.Errorf("fork unavailable for turn %d (resumed session)", turn))
+		return "", c.rewindFail(fmt.Errorf("fork unavailable for turn %d: checkpoint has no conversation anchor", turn))
+	}
+	if boundary < 0 {
+		return "", c.rewindFail(fmt.Errorf("fork unavailable for turn %d: invalid negative boundary", turn))
+	}
+	runtimeData, _ := c.checkpoints.runtime(turn)
+	src := c.executor.Session().Snapshot()
+	if boundary > len(src) {
+		return "", c.rewindFail(fmt.Errorf("fork unavailable for turn %d: the conversation was compacted past this point", turn))
+	}
+	checkpointDigest, hasDigest := c.checkpoints.transcriptDigest(turn)
+	if !hasDigest {
+		return "", c.rewindFail(fmt.Errorf("fork unavailable for turn %d: legacy checkpoint lacks a transcript digest", turn))
+	}
+	if equal, extends := c.executor.Session().CompareTranscriptAnchor(boundary, checkpointDigest); !equal && !extends {
+		return "", c.rewindFail(fmt.Errorf("fork unavailable for turn %d: transcript diverged from the checkpoint prefix", turn))
+	}
+	if len(runtimeData) > 0 {
+		if _, err := c.goals.decodeCheckpointState(runtimeData); err != nil {
+			return "", c.rewindFail(fmt.Errorf("fork unavailable for turn %d: invalid checkpoint runtime: %w", turn, err))
+		}
 	}
 
 	// Persist the current conversation first so the branch point survives, then
@@ -2406,20 +2501,19 @@ func (c *Controller) forkNamed(turn int, name string, switchToFork bool) (string
 	}
 	parentPath := c.SessionPath()
 	parentID := agent.BranchID(parentPath)
-	src := c.executor.Session().Snapshot()
-	if boundary > len(src) {
-		boundary = len(src)
-	}
 	forked := append([]provider.Message(nil), src[:boundary]...)
 	sess := agent.NewSession("")
 	sess.Messages = forked
 
 	newPath := agent.NewSessionPath(c.sessionDir, c.label)
 	if err := sess.Save(newPath); err != nil {
-		return "", c.rewindFail(err)
+		return "", c.rewindFail(cleanupSessionCreationError(newPath, err))
+	}
+	if err := writeSessionRuntimeData(newPath, runtimeData); err != nil {
+		return "", c.rewindFail(cleanupSessionCreationError(newPath, fmt.Errorf("persist fork runtime: %w", err)))
 	}
 	forkPreview, forkTurns := agent.SessionPreviewFromMessages(forked)
-	if err := agent.SaveBranchMeta(newPath, agent.BranchMeta{
+	if err := c.saveBranchMeta(newPath, agent.BranchMeta{
 		Name:             strings.TrimSpace(name),
 		ParentID:         parentID,
 		ForkTurn:         turn,
@@ -2428,7 +2522,7 @@ func (c *Controller) forkNamed(turn int, name string, switchToFork bool) (string
 		Turns:            forkTurns,
 		SchemaVersion:    agent.BranchMetaCountsVersion,
 	}); err != nil {
-		return "", c.rewindFail(err)
+		return "", c.rewindFail(cleanupSessionCreationError(newPath, err))
 	}
 	if switchToFork {
 		// See snapshotMu: the swap must not interleave with an in-flight save.
@@ -2441,6 +2535,7 @@ func (c *Controller) forkNamed(turn int, name string, switchToFork bool) (string
 		c.mu.Unlock()
 		c.setActiveJobSession(newPath)
 		c.rebindCheckpoints(newPath)
+		c.restoreSessionRuntime(newPath)
 		if c.guardianSess != nil {
 			c.guardianSess.Reset()
 		}
@@ -2453,14 +2548,15 @@ func (c *Controller) forkNamed(turn int, name string, switchToFork bool) (string
 
 func (c *Controller) CheckpointHasBoundary(turn int) bool {
 	boundary, ok := c.checkpoints.boundary(turn)
+	if !ok || boundary < 0 || c.executor == nil || c.executor.Session() == nil {
+		return false
+	}
+	digest, ok := c.checkpoints.transcriptDigest(turn)
 	if !ok {
 		return false
 	}
-	// After compaction the key may still exist but the boundary value is
-	// stale (it points past the truncated message log).  Treat those
-	// turns the same as "no boundary" so the UI can disable the button.
-	// Len is lock-guarded: this runs on frontend goroutines while a turn appends.
-	return boundary <= c.executor.Session().Len()
+	equal, extends := c.executor.Session().CompareTranscriptAnchor(boundary, digest)
+	return equal || extends
 }
 
 // Branch copies the current conversation into a child branch and switches to it.
@@ -2487,6 +2583,7 @@ func (c *Controller) Branch(name string) (string, error) {
 	if err := c.Snapshot(); err != nil {
 		return "", c.rewindFail(err)
 	}
+	runtimeData := c.goals.snapshotData(c.goalRuntimeProjection())
 	parentPath := c.SessionPath()
 	parentID := agent.BranchID(parentPath)
 	src := c.executor.Session().Snapshot()
@@ -2496,10 +2593,13 @@ func (c *Controller) Branch(name string) (string, error) {
 
 	newPath := agent.NewSessionPath(c.sessionDir, c.label)
 	if err := sess.Save(newPath); err != nil {
-		return "", c.rewindFail(err)
+		return "", c.rewindFail(cleanupSessionCreationError(newPath, err))
+	}
+	if err := writeSessionRuntimeData(newPath, runtimeData); err != nil {
+		return "", c.rewindFail(cleanupSessionCreationError(newPath, fmt.Errorf("persist branch runtime: %w", err)))
 	}
 	branchPreview, branchTurns := agent.SessionPreviewFromMessages(branched)
-	if err := agent.SaveBranchMeta(newPath, agent.BranchMeta{
+	if err := c.saveBranchMeta(newPath, agent.BranchMeta{
 		Name:             strings.TrimSpace(name),
 		ParentID:         parentID,
 		ForkTurn:         -1,
@@ -2508,7 +2608,7 @@ func (c *Controller) Branch(name string) (string, error) {
 		Turns:            branchTurns,
 		SchemaVersion:    agent.BranchMetaCountsVersion,
 	}); err != nil {
-		return "", c.rewindFail(err)
+		return "", c.rewindFail(cleanupSessionCreationError(newPath, err))
 	}
 	// See snapshotMu: the swap must not interleave with an in-flight save.
 	c.snapshotMu.Lock()
@@ -2520,6 +2620,7 @@ func (c *Controller) Branch(name string) (string, error) {
 	c.mu.Unlock()
 	c.setActiveJobSession(newPath)
 	c.rebindCheckpoints(newPath)
+	c.restoreSessionRuntime(newPath)
 	if c.guardianSess != nil {
 		c.guardianSess.Reset()
 	}
@@ -2527,6 +2628,13 @@ func (c *Controller) Branch(name string) (string, error) {
 	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
 		Text: fmt.Sprintf("created branch %s", agent.BranchID(newPath))})
 	return newPath, nil
+}
+
+func (c *Controller) saveBranchMeta(path string, meta agent.BranchMeta) error {
+	if c.branchMetaSave != nil {
+		return c.branchMetaSave(path, meta)
+	}
+	return agent.SaveBranchMeta(path, meta)
 }
 
 // Branches lists saved conversation branches in this controller's session dir.
@@ -2581,7 +2689,7 @@ func (c *Controller) SwitchBranch(ref string) (agent.BranchInfo, error) {
 	c.mu.Unlock()
 	c.setActiveJobSession(match.Path)
 	c.rebindCheckpoints(match.Path)
-	c.restoreTerminalGoalTodos(match.Path)
+	c.restoreSessionRuntime(match.Path)
 	c.loadGuardianSession()
 	c.snapshotMu.Unlock()
 	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
@@ -2636,7 +2744,8 @@ func branchDisplayName(b agent.BranchInfo) string {
 // from/up to here" — they restructure the message log (keeping code untouched), so
 // afterwards the per-turn boundaries no longer map and conversation rewind/fork
 // report "unavailable" until new turns rebuild them (code rewind, file-based, is
-// unaffected). Refused while a turn runs; need the live boundary.
+// unaffected). Refused while a turn runs; requires a persisted boundary and a
+// matching transcript-prefix digest.
 func (c *Controller) SummarizeFrom(ctx context.Context, turn int) error {
 	return c.summarizeAt(ctx, turn, true)
 }
@@ -2662,7 +2771,17 @@ func (c *Controller) summarizeAt(ctx context.Context, turn int, from bool) error
 	defer c.endRotation()
 	boundary, hasBound := c.checkpoints.boundary(turn)
 	if !hasBound {
-		return c.rewindFail(fmt.Errorf("summarize unavailable for turn %d (resumed session)", turn))
+		return c.rewindFail(fmt.Errorf("summarize unavailable for turn %d: checkpoint has no conversation anchor", turn))
+	}
+	if boundary < 0 {
+		return c.rewindFail(fmt.Errorf("summarize unavailable for turn %d: invalid negative boundary", turn))
+	}
+	digest, hasDigest := c.checkpoints.transcriptDigest(turn)
+	if !hasDigest {
+		return c.rewindFail(fmt.Errorf("summarize unavailable for turn %d: legacy checkpoint lacks a transcript digest", turn))
+	}
+	if equal, extends := c.executor.Session().CompareTranscriptAnchor(boundary, digest); !equal && !extends {
+		return c.rewindFail(fmt.Errorf("summarize unavailable for turn %d: transcript diverged from the checkpoint prefix", turn))
 	}
 	var err error
 	if from {
@@ -2701,8 +2820,7 @@ func (c *Controller) Resume(s *agent.Session, path string) {
 	c.mu.Unlock()
 	c.setActiveJobSession(path)
 	c.rebindCheckpoints(path)
-	c.goals.restoreRunningFromState(path)
-	c.restoreTerminalGoalTodos(path)
+	c.restoreSessionRuntime(path)
 	c.loadGuardianSession()
 	c.snapshotMu.Unlock()
 	c.recoverInterruptedTurn(path)
@@ -2793,7 +2911,13 @@ func (c *Controller) SnapshotActivity() error {
 // manual compaction. Ordinary autosave paths should use Snapshot so stale
 // controllers cannot overwrite a newer transcript.
 func (c *Controller) SnapshotRewrite() error {
-	return c.snapshot(false, true)
+	if err := c.snapshot(false, true); err != nil {
+		return err
+	}
+	if c.executor != nil {
+		c.goals.persistRuntime(c.goalRuntimeProjection())
+	}
+	return nil
 }
 
 // midTurnSnapshotInterval is atomic (nanoseconds) so a test shrinking it
@@ -3218,7 +3342,7 @@ func (c *Controller) recoverInterruptedTurn(path string) {
 		} else {
 			c.stripTurnMessagesAfter(marker.StartMessageIndex)
 		}
-		if err := c.snapshot(false, true); err != nil {
+		if err := c.SnapshotRewrite(); err != nil {
 			slog.Warn("controller: post-interrupted-turn snapshot", "err", err)
 		}
 	}
@@ -3328,6 +3452,8 @@ func (c *Controller) replaceSessionAfterCancel(msgs []provider.Message) {
 			} else {
 				slog.Warn("controller: post-cancel transcript flush", "err", err)
 			}
+		} else {
+			c.goals.persistRuntime(c.goalRuntimeProjection())
 		}
 	}
 }
@@ -3481,6 +3607,13 @@ func (c *Controller) Todos() []evidence.TodoItem {
 		return nil
 	}
 	return c.executor.CanonicalTodoState()
+}
+
+func (c *Controller) EvidenceSnapshot() evidence.Snapshot {
+	if c.executor == nil {
+		return evidence.Snapshot{}
+	}
+	return c.executor.EvidenceSnapshot()
 }
 
 // ToolResultData holds the full arguments and output for one tool call, loaded

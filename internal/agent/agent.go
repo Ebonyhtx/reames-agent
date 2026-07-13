@@ -719,8 +719,13 @@ func (a *Agent) SetSession(s *Session) {
 	a.sessMu.Unlock()
 	a.sessCacheHit.Store(0)
 	a.sessCacheMiss.Store(0)
+	if a.evidence != nil {
+		a.evidence.Reset()
+	}
 	if s != nil {
 		a.rebuildTodoState(s.Snapshot())
+	} else {
+		a.setTodoState(nil)
 	}
 	a.resetMemoryCompilerInjectionGate()
 	// A session switch breaks the "immediately preceding turn" relationship:
@@ -1189,7 +1194,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 		})
 
 		if len(calls) == 0 {
-			readiness := a.finalReadinessCheck()
+			readiness := a.finalReadinessCheck(true)
 			if readiness.reason != "" {
 				finalReadinessBlocks++
 				result := evidence.ReadinessBlocked
@@ -1300,14 +1305,23 @@ func (a *Agent) emitMemoryCompilerStats(turn *memorycompiler.Turn) {
 }
 
 func (a *Agent) finalReadinessFailure() string {
-	return a.finalReadinessCheck().reason
+	return a.finalReadinessCheck(true).reason
 }
 
 // GoalReadinessFailure returns the final-readiness failure reason — a summary of
 // incomplete todos and unverified project checks — or empty string if none.
 // Exported so the Controller can gate [goal:complete] on evidence.
 func (a *Agent) GoalReadinessFailure() string {
-	return a.finalReadinessFailure()
+	return a.finalReadinessCheck(false).reason
+}
+
+// EvidenceSnapshot exposes bounded host-observed receipts for local status
+// projection. It never enters the provider prompt and is not durable evidence.
+func (a *Agent) EvidenceSnapshot() evidence.Snapshot {
+	if a == nil || a.evidence == nil {
+		return evidence.Snapshot{}
+	}
+	return a.evidence.Snapshot(50)
 }
 
 type finalReadinessCheck struct {
@@ -1327,7 +1341,7 @@ func (c finalReadinessCheck) audit(result evidence.ReadinessAuditResult, recover
 	}
 }
 
-func (a *Agent) finalReadinessCheck() finalReadinessCheck {
+func (a *Agent) finalReadinessCheck(allowLoopGuard bool) finalReadinessCheck {
 	if a.evidence == nil {
 		return finalReadinessCheck{}
 	}
@@ -1347,7 +1361,7 @@ func (a *Agent) finalReadinessCheck() finalReadinessCheck {
 	writer, hasWriter := a.evidence.LatestSuccessfulWriterIndex()
 	if !hasWriter {
 		if len(missing) > 0 {
-			if a.loopGuardAllowsFinal() {
+			if allowLoopGuard && a.loopGuardAllowsFinal() {
 				return out
 			}
 			out.reason = strings.Join(missing, "; ")
@@ -1374,7 +1388,7 @@ func (a *Agent) finalReadinessCheck() finalReadinessCheck {
 	if len(missing) == 0 {
 		return out
 	}
-	if a.loopGuardAllowsFinal() {
+	if allowLoopGuard && a.loopGuardAllowsFinal() {
 		return out
 	}
 	out.reason = strings.Join(missing, "; ")
@@ -1442,6 +1456,12 @@ func (a *Agent) SeedTodoState(todos []evidence.TodoItem) {
 func (a *Agent) ReplaceTodoState(todos []evidence.TodoItem) {
 	a.setTodoState(todos)
 	a.recordTodoState(todos)
+}
+
+// RestoreTodoState replaces canonical Todo state from durable runtime without
+// manufacturing a current-turn receipt. Recovery is not execution evidence.
+func (a *Agent) RestoreTodoState(todos []evidence.TodoItem) {
+	a.setTodoState(todos)
 }
 
 // CanonicalTodoState returns a copy of the host-reconstructed task list.
@@ -1543,16 +1563,33 @@ func (a *Agent) RebuildTodoState() {
 	a.rebuildTodoState(a.Session().Snapshot())
 }
 
+// RestoreTodoStateFromAnchor starts with the durable Todo projection captured
+// at messageCount and replays successful Todo events from the append-only
+// transcript suffix. It returns false when the boundary is invalid.
+func (a *Agent) RestoreTodoStateFromAnchor(todos []evidence.TodoItem, messageCount int) bool {
+	msgs := a.Session().Snapshot()
+	if messageCount < 0 || messageCount > len(msgs) {
+		return false
+	}
+	a.rebuildTodoStateFromBase(msgs, messageCount, todos, true)
+	return true
+}
+
 // rebuildTodoState reconstructs the canonical task list from a transcript: the
 // latest successful todo_write is the base, then every complete_step after it
 // advances an item. Deterministic from persisted messages, so it survives a
 // fresh load or a rewind (the truncated history yields the historical state).
 // Empty after compaction drops the todo_write — no worse than no canonical list.
 func (a *Agent) rebuildTodoState(msgs []provider.Message) {
+	a.rebuildTodoStateFromBase(msgs, 0, nil, false)
+}
+
+func (a *Agent) rebuildTodoStateFromBase(msgs []provider.Message, start int, base []evidence.TodoItem, baseKnown bool) {
 	successful := successfulToolCallIDs(msgs)
-	var todos []evidence.TodoItem
+	todos := append([]evidence.TodoItem(nil), base...)
 	baseIdx := -1
-	for i, msg := range msgs {
+	for i := start; i < len(msgs); i++ {
+		msg := msgs[i]
 		for _, tc := range msg.ToolCalls {
 			if tc.Name != "todo_write" || !successful[tc.ID] {
 				continue
@@ -1564,11 +1601,15 @@ func (a *Agent) rebuildTodoState(msgs []provider.Message) {
 			baseIdx = i
 		}
 	}
-	if baseIdx < 0 {
+	if baseIdx < 0 && !baseKnown {
 		a.setTodoState(nil)
 		return
 	}
-	for i := baseIdx; i < len(msgs); i++ {
+	replayFrom := baseIdx
+	if replayFrom < 0 {
+		replayFrom = start
+	}
+	for i := replayFrom; i < len(msgs); i++ {
 		for _, tc := range msgs[i].ToolCalls {
 			if tc.Name != "complete_step" || !successful[tc.ID] {
 				continue

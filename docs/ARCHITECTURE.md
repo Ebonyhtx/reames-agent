@@ -2,7 +2,7 @@
 
 > 创建：2026-07-08
 >
-> 更新：2026-07-12
+> 更新：2026-07-14
 >
 > 基座：DeepSeek Reasonix main-v2，Go 1.25+，MIT License
 
@@ -93,3 +93,21 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
 5. UI 状态、诊断、面板状态不得注入 prompt
 6. `MemoryCitations`、`Edited`、`Original` 等本地展示 metadata 在 Provider interface 前剥离，不能依赖具体 Provider 恰好忽略它们
 7. IM connection/domain/chat/user/operator/message ID 只用于路由和授权，不进入 prompt；群聊中显式的参与者名称标签属于用户可见语义
+
+## 五、会话运行态与恢复
+
+动态 Goal/Plan/Todo 不进入稳定 system prompt，但必须和 transcript 一起恢复。`control.Controller` 为每个 session 维护 v2 runtime sidecar：Goal FSM、continuation/blocker/intercept/idle/self-check 计数、PlanMode、canonical Todo、transcript message count、忽略可刷新 leading system prompt 的 transcript digest 和 monotonic revision。Sidecar 与 checkpoint JSON 使用 `fileutil.AtomicWriteFile`；同一进程内相同 sidecar 路径的 revision 检查与替换处于同一临界区，跨进程写入依赖 transport 持有的 session lease。该 helper 在 Windows cross-device/filter-driver rename 失败时会降级为原地复制，因此不能无条件外推为断电 crash-safe。
+
+```text
+visible user turn start
+  ├─ checkpoint: transcript boundary + runtime projection + later file snapshots
+  ├─ Agent/Coordinator turn
+  ├─ turn-boundary runtime sidecar refresh
+  └─ Goal advance: evidence gate + counters + second runtime refresh
+```
+
+恢复采用整体替换而不是字段叠加：Resume/Switch 先让 Agent 从目标 transcript 重建 Todo；带 digest 的 v2 sidecar 在 transcript 锚点完全相等时直接恢复 Todo，append-only extension 以 sidecar Todo 为基础重放后缀 `todo_write`/`complete_step`，rewrite/divergence 则保留 transcript 重建结果，避免 compaction 后较大的旧 message count 冒充新状态。旧 v2 sidecar 才使用 message count 兼容回退。Branch/Fork 复制对应 tip/turn-start runtime；conversation rewind 同时截断 transcript 并恢复 checkpoint runtime。目标没有 sidecar 时，旧 Goal 和 PlanMode 必须清空。
+
+`checkpoint.Store.RestoreCode` 先构造并验证全部操作，再执行写入；路径必须留在已解析 workspace 内，不能穿过 symlink/reparse point，且只能覆盖普通文件。路径别名按规范化 identity 合并，Windows 大小写折叠，现存硬链接使用 `os.SameFile` 共享 earliest bytes。失败时以预检保存的 bytes/mode 反向回滚已成功操作和可能部分写入的当前失败目标；相对路径的 mode 也按 workspace root 捕获。Conversation rewind/Fork/Summarize 必须验证 turn-start transcript prefix digest，Rewind/Fork 对非空无效 runtime 在修改前失败；truncate manifest 让物理 checkpoint 删除失败后也不会在重启时复活，turn ID 保持单调。路径预检到按路径写入之间仍有 TOCTOU，完整关闭需要 handle-relative no-reparse/resolve-beneath 写入；transcript/runtime/workspace 也不构成单一断电事务。
+
+当前 evidence ledger 是 turn-scoped 内存状态，只用于 `complete_step`、Goal readiness 和 Board 投影，不是跨进程证明。Durable evidence、共享子代理预算和 writable 子代理归并仍属于 M4 后续边界。

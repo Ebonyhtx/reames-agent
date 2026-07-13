@@ -743,7 +743,10 @@ func TestSubmitRememberCommandQuickAddsMemory(t *testing.T) {
 
 func waitForTurnDone(t *testing.T, events <-chan event.Event) {
 	t.Helper()
-	deadline := time.After(2 * time.Second)
+	// Goal/AutoResearch tests can perform several filesystem-backed lifecycle
+	// steps before TurnDone. Keep the assertion bounded while allowing the same
+	// slow-runner margin used by the session recovery tests.
+	deadline := time.After(10 * time.Second)
 	for {
 		select {
 		case e := <-events:

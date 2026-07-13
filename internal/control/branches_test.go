@@ -2,7 +2,10 @@ package control
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -11,6 +14,20 @@ import (
 	"reames-agent/internal/provider"
 	"reames-agent/internal/tool"
 )
+
+func directoryNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	sort.Strings(names)
+	return names
+}
 
 func TestBranchAndSwitch(t *testing.T) {
 	dir := t.TempDir()
@@ -23,6 +40,8 @@ func TestBranchAndSwitch(t *testing.T) {
 	}
 	rootPath := c.SessionPath()
 	rootID := agent.BranchID(rootPath)
+	c.SetGoal("root goal")
+	c.SetPlanMode(true)
 
 	if _, err := c.Branch("try something"); err != nil {
 		t.Fatal(err)
@@ -31,6 +50,11 @@ func TestBranchAndSwitch(t *testing.T) {
 	if childPath == rootPath {
 		t.Fatal("branch should switch to a new session path")
 	}
+	if c.Goal() != "root goal" || !c.PlanMode() {
+		t.Fatalf("tip branch did not inherit runtime: goal=%q plan=%v", c.Goal(), c.PlanMode())
+	}
+	c.SetGoal("child goal")
+	c.SetPlanMode(false)
 	meta, ok, err := agent.LoadBranchMeta(childPath)
 	if err != nil || !ok {
 		t.Fatalf("load child meta ok=%v err=%v", ok, err)
@@ -50,10 +74,56 @@ func TestBranchAndSwitch(t *testing.T) {
 	if c.SessionPath() != rootPath {
 		t.Fatalf("session path = %q, want %q", c.SessionPath(), rootPath)
 	}
+	if c.Goal() != "root goal" || !c.PlanMode() {
+		t.Fatalf("switch layered child runtime over root: goal=%q plan=%v", c.Goal(), c.PlanMode())
+	}
+	if _, err := c.SwitchBranch(agent.BranchID(childPath)); err != nil {
+		t.Fatal(err)
+	}
+	if c.Goal() != "child goal" || c.PlanMode() {
+		t.Fatalf("switch did not restore child runtime: goal=%q plan=%v", c.Goal(), c.PlanMode())
+	}
 
 	tree := c.BranchTreeText()
 	if !strings.Contains(tree, shortBranchID(rootID)) || !strings.Contains(tree, "try something") {
 		t.Fatalf("tree missing expected branches:\n%s", tree)
+	}
+}
+
+func TestBranchMetaFailureCleansPartialSessionArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	exec := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{}, event.Discard)
+	exec.Session().Add(provider.Message{Role: provider.RoleUser, Content: "root prompt"})
+	c := New(Options{Executor: exec, SessionDir: dir, Label: "test"})
+	c.SetSessionPath(agent.NewSessionPath(dir, "test"))
+	if err := c.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+	before := directoryNames(t, dir)
+	c.branchMetaSave = func(string, agent.BranchMeta) error { return errors.New("injected branch meta failure") }
+
+	if _, err := c.Branch("broken child"); err == nil || !strings.Contains(err.Error(), "injected branch meta failure") {
+		t.Fatalf("Branch error = %v", err)
+	}
+	if after := directoryNames(t, dir); strings.Join(after, "\n") != strings.Join(before, "\n") {
+		t.Fatalf("partial branch artifacts survived:\nbefore=%v\nafter=%v", before, after)
+	}
+}
+
+func TestForkMetaFailureCleansPartialSessionArtifacts(t *testing.T) {
+	c, _, _ := runTwoTurns(t)
+	c.checkpoints.mu.Lock()
+	lastTurn := c.checkpoints.turn - 1
+	c.checkpoints.mu.Unlock()
+	dir := filepath.Dir(c.SessionPath())
+	before := directoryNames(t, dir)
+	c.branchMetaSave = func(string, agent.BranchMeta) error { return errors.New("injected fork meta failure") }
+
+	if _, err := c.Fork(lastTurn); err == nil || !strings.Contains(err.Error(), "injected fork meta failure") {
+		t.Fatalf("Fork error = %v", err)
+	}
+	if after := directoryNames(t, dir); strings.Join(after, "\n") != strings.Join(before, "\n") {
+		t.Fatalf("partial fork artifacts survived:\nbefore=%v\nafter=%v", before, after)
 	}
 }
 
@@ -195,9 +265,14 @@ func TestSubmitBranchHonorsNumericTurnTarget(t *testing.T) {
 	}
 	rootPath := c.SessionPath()
 
+	prefix := agent.NewSession("sys")
+	prefix.Add(provider.Message{Role: provider.RoleUser, Content: "first prompt"})
+	prefix.Add(provider.Message{Role: provider.RoleAssistant, Content: "first answer"})
+	boundary, digest := prefix.TranscriptAnchor()
 	c.checkpoints.mu.Lock()
-	c.checkpoints.bound[1] = 3 // displayed turn 2 starts before "second prompt"
+	c.checkpoints.turn = 1 // displayed turn 2 starts before "second prompt"
 	c.checkpoints.mu.Unlock()
+	c.checkpoints.begin("second prompt", boundary, digest, nil)
 
 	c.Submit("/branch 2 experiment")
 	if c.SessionPath() == rootPath {

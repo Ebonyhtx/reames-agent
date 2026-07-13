@@ -2,15 +2,13 @@ package control
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 
 	"reames-agent/internal/agent"
 	"reames-agent/internal/autoresearch"
-	"reames-agent/internal/event"
-	"reames-agent/internal/evidence"
 	"reames-agent/internal/jobs"
+	"reames-agent/internal/provider"
 )
 
 // turnOrchestrator owns foreground turn execution while Controller keeps the
@@ -25,6 +23,7 @@ type orchestratedTurn struct {
 	display        string
 	editedOriginal string
 	synthetic      bool
+	headless       bool
 }
 
 func newTurnOrchestrator(c *Controller) *turnOrchestrator {
@@ -43,6 +42,23 @@ func (o *turnOrchestrator) runSyntheticTurnWithRawDisplay(ctx context.Context, i
 	return o.runOrchestratedTurn(ctx, orchestratedTurn{input: input, raw: raw, display: display, synthetic: true})
 }
 
+func (o *turnOrchestrator) runObservedSyntheticTurn(ctx context.Context, input, raw, display string, headless bool) (bool, error) {
+	start := o.c.messageCount()
+	if err := o.runOrchestratedTurn(ctx, orchestratedTurn{input: input, raw: raw, display: display, synthetic: true, headless: headless}); err != nil {
+		return false, err
+	}
+	history := o.c.History()
+	if start < 0 || start > len(history) {
+		return false, nil
+	}
+	for _, msg := range history[start:] {
+		if msg.Role == provider.RoleAssistant {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (o *turnOrchestrator) runComposedSyntheticTurn(ctx context.Context, text string) error {
 	c := o.c
 	return c.runner.Run(agent.WithMemoryCompilerSkip(ctx), c.ComposeSynthetic(text))
@@ -51,7 +67,7 @@ func (o *turnOrchestrator) runComposedSyntheticTurn(ctx context.Context, text st
 func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchestratedTurn) error {
 	c := o.c
 	c.maybeSessionStart(ctx)
-	if !turn.synthetic {
+	if !turn.synthetic && !turn.headless {
 		c.maybeAutoPlan(ctx, turn.raw)
 	}
 	parentSession := c.parentSessionID()
@@ -69,6 +85,14 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 	}
 	input := c.compose(turn.input, turn.raw, !turn.synthetic)
 	startMessages := c.messageCount()
+	// Persist the complete runtime projection at every turn boundary. Goal FSM
+	// transitions persist again after advanceGoalAfterTurn; ordinary and
+	// plan-execution turns still need their latest canonical Todo state durable.
+	defer func() {
+		if c.executor != nil {
+			c.goals.persistRuntime(c.goalRuntimeProjection())
+		}
+	}()
 	defer c.snapshotActivityIfChanged(startMessages)
 	defer c.recordDisplayForNewUser(startMessages, turn.display)
 	if turn.editedOriginal != "" {
@@ -130,6 +154,12 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 		c.clearInFlightTurn()
 		return err
 	}
+	// Headless callers have no plan-approval responder. They still use the
+	// shared checkpoint/runtime/Goal lifecycle, while PlanMode remains an agent
+	// execution constraint rather than an interactive proposal gate.
+	if turn.headless {
+		return nil
+	}
 	c.mu.Lock()
 	plan := c.planMode
 	c.mu.Unlock()
@@ -181,7 +211,7 @@ func (o *turnOrchestrator) runGoalLoopWithRawDisplay(ctx context.Context, input,
 		}
 		return err
 	}
-	return o.continueGoal(ctx)
+	return o.continueGoal(ctx, false)
 }
 
 func (o *turnOrchestrator) runEditedGoalLoopWithRawDisplay(ctx context.Context, input, raw, display, original string) error {
@@ -191,13 +221,24 @@ func (o *turnOrchestrator) runEditedGoalLoopWithRawDisplay(ctx context.Context, 
 		}
 		return err
 	}
-	return o.continueGoal(ctx)
+	return o.continueGoal(ctx, false)
 }
 
-func (o *turnOrchestrator) continueGoal(ctx context.Context) error {
+func (o *turnOrchestrator) runHeadlessGoalLoopWithRaw(ctx context.Context, input, raw string) error {
+	if err := o.runOrchestratedTurn(ctx, orchestratedTurn{input: input, raw: raw, headless: true}); err != nil {
+		if ctx.Err() != nil {
+			o.c.stopGoal(GoalStatusStopped)
+		}
+		return err
+	}
+	return o.continueGoal(ctx, true)
+}
+
+func (o *turnOrchestrator) continueGoal(ctx context.Context, headless bool) error {
 	c := o.c
+	selfCheckTurn := false
 	for {
-		cont := o.advanceGoalAfterTurn()
+		cont := o.advanceGoalAfterTurn(selfCheckTurn)
 		if !cont {
 			return nil
 		}
@@ -206,24 +247,36 @@ func (o *turnOrchestrator) continueGoal(ctx context.Context) error {
 			return err
 		}
 		turn := goalContinueTurn
+		intercepted := false
 		if msg, ok := c.goals.takeIntercept(); ok {
 			turn = msg
+			intercepted = true
 			if strings.Contains(msg, "AutoResearch readiness check failed") {
 				c.notice("autoresearch readiness blocked completion")
 			} else {
-				c.notice("goal intercept: incomplete todos remain (override with a second [goal:complete])")
+				c.notice("goal intercept: incomplete work or verification remains")
 			}
 		}
-		if err := o.runSyntheticTurnWithRawDisplay(ctx, turn, turn, ""); err != nil {
+		ran, err := o.runObservedSyntheticTurn(ctx, turn, turn, "", headless)
+		if err != nil {
 			if ctx.Err() != nil {
 				c.stopGoal(GoalStatusStopped)
 			}
 			return err
 		}
+		if !ran {
+			if intercepted {
+				runtime := c.goalRuntimeProjection()
+				path, data, revision, ok := c.goals.requeueIntercept(turn, runtime)
+				c.persistGoalState(path, data, revision, ok)
+			}
+			return nil
+		}
+		selfCheckTurn = turn == goalSelfCheckTurn
 	}
 }
 
-func (o *turnOrchestrator) advanceGoalAfterTurn() bool {
+func (o *turnOrchestrator) advanceGoalAfterTurn(selfCheckTurn bool) bool {
 	c := o.c
 	// Gather every input the FSM needs off the goal lock: parse the marker,
 	// snapshot the executor's todos + readiness, and check tool activity. None
@@ -241,20 +294,22 @@ func (o *turnOrchestrator) advanceGoalAfterTurn() bool {
 			readiness = arReadiness
 		}
 	}
+	runtime := c.goalRuntimeProjection()
 	res := c.goals.advance(goalAdvanceInput{
-		status:     status,
-		reason:     reason,
-		toolCalled: c.toolWasCalledLastTurn(),
-		todos:      c.goalTodos(),
-		readiness:  readiness,
+		status:           status,
+		reason:           reason,
+		toolCalled:       c.toolWasCalledLastTurn(),
+		selfCheckTurn:    selfCheckTurn,
+		todos:            runtime.todos,
+		readiness:        readiness,
+		planMode:         runtime.planMode,
+		messageCount:     runtime.messageCount,
+		transcriptDigest: runtime.transcriptDigest,
 	})
-	c.persistGoalState(res.path, res.data, res.ok)
+	c.persistGoalState(res.path, res.data, res.revision, res.ok)
 	if res.notice != "" {
 		c.finalizeAutoResearchTask(autoResearchTaskID, res.notice)
 		c.notice(res.notice)
-	}
-	if res.notice == goalCompleteNotice && c.executor != nil {
-		c.completeRemainingGoalTodos()
 	}
 	return res.cont
 }
@@ -283,33 +338,4 @@ func (c *Controller) finalizeAutoResearchTask(taskID, notice string) {
 		}
 		c.notice("autoresearch task blocked: " + taskID)
 	}
-}
-
-// completeRemainingGoalTodos force-completes any remaining incomplete canonical
-// todos when the goal FSM transitions to completed and emits a synthetic
-// todo_write event so the frontend panel reflects the final state. Handles the
-// second [goal:complete] override (non-strict) where the model does not mark
-// each todo individually.
-func (c *Controller) completeRemainingGoalTodos() {
-	todos := c.executor.CanonicalTodoState()
-	if len(evidence.IncompleteTodos(todos)) == 0 {
-		return
-	}
-	for i := range todos {
-		todos[i].Status = "completed"
-	}
-	args, err := json.Marshal(map[string]any{"todos": todos})
-	if err != nil {
-		return
-	}
-	t := event.Tool{ID: "goal-final", Name: "todo_write", Args: string(args), ReadOnly: true}
-	c.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: t})
-	t.Output = "goal completed"
-	c.sink.Emit(event.Event{Kind: event.ToolResult, Tool: t})
-	c.executor.ReplaceTodoState(todos)
-	// Persist the completed todo state so a session reload does not revert
-	// to the old incomplete list — the synthetic todo_write events are not
-	// part of the session transcript and rebuildTodoState would otherwise
-	// reconstruct the stale pre-completion state.
-	c.goals.persistWithTodos(todos)
 }

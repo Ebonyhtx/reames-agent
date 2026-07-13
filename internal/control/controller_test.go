@@ -466,11 +466,15 @@ func TestResumeRestoresTerminalGoalTodosFromSidecar(t *testing.T) {
 		Name:       "todo_write",
 		Content:    "ok",
 	})
-	state := FromGoalState(goalState{
-		Status: GoalStatusComplete,
-		Todos:  []evidence.TodoItem{{Content: "Step 1", Status: "completed"}},
+	legacyState, err := json.Marshal(goalStateV1{
+		Version: 1,
+		Status:  GoalStatusComplete,
+		Todos:   []evidence.TodoItem{{Content: "Step 1", Status: "completed"}},
 	})
-	if err := WriteGoalStateV1(goalStatePath(path), state); err != nil {
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(goalStatePath(path), legacyState, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -513,6 +517,259 @@ func TestResumeKeepsTranscriptTodosForRunningGoalSidecar(t *testing.T) {
 	got := c.Todos()
 	if len(got) != 1 || got[0].Content != "Step 1" || got[0].Status != "in_progress" {
 		t.Fatalf("Todos() after resume = %+v, want transcript todos while goal state is running", got)
+	}
+}
+
+func TestResumeRestoresV2TodosAfterCompactionDropsTodoTranscript(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	compacted := agent.NewSession("sys")
+	compacted.Add(provider.Message{Role: provider.RoleUser, Content: "compacted summary without todo tool calls"})
+	messageCount, transcriptDigest := compacted.TranscriptAnchor()
+	state := GoalStateV2{
+		Version:          GoalStateVersion,
+		Goal:             "finish parser",
+		Status:           GoalStatusRunning,
+		TodosKnown:       true,
+		Todos:            []evidence.TodoItem{{Content: "verify parser", Status: "in_progress"}},
+		MessageCount:     messageCount,
+		TranscriptDigest: transcriptDigest,
+		Revision:         4,
+	}
+	if err := WriteGoalStateV2(goalStatePath(path), state); err != nil {
+		t.Fatal(err)
+	}
+
+	exec := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{}, event.Discard)
+	c := New(Options{Executor: exec, SessionDir: dir, Label: "test"})
+	c.Resume(compacted, path)
+
+	if got := c.Goal(); got != "finish parser" {
+		t.Fatalf("Goal() after compacted resume = %q", got)
+	}
+	todos := c.Todos()
+	if len(todos) != 1 || todos[0].Content != "verify parser" || todos[0].Status != "in_progress" {
+		t.Fatalf("Todos() after compacted resume = %+v", todos)
+	}
+}
+
+func TestResumeReplaysAppendOnlyTodoSuffixFromV2Anchor(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	loaded := agent.NewSession("sys")
+	loaded.Add(provider.Message{Role: provider.RoleUser, Content: "compacted history without todo calls"})
+	messageCount, transcriptDigest := loaded.TranscriptAnchor()
+	loaded.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{
+		ID: "complete-a", Name: "complete_step", Arguments: `{"step":"a"}`,
+	}}})
+	loaded.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "complete-a", Name: "complete_step", Content: "signed off"})
+	state := GoalStateV2{
+		Version:          GoalStateVersion,
+		Goal:             "finish compacted plan",
+		Status:           GoalStatusRunning,
+		TodosKnown:       true,
+		Todos:            []evidence.TodoItem{{Content: "a", Status: "in_progress"}, {Content: "b", Status: "pending"}},
+		MessageCount:     messageCount,
+		TranscriptDigest: transcriptDigest,
+		Revision:         5,
+	}
+	if err := WriteGoalStateV2(goalStatePath(path), state); err != nil {
+		t.Fatal(err)
+	}
+
+	exec := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{}, event.Discard)
+	c := New(Options{Executor: exec, SessionDir: dir, Label: "test"})
+	c.Resume(loaded, path)
+
+	todos := c.Todos()
+	if len(todos) != 2 || todos[0].Status != "completed" || todos[1].Status != "in_progress" {
+		t.Fatalf("Todos() after append-only resume = %+v, want completed a and active b", todos)
+	}
+}
+
+func TestResumeKeepsNewerTranscriptTodosThanV2Sidecar(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	loaded := agent.NewSession("sys")
+	messageCount, transcriptDigest := loaded.TranscriptAnchor()
+	loaded.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{
+		ID: "todo-new", Name: "todo_write", Arguments: `{"todos":[{"content":"new transcript task","status":"in_progress"}]}`,
+	}}})
+	loaded.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "todo-new", Name: "todo_write", Content: "ok"})
+	state := GoalStateV2{
+		Version:          GoalStateVersion,
+		Status:           GoalStatusStopped,
+		TodosKnown:       true,
+		Todos:            []evidence.TodoItem{{Content: "stale sidecar task", Status: "pending"}},
+		MessageCount:     messageCount,
+		TranscriptDigest: transcriptDigest,
+		Revision:         2,
+	}
+	if err := WriteGoalStateV2(goalStatePath(path), state); err != nil {
+		t.Fatal(err)
+	}
+
+	exec := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{}, event.Discard)
+	c := New(Options{Executor: exec, SessionDir: dir, Label: "test"})
+	c.Resume(loaded, path)
+
+	todos := c.Todos()
+	if len(todos) != 1 || todos[0].Content != "new transcript task" || todos[0].Status != "in_progress" {
+		t.Fatalf("newer transcript todos were overwritten: %+v", todos)
+	}
+}
+
+func TestResumeDoesNotTreatPreCompactionCountAsNewerThanDivergedTranscript(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	preCompaction := agent.NewSession("sys")
+	for i := 0; i < 8; i++ {
+		preCompaction.Add(provider.Message{Role: provider.RoleUser, Content: fmt.Sprintf("old turn %d", i)})
+	}
+	oldCount, oldDigest := preCompaction.TranscriptAnchor()
+
+	loaded := agent.NewSession("sys")
+	loaded.Add(provider.Message{Role: provider.RoleUser, Content: "new compacted summary"})
+	loaded.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{
+		ID: "todo-new", Name: "todo_write", Arguments: `{"todos":[{"content":"new post-compaction task","status":"in_progress"}]}`,
+	}}})
+	loaded.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "todo-new", Name: "todo_write", Content: "ok"})
+	if oldCount <= loaded.Len() {
+		t.Fatalf("test setup needs reversed message counts: old=%d loaded=%d", oldCount, loaded.Len())
+	}
+	state := GoalStateV2{
+		Version: GoalStateVersion, Status: GoalStatusRunning, Goal: "continue safely",
+		TodosKnown: true, Todos: []evidence.TodoItem{{Content: "stale pre-compaction task", Status: "pending"}},
+		MessageCount: oldCount, TranscriptDigest: oldDigest, Revision: 7,
+	}
+	if err := WriteGoalStateV2(goalStatePath(path), state); err != nil {
+		t.Fatal(err)
+	}
+
+	exec := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{}, event.Discard)
+	c := New(Options{Executor: exec, SessionDir: dir, Label: "test"})
+	c.Resume(loaded, path)
+
+	todos := c.Todos()
+	if len(todos) != 1 || todos[0].Content != "new post-compaction task" {
+		t.Fatalf("larger stale count overwrote diverged transcript todos: %+v", todos)
+	}
+}
+
+func TestTurnBoundaryPersistsCanonicalTodos(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	exec := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{}, event.Discard)
+	runner := &scriptedRunner{exec: exec}
+	runner.scripts = []func(string){func(input string) {
+		exec.Session().Add(provider.Message{Role: provider.RoleUser, Content: input})
+		exec.ReplaceTodoState([]evidence.TodoItem{{Content: "persist after ordinary turn", Status: "in_progress"}})
+		exec.Session().Add(provider.Message{Role: provider.RoleAssistant, Content: "working"})
+	}}
+	c := New(Options{Runner: runner, Executor: exec, SessionDir: dir, SessionPath: path, Label: "test"})
+
+	if err := c.runTurn(context.Background(), "continue"); err != nil {
+		t.Fatal(err)
+	}
+	state, err := ReadGoalStateV2(goalStatePath(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.TodosKnown || len(state.Todos) != 1 || state.Todos[0].Content != "persist after ordinary turn" {
+		t.Fatalf("turn-boundary runtime = %+v", state)
+	}
+	if state.MessageCount != exec.Session().Len() {
+		t.Fatalf("runtime message count = %d, want %d", state.MessageCount, exec.Session().Len())
+	}
+	_, digest := exec.Session().TranscriptAnchor()
+	if state.TranscriptDigest == "" || state.TranscriptDigest != digest {
+		t.Fatalf("runtime transcript digest = %q, want %q", state.TranscriptDigest, digest)
+	}
+}
+
+func TestHeadlessRunUsesCheckpointRuntimeAndGoalLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	prov := &scriptedTurns{turns: [][]provider.Chunk{textTurn("Finished.\n\n[goal:complete]")}}
+	exec := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.Discard)
+	c := New(Options{
+		Runner: exec, Executor: exec, SessionDir: dir, SessionPath: path, Label: "test",
+	})
+	c.SetGoal("ship the headless task")
+
+	if err := c.Run(context.Background(), "start"); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.GoalStatus(); got != GoalStatusComplete {
+		t.Fatalf("GoalStatus() = %q, want complete", got)
+	}
+	if !c.CheckpointHasBoundary(0) {
+		t.Fatal("headless Run did not create a conversation checkpoint")
+	}
+	runtimeData, ok := c.checkpoints.runtime(0)
+	if !ok || len(runtimeData) == 0 {
+		t.Fatal("headless Run checkpoint did not capture runtime state")
+	}
+	state, err := ReadGoalStateV2(goalStatePath(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != GoalStatusComplete || state.Goal != "" || state.MessageCount != exec.Session().Len() {
+		t.Fatalf("persisted headless runtime = %+v", state)
+	}
+}
+
+func TestHeadlessRunKeepsPlanModeWithoutWaitingForInteractiveApproval(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	prov := &scriptedTurns{turns: [][]provider.Chunk{textTurn("Plan only; no interactive approval is available.")}}
+	exec := agent.New(prov, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.Discard)
+	c := New(Options{Runner: exec, Executor: exec, SessionDir: dir, SessionPath: path, Label: "test"})
+	c.SetPlanMode(true)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := c.Run(ctx, "plan the headless task"); err != nil {
+		t.Fatal(err)
+	}
+	if prov.call != 1 {
+		t.Fatalf("provider calls = %d, want one headless planning turn", prov.call)
+	}
+	if !c.PlanMode() {
+		t.Fatal("headless Run should preserve PlanMode for later explicit execution")
+	}
+	if !c.CheckpointHasBoundary(0) {
+		t.Fatal("headless PlanMode turn did not keep the shared checkpoint lifecycle")
+	}
+}
+
+func TestSnapshotRewriteRefreshesRuntimeTranscriptAnchor(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	exec := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{}, event.Discard)
+	exec.Session().Add(provider.Message{Role: provider.RoleUser, Content: "before compaction"})
+	exec.ReplaceTodoState([]evidence.TodoItem{{Content: "survive compaction", Status: "in_progress"}})
+	c := New(Options{Executor: exec, SessionDir: dir, SessionPath: path, Label: "test"})
+	c.SetGoal("finish after compaction")
+
+	exec.Session().Replace([]provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "compacted summary"},
+	})
+	exec.Session().IncrementRewrite()
+	if err := c.SnapshotRewrite(); err != nil {
+		t.Fatal(err)
+	}
+	state, err := ReadGoalStateV2(goalStatePath(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	count, digest := exec.Session().TranscriptAnchor()
+	if state.MessageCount != count || state.TranscriptDigest != digest {
+		t.Fatalf("rewrite runtime anchor = count %d digest %q, want %d %q", state.MessageCount, state.TranscriptDigest, count, digest)
+	}
+	if len(state.Todos) != 1 || state.Todos[0].Content != "survive compaction" {
+		t.Fatalf("rewrite runtime todos = %+v", state.Todos)
 	}
 }
 

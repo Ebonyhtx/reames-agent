@@ -43,17 +43,24 @@ type goalMachine struct {
 	interceptMsg       string
 	intercepts         int
 	strict             bool
-	selfCheckDone      bool
+	selfCheckPending   bool
 	idleTurns          int
+	revision           uint64
 
 	// statePath is the persisted goal-state sidecar; empty disables persistence.
 	statePath string
 	// writeMu serializes goal-state disk writes so concurrent saves don't
 	// interleave or land out of order. Taken OFF mu by writeState.
-	writeMu sync.Mutex
+	writeMu         sync.Mutex
+	writtenRevision map[string]uint64
+	// stateWrite is a fault-injection seam for revision-ordering tests.
+	stateWrite func(string, []byte, os.FileMode) error
 }
 
-// goalState is the serializable form of a running goal.
+// goalState is the serializable session runtime projection. Goal, Plan, Todo,
+// and continuation bookkeeping are persisted together so resume/switch/rewind
+// can replace the whole projection instead of layering new state over stale
+// in-memory fields.
 type goalState struct {
 	Goal               string              `json:"goal,omitempty"`
 	Status             string              `json:"status,omitempty"`
@@ -63,28 +70,49 @@ type goalState struct {
 	Blocks             int                 `json:"blocks,omitempty"`
 	Block              string              `json:"block,omitempty"`
 	Strict             bool                `json:"strict,omitempty"`
+	Intercepts         int                 `json:"intercepts,omitempty"`
+	InterceptMsg       string              `json:"interceptMsg,omitempty"`
+	SelfCheckPending   bool                `json:"selfCheckPending,omitempty"`
+	IdleTurns          int                 `json:"idleTurns,omitempty"`
+	PlanMode           bool                `json:"planMode,omitempty"`
+	TodosKnown         bool                `json:"todosKnown,omitempty"`
 	Todos              []evidence.TodoItem `json:"todos,omitempty"`
+	MessageCount       int                 `json:"messageCount,omitempty"`
+	TranscriptDigest   string              `json:"transcriptDigest,omitempty"`
+	Revision           uint64              `json:"revision,omitempty"`
+}
+
+type goalRuntimeProjection struct {
+	planMode         bool
+	todos            []evidence.TodoItem
+	messageCount     int
+	transcriptDigest string
 }
 
 // goalAdvanceInput carries everything the FSM needs for one continuation step,
 // gathered by the caller off the machine's lock.
 type goalAdvanceInput struct {
-	status     string // parsed marker status ("" when the turn carried no marker)
-	reason     string // blocked reason from the marker, if any
-	toolCalled bool   // whether the last turn made any tool call
-	todos      []evidence.TodoItem
-	readiness  string // executor.GoalReadinessFailure()
+	status           string // parsed marker status ("" when the turn carried no marker)
+	reason           string // blocked reason from the marker, if any
+	toolCalled       bool   // whether the last turn made any tool call
+	selfCheckTurn    bool   // whether the host actually issued the strict self-check turn
+	todos            []evidence.TodoItem
+	readiness        string // executor.GoalReadinessFailure()
+	planMode         bool
+	messageCount     int
+	transcriptDigest string
 }
 
 // goalAdvanceResult reports the FSM step's outcome. data/path/ok describe the
-// state to persist (built under mu when something changed); notice is surfaced
+// state to persist (built under mu for every active transition); notice is surfaced
 // to the user; cont reports whether the goal loop should continue.
 type goalAdvanceResult struct {
-	notice string
-	cont   bool
-	path   string
-	data   []byte
-	ok     bool
+	notice   string
+	cont     bool
+	path     string
+	data     []byte
+	ok       bool
+	revision uint64
 }
 
 // goalStatePath derives a session's persisted goal-state sidecar.
@@ -140,34 +168,36 @@ func (g *goalMachine) statusForDisplay() string {
 // set installs a session-scoped goal (or clears it when goal is empty), resets
 // the per-goal counters, and returns the state to persist. ok is false (no
 // persistence) when the goal is unchanged or no state path is configured.
-func (g *goalMachine) set(goal string, mode GoalResearchMode, autoResearchTaskID string, todos []evidence.TodoItem) (string, []byte, bool) {
+func (g *goalMachine) set(goal string, mode GoalResearchMode, autoResearchTaskID string, runtime goalRuntimeProjection) (string, []byte, uint64, bool) {
 	goal = strings.TrimSpace(goal)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if goal != "" && g.goal == goal && g.status == GoalStatusRunning && g.researchMode == mode && g.autoResearchTaskID == autoResearchTaskID {
-		return "", nil, false
+		return "", nil, 0, false
 	}
 	g.turns, g.blocks, g.block = 0, 0, ""
 	g.interceptMsg, g.intercepts = "", 0
-	g.selfCheckDone, g.idleTurns, g.strict = false, 0, false
+	g.selfCheckPending, g.idleTurns, g.strict = false, 0, false
 	if goal == "" {
 		g.goal, g.status, g.researchMode, g.autoResearchTaskID = "", GoalStatusStopped, GoalResearchAuto, ""
 	} else {
 		g.goal, g.status, g.researchMode, g.autoResearchTaskID = goal, GoalStatusRunning, mode, autoResearchTaskID
 	}
-	return g.buildStateLocked(todos)
+	g.revision++
+	return g.buildStateLocked(runtime)
 }
 
-func (g *goalMachine) setStrict(strict bool, todos []evidence.TodoItem) (string, []byte, bool) {
+func (g *goalMachine) setStrict(strict bool, runtime goalRuntimeProjection) (string, []byte, uint64, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.strict = strict
-	return g.buildStateLocked(todos)
+	g.revision++
+	return g.buildStateLocked(runtime)
 }
 
 // stop transitions a running goal to the given terminal status and clears the
 // transient intercept/idle bookkeeping.
-func (g *goalMachine) stop(status string, todos []evidence.TodoItem) (string, []byte, bool) {
+func (g *goalMachine) stop(status string, runtime goalRuntimeProjection) (string, []byte, uint64, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if strings.TrimSpace(g.goal) != "" && g.status == GoalStatusRunning {
@@ -175,12 +205,13 @@ func (g *goalMachine) stop(status string, todos []evidence.TodoItem) (string, []
 	}
 	g.interceptMsg = ""
 	g.intercepts = 0
-	g.selfCheckDone = false
+	g.selfCheckPending = false
 	g.idleTurns = 0
-	return g.buildStateLocked(todos)
+	g.revision++
+	return g.buildStateLocked(runtime)
 }
 
-// takeIntercept consumes a pending continuation-turn override, if any.
+// takeIntercept consumes a pending continuation-turn instruction, if any.
 func (g *goalMachine) takeIntercept() (string, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -192,9 +223,22 @@ func (g *goalMachine) takeIntercept() (string, bool) {
 	return msg, true
 }
 
+func (g *goalMachine) requeueIntercept(msg string, runtime goalRuntimeProjection) (string, []byte, uint64, bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.status != GoalStatusRunning || strings.TrimSpace(g.goal) == "" || strings.TrimSpace(msg) == "" {
+		return "", nil, 0, false
+	}
+	if g.interceptMsg == "" {
+		g.interceptMsg = msg
+	}
+	g.revision++
+	return g.buildStateLocked(runtime)
+}
+
 // advance runs one continuation step of the goal FSM from already-gathered
 // inputs. It mutates the machine, decides whether to keep looping, and builds
-// the state to persist when the goal reached a terminal/notice point.
+// the state to persist for every active transition.
 func (g *goalMachine) advance(in goalAdvanceInput) goalAdvanceResult {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -205,23 +249,24 @@ func (g *goalMachine) advance(in goalAdvanceInput) goalAdvanceResult {
 	var notice string
 	switch in.status {
 	case GoalStatusComplete:
-		if incomplete := formatIncompleteTodos(in.todos, in.readiness); len(incomplete) > 0 && (g.strict || g.intercepts == 0) {
-			// In strict mode every claim is blocked until todos are done;
-			// otherwise only the first consecutive claim is intercepted.
+		if incomplete := formatIncompleteTodos(in.todos, in.readiness); len(incomplete) > 0 {
+			// Completion is evidence-gated in every mode. Strict adds the final
+			// self-check; it never changes whether incomplete work may complete.
 			g.intercepts++
 			g.interceptMsg = incomplete
+			g.selfCheckPending = false
 			break
 		}
 		// Todos are all done — in strict mode run self-check before final
 		// completion. Non-strict mode completes immediately.
-		if g.strict && !g.selfCheckDone {
-			g.selfCheckDone = true
+		if g.strict && !in.selfCheckTurn {
+			g.selfCheckPending = true
 			g.interceptMsg = goalSelfCheckTurn
 			break
 		}
 		// Self-check passed — complete the goal.
 		g.intercepts = 0
-		g.selfCheckDone = false
+		g.selfCheckPending = false
 		g.idleTurns = 0
 		g.goal = ""
 		g.status = GoalStatusComplete
@@ -230,6 +275,7 @@ func (g *goalMachine) advance(in goalAdvanceInput) goalAdvanceResult {
 		g.interceptMsg = ""
 		notice = goalCompleteNotice
 	case GoalStatusBlocked:
+		g.selfCheckPending = false
 		reason := cleanGoalBlockReason(in.reason)
 		if reason == "" {
 			reason = "blocked"
@@ -248,8 +294,7 @@ func (g *goalMachine) advance(in goalAdvanceInput) goalAdvanceResult {
 		g.blocks = 0
 		g.block = ""
 		g.intercepts = 0
-		g.selfCheckDone = false
-		g.idleTurns = 0
+		g.selfCheckPending = false
 	}
 	// Idle detection: if the agent went multiple turns without any tool calls,
 	// inject a reminder to make progress (unless the goal is already completing
@@ -269,15 +314,21 @@ func (g *goalMachine) advance(in goalAdvanceInput) goalAdvanceResult {
 		g.status = GoalStatusBlocked
 		g.block = "goal continuation limit reached"
 		g.intercepts = 0
-		g.selfCheckDone = false
+		g.selfCheckPending = false
 		g.interceptMsg = ""
 		g.idleTurns = 0
 		notice = g.block
 	}
 	res := goalAdvanceResult{notice: notice, cont: notice == ""}
-	if notice != "" {
-		res.path, res.data, res.ok = g.buildStateLocked(in.todos)
+	// Every transition is durable, including continue/block streaks, idle
+	// reminders, completion intercepts, and the self-check phase. A crash may
+	// replay a pending reminder, but cannot reset the safety budgets.
+	g.revision++
+	runtime := goalRuntimeProjection{
+		planMode: in.planMode, todos: in.todos,
+		messageCount: in.messageCount, transcriptDigest: in.transcriptDigest,
 	}
+	res.path, res.data, res.revision, res.ok = g.buildStateLocked(runtime)
 	return res
 }
 
@@ -285,75 +336,166 @@ func (g *goalMachine) advance(in goalAdvanceInput) goalAdvanceResult {
 // holds mu; this only reads in-memory state, never touching disk. Returns ok=false
 // when persistence is disabled (no state path). The matching writeState does the
 // disk write OFF mu so the per-turn save can't stall a status poll.
-func (g *goalMachine) buildStateLocked(todos []evidence.TodoItem) (path string, data []byte, ok bool) {
+func (g *goalMachine) buildStateLocked(runtime goalRuntimeProjection) (path string, data []byte, revision uint64, ok bool) {
 	if g.statePath == "" {
-		return "", nil, false
+		return "", nil, 0, false
 	}
-	gs := goalState{
+	b, err := json.Marshal(FromGoalState(g.stateLocked(runtime)))
+	if err != nil {
+		slog.Warn("controller: marshal goal state", "err", err)
+		return "", nil, 0, false
+	}
+	return g.statePath, b, g.revision, true
+}
+
+func (g *goalMachine) stateLocked(runtime goalRuntimeProjection) goalState {
+	status := g.status
+	if status == "" {
+		status = GoalStatusStopped
+	}
+	return goalState{
 		Goal:               g.goal,
-		Status:             g.status,
+		Status:             status,
 		ResearchMode:       g.researchMode,
 		AutoResearchTaskID: g.autoResearchTaskID,
 		Turns:              g.turns,
 		Blocks:             g.blocks,
 		Block:              g.block,
 		Strict:             g.strict,
-		Todos:              todos,
+		Intercepts:         g.intercepts,
+		InterceptMsg:       g.interceptMsg,
+		SelfCheckPending:   g.selfCheckPending,
+		IdleTurns:          g.idleTurns,
+		PlanMode:           runtime.planMode,
+		TodosKnown:         true,
+		Todos:              append([]evidence.TodoItem(nil), runtime.todos...),
+		MessageCount:       runtime.messageCount,
+		TranscriptDigest:   runtime.transcriptDigest,
+		Revision:           g.revision,
 	}
-	// Write versioned format (GoalStateV1) for forward compatibility.
-	b, err := json.Marshal(FromGoalState(gs))
+}
+
+func (g *goalMachine) snapshotData(runtime goalRuntimeProjection) json.RawMessage {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	b, err := json.Marshal(FromGoalState(g.stateLocked(runtime)))
 	if err != nil {
-		slog.Warn("controller: marshal goal state", "err", err)
-		return "", nil, false
+		slog.Warn("controller: marshal checkpoint runtime", "err", err)
+		return nil
 	}
-	return g.statePath, b, true
+	return b
 }
 
 // writeState persists pre-marshaled goal-state bytes to disk, OFF mu and
 // serialized by writeMu so concurrent saves don't interleave or land out of
 // order. Best-effort: failures are logged, not surfaced.
-func (g *goalMachine) writeState(path string, data []byte) {
+func (g *goalMachine) writeState(path string, data []byte, revision uint64) {
 	if path == "" || data == nil {
 		return
 	}
 	g.writeMu.Lock()
 	defer g.writeMu.Unlock()
-	if err := fileutil.AtomicWriteFile(path, data, 0o644); err != nil {
-		slog.Warn("controller: write goal state", "err", err)
+	// The disk revision check and the atomic replacement form one compare/write
+	// transaction across Controller instances in this process. Session leases
+	// provide the corresponding cross-process single-writer boundary.
+	unlock := lockGoalStateFile(path)
+	defer unlock()
+	if g.writtenRevision == nil {
+		g.writtenRevision = make(map[string]uint64)
 	}
+	if last, exists := g.writtenRevision[path]; exists && revision <= last {
+		return
+	}
+	if current, err := os.ReadFile(path); err == nil {
+		state, parseErr := ReadGoalStateForResume(current)
+		if parseErr != nil {
+			slog.Warn("controller: preserve unreadable goal state", "path", path, "err", parseErr)
+			return
+		}
+		if revision <= state.Revision {
+			g.writtenRevision[path] = state.Revision
+			return
+		}
+	} else if !os.IsNotExist(err) {
+		slog.Warn("controller: inspect goal state revision", "path", path, "err", err)
+		return
+	}
+	writeFile := g.stateWrite
+	if writeFile == nil {
+		writeFile = fileutil.AtomicWriteFile
+	}
+	if err := writeFile(path, data, 0o644); err != nil {
+		slog.Warn("controller: write goal state", "err", err)
+		return
+	}
+	g.writtenRevision[path] = revision
 }
 
-// persistWithTodos re-persists goal state with the given todos, without
-// changing any in-memory goal fields. Used after force-completing todos on
-// goal completion so a session reload does not revert to the old incomplete
-// todo state.
-func (g *goalMachine) persistWithTodos(todos []evidence.TodoItem) {
+// persistRuntime writes the current Goal FSM together with Plan/Todo state.
+func (g *goalMachine) persistRuntime(runtime goalRuntimeProjection) {
 	g.mu.Lock()
-	path, data, ok := g.buildStateLocked(todos)
+	g.revision++
+	path, data, revision, ok := g.buildStateLocked(runtime)
 	g.mu.Unlock()
 	if ok {
-		g.writeState(path, data)
+		g.writeState(path, data, revision)
 	}
 }
 
-// terminalTodosFromState reads the persisted goal-state sidecar and returns its
-// todo snapshot only after the goal has reached a terminal state. Running goal
-// state is not refreshed on every todo_write, so its todos may be older than the
-// transcript rebuilt by Agent.SetSession.
-func (g *goalMachine) terminalTodosFromState(sessionPath string) ([]evidence.TodoItem, bool) {
+// readSessionState reads one persisted runtime projection. Invalid or future
+// formats fail closed and leave the caller's transcript-derived state intact.
+func (g *goalMachine) readSessionState(sessionPath string) (goalState, bool) {
 	if strings.TrimSpace(sessionPath) == "" {
-		return nil, false
+		return goalState{}, false
 	}
 	data, err := os.ReadFile(goalStatePath(sessionPath))
 	if err != nil {
 		if !os.IsNotExist(err) {
 			slog.Warn("controller: read goal state", "err", err)
 		}
-		return nil, false
+		return goalState{}, false
 	}
 	state, err := ReadGoalStateForResume(data)
 	if err != nil {
 		slog.Warn("controller: parse goal state", "err", err)
+		return goalState{}, false
+	}
+	return state, true
+}
+
+// restoreSessionState replaces every session-scoped Goal FSM field. It always
+// clears the previous session first, so switching to a branch with no sidecar
+// cannot retain and later persist the source branch's goal.
+func (g *goalMachine) restoreSessionState(sessionPath string) (goalState, bool) {
+	state, ok := g.readSessionState(sessionPath)
+	if ok && !validGoalState(state) {
+		ok = false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.replaceStateLocked(state, ok, false)
+	if !ok {
+		return goalState{}, false
+	}
+	return state, true
+}
+
+// restoreRunningFromState is retained for focused compatibility tests. Session
+// lifecycle code uses restoreSessionState so terminal/empty branches also clear
+// stale in-memory state.
+func (g *goalMachine) restoreRunningFromState(sessionPath string) {
+	state, ok := g.readSessionState(sessionPath)
+	if !ok || state.Status != GoalStatusRunning || strings.TrimSpace(state.Goal) == "" {
+		return
+	}
+	g.mu.Lock()
+	g.replaceStateLocked(state, true, false)
+	g.mu.Unlock()
+}
+
+func (g *goalMachine) terminalTodosFromState(sessionPath string) ([]evidence.TodoItem, bool) {
+	state, ok := g.readSessionState(sessionPath)
+	if !ok {
 		return nil, false
 	}
 	switch state.Status {
@@ -361,47 +503,86 @@ func (g *goalMachine) terminalTodosFromState(sessionPath string) ([]evidence.Tod
 	default:
 		return nil, false
 	}
-	if len(state.Todos) == 0 {
+	if !state.TodosKnown && len(state.Todos) == 0 {
 		return nil, false
 	}
 	return append([]evidence.TodoItem(nil), state.Todos...), true
 }
 
-// restoreRunningFromState reloads the active running goal from the persisted
-// sidecar during cold resume. Terminal sidecar data is intentionally ignored:
-// terminal todo repair is handled by terminalTodosFromState without reviving the
-// goal loop.
-func (g *goalMachine) restoreRunningFromState(sessionPath string) {
-	if strings.TrimSpace(sessionPath) == "" {
-		return
-	}
-	data, err := os.ReadFile(goalStatePath(sessionPath))
+func (g *goalMachine) restoreCheckpointState(data []byte) (goalState, bool) {
+	state, err := g.decodeCheckpointState(data)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			slog.Warn("controller: read goal state", "err", err)
-		}
-		return
+		slog.Warn("controller: parse checkpoint runtime", "err", err)
+		return goalState{}, false
 	}
+	g.applyCheckpointState(state)
+	return state, true
+}
+
+func (g *goalMachine) decodeCheckpointState(data []byte) (goalState, error) {
 	state, err := ReadGoalStateForResume(data)
 	if err != nil {
-		slog.Warn("controller: parse goal state", "err", err)
-		return
+		return goalState{}, err
 	}
-	if state.Status != GoalStatusRunning || strings.TrimSpace(state.Goal) == "" {
-		return
+	if !validGoalState(state) {
+		return goalState{}, fmt.Errorf("invalid checkpoint runtime status %q", state.Status)
 	}
+	return state, nil
+}
+
+func (g *goalMachine) applyCheckpointState(state goalState) {
 	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.replaceStateLocked(state, true, true)
+	g.mu.Unlock()
+}
+
+func validGoalState(state goalState) bool {
+	switch state.Status {
+	case GoalStatusRunning:
+		return strings.TrimSpace(state.Goal) != ""
+	case GoalStatusComplete, GoalStatusBlocked, GoalStatusStopped:
+		return true
+	default:
+		return false
+	}
+}
+
+func (g *goalMachine) replaceStateLocked(state goalState, ok, keepRevisionMonotonic bool) {
+	previousRevision := g.revision
+	g.goal = ""
+	g.status = GoalStatusStopped
+	g.researchMode = GoalResearchAuto
+	g.autoResearchTaskID = ""
+	g.turns, g.blocks, g.block = 0, 0, ""
+	g.strict = false
+	g.interceptMsg, g.intercepts = "", 0
+	g.selfCheckPending, g.idleTurns = false, 0
+	g.revision = 0
+	if !ok {
+		return
+	}
+	switch state.Status {
+	case GoalStatusRunning, GoalStatusComplete, GoalStatusBlocked, GoalStatusStopped:
+	default:
+		return
+	}
+	if state.Status == GoalStatusRunning && strings.TrimSpace(state.Goal) == "" {
+		return
+	}
 	g.goal = strings.TrimSpace(state.Goal)
-	g.status = GoalStatusRunning
+	g.status = state.Status
 	g.researchMode = state.ResearchMode
 	g.autoResearchTaskID = strings.TrimSpace(state.AutoResearchTaskID)
 	g.turns = state.Turns
 	g.blocks = state.Blocks
 	g.block = state.Block
 	g.strict = state.Strict
-	g.interceptMsg, g.intercepts = "", 0
-	g.selfCheckDone, g.idleTurns = false, 0
+	g.interceptMsg, g.intercepts = state.InterceptMsg, state.Intercepts
+	g.selfCheckPending, g.idleTurns = state.SelfCheckPending, state.IdleTurns
+	g.revision = state.Revision
+	if keepRevisionMonotonic && previousRevision > g.revision {
+		g.revision = previousRevision
+	}
 }
 
 // formatIncompleteTodos renders the reminder shown when [goal:complete] arrives
@@ -506,23 +687,94 @@ func (c *Controller) goalTodos() []evidence.TodoItem {
 	return c.executor.CanonicalTodoState()
 }
 
+func (c *Controller) goalRuntimeProjection() goalRuntimeProjection {
+	projection := goalRuntimeProjection{planMode: c.PlanMode(), todos: c.goalTodos()}
+	if c.executor != nil && c.executor.Session() != nil {
+		projection.messageCount, projection.transcriptDigest = c.executor.Session().TranscriptAnchor()
+	}
+	return projection
+}
+
 // persistGoalState writes a freshly built goal state to disk, off c.mu. The
 // executor guard preserves the original behavior of skipping persistence when
 // no executor is attached.
-func (c *Controller) persistGoalState(path string, data []byte, ok bool) {
+func (c *Controller) persistGoalState(path string, data []byte, revision uint64, ok bool) {
 	if !ok || c.executor == nil {
 		return
 	}
-	c.goals.writeState(path, data)
+	c.goals.writeState(path, data, revision)
 }
 
-func (c *Controller) restoreTerminalGoalTodos(sessionPath string) {
+func (c *Controller) restoreSessionRuntime(sessionPath string) {
+	state, ok := c.goals.restoreSessionState(sessionPath)
+	if !ok {
+		c.setPlanMode(false, false)
+		return
+	}
+	c.restoreRuntimeTodos(state)
+	c.setPlanMode(state.PlanMode, false)
+}
+
+func (c *Controller) restoreCheckpointRuntime(data []byte) bool {
+	state, ok := c.goals.restoreCheckpointState(data)
+	if !ok {
+		return false
+	}
+	c.restoreRuntimeTodos(state)
+	c.setPlanMode(state.PlanMode, false)
+	c.goals.persistRuntime(c.goalRuntimeProjection())
+	return true
+}
+
+func (c *Controller) restoreCheckpointState(state goalState) {
+	c.goals.applyCheckpointState(state)
+	c.restoreRuntimeTodos(state)
+	c.setPlanMode(state.PlanMode, false)
+	c.goals.persistRuntime(c.goalRuntimeProjection())
+}
+
+func (c *Controller) restoreRuntimeTodos(state goalState) {
 	if c.executor == nil {
 		return
 	}
-	todos, ok := c.goals.terminalTodosFromState(sessionPath)
-	if !ok {
+	if !state.TodosKnown {
+		// Legacy sidecars only used terminal Todo snapshots as a repair for the
+		// old completion override. Running v0/v1 state stays transcript-derived.
+		if state.Status != GoalStatusRunning && len(state.Todos) > 0 {
+			c.executor.RestoreTodoState(append([]evidence.TodoItem(nil), state.Todos...))
+		}
 		return
 	}
-	c.executor.ReplaceTodoState(todos)
+	// Modern v2 projections carry a transcript anchor. Exact equality means the
+	// sidecar and transcript describe the same boundary (including a compacted
+	// log); an append-only extension proves the transcript is newer. A rewrite or
+	// divergence is intentionally inconclusive and keeps transcript-derived Todo
+	// state rather than allowing a larger pre-compaction count to pose as newer.
+	session := c.executor.Session()
+	if session != nil && state.TranscriptDigest != "" {
+		equal, extends := session.CompareTranscriptAnchor(state.MessageCount, state.TranscriptDigest)
+		switch {
+		case equal:
+			c.executor.RestoreTodoState(append([]evidence.TodoItem(nil), state.Todos...))
+		case extends:
+			c.executor.RestoreTodoStateFromAnchor(append([]evidence.TodoItem(nil), state.Todos...), state.MessageCount)
+		}
+		return
+	}
+	// Legacy v2 sidecars lack an anchor. Preserve their original count heuristic
+	// for compatibility; every newly persisted projection upgrades itself.
+	if session == nil || state.MessageCount >= session.Len() {
+		c.executor.RestoreTodoState(append([]evidence.TodoItem(nil), state.Todos...))
+	}
+}
+
+func writeSessionRuntimeData(sessionPath string, data []byte) error {
+	if strings.TrimSpace(sessionPath) == "" || len(data) == 0 {
+		return nil
+	}
+	state, err := ReadGoalStateForResume(data)
+	if err != nil {
+		return err
+	}
+	return WriteGoalStateV2(goalStatePath(sessionPath), FromGoalState(state))
 }

@@ -52,12 +52,14 @@ type SessionInfo struct {
 func Build(ctrl control.SessionAPI, l *evidence.Ledger) Status {
 	rs := ctrl.RuntimeStatus()
 	hit, miss := ctrl.SessionCache()
+	goalText := ctrl.Goal()
+	goalStatus := ctrl.GoalStatus()
 
 	s := Status{
 		Goal: GoalStatus{
-			Text:   ctrl.Goal(),
-			Status: ctrl.GoalStatus(),
-			Active: ctrl.Goal() != "",
+			Text:   goalText,
+			Status: goalStatus,
+			Active: goalText != "" && goalStatus == control.GoalStatusRunning,
 		},
 		Plan: PlanStatus{Active: ctrl.PlanMode()},
 		Session: SessionInfo{
@@ -73,14 +75,15 @@ func Build(ctrl control.SessionAPI, l *evidence.Ledger) Status {
 		s.Todos[i] = TodoItem{Content: t.Content, Status: t.Status, ActiveForm: t.ActiveForm, Level: t.Level}
 	}
 
+	snapshot := ctrl.EvidenceSnapshot()
 	if l != nil {
-		_, todoReady := l.IncompleteLatestTodos()
-		s.Evidence = EvidenceSummary{
-			Receipts:    l.Len(),
-			WriteRecent: l.HasWriteOrCommandSince(0),
-			Touched:     safe(l.TouchedPaths(50, false), 50),
-			TodoReady:   !todoReady,
-		}
+		snapshot = l.Snapshot(50)
+	}
+	s.Evidence = EvidenceSummary{
+		Receipts:    snapshot.Receipts,
+		WriteRecent: snapshot.WriteOrCommand,
+		Touched:     safe(snapshot.Touched, 50),
+		TodoReady:   len(evidence.IncompleteTodos(raw)) == 0,
 	}
 
 	return s

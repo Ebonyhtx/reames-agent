@@ -163,6 +163,29 @@ func TestRebuildTodoStateHonorsEmptyTodoWriteClear(t *testing.T) {
 	}
 }
 
+func TestRestoreTodoStateFromAnchorReplaysAppendOnlySuffix(t *testing.T) {
+	sess := NewSession("system")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "compacted history"})
+	anchor := sess.Len()
+	sess.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{
+		ID: "c1", Name: "complete_step", Arguments: `{"step":"a"}`,
+	}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "c1", Name: "complete_step", Content: "signed off"})
+
+	a := &Agent{session: sess}
+	base := []evidence.TodoItem{{Content: "a", Status: "in_progress"}, {Content: "b", Status: "pending"}}
+	if !a.RestoreTodoStateFromAnchor(base, anchor) {
+		t.Fatal("RestoreTodoStateFromAnchor rejected valid append-only boundary")
+	}
+	got := a.CanonicalTodoState()
+	if len(got) != 2 || got[0].Status != "completed" || got[1].Status != "in_progress" {
+		t.Fatalf("restored Todo state = %+v, want completed a and active b", got)
+	}
+	if a.RestoreTodoStateFromAnchor(base, -1) {
+		t.Fatal("RestoreTodoStateFromAnchor accepted negative boundary")
+	}
+}
+
 func TestSeedTodoState(t *testing.T) {
 	a := &Agent{sink: event.Discard}
 	todos := []evidence.TodoItem{

@@ -196,6 +196,49 @@ func TestTurnOrchestratorGoalContinuationRunsStopPerUnit(t *testing.T) {
 	}
 }
 
+func TestTurnOrchestratorRequeuesStrictSelfCheckWhenPromptHookBlocks(t *testing.T) {
+	prov := &scriptedTurns{turns: [][]provider.Chunk{
+		textTurn("Finished.\n\n[goal:complete]"),
+	}}
+	ag := agent.New(prov, tool.NewRegistry(), agent.NewSession(""), agent.Options{}, event.Discard)
+	var blockedSelfChecks int
+	hooks := hook.NewRunner([]hook.ResolvedHook{{
+		HookConfig: hook.HookConfig{Command: "gate-self-check"},
+		Event:      hook.UserPromptSubmit,
+		Scope:      hook.ScopeProject,
+	}}, "", func(_ context.Context, in hook.SpawnInput) hook.SpawnResult {
+		var payload hook.Payload
+		if err := json.Unmarshal([]byte(in.Stdin), &payload); err != nil {
+			t.Fatalf("hook payload: %v", err)
+		}
+		if strings.Contains(payload.Prompt, goalSelfCheckTurn) {
+			blockedSelfChecks++
+			return hook.SpawnResult{ExitCode: 2, Stderr: "self-check gated"}
+		}
+		return hook.SpawnResult{ExitCode: 0}
+	}, nil)
+	c := New(Options{Runner: ag, Executor: ag, Hooks: hooks})
+	c.SetGoal("ship the refactor")
+	c.GoalStrict(true)
+
+	if err := newTurnOrchestrator(c).runGoalLoopWithRawDisplay(context.Background(), "start", "start", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if prov.call != 1 {
+		t.Fatalf("provider calls = %d, want only the initial turn", prov.call)
+	}
+	if blockedSelfChecks != 1 {
+		t.Fatalf("blocked self-check hooks = %d, want 1", blockedSelfChecks)
+	}
+	if got := c.GoalStatus(); got != GoalStatusRunning {
+		t.Fatalf("GoalStatus() = %q, want running until a real self-check turn completes", got)
+	}
+	if msg, ok := c.goals.takeIntercept(); !ok || msg != goalSelfCheckTurn {
+		t.Fatalf("requeued self-check = %q ok=%v", msg, ok)
+	}
+}
+
 func TestTurnOrchestratorApprovedPlanSharesOneStopHook(t *testing.T) {
 	prov := &scriptedTurns{turns: [][]provider.Chunk{
 		textTurn("Plan:\n1. Make the change\n2. Verify it"),

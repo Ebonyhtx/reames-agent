@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Agent Reliability
+
+- Made Goal completion evidence-gated in every mode; repeated completion claims can no longer override incomplete canonical todos or project checks, and the host no longer fabricates final todo events.
+- Added a versioned session runtime projection for recoverable Goal/Plan/Todo state, continuation budgets, strict self-checks, transcript-digest freshness, and per-path monotonic revisions across resume, branch, fork, switch, and rewind.
+- Hardened checkpoint rewind with transcript-prefix digests, runtime preflight, durable truncate tombstones, workspace/symlink confinement, path-alias handling, transactional file rollback including a partially written failing target, and relative-path mode restoration. Checkpoint writes use `AtomicWriteFile`; its Windows cross-device fallback and the remaining path/dual-resource crash windows are documented rather than described as unconditionally crash-safe.
+- Corrected idle-loop detection, required strict completion to follow an actual host self-check turn, and exposed current-turn evidence to Board without treating it as durable proof.
+
 ### Security / Governance
 
 - Added public-readiness gates for ownership, release safety, deployment docs, and attribution.

@@ -109,6 +109,7 @@
 | [M6 clean-node 运维预检审计](audits/2026-07-13-m6-clean-node-operations-preflight.md) | schema v2 credential-free 实际二进制预检、全 home 敏感值扫描与真实外部证据非声明 |
 | [M6 Linux systemd user lifecycle audit](audits/2026-07-13-m6-linux-systemd-lifecycle.md) | WSL2 真实 user-service 安装、同名重装、restart/stop/start/uninstall、webhook readiness 与升级资产合同证据 |
 | [M6 Gateway、备份与升级恢复事务审计](audits/2026-07-14-m6-recovery-transactions.md) | Linux user install fail-closed 回滚、敏感 home/state backup/restore 与 CLI updater previous/rollback 的本地证据和限制 |
+| [M4 会话运行态与 Checkpoint 恢复审计](audits/2026-07-14-m4-session-runtime-recovery.md) | Goal completion 门控、v2 Goal/Plan/Todo 恢复、分支/回退一致性、事务式文件恢复及剩余 M4 边界 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 

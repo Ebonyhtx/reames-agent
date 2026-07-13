@@ -170,6 +170,7 @@ type Status interface {
 	Balance(ctx context.Context) (*billing.Balance, error)
 	Jobs() []jobs.View
 	Todos() []evidence.TodoItem
+	EvidenceSnapshot() evidence.Snapshot
 }
 
 // SessionPersistence covers snapshotting a session and tearing down its on-disk

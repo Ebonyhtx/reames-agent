@@ -53,6 +53,14 @@ type Ledger struct {
 	receipts []Receipt
 }
 
+// Snapshot is a bounded, read-only projection for status surfaces. It is
+// intentionally not durable proof: the ledger resets at the next user turn.
+type Snapshot struct {
+	Receipts       int
+	WriteOrCommand bool
+	Touched        []string
+}
+
 func NewLedger() *Ledger { return &Ledger{} }
 
 // Reset clears receipts between user turns.
@@ -100,6 +108,32 @@ func (l *Ledger) Len() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return len(l.receipts)
+}
+
+func (l *Ledger) Snapshot(limit int) Snapshot {
+	if l == nil {
+		return Snapshot{}
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := Snapshot{Receipts: len(l.receipts)}
+	seen := map[string]bool{}
+	for i := len(l.receipts) - 1; i >= 0; i-- {
+		r := l.receipts[i]
+		if r.Success && (r.Write || r.Command != "") {
+			out.WriteOrCommand = true
+		}
+		if !r.Success || (!r.Read && !r.Write) || len(out.Touched) >= limit {
+			continue
+		}
+		for _, path := range r.Paths {
+			if !seen[path] && len(out.Touched) < limit {
+				seen[path] = true
+				out.Touched = append(out.Touched, path)
+			}
+		}
+	}
+	return out
 }
 
 // HasWriteOrCommandSince reports whether a successful write or command receipt

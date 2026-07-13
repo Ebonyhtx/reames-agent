@@ -3,14 +3,17 @@ package checkpoint
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
 	"reames-agent/internal/diff"
+	"reames-agent/internal/fileutil"
 	fileenc "reames-agent/internal/fileutil/encoding"
 )
 
@@ -205,6 +208,52 @@ func TestSnapshotDedupsFirstTouchWins(t *testing.T) {
 	}
 }
 
+func TestSnapshotDedupsLexicalPathAliases(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "a.txt")
+	alias := root + string(filepath.Separator) + "." + string(filepath.Separator) + "a.txt"
+	write(t, path, "orig")
+	s := New("", root)
+	s.Begin(0, "p", 0)
+	s.Snapshot(diff.Change{Path: alias, Kind: diff.Modify, OldText: "orig"})
+	write(t, path, "edited-once")
+	s.Snapshot(diff.Change{Path: path, Kind: diff.Modify, OldText: "edited-once"})
+	write(t, path, "edited-twice")
+
+	if _, _, err := s.RestoreCode(0); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, path); got != "orig" {
+		t.Fatalf("path alias restored %q, want earliest content", got)
+	}
+}
+
+func TestSnapshotHardLinkAliasesShareEarliestContent(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "first.txt")
+	second := filepath.Join(root, "second.txt")
+	write(t, first, "orig")
+	if err := os.Link(first, second); err != nil {
+		t.Skipf("hard links unavailable: %v", err)
+	}
+	s := New("", root)
+	s.Begin(0, "p", 0)
+	s.Snapshot(diff.Change{Path: first, Kind: diff.Modify, OldText: "orig"})
+	write(t, first, "edited-once")
+	s.Snapshot(diff.Change{Path: second, Kind: diff.Modify, OldText: "edited-once"})
+	write(t, second, "edited-twice")
+
+	if _, _, err := s.RestoreCode(0); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, first); got != "orig" {
+		t.Fatalf("first hard-link alias = %q, want earliest content", got)
+	}
+	if got := read(t, second); got != "orig" {
+		t.Fatalf("second hard-link alias = %q, want earliest content", got)
+	}
+}
+
 func TestRestoreRejectsPathEscape(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "evil.txt")
@@ -284,8 +333,8 @@ func TestTruncateFromDropsFutureCheckpointsAndFiles(t *testing.T) {
 	if len(metas) != 1 || metas[0].Turn != 0 {
 		t.Fatalf("metas after truncate = %+v, want only turn 0", metas)
 	}
-	if s.NextTurn() != 1 {
-		t.Fatalf("NextTurn after truncate = %d, want 1", s.NextTurn())
+	if s.NextTurn() != 3 {
+		t.Fatalf("NextTurn after truncate = %d, want monotonic watermark 3", s.NextTurn())
 	}
 	if _, err := os.Stat(filepath.Join(dir, "turn-1.json")); !os.IsNotExist(err) {
 		t.Fatalf("turn-1 checkpoint should be deleted, stat err=%v", err)
@@ -296,6 +345,130 @@ func TestTruncateFromDropsFutureCheckpointsAndFiles(t *testing.T) {
 	reloaded := New(dir, root)
 	if got := reloaded.List(); len(got) != 1 || got[0].Turn != 0 {
 		t.Fatalf("reloaded metas after truncate = %+v, want only turn 0", got)
+	}
+	if reloaded.NextTurn() != 3 {
+		t.Fatalf("reloaded NextTurn = %d, want monotonic watermark 3", reloaded.NextTurn())
+	}
+}
+
+func TestTruncateTombstoneFiltersUndeletedRecordsAfterRestart(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "session.ckpt")
+	s := New(dir, root)
+	s.Begin(0, "first", 0)
+	s.Begin(1, "second", 2)
+	retiredPath := filepath.Join(dir, "turn-1.json")
+	retiredBytes, err := os.ReadFile(retiredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.TruncateFrom(1); err != nil {
+		t.Fatal(err)
+	}
+	// Model a failed physical delete or a stale directory view after the durable
+	// truncate state landed. Reload must not resurrect the retired checkpoint.
+	if err := os.WriteFile(retiredPath, retiredBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := New(dir, root)
+	if got := reloaded.List(); len(got) != 1 || got[0].Turn != 0 {
+		t.Fatalf("tombstoned checkpoint resurrected: %+v", got)
+	}
+	if reloaded.NextTurn() != 2 {
+		t.Fatalf("NextTurn after tombstoned reload = %d, want 2", reloaded.NextTurn())
+	}
+	reloaded.Begin(2, "new future", 1)
+	if got := reloaded.List(); len(got) != 2 || got[1].Turn != 2 {
+		t.Fatalf("new monotonic checkpoint hidden by tombstone: %+v", got)
+	}
+}
+
+func TestCorruptTruncateManifestFailsClosedAndHealsOnNextTurn(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "session.ckpt")
+	s := New(dir, root)
+	s.Begin(0, "first", 0)
+	s.Begin(1, "second", 2)
+	retiredPath := filepath.Join(dir, "turn-1.json")
+	retiredBytes, err := os.ReadFile(retiredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.TruncateFrom(1); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(retiredPath, retiredBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, checkpointStateFilename), []byte(`{"version":`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := New(dir, root)
+	if got := reloaded.List(); len(got) != 0 {
+		t.Fatalf("corrupt manifest admitted untrusted checkpoints: %+v", got)
+	}
+	if reloaded.NextTurn() != 2 {
+		t.Fatalf("NextTurn with corrupt manifest = %d, want filename watermark 2", reloaded.NextTurn())
+	}
+	reloaded.Begin(2, "new trusted turn", 1)
+	healed := New(dir, root)
+	if got := healed.List(); len(got) != 1 || got[0].Turn != 2 {
+		t.Fatalf("healed store checkpoints = %+v, want only new turn 2", got)
+	}
+	if healed.NextTurn() != 3 {
+		t.Fatalf("healed NextTurn = %d, want 3", healed.NextTurn())
+	}
+}
+
+func TestTruncateManifestFailureLeavesStoreIntact(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "session.ckpt")
+	s := New(dir, root)
+	s.Begin(0, "first", 0)
+	s.Begin(1, "second", 2)
+	s.stateWrite = func(string, []byte, os.FileMode) error { return errors.New("injected manifest failure") }
+
+	if err := s.TruncateFrom(1); err == nil || !strings.Contains(err.Error(), "injected manifest failure") {
+		t.Fatalf("TruncateFrom error = %v", err)
+	}
+	if got := s.List(); len(got) != 2 {
+		t.Fatalf("failed truncate mutated live store: %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "turn-1.json")); err != nil {
+		t.Fatalf("failed truncate removed checkpoint: %v", err)
+	}
+}
+
+func TestLoadRejectsInvalidCheckpointRecords(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "session.ckpt")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	records := map[string]Checkpoint{
+		"turn-0.json": {Turn: -1, MsgIndex: 0},
+		"turn-1.json": {Turn: 0, MsgIndex: 0},
+		"turn-2.json": {Turn: 2, MsgIndex: -1},
+		"turn-3.json": {Turn: 3, MsgIndex: 1, Prompt: "valid"},
+	}
+	for name, record := range records {
+		data, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s := New(dir, root)
+	if got := s.List(); len(got) != 1 || got[0].Turn != 3 {
+		t.Fatalf("loaded invalid checkpoint records: %+v", got)
+	}
+	if s.NextTurn() != 4 {
+		t.Fatalf("NextTurn = %d, want filename watermark 4", s.NextTurn())
 	}
 }
 
@@ -345,5 +518,185 @@ func TestLazyDirectoryCreation(t *testing.T) {
 	turnPath := filepath.Join(dir, "turn-0.json")
 	if _, err := os.Stat(turnPath); err != nil {
 		t.Fatalf("turn file should now exist: %v", err)
+	}
+}
+
+func TestRuntimeProjectionPersistsWithCheckpoint(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "session.ckpt")
+	s := New(dir, t.TempDir())
+	runtimeState := json.RawMessage(`{"version":2,"goal":"ship","status":"running","revision":3}`)
+	s.Begin(0, "ship", 2, runtimeState)
+
+	reloaded := New(dir, s.root)
+	got, ok := reloaded.Runtime(0)
+	if !ok || !bytes.Equal(got, runtimeState) {
+		t.Fatalf("runtime projection = %s ok=%v, want %s", got, ok, runtimeState)
+	}
+}
+
+func TestRestoreRejectsSymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	target := filepath.Join(link, "outside.txt")
+	outsideTarget := filepath.Join(outside, "outside.txt")
+	write(t, outsideTarget, "original")
+	s := New("", root)
+	s.Begin(0, "edit", 0)
+	s.Snapshot(diff.Change{Path: target, Kind: diff.Modify, OldText: "original"})
+	write(t, outsideTarget, "edited")
+
+	if _, _, err := s.RestoreCode(0); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("RestoreCode symlink error = %v", err)
+	}
+	if got := read(t, outsideTarget); got != "edited" {
+		t.Fatalf("outside target changed through symlink: %q", got)
+	}
+}
+
+func TestRestoreRollsBackEarlierFilesOnWriteFailure(t *testing.T) {
+	root := t.TempDir()
+	a := filepath.Join(root, "a.txt")
+	b := filepath.Join(root, "b.txt")
+	write(t, a, "a-before")
+	write(t, b, "b-before")
+	s := New("", root)
+	s.Begin(0, "edit both", 0)
+	s.Snapshot(diff.Change{Path: a, Kind: diff.Modify, OldText: "a-before"})
+	s.Snapshot(diff.Change{Path: b, Kind: diff.Modify, OldText: "b-before"})
+	write(t, a, "a-edited")
+	write(t, b, "b-edited")
+	s.restoreWrite = func(path string, data []byte, mode os.FileMode) error {
+		if filepath.Base(path) == "b.txt" {
+			return errors.New("injected second write failure")
+		}
+		return fileutil.AtomicWriteFile(path, data, mode)
+	}
+
+	if _, _, err := s.RestoreCode(0); err == nil || !strings.Contains(err.Error(), "injected") {
+		t.Fatalf("RestoreCode error = %v", err)
+	}
+	if got := read(t, a); got != "a-edited" {
+		t.Fatalf("first file was not rolled back: %q", got)
+	}
+	if got := read(t, b); got != "b-edited" {
+		t.Fatalf("failed file changed: %q", got)
+	}
+}
+
+func TestRestoreRollsBackFailingFileAfterPartialWrite(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "target.txt")
+	write(t, path, "before")
+	s := New("", root)
+	s.Begin(0, "edit", 0)
+	s.Snapshot(diff.Change{Path: path, Kind: diff.Modify, OldText: "before"})
+	write(t, path, "edited")
+	s.restoreWrite = func(path string, _ []byte, mode os.FileMode) error {
+		if err := os.WriteFile(path, []byte("partial"), mode); err != nil {
+			return err
+		}
+		return errors.New("injected failure after partial write")
+	}
+
+	if _, _, err := s.RestoreCode(0); err == nil || !strings.Contains(err.Error(), "injected") {
+		t.Fatalf("RestoreCode error = %v", err)
+	}
+	if got := read(t, path); got != "edited" {
+		t.Fatalf("partially written file was not rolled back: %q", got)
+	}
+}
+
+func TestRestorePreservesExecutableMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve Unix executable bits")
+	}
+	root := t.TempDir()
+	path := filepath.Join(root, "script.sh")
+	if err := os.WriteFile(path, []byte("before"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := New("", root)
+	s.Begin(0, "edit script", 0)
+	s.Snapshot(diff.Change{Path: path, Kind: diff.Modify, OldText: "before"})
+	if err := os.WriteFile(path, []byte("edited"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.RestoreCode(0); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Fatalf("restored mode = %o, want 755", info.Mode().Perm())
+	}
+}
+
+func TestRestoreRelativePathPreservesExecutableMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve Unix executable bits")
+	}
+	root := t.TempDir()
+	const relative = "script.sh"
+	path := filepath.Join(root, relative)
+	if err := os.WriteFile(path, []byte("before"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := New("", root)
+	s.Begin(0, "edit relative script", 0)
+	s.Snapshot(diff.Change{Path: relative, Kind: diff.Modify, OldText: "before"})
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("edited"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.RestoreCode(0); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Fatalf("restored relative-path mode = %o, want 755", info.Mode().Perm())
+	}
+}
+
+func TestRestorePreservesZeroMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve Unix permission bits")
+	}
+	root := t.TempDir()
+	path := filepath.Join(root, "locked.txt")
+	if err := os.WriteFile(path, []byte("before"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	s := New("", root)
+	s.Begin(0, "edit locked file", 0)
+	s.Snapshot(diff.Change{Path: path, Kind: diff.Modify, OldText: "before"})
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("edited"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.RestoreCode(0); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0 {
+		t.Fatalf("restored mode = %o, want 000", info.Mode().Perm())
 	}
 }

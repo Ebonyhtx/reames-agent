@@ -1,7 +1,7 @@
 # Reames Agent 威胁模型
 
 > 状态：描述当前代码边界，不把路线图当作已实现能力
-> 更新：2026-07-13
+> 更新：2026-07-14
 
 ## 范围与假设
 
@@ -33,7 +33,7 @@ Controller ── Agent loop ── Provider API
 | HTTP Serve | 部分实现 | 支持 `none`/token/password，token 常量时间比较、密码 session HMAC、登录速率限制、JSON-only POST CSRF guard、默认无 CORS、显式单 origin CORS；版本化 command 校验与服务端 `remote` scope 阻止客户端选择 trusted submit，旧 WS submit 也不再绕过 `!shell` 限制；history 使用展示安全 transcript 而不输出 system/注入上下文；真实 WebSocket 握手有回归测试 | WebSocket `CheckOrigin` 当前放行并依赖外层鉴权；`auth=none` 依赖 loopback/same-origin 部署假设；请求体、WS frame 和全局请求速率限制仍需系统化审计 |
 | IM Gateway | 部分实现 | 用户/群 allowlist、admin/approver 角色、operator 身份检查和各渠道传输适配已存在；connection/domain/chat/user/operator/message ID 只用于路由，不进入 Provider prompt。`gateway setup` 只接受常规大写 secret 环境变量名，新连接必须显式 pairing/名单/角色或有意 `allow_all`，损坏配置与缺失 access 均 fail closed；dry-run 不落盘，正式更新原子且幂等。Linux systemd user service 已用随机 token 的 loopback webhook challenge 验证 install/reinstall/restart/stop/start/uninstall，token 不进入 unit、命令输出或报告；Linux user-scope install 还会验证 unit、快照旧定义与 enabled/active 状态，并在定义恢复失败时停止后续 manager 操作 | CLI 无法从字符串本身证明一个大写值绝不是误传 secret，运维仍须使用命名明确的环境变量；当前没有通用飞书 webhook HMAC/重放验证实现；install 事务不覆盖 system scope、macOS launchd、Windows Scheduled Task 或 uninstall；WSL 证据为 `Linger=no` 的登录会话内生命周期，不证明 logout/reboot 常驻；真实飞书/QQ/微信回环需要外部应用凭据与网络环境，未验证前不得声明完成 |
 | 插件与 Hook | 部分实现 | 插件路径/名称/manifest 基础校验、启停状态、MCP 启动/调用超时、项目 Hook trust gate 和 Hook 超时已存在 | manifest 尚无被安装器执行的权限声明、兼容版本、内容哈希或签名验证；“用户安装即信任”仍是主要边界 |
-| 状态与恢复 | 部分实现 | session JSONL、lease/recovery、checkpoint/rewind、版本化 Goal sidecar 和 Todo 恢复均有测试；CLI/Bot/Serve/ACP/Desktop 的列表/恢复/跨进程 lease/cleanup/trash/recovery GC 通过 control persistence 边界复用同一语义。`backup create/verify/restore` 支持 home/state 分根、已知凭据排除、逐文件哈希、源文件身份复验、portable path 拒绝、仅新目标恢复和后续根失败时的进程内回滚 | 备份仍可能含 session/memory/config 中的 secret；内嵌 hash 只证明自洽；`--offline` 是人工确认而非全局锁；Windows 保护依赖目标目录 ACL；跨根恢复没有 durable crash journal，强杀后可能留下 staging/空 parent；并非所有 sidecar 都使用同一种原子写协议 |
+| 状态与恢复 | 部分实现 | session JSONL、lease/recovery 和 control persistence 边界继续复用同一语义。v2 runtime sidecar 持久化 Goal/Plan/Todo、continuation 安全计数、message count、transcript digest 与 monotonic revision；相同 sidecar 路径的进程内 revision 检查/替换串行化，跨进程依赖 session lease。所有 completion 都经过 Todo/project checks，strict 只接受实际 self-check turn；被 PromptSubmit hook 拦截的 synthetic self-check 不算执行并会重新排队。Resume/Switch/Branch/Fork/Rewind 整体替换运行态；append-only transcript 从 sidecar Todo 基础重放后缀，rewrite/divergence 不接受旧 Todo。Checkpoint 保存 turn-start runtime 与 prefix digest；同长度 divergence、legacy 无 digest、负边界和无效 runtime 均 fail closed。持久化 truncate tombstone 阻止删除失败后复活并保持 turn ID 单调；路径别名和现存硬链接共享 earliest bytes，文件失败反向恢复已成功及可能部分写入的目标。`backup create/verify/restore` 继续提供分根、哈希、源身份、portable path 和仅新目标恢复门禁 | Runtime/checkpoint 写失败尚未全部向 writer fail closed 传播；evidence ledger 仍是单 turn 内存态，不是 durable proof；后台 Task 与 writable 子代理没有完整 crash-resume/父 checkpoint 归并。`AtomicWriteFile` 的 Windows cross-device fallback 可能原地复制；RestoreCode 路径复查后仍按路径写入，存在需要 handle-relative no-reparse/resolve-beneath 关闭的 TOCTOU；transcript/runtime/workspace 不构成断电事务，ACL/xattr/硬链接身份也不恢复。session lease 缺失的非标准嵌入方不获得跨进程 sidecar 单写者保证。备份仍可能含 session/memory/config secret，内嵌 hash 只证明自洽，`--offline` 不是全局锁，Windows 依赖目标 ACL，跨根恢复没有 durable crash journal |
 | 构建与发布 | 部分实现 | Go 依赖哈希、六目标 candidate、SHA256SUMS、三平台 Desktop candidate、CodeQL 和发布契约检查已建立；CLI updater 已锁定官方仓库和精确资产名，实际执行候选/安装后 `version`，保留 `.previous`，并以同目录锁保护自动恢复和 `upgrade --rollback` | updater 事务没有 durable crash journal；生产发布仍禁用；公开 release 实际升级/失败回滚、CLI/Windows/macOS 工件签名、notarization、provenance attestation 和可信 updater 发布链未完成 |
 
 ## 优先风险

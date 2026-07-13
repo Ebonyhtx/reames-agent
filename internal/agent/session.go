@@ -86,6 +86,37 @@ func (s *Session) Len() int {
 	return len(s.Messages)
 }
 
+// TranscriptAnchor returns a stable identity for the current message boundary.
+// The leading system message is excluded from the digest so refreshing the
+// cache-stable prompt on resume does not make an otherwise identical transcript
+// look divergent. MessageCount still includes it and preserves exact boundaries.
+func (s *Session) TranscriptAnchor() (messageCount int, digest string) {
+	msgs := s.Snapshot()
+	return len(msgs), runtimeTranscriptDigest(msgs)
+}
+
+// CompareTranscriptAnchor reports whether the current transcript is exactly the
+// anchored boundary or an append-only extension of it. Both false means the log
+// was rewritten/diverged, so callers must not infer freshness from message count.
+func (s *Session) CompareTranscriptAnchor(messageCount int, digest string) (equal, extends bool) {
+	msgs := s.Snapshot()
+	if messageCount < 0 || messageCount > len(msgs) || digest == "" {
+		return false, false
+	}
+	if runtimeTranscriptDigest(msgs[:messageCount]) != digest {
+		return false, false
+	}
+	return messageCount == len(msgs), messageCount < len(msgs)
+}
+
+func runtimeTranscriptDigest(msgs []provider.Message) string {
+	digest, err := digestSessionMessages(messagesWithoutLeadingSystem(msgs))
+	if err != nil {
+		return ""
+	}
+	return digestString(digest)
+}
+
 // CloneWithMessages returns a fresh Session carrying msgs while preserving the
 // persistence baseline of the source session. Resume paths use this when they
 // need to adjust loaded history before a rewrite; dropping persisted would make

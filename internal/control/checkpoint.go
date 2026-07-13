@@ -1,6 +1,7 @@
 package control
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -59,7 +60,7 @@ func (m *checkpointManager) enabled() bool {
 
 // begin opens a checkpoint for the turn about to run, recording msgIndex as the
 // conversation-rewind boundary. No-op when checkpoints are disabled.
-func (m *checkpointManager) begin(input string, msgIndex int) {
+func (m *checkpointManager) begin(input string, msgIndex int, transcriptDigest string, runtime json.RawMessage) {
 	m.mu.Lock()
 	store := m.store
 	if store == nil {
@@ -70,7 +71,27 @@ func (m *checkpointManager) begin(input string, msgIndex int) {
 	m.turn++
 	m.bound[turn] = msgIndex
 	m.mu.Unlock()
-	store.Begin(turn, input, msgIndex)
+	store.BeginAnchored(turn, input, msgIndex, transcriptDigest, runtime)
+}
+
+func (m *checkpointManager) runtime(turn int) (json.RawMessage, bool) {
+	m.mu.Lock()
+	store := m.store
+	m.mu.Unlock()
+	if store == nil {
+		return nil, false
+	}
+	return store.Runtime(turn)
+}
+
+func (m *checkpointManager) transcriptDigest(turn int) (string, bool) {
+	m.mu.Lock()
+	store := m.store
+	m.mu.Unlock()
+	if store == nil {
+		return "", false
+	}
+	return store.TranscriptDigest(turn)
 }
 
 // turnsByMessageIndex returns message-log index -> checkpoint turn over live
@@ -134,19 +155,23 @@ func (m *checkpointManager) snapshot(ch diff.Change) {
 
 // truncateFrom renumbers future turns from `turn` and drops every boundary at or
 // after it — the conversation-rewind renumber after the message log is cut back.
-func (m *checkpointManager) truncateFrom(turn int) {
+func (m *checkpointManager) truncateFrom(turn int) error {
 	m.mu.Lock()
 	store := m.store
-	m.turn = turn
+	m.mu.Unlock()
+	if store != nil {
+		if err := store.TruncateFrom(turn); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
 	for k := range m.bound {
 		if k >= turn {
 			delete(m.bound, k)
 		}
 	}
 	m.mu.Unlock()
-	if store != nil {
-		store.TruncateFrom(turn)
-	}
+	return nil
 }
 
 // clearBounds drops every boundary after a summarize restructures the log (so

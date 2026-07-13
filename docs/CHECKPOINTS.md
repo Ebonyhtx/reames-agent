@@ -1,11 +1,11 @@
 # Design: Checkpoints & Rewind
 
-Status: **Phase 1 + 2 implemented** — snapshot store, capture seam, the Esc-Esc /
-`/rewind` CLI picker, and the desktop hover-rewind, with the full Claude Code menu:
-restore code / conversation / both, fork-from-here, and summarize from / up to
-here. Snapshot-based and aligned with Claude Code. An optional git-backed mode is
-the remaining (lower-priority) follow-up. Tracks the most requested missing
-capability from v1 — an edit safety net / undo.
+Status: **Phase 1 + 2 and the first M4 recovery hardening batch are implemented**.
+The shared controller supports code/conversation/both rewind, fork-from-here and
+summarize from/up to here for CLI and Desktop. Conversation rewrites now require
+a transcript-prefix digest and a valid turn-start runtime projection; checkpoint
+truncation is restart-durable even when physical garbage collection fails. An
+optional git-backed mode remains a lower-priority follow-up.
 
 This document describes rewind snapshots. For the autonomous-run rule about when
 the agent should pause and ask the user, see
@@ -37,15 +37,18 @@ for users who want git-level safety; it is explicitly out of scope here.
 
 ## Anchors & capture
 
-- **One checkpoint per user turn.** A checkpoint opens when a turn starts
-  (`Controller.Send` / `runTurn`), labelled with the user prompt.
+- **One checkpoint per visible user turn.** A checkpoint opens through the
+  shared turn orchestrator before the user message is appended. Interactive
+  sends and headless `Controller.Run` use the same lifecycle; synthetic Goal or
+  approved-plan continuations remain attached to that visible checkpoint.
 - **Pre-edit snapshot.** In `agent.(*Agent).executeOne`, before running a tool
   whose `ReadOnly()` is false and which implements `tool.Previewer`, call
   `Preview(args)` → `diff.Change{Path, Kind, OldText}` and record a snapshot of
   that file into the active checkpoint. `tool.Previewer` already exists and the
   file-writers implement it, so this is one centralized seam — no per-tool code.
-  - Dedup per path per turn: only the **first** touch is snapshotted (that is the
-    file's turn-start content).
+  - Dedup uses normalized workspace identities. Lexical aliases and Windows
+    case aliases keep the first snapshot; existing hard-link aliases all restore
+    from the same earliest bytes (hard-link identity itself is not recreated).
   - `Kind == create` (file did not exist) → store `Content = nil` so a restore
     *deletes* it. `modify`/`delete` → store `OldText`.
   - `bash` has no `Previewer`, so it is naturally excluded — matching the
@@ -55,26 +58,38 @@ for users who want git-level safety; it is explicitly out of scope here.
 
 ```go
 type FileSnap struct {
-    Path    string  // workspace-relative
-    Content *string // nil → file did not exist at the anchor (restore deletes it)
+    Path     string
+    Content  *string // nil -> file did not exist at the anchor
+    Encoding *encoding.Kind
+    Mode     *uint32
 }
 
 type Checkpoint struct {
-    Turn   int        // user-message index this anchors (0-based)
-    Time   time.Time
-    Prompt string     // user message text — the picker label
-    Files  []FileSnap // distinct files touched during this turn, turn-start state
+    Turn             int
+    Time             time.Time
+    Prompt           string
+    MsgIndex         int             // exact transcript boundary
+    TranscriptDigest string          // digest of the prefix at MsgIndex
+    Runtime          json.RawMessage // Goal/Plan/Todo projection at turn start
+    Files            []FileSnap
 }
 ```
 
 ## Storage
 
 - **Sidecar to the session**, under `config.SessionDir()`: `<session-id>.ckpt/`
-  with one JSON per checkpoint plus a small index (v1's layout — cheap delete, a
-  corrupt snapshot only loses itself). Kept separate from the message JSONL
-  (`agent.Session.Save`) so the session format is unchanged.
+  with one `turn-<id>.json` per checkpoint and a small `.state.json` allocation /
+  truncate manifest. It remains separate from the message JSONL.
 - **Persists across sessions** — resuming a session re-loads its checkpoints, so
-  rewind works after a restart (Claude Code parity).
+  code rewind works after a restart. Conversation rewind/fork additionally
+  requires a modern checkpoint digest; legacy integer-only boundaries fail
+  closed because same-length transcript divergence cannot be proven safe.
+- **Restart-durable truncation** — rewind writes an atomic tombstone range before
+  treating future checkpoints as retired. Physical `turn-*.json` deletion is
+  garbage collection only; stale files are filtered after restart. Turn IDs use
+  a durable monotonic watermark and are never reused after rewind. An existing
+  but corrupt manifest fails closed: no old checkpoint is loaded, and the next
+  turn retires the full prior ID range before healing the manifest.
 - **Retention**: prune with the session (default ~30 days, configurable), to bound
   disk from full-content snapshots.
 
@@ -92,13 +107,17 @@ func (c *Controller) Rewind(turn int, scope RewindScope) error
 ```
 
 - **Code**: for every checkpoint from `turn` to the latest, take the earliest
-  `FileSnap` per path and restore each file to that content (delete if `nil`) —
-  i.e. undo all edits made at or after `turn`. Path-escape re-checked against the
-  live workspace root.
+  `FileSnap` per normalized file identity and restore each recorded alias to that
+  content (delete if `nil`). All targets are preflighted before the first write:
+  workspace escape, symlink/reparse traversal and non-regular targets are
+  rejected. A failed operation rolls back earlier writes and the possibly
+  partially written failing target from captured bytes/mode.
 - **Conversation**: truncate `Session.Messages` to just before turn `turn`'s user
-  message, re-`Save`, and emit the truncated history as events so the frontend
-  re-renders. The turn's prompt is restored into the composer for re-send/edit
-  (Claude Code behavior).
+  message only when the live prefix matches `TranscriptDigest`. Non-empty invalid
+  or future-version checkpoint runtime fails before transcript mutation; valid
+  runtime replaces Goal/Plan/Todo, while a truly missing legacy runtime clears
+  future Goal/Plan state. The rewritten transcript/runtime is persisted before a
+  success event.
 - **Both**: code + conversation.
 
 A `Rewound` event (or reuse of a history-replace event) lets every frontend
@@ -131,6 +150,12 @@ re-render uniformly.
   `bash rm` is not.
 - **Large files**: full snapshots — retention cleanup bounds disk; revisit dedup
   (content-addressed snapshots) if it becomes a problem.
+- **Known atomicity limits**: sidecars use `fileutil.AtomicWriteFile`, whose
+  Windows cross-device/filter-driver fallback performs an in-place copy and can
+  tear on process or power loss. Transcript/runtime/workspace are separate
+  resources and do not form one crash transaction. Restore path checks also have
+  a check-to-use window until handle-relative no-reparse/resolve-beneath writes
+  are implemented. ACLs, xattrs and hard-link identity are not restored.
 
 ## Phasing
 
@@ -141,6 +166,6 @@ re-render uniformly.
 
 ## Open questions
 
-- Snapshot on `/compact` and on `NewSession` boundaries?
 - Default retention window and whether to expose it in `[checkpoints]` config.
-- Content-addressed dedup vs one-file-per-snapshot from the start.
+- Content-addressed dedup vs one-file-per-snapshot.
+- Handle-relative no-reparse restore and a durable multi-resource rewind journal.

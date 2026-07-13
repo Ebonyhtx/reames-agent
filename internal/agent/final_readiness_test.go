@@ -73,7 +73,7 @@ func TestFinalReadinessAllowsIncompleteTodosInPlanMode(t *testing.T) {
 	if got := a.finalReadinessFailure(); got != "" {
 		t.Fatalf("finalReadinessFailure() = %q, want empty in plan mode", got)
 	}
-	if got := a.finalReadinessCheck(); got.applies {
+	if got := a.finalReadinessCheck(true); got.applies {
 		t.Fatalf("finalReadinessCheck() applies in plan mode: %+v", got)
 	}
 }
@@ -83,7 +83,7 @@ func TestFinalReadinessCheckAuditsIncompleteTodos(t *testing.T) {
 	writer := evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Paths: []string{"a.go"}}
 	a := &Agent{evidence: readinessLedger(writer, todo)}
 
-	got := a.finalReadinessCheck()
+	got := a.finalReadinessCheck(true)
 	if !got.applies {
 		t.Fatalf("finalReadinessCheck() applies = false, want true")
 	}
@@ -106,12 +106,27 @@ func TestFinalReadinessAllowsFinalAfterLoopGuardedToolBlocker(t *testing.T) {
 	a := &Agent{evidence: ledger}
 	a.armLoopGuardPass(ledger.Len())
 
-	got := a.finalReadinessCheck()
+	got := a.finalReadinessCheck(true)
 	if !got.applies {
 		t.Fatalf("finalReadinessCheck() applies = false, want true audit after loop guard")
 	}
 	if got.reason != "" {
 		t.Fatalf("finalReadinessCheck() reason = %q, want loop guard to allow final blocker report", got.reason)
+	}
+}
+
+func TestGoalReadinessDoesNotUseFinalAnswerLoopGuard(t *testing.T) {
+	check := instruction.VerifyCheck{Command: "go test ./...", SourcePath: "AGENTS.md", Line: 3}
+	writer := evidence.Receipt{ToolName: "write_file", Success: true, Write: true, Paths: []string{"a.go"}}
+	ledger := readinessLedger(writer)
+	a := &Agent{evidence: ledger, projectChecks: []instruction.VerifyCheck{check}}
+	a.armLoopGuardPass(ledger.Len())
+
+	if got := a.finalReadinessFailure(); got != "" {
+		t.Fatalf("ordinary final readiness = %q, want loop guard to allow blocker report", got)
+	}
+	if got := a.GoalReadinessFailure(); !strings.Contains(got, "go test ./...") {
+		t.Fatalf("GoalReadinessFailure() = %q, want missing project check", got)
 	}
 }
 
@@ -129,7 +144,7 @@ func TestFinalReadinessLoopGuardPassSurvivesBookkeeping(t *testing.T) {
 	ledger.Record(evidence.Receipt{ToolName: "todo_write", Success: true, Todos: []evidence.TodoItem{{Content: "edit", Status: "in_progress"}}})
 	ledger.Record(evidence.Receipt{ToolName: "complete_step", Success: true, Step: "edit"})
 
-	if got := a.finalReadinessCheck(); got.reason != "" {
+	if got := a.finalReadinessCheck(true); got.reason != "" {
 		t.Fatalf("finalReadinessCheck() reason = %q, want bookkeeping after the guard to keep the pass", got.reason)
 	}
 }
@@ -146,7 +161,7 @@ func TestFinalReadinessLoopGuardPassRevokedByRealProgress(t *testing.T) {
 
 	ledger.Record(evidence.Receipt{ToolName: "bash", Success: true, Command: "go test ./..."})
 
-	if got := a.finalReadinessCheck(); got.reason == "" {
+	if got := a.finalReadinessCheck(true); got.reason == "" {
 		t.Fatal("finalReadinessCheck() reason empty, want real progress after the guard to revoke the pass")
 	}
 }
@@ -163,7 +178,7 @@ func TestFinalReadinessIgnoresLoopGuardQuotedInToolOutput(t *testing.T) {
 	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "b1", Name: "bash", Content: "agent.go:2082: \"[loop guard] %s has now %s %d times\""})
 	a := &Agent{evidence: readinessLedger(writer, todo), session: sess}
 
-	if got := a.finalReadinessCheck(); got.reason == "" {
+	if got := a.finalReadinessCheck(true); got.reason == "" {
 		t.Fatal("finalReadinessCheck() reason empty, want quoted loop-guard text to be ignored")
 	}
 }
