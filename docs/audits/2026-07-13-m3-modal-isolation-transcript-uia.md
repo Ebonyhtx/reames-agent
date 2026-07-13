@@ -2,7 +2,7 @@
 
 日期：2026-07-13
 
-状态：完整本地验收完成；等待本批集中 commit/push 与远端 CI/CodeQL。本批未运行三平台安装器 Desktop candidate。
+状态：实现已由 commit `827e0b4` 交付，普通 CI `29229513429` 8/8、CodeQL `29229513359` 3/3；安装器 accessibility 仍待 Windows interaction 前序门禁修复后复核
 
 ## 缺口
 
@@ -68,6 +68,25 @@ Wails v2.12.0 production Windows build                       PASS
 
 production Wails executable 为 48,050,176 B，SHA-256 `8E008415A9D331ABFFA63864CD67B5818FFC74F8FD5D8984790C7371F8590CD7`。严格 accessibility smoke 的三次动作全部记录为 InvokePattern，skip→composer、dialog 初始关闭焦点、背景 UIA 树消失、关闭后 opener 恢复、临时目录清理和默认状态边界全部通过。native smoke 的 cold 首次可见/响应 0.500 秒、稳定 1.500 秒，warm 首次可见/响应 0.500 秒、稳定 1.500 秒，满足本地 8/6 秒预算。interaction smoke 完成 19 次 loopback provider 请求、五类失败恢复、停止、持久化和重启恢复，`boundary_changes=[]`、`errors=[]`。
 
+## 远端 candidate 结果与后续修复
+
+Desktop candidate `29229871453` attempt 1 的 Linux/macOS jobs 成功，Windows
+安装、native cold/warm 启动也成功；interaction 已完成 19 请求、五类失败恢复、
+审批拒绝、工具超时、停止、磁盘事件账本和清理，但重启 30 秒未在 UI 中显示
+marker/assistant。attempt 2 重跑 Windows 后在同一点再次失败，因此不能归类为
+偶发 runner 波动，后续 accessibility step 也没有执行。
+
+当前批次把 pinned transcript 预载与 controller readiness 分离：恢复 tab 发布
+`ready=false` metadata 后立即只读 session event log 并显示历史，composer 继续锁定；
+ready event/轮询到达后复用已加载历史并补齐 meta/effort/jobs/context/checkpoints。
+新增 ready-event 与 missed-ready 测试证明历史在 runtime 未就绪时可见、发送仍锁定、
+ready 不等待 ancillary 且 history 只读取一次。新 production Wails executable 为
+48,050,688 B，SHA-256
+`A4D22842BB5C107AA1E9F6829947046338FBD15826AADF035AFCDD0234F4E8A0`；本地 native
+cold/warm 均为 0.5 秒首响、1.5 秒稳定，严格 accessibility 3/3 InvokePattern，
+interaction 19 请求、五类恢复、停止和重启恢复通过，边界变化与 errors 均为空。
+该新提交尚需安装器 candidate 远端复核。
+
 ## 证据边界
 
-组件/DOM 测试不等于原生 UIA；本地源码 production Wails 不等于安装器 candidate；workflow 接线不等于 candidate run 成功。UIA 暴露 polite/atomic 属性也不等于 NVDA/Narrator 实际只朗读一次，`forced-colors` 合同不等于 Windows High Contrast 人工验证。本批没有使用真实 API key；loopback provider 不是真实公网 Provider。屏幕阅读器听感、High Contrast、签名安装器和三平台 candidate 仍需独立手动或外部证据。
+组件/DOM 测试不等于原生 UIA；本地源码 production Wails 不等于安装器 candidate；workflow 接线和旧 commit 的失败 candidate 都不能证明新修复已远端通过。UIA 暴露 polite/atomic 属性也不等于 NVDA/Narrator 实际只朗读一次，`forced-colors` 合同不等于 Windows High Contrast 人工验证。本批没有使用真实 API key；loopback provider 不是真实公网 Provider。屏幕阅读器听感、High Contrast、签名安装器和新 commit 的 Windows installed candidate 仍需独立手动或外部证据。

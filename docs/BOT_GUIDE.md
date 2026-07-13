@@ -147,6 +147,12 @@ The desktop app is the easiest way to create and test bot connections, but the
 runtime itself can also run as a long-lived headless gateway:
 
 ```sh
+reames-agent gateway setup --home ~/.reames-agent --channel feishu \
+  --app-id APP_ID --app-secret-env FEISHU_BOT_APP_SECRET \
+  --workspace /path/to/project --pairing --dry-run
+reames-agent gateway setup --home ~/.reames-agent --channel feishu \
+  --app-id APP_ID --app-secret-env FEISHU_BOT_APP_SECRET \
+  --workspace /path/to/project --pairing
 reames-agent bot doctor
 reames-agent bot doctor --deep
 reames-agent gateway doctor --deep --home ~/.reames-agent
@@ -154,6 +160,28 @@ reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
 reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
 reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu --dir /path/to/project
 ```
+
+`gateway setup` is the headless configuration entrypoint for `feishu`, `lark`,
+`qq`, and `weixin`. Feishu/Lark/QQ use `--app-id` and `--app-secret-env`;
+WeChat uses `--account-id` and `--token-env`. Secret options accept only
+conventional uppercase environment-variable names. Secret values are never
+accepted on the command line or written to the config. Use `--connection-id`
+for a stable multi-instance ID and `--workspace`, `--model`, and
+`--tool-approval ask|auto|yolo` for per-connection defaults.
+
+Access must be explicit: choose `--pairing`, `--users`, `--groups`,
+`--approvers`, `--admins`, or deliberately pass `--allow-all`. List flags can
+be repeated or comma-separated. Updates merge and preserve existing access by
+default; use `--reset-access` together with replacement rules to narrow an old
+open configuration. A new connection without an explicit rule fails closed.
+
+`--dry-run` strictly parses the existing TOML, validates credential references
+and access boundaries, and prints a stable redacted plan without creating or
+rewriting files. Applying the plan uses atomic replacement and idempotent
+connection-ID updates. Other connections, providers, routes, `created_at`,
+session mappings, and untouched access remain intact; an identical rerun does
+not refresh `updated_at` or rewrite the file. Malformed config fails without
+being replaced by defaults.
 
 Use `--channels` to choose which configured IM inputs to accept. `feishu` and
 `lark` select the matching Feishu-family connection; `weixin` selects the saved

@@ -121,6 +121,7 @@ const jobs: JobView[] = [];
 const checkpoints: CheckpointMeta[] = [];
 const readyHandlers: Array<(tabId?: string) => void> = [];
 const historyGate = deferred<HistoryMessage[]>();
+const metaGate = deferred<Meta>();
 let backendReady = false;
 let listTabsCalls = 0;
 let historyCalls = 0;
@@ -142,7 +143,7 @@ window.go = {
       },
       MetaForTab: async () => {
         metaCalls += 1;
-        return meta(backendReady);
+        return metaGate.promise;
       },
       ContextUsageForTab: async () => context,
       EffortForTab: async () => effort,
@@ -179,8 +180,16 @@ await act(async () => {
 });
 
 await waitFor("initial not-ready metadata", () => controller?.activeTabId === "tab-ready" && controller.state.meta?.ready === false);
-eq(historyCalls, 0, "startup does not read history before the restored controller is ready");
+eq(historyCalls, 1, "startup preloads pinned history before the restored controller is ready");
 eq(metaCalls, 0, "startup readiness wait does not call ancillary meta");
+
+await act(async () => {
+  historyGate.resolve([{ role: "user", content: "hello" }]);
+  await historyGate.promise;
+  await flushPromises();
+});
+await waitFor("pinned history is visible before ready", () => controller?.state.items.some((item) => item.kind === "user" && item.text === "hello") ?? false);
+eq(controller?.state.meta?.ready, false, "history preload does not unlock sending");
 
 backendReady = true;
 await act(async () => {
@@ -190,16 +199,18 @@ await act(async () => {
 await waitFor("ready metadata refreshed before history settles", () => controller?.state.meta?.ready === true);
 
 eq(listTabsCalls >= 2, true, "ready event refreshes active tab metadata from ListTabs");
-eq(historyCalls, 1, "ready event starts one history hydration after controller readiness");
-eq(metaCalls, 0, "ready event does not wait for ancillary MetaForTab before unlocking send");
+eq(historyCalls, 1, "ready event reuses the preloaded transcript instead of reading it twice");
+eq(metaCalls, 1, "ready event starts ancillary metadata after history preload");
+eq(controller?.state.meta?.ready, true, "ready snapshot unlocks send while ancillary metadata is pending");
 
-await act(async () => {
-  historyGate.resolve([{ role: "user", content: "hello" }]);
-  await historyGate.promise;
-  await flushPromises();
-});
 await waitFor("history finishes", () => controller?.state.hydrating === false);
 ok(controller?.state.items.some((item) => item.kind === "user" && item.text === "hello") ?? false, "history still hydrates after the ready metadata sync");
+
+await act(async () => {
+  metaGate.resolve(meta(true));
+  await metaGate.promise;
+  await flushPromises();
+});
 
 await act(async () => {
   root.unmount();

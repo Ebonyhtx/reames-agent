@@ -31,8 +31,8 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
 - M2 已关闭：依赖棘轮 allowlist 已归零，结构化错误、版本化 command/event/display DTO、prompt metadata、会话持久化、Desktop/ACP/CLI 装配和终端渲染边界均已收口；完整本地门禁及远端 CI/CodeQL 已通过。
-- M3 进行中：性能、模态焦点、显示缩放、主题对比度、三平台启动 readiness 与 Desktop 重启恢复竞态已形成分层证据。主首启图/CSS 拆分已由 `7d07c89` 交付，普通 CI `29216174519` 为 8/8、CodeQL `29216174514` 为 3/3。当前未提交候选继续关闭真正模态背景隔离、Transcript 最终答复语义和 Windows 严格 UIA accessibility smoke；localhost Browser、production Wails accessibility/native/interaction 与完整 frontend/Python/Go/Desktop/docs 门禁已通过，本批远端结果仍待收口。
-- M6 进行中：Gateway service、headless smoke 和 feedback 本地闭环已具备；真实 IM 与干净云节点仍缺外部证据。
+- M3 进行中：可访问性批次已由 `827e0b4` 交付，普通 CI `29229513429` 8/8、CodeQL `29229513359` 3/3。candidate `29229871453` 的 Linux/macOS 与 Windows native 通过，但 Windows interaction 两次在同一重启 transcript 可见性断点失败；当前未提交 pinned-history 预载修复已通过完整本地 production native/accessibility/interaction，仍需新 commit 的 installed candidate。
+- M6 进行中：Gateway service、headless smoke、feedback 和本批四渠道 `gateway setup` 确定性闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
 
@@ -65,28 +65,19 @@ commit `bbdddde` 已推送；普通 CI run `29214262280` 为 8/8、CodeQL run `2
 
 commit `7d07c89` 已推送；普通 CI run `29216174519` 为 8/8、CodeQL run `29216174514` 为 3/3。详见 `docs/audits/2026-07-13-m3-main-graph-css-split.md`。
 
-## 当前 M3 候选批次关键证据
+## 当前 M3 + M6 批次
 
-```text
-python -m unittest scripts.test_smoke_desktop_candidate   PASS (14)
-python -m unittest scripts.test_smoke_desktop_native      PASS (21)
-python -m unittest scripts.test_smoke_desktop_accessibility PASS (10)
-python scripts/check_release_contracts.py                 PASS
-Linux native candidate runner                             PASS (4.538s first / 5.567s stable)
-macOS native candidate runner                             PASS (0.575s first / 1.872s stable)
-Windows hosted startup candidate                          PASS (11.016s first / 12.016s stable; warm 2.000s stable)
-Windows hosted interaction recovery                       PASS (19 requests / recovery_verified=true)
-Windows source production strict accessibility             PASS (3 InvokePattern actions)
-完整 root/Desktop/frontend/docs 门禁                      PASS
-```
+- M3：恢复 tab 在 controller `ready=false` 时先从 pinned session event log 预载历史，仍锁定发送；ready 后复用缓存并补 ancillary，关闭托管 runner 慢启动导致的空 transcript 窗口。
+- M6：新增 `internal/gatewaysetup` 和 `reames-agent gateway setup`，覆盖 Feishu/Lark、QQ、Weixin、workspace/model/connection ID、secret-env-only、显式 access、`--reset-access`、redacted dry-run、严格 TOML、原子幂等写入。
+- 测试：四渠道、状态保留、byte-for-byte 幂等、损坏配置和误传 secret fail closed、setup → doctor → service dry-run；ready-event/missed-ready/pinned page；完整前端与本地 production Wails native/accessibility/interaction。
 
-当前远端 `main` 为 `7d07c89`；普通 CI `29216174519` 8/8、CodeQL `29216174514` 3/3。Linux 证据包含隔离状态与可见 X11 窗口；macOS 只声明隔离状态 readiness。Windows installer 的历史 native/interaction JSON 均通过，但本批新增 accessibility workflow 尚未触发安装器 candidate，不能用本地源码 Wails 或普通 CI 冒充。
+candidate `29229871453` attempt 1/2 的 Windows interaction 均失败；本批 pinned-history 修复即使完成本地门禁和普通 CI，也不能把源码 Wails 证据冒充 installed candidate。
 
 ## 下一执行顺序
 
-1. 最终审查当前 accessibility 批次 diff，只显式暂存本批路径，集中 commit/push 一次并守候普通 CI 与 CodeQL。
-2. 远端全绿后继续 M3 原生 Desktop 日用化；安装器 accessibility candidate、NVDA/Narrator 与 Windows High Contrast 分别保留远端人工/外部证据边界，不为纯证据单独碎片 push。
-3. M3 主体验充分后再进入干净云节点 CLI + Gateway + feedback 与真实飞书回环。
+1. 守候本批集中 push 后的普通 CI/CodeQL，不为纯证据另做碎片提交。
+2. 对新 commit 运行 Desktop candidate，必须让 Windows installed interaction 越过两次失败断点，并实际执行 strict accessibility step。
+3. 远端关闭后进入干净云节点 CLI + gateway setup/doctor/service + feedback，再做真实飞书回环。
 
 ## 长期未关闭项
 
@@ -98,16 +89,8 @@ Windows source production strict accessibility             PASS (3 InvokePattern
 
 长期 GOAL 尚未完成。即使本批全绿，也只能声明该批验收完成，不能声明整个项目完成。
 
-## 当前未提交证据与下一批边界
+## 当前证据边界
 
-当前未提交 accessibility 批次为七个真正模态层提供稳定 ID：`command-palette-dialog`、`settings-dialog`、`history-dialog`、`shortcuts-cheatsheet-dialog`、`image-viewer-dialog`、`onboarding-dialog`、`heartbeat-dialog`。`useDialogFocus` 以每次打开独立 lease 管理顶层，沿 dialog→body 路径用 `inert`/`aria-hidden` 隔离背景并精确恢复原属性，覆盖嵌套、退出动画、快速重开、动态 portal 和 inert portal 首次聚焦重试；lease 继承直接父控件与原始 opener 链，模态替换或 StrictMode effect 重放后不会把焦点丢到 body。只有顶层响应 Escape，`PromptShelf aria-modal=false` 保持非阻断。
+新 production bundle：entry 628,743 B、base initial JS 869,545 B、最坏本地化 984,999 B、initial CSS 511,305 B，预算通过。Wails executable 48,050,688 B，SHA-256 `A4D22842BB5C107AA1E9F6829947046338FBD15826AADF035AFCDD0234F4E8A0`；native cold/warm 0.5/1.5 秒，strict accessibility 3/3 InvokePattern，interaction 19 请求与五类失败恢复、停止和重启恢复通过，边界变化和 errors 为空。
 
-主 Transcript 使用唯一 `transcript-log`、`role=log`、`aria-live=off`、运行/加载 busy 状态；独立 `transcript-announcer` 只在真实运行结束后提交一次最终 assistant 文本。hydration、tab/session 切换、history append、rewind/undo 和 `/clear` generation 不回放历史。History 预览使用唯一 `history-preview-transcript-log` 并禁用第二个 announcer。
-
-Windows UIA 驱动新增 localized control type、focused/focusable、offscreen、ARIA role/properties，并提供严格 `invoke_pattern()`，缺失或调用失败时不允许坐标回退。新 accessibility smoke 以隔离 HOME 验证 `app-main`、log/status、skip→composer、Settings dialog/关闭焦点、六个背景 ID 从 UIA 树消失、关闭后 opener 恢复；candidate Windows job 已接线并上传独立 JSON，但本批未触发安装器 candidate。
-
-当前定向与 production 证据：dialog focus 35 + palette 2、Transcript 54、accessibility smoke 单测 10、`pnpm build` 通过。最终 bundle 为 entry 628,571 B、base initial JS 869,373 B（5 files）、最坏本地化 984,827 B、initial CSS 511,305 B、browser mock 964,263 B、VirtualMenu 894,626 B、Settings 1,057,628 B JS + 611,477 B CSS、largest JS 704,186 B，均在硬预算内。无热更新 localhost Browser 的嵌套隔离、双 Escape、opener 恢复和唯一 Transcript seam 通过，warning/error 为 0。
-
-最终 Windows production 可执行文件为 48,050,176 B，SHA-256 `8E008415A9D331ABFFA63864CD67B5818FFC74F8FD5D8984790C7371F8590CD7`。严格 accessibility smoke 的 3 个动作全部为 InvokePattern，所有断言、清理和状态边界通过；native cold 首次可见/响应 0.500 秒、稳定 1.500 秒，warm 0.500/1.500 秒，满足 8/6 秒预算；interaction smoke 完成 19 请求、五类失败恢复、停止、持久化和重启恢复，`boundary_changes=[]`、`errors=[]`。
-
-当前改动尚未 commit/push，不能借用 `7d07c89` 的远端结果声明本批已交付。完整 frontend/Python/Go/Desktop/docs 门禁已通过；只显式暂存本批路径并集中 push，受保护的 `.agents/`、`artifacts/`、`docs/audits/2026-07-09-reference-feature-gap-map.md` 继续排除。NVDA/Narrator 实际听感、Windows High Contrast、签名安装器和本批三平台 candidate 仍是独立手动或外部证据。详见 `docs/audits/2026-07-13-m3-modal-isolation-transcript-uia.md`。
+这些仍是本地源码 production 证据。新 commit 的安装器 candidate、NVDA/Narrator、Windows High Contrast、真实云节点、真实飞书和签名安装器仍分别是远端或 `external-blocked` 证据。受保护的 `.agents/`、`artifacts/`、`docs/audits/2026-07-09-reference-feature-gap-map.md` 禁止暂存。

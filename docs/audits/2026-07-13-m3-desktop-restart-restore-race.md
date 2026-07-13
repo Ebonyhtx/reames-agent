@@ -2,7 +2,7 @@
 
 日期：2026-07-13
 
-状态：已交付（commits `0cdfef1`、`9d31735`；普通 CI `29211678562` 8/8、CodeQL `29211678591` 3/3；candidate `29211681563` 三平台全绿）
+状态：基础修复已交付；后续慢启动回归已本地修复，等待新 commit 的 Windows installed candidate
 
 ## 触发证据
 
@@ -42,3 +42,19 @@ partial fix commit `0cdfef1` 的普通 CI run `29211082959` 8/8、CodeQL run `29
 最终 `Desktop candidate` run `29211681563` 三平台全部成功。Windows installer SHA-256 为 `1D84CB0D503E86E437B54C5806647D2ADDE8549E3CD8349A2C4255C3BA1A095E`，安装后二进制 SHA-256 为 `9CA1C61A468CA0B3D066B4AA497E68B75A131E482CFE36BF4BEFC84D3EEFCA99`。native startup cold 首次/稳定响应为 11.016/12.016 秒，warm 为 1.000/2.000 秒，满足 15/6 秒 hosted 预算。
 
 同一 Windows job 的 interaction JSON `outcome=passed`、`failure_kind=null`，19 次 provider 请求和五类失败场景全部完成可见信号、idle 恢复与后续成功 turn；marker/assistant 均持久化、停止完成、`recovery_verified=true`，重启前后 session path 完全一致。native 与 interaction 两份证据均清理进程和临时 HOME，默认状态边界变化为 0，errors 为空。本批远端复核关闭，未为纯证据另行 push。
+
+## 2026-07-13 后续慢启动回归
+
+可访问性 commit `827e0b4` 的 candidate `29229871453` 在 Windows attempt 1 与
+attempt 2 连续复现相同现象：native 启动通过，interaction 的 19 请求、五类失败
+恢复、停止、canonical event log 和清理全部通过，但重启 30 秒未显示持久消息。
+这次不是空 tab/空文件；托管 runner 上 controller build 比本地显著慢，而前端为
+规避旧空历史竞态，把第一次 history read 与 controller `ready=true` 绑定，导致
+运行时未就绪时用户看不到已经可安全读取的磁盘 transcript。
+
+当前修复把两条状态拆开：`HistoryPageForTab` 的 pinned-session fallback 在 Ctrl
+为空时直接读取 event log；前端 startup 立即执行 `historyOnly` 预载，composer
+仍由 `meta.ready` 锁定。ready event 与轮询共享同一个 in-flight history，随后只
+补 ancillary，不重复读历史。Go page 测试、ready-event/missed-ready 测试、完整
+frontend、production Wails native/accessibility/interaction 已通过；新 commit 的
+Windows installed candidate 仍是关闭该回归所需的独立远端证据。

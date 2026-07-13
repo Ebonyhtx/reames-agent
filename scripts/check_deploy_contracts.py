@@ -82,6 +82,7 @@ def check() -> list[str]:
     require("tmux" in deploy and "reames-agent run" in deploy, "docs/DEPLOY.md must document SSH/tmux CLI usage.", failures)
     require("<Reames Agent home>/.env" in deploy, "docs/DEPLOY.md must document server user credential storage.", failures)
     require("Gateway preflight" in deploy and "reames-agent setup" in deploy, "docs/DEPLOY.md must document setup-to-Gateway preflight next steps.", failures)
+    require("gateway setup --dry-run" in deploy and "不创建 synthetic `.env`" in deploy, "docs/DEPLOY.md must document the credential-free Gateway setup smoke.", failures)
     require("不是 CLI 或 gateway 的前置条件" in deploy, "docs/DEPLOY.md must state serve is optional after CLI/gateway setup.", failures)
     require("reames-agent gateway install --dry-run" in deploy, "docs/DEPLOY.md must document safe gateway service dry-run.", failures)
     require("reames-agent gateway install --start-now" in deploy, "docs/DEPLOY.md must document the Hermes-like gateway service lifecycle.", failures)
@@ -128,6 +129,10 @@ def check() -> list[str]:
     require("verify SHA256SUMS" in installer_tests, "installer tests must assert release checksum verification dry-runs.", failures)
 
     gateway_smoke = read("scripts/smoke_gateway_headless.py")
+    require("gateway" in gateway_smoke and "setup" in gateway_smoke and "action: create" in gateway_smoke, "headless Gateway smoke must exercise gateway setup.", failures)
+    require("write: skipped (dry-run)" in gateway_smoke and "dry_run_zero_write" in gateway_smoke, "headless Gateway smoke must prove setup dry-run leaves config untouched.", failures)
+    require("action: unchanged" in gateway_smoke and "idempotent_bytes" in gateway_smoke, "headless Gateway smoke must prove setup is byte-for-byte idempotent.", failures)
+    require("missing_secret_reported" in gateway_smoke and "no_credential_file" in gateway_smoke, "headless Gateway smoke must validate deployment readiness without synthetic secrets.", failures)
     require("gateway" in gateway_smoke and "doctor" in gateway_smoke and "--home" in gateway_smoke, "headless Gateway smoke must exercise gateway doctor --home.", failures)
     require("gateway" in gateway_smoke and "run" in gateway_smoke and "home_overrides_ambient_env" in gateway_smoke, "headless Gateway smoke must exercise foreground gateway run --home.", failures)
     require("install" in gateway_smoke and "--dry-run" in gateway_smoke, "headless Gateway smoke must exercise gateway install --dry-run.", failures)

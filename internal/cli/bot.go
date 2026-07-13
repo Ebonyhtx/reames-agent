@@ -17,6 +17,7 @@ import (
 	"reames-agent/internal/botruntime"
 	"reames-agent/internal/config"
 	"reames-agent/internal/gatewayservice"
+	"reames-agent/internal/gatewaysetup"
 )
 
 func botCommand(args []string, version string) int {
@@ -61,6 +62,8 @@ func gatewayCommand(args []string, version string) int {
 	rest := args[1:]
 
 	switch sub {
+	case "setup":
+		return gatewaySetup(rest)
 	case "run":
 		return gatewayRun(rest, version)
 	case "doctor":
@@ -75,6 +78,80 @@ func gatewayCommand(args []string, version string) int {
 		gatewayUsage()
 		return 2
 	}
+}
+
+type gatewayStringListFlag []string
+
+func (f *gatewayStringListFlag) String() string { return strings.Join(*f, ",") }
+
+func (f *gatewayStringListFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+func gatewaySetup(args []string) int {
+	fs := flag.NewFlagSet("gateway setup", flag.ContinueOnError)
+	home := fs.String("home", "", "REAMES_AGENT_HOME to configure")
+	channel := fs.String("channel", "", "channel: feishu, lark, qq, or weixin")
+	connectionID := fs.String("connection-id", "", "stable connection ID (default derived from channel)")
+	label := fs.String("label", "", "connection label")
+	workspace := fs.String("workspace", "", "default workspace for this connection")
+	model := fs.String("model", "", "model override for this connection")
+	toolApproval := fs.String("tool-approval", "", "tool approval mode: ask, auto, or yolo")
+	appID := fs.String("app-id", "", "Feishu/Lark/QQ application ID")
+	appSecretEnv := fs.String("app-secret-env", "", "environment variable name containing the app secret")
+	accountID := fs.String("account-id", "", "Weixin iLink account ID")
+	tokenEnv := fs.String("token-env", "", "environment variable name containing the channel token")
+	pairing := fs.Bool("pairing", false, "allow unknown direct-message users to request local pairing")
+	allowAll := fs.Bool("allow-all", false, "intentionally allow every reachable user")
+	resetAccess := fs.Bool("reset-access", false, "replace existing access rules before adding the supplied rules")
+	dryRun := fs.Bool("dry-run", false, "validate and print the redacted plan without writing config")
+	var users, groups, approvers, admins gatewayStringListFlag
+	fs.Var(&users, "users", "allowed user IDs (repeat or comma-separate)")
+	fs.Var(&groups, "groups", "allowed group IDs (repeat or comma-separate)")
+	fs.Var(&approvers, "approvers", "tool approver IDs (repeat or comma-separate)")
+	fs.Var(&admins, "admins", "gateway admin IDs (repeat or comma-separate)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "error: gateway setup does not accept positional arguments")
+		return 2
+	}
+	restoreHome, err := setTemporaryReamesAgentHome(*home)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: set REAMES_AGENT_HOME: %v\n", err)
+		return 2
+	}
+	defer restoreHome()
+
+	result, err := gatewaysetup.Apply(gatewaysetup.Options{
+		ConfigPath:       config.UserConfigPath(),
+		Channel:          *channel,
+		ConnectionID:     *connectionID,
+		Label:            *label,
+		WorkspaceRoot:    *workspace,
+		Model:            *model,
+		ToolApprovalMode: *toolApproval,
+		AppID:            *appID,
+		AppSecretEnv:     *appSecretEnv,
+		AccountID:        *accountID,
+		TokenEnv:         *tokenEnv,
+		Pairing:          *pairing,
+		AllowAll:         *allowAll,
+		ResetAccess:      *resetAccess,
+		Users:            []string(users),
+		Groups:           []string(groups),
+		Approvers:        []string(approvers),
+		Admins:           []string(admins),
+		DryRun:           *dryRun,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	fmt.Print(gatewaysetup.FormatResult(result, *dryRun))
+	return 0
 }
 
 func gatewayRun(args []string, version string) int {
@@ -724,12 +801,14 @@ func gatewayUsage() {
 	fmt.Print(`reames-agent gateway — independent social-channel gateway
 
 Usage:
+  reames-agent gateway setup --channel CHANNEL [connection and access options] [--home PATH] [--dry-run]
   reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME] [--home PATH]
   reames-agent gateway doctor [--json] [--deep] [--home PATH]
   reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--home PATH] [--channels LIST] [--dir PATH] [--model NAME]
   reames-agent gateway start|stop|restart|status|uninstall [--dry-run] [--scope user|system]
 
 Subcommands:
+  setup     atomically create or update a channel connection without accepting secret values
   run       run the gateway in the foreground; compatible with "reames-agent bot start"
   doctor    inspect gateway config, credentials, access control, and connection records
   install   install a user-level OS service (systemd, launchd, or Windows Scheduled Task)
@@ -740,6 +819,8 @@ Subcommands:
   uninstall remove the installed service
 
 Examples:
+  reames-agent gateway setup --channel feishu --app-id APP_ID --app-secret-env FEISHU_BOT_APP_SECRET --workspace /path/to/project --pairing
+  reames-agent gateway setup --channel qq --app-id APP_ID --users USER_ID --admins ADMIN_ID --dry-run
   reames-agent gateway run --home ~/.reames-agent --channels feishu
   reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
   reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu
@@ -747,6 +828,7 @@ Examples:
 
 Secrets:
   Provider and bot secrets stay in <Reames Agent home>/.env. Service definitions
-  pin REAMES_AGENT_HOME but do not embed secret values.
+  pin REAMES_AGENT_HOME but do not embed secret values. gateway setup accepts
+  only secret environment variable names via --app-secret-env or --token-env.
 `)
 }

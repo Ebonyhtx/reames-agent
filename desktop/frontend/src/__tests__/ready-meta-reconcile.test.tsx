@@ -121,6 +121,7 @@ const balance: BalanceInfo = { available: false, display: "" };
 const jobs: JobView[] = [];
 const checkpoints: CheckpointMeta[] = [];
 const historyGate = deferred<HistoryMessage[]>();
+const metaGate = deferred<Meta>();
 let backendReady = false;
 let listTabsCalls = 0;
 let historyCalls = 0;
@@ -145,7 +146,7 @@ window.go = {
       MetaForTab: async (tabId: string) => {
         metaCalls += 1;
         metaTabIds.push(tabId);
-        return meta(tabId, tabId === "tab-ready" ? backendReady : true);
+        return metaGate.promise;
       },
       ContextUsageForTab: async () => context,
       EffortForTab: async () => effort,
@@ -191,26 +192,36 @@ await act(async () => {
 });
 
 await waitFor("initial not-ready metadata", () => controller?.activeTabId === "tab-ready" && controller.state.meta?.ready === false);
-eq(historyCalls, 0, "startup delays active-tab history until controller readiness");
+eq(historyCalls, 1, "startup preloads the active tab's pinned history before readiness");
 ok(listTabsCalls >= 2, "startup begins polling the restored tab readiness");
-
-backendReady = true;
-await waitFor("ready metadata is reconciled without a ready event", () => controller?.state.meta?.ready === true);
-await waitFor("history begins after readiness", () => historyCalls === 1);
-
-eq(metaCalls, 0, "restored tab readiness does not require ancillary metadata polling");
-eq(metaTabIds.length, 0, "startup readiness is sourced from the authoritative tab snapshot");
-ok(listTabsCalls >= 2, "startup readiness polling refreshes the restored tab");
-eq(historyCalls, 1, "ready polling starts exactly one history hydration");
-eq(approvalModeCalls, 0, "ready polling does not rely on approval-mode changes");
 
 await act(async () => {
   historyGate.resolve([{ role: "user", content: "hello" }]);
   await historyGate.promise;
   await flushPromises();
 });
+await waitFor("pinned history is visible while runtime is starting", () => controller?.state.items.some((item) => item.kind === "user" && item.text === "hello") ?? false);
+eq(controller?.state.meta?.ready, false, "pinned history does not mark the controller ready");
+
+backendReady = true;
+await waitFor("ready metadata is reconciled without a ready event", () => controller?.state.meta?.ready === true);
+await waitFor("history begins after readiness", () => historyCalls === 1);
+
+eq(metaCalls, 1, "restored tab starts ancillary metadata after pinned history is visible");
+eq(metaTabIds[0], "tab-ready", "ancillary metadata stays bound to the restored tab");
+eq(controller?.state.meta?.ready, true, "authoritative tab readiness does not wait for ancillary metadata");
+ok(listTabsCalls >= 2, "startup readiness polling refreshes the restored tab");
+eq(historyCalls, 1, "ready polling reuses exactly one pinned history hydration");
+eq(approvalModeCalls, 0, "ready polling does not rely on approval-mode changes");
+
 await waitFor("history finishes", () => controller?.state.hydrating === false);
 ok(controller?.state.items.some((item) => item.kind === "user" && item.text === "hello") ?? false, "history still hydrates after ready reconciliation");
+
+await act(async () => {
+  metaGate.resolve(meta("tab-ready", true));
+  await metaGate.promise;
+  await flushPromises();
+});
 
 await act(async () => {
   root.unmount();

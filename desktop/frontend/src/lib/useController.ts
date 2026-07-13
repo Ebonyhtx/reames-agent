@@ -1324,7 +1324,7 @@ export function useController() {
     tabId: string,
     reset = false,
     reason: HydrateReason = "startup",
-    options: { skipHistory?: boolean; placeholderItems?: Item[]; preserveCachedHistory?: boolean; sessionPath?: string } = {},
+    options: { skipHistory?: boolean; historyOnly?: boolean; placeholderItems?: Item[]; preserveCachedHistory?: boolean; sessionPath?: string } = {},
   ) => {
     const sessionPath = (options.sessionPath ?? statesRef.current.get(tabId)?.meta?.sessionPath ?? "").trim();
     const canJoinInFlight = !reset && !options.skipHistory;
@@ -1396,6 +1396,7 @@ export function useController() {
 
       dispatchTo(tabId, { type: "hydrate_done" });
       addBreadcrumb("tab.hydrate", `done ${reason} ${tabId} ms=${Date.now() - hydrateStartedAt}`);
+      if (options.historyOnly) return;
 
       // Phase 2: local ancillary data. It stays inside the same in-flight
       // promise so duplicate ready/startup hydrations coalesce, but it runs
@@ -1541,17 +1542,25 @@ export function useController() {
     activeTabIdRef.current = active.id;
     confirmBackendActiveTab(active.id);
     dispatchTo(active.id, { type: "optimistic_meta", meta: metaFromTab(active, statesRef.current.get(active.id)?.meta) });
-    // Restored tab entries become visible before their controllers finish
-    // loading the persisted session. Hydrating history from ready=false can
-    // return an empty snapshot; if agent:ready overlaps that request, the
-    // in-flight coalescer then preserves the empty result for this process.
-    // Keep the shell/tab visible, but wait for the existing readiness signal
-    // before the first transcript read and refresh metadata/sessionPath once.
+    // Persisted transcript visibility is independent from controller startup.
+    // The backend reads the tab's pinned session file while Ctrl is nil, so a
+    // slow plugin/provider build must not leave a returning user staring at an
+    // empty conversation. Keep send locked on ready=false, preload history
+    // only, then reconcile runtime metadata and ancillary state after ready.
+    const persistedSessionPath = (active.sessionPath ?? "").trim();
+    const persistedHistory = !reset && !active.ready && persistedSessionPath
+      ? loadSessionDataForTab(active.id, false, "startup", {
+        historyOnly: true,
+        sessionPath: persistedSessionPath,
+      })
+      : undefined;
     const settled = await waitForTabReady(active.id, STARTUP_TAB_READY_TIMEOUT_MS);
     if (settled?.id === active.id) {
       active = settled;
       dispatchTo(active.id, { type: "optimistic_meta", meta: metaFromTab(active, statesRef.current.get(active.id)?.meta) });
     }
+    if (guard && activeTabIdRef.current !== active.id) return active.id;
+    await persistedHistory;
     if (guard && activeTabIdRef.current !== active.id) return active.id;
     const preserveCachedHistory = options.preserveCachedHistory ?? !reset;
     if (!reset) dispatchRuntimeStatusForTab(active.id, active);

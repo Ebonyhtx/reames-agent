@@ -3,9 +3,9 @@
 
 This is intentionally stronger than a text contract and weaker than a real IM
 round trip: it runs the actual CLI binary against an isolated Reames Agent home,
-checks `gateway doctor --home`, and renders a service-manager dry-run plan. It
-does not start a background service and never requires real provider or bot
-secrets.
+applies `gateway setup`, checks `gateway doctor --home`, and renders a
+service-manager dry-run plan. It does not start a background service and never
+requires real provider or bot secrets.
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SMOKE_SECRET = "smoke-secret-never-print"
+SMOKE_APP_ID = "cli-smoke-feishu-app"
+SMOKE_SECRET_ENV = "FEISHU_BOT_APP_SECRET"
 
 
 def run_result(args: list[str], *, env: dict[str, str] | None = None, timeout: int = 30) -> tuple[int, str]:
@@ -55,48 +56,35 @@ def build_binary(work: Path) -> Path:
     return binary
 
 
-def write_smoke_home(home: Path) -> Path:
+def prepare_workspace(home: Path) -> Path:
     workspace = home / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
-    (home / "config.toml").write_text(
-        """
-language = "en"
-default_model = "deepseek-flash"
-
-[bot]
-enabled = true
-
-[bot.allowlist]
-enabled = true
-feishu_users = ["ou-smoke-user"]
-
-[bot.feishu]
-enabled = true
-app_id = "cli-smoke-feishu"
-app_secret_env = "FEISHU_BOT_APP_SECRET"
-mode = "webhook"
-""".lstrip(),
-        encoding="utf-8",
-    )
-    (home / ".env").write_text(f"FEISHU_BOT_APP_SECRET={SMOKE_SECRET}\n", encoding="utf-8")
     return workspace
 
 
-def write_foreground_probe_home(home: Path, *, enabled: bool) -> None:
-    home.mkdir(parents=True, exist_ok=True)
-    (home / "config.toml").write_text(
-        f"""
-language = "en"
-default_model = "deepseek-flash"
-
-[bot]
-enabled = {str(enabled).lower()}
-
-[bot.allowlist]
-allow_all = true
-""".lstrip(),
-        encoding="utf-8",
-    )
+def setup_args(binary: Path, home: Path, workspace: Path, *, dry_run: bool = False) -> list[str]:
+    args = [
+        str(binary),
+        "gateway",
+        "setup",
+        "--home",
+        str(home),
+        "--channel",
+        "feishu",
+        "--app-id",
+        SMOKE_APP_ID,
+        "--app-secret-env",
+        SMOKE_SECRET_ENV,
+        "--workspace",
+        str(workspace),
+        "--model",
+        "deepseek-flash",
+        "--users",
+        "ou-smoke-user",
+    ]
+    if dry_run:
+        args.append("--dry-run")
+    return args
 
 
 def assert_contains(text: str, needle: str) -> None:
@@ -110,10 +98,46 @@ def assert_not_contains(text: str, needle: str) -> None:
 
 
 def smoke(binary: Path, home: Path) -> dict[str, object]:
-    workspace = write_smoke_home(home)
+    config_path = home / "config.toml"
+    if config_path.exists():
+        raise AssertionError(f"headless Gateway smoke requires a clean home: {config_path} already exists")
+    workspace = prepare_workspace(home)
     env = os.environ.copy()
     env.pop("REAMES_AGENT_HOME", None)
     env["REAMES_AGENT_CREDENTIALS_STORE"] = "file"
+
+    setup_dry_run = run(setup_args(binary, home, workspace, dry_run=True), env=env)
+    assert_contains(setup_dry_run, "gateway setup plan:")
+    assert_contains(setup_dry_run, "action: create")
+    assert_contains(setup_dry_run, "write: skipped (dry-run)")
+    assert_not_contains(setup_dry_run, SMOKE_APP_ID)
+    if config_path.exists():
+        raise AssertionError("gateway setup --dry-run created config.toml")
+
+    setup_apply = run(setup_args(binary, home, workspace), env=env)
+    assert_contains(setup_apply, "action: create")
+    assert_contains(setup_apply, "write: applied atomically")
+    assert_not_contains(setup_apply, SMOKE_APP_ID)
+    if not config_path.is_file():
+        raise AssertionError("gateway setup did not create config.toml")
+    first_config = config_path.read_bytes()
+
+    setup_repeat = run(setup_args(binary, home, workspace), env=env)
+    assert_contains(setup_repeat, "action: unchanged")
+    assert_contains(setup_repeat, "write: unchanged")
+    assert_not_contains(setup_repeat, SMOKE_APP_ID)
+    if config_path.read_bytes() != first_config:
+        raise AssertionError("idempotent gateway setup rewrote config.toml")
+    if (home / ".env").exists():
+        raise AssertionError("gateway setup unexpectedly created a credential file")
+    setup_contracts = {
+        "dry_run_zero_write": "write: skipped (dry-run)" in setup_dry_run,
+        "applied_atomically": "write: applied atomically" in setup_apply,
+        "idempotent_action": "action: unchanged" in setup_repeat,
+        "idempotent_bytes": config_path.read_bytes() == first_config,
+        "app_id_redacted": SMOKE_APP_ID not in setup_dry_run + setup_apply + setup_repeat,
+        "no_credential_file": not (home / ".env").exists(),
+    }
 
     doctor = run(
         [
@@ -130,16 +154,16 @@ def smoke(binary: Path, home: Path) -> dict[str, object]:
     checks = {item.get("name"): item for item in json.loads(doctor)}
     if checks.get("bot.home", {}).get("status") != "ok" or checks.get("bot.home", {}).get("detail") != str(home):
         raise AssertionError(f"bot.home did not bind to selected home {home}:\n{doctor}")
-    if checks.get("bot.credentials", {}).get("status") != "ok":
-        raise AssertionError(f"bot.credentials was not ok:\n{doctor}")
-    if checks.get("bot.feishu.app_secret", {}).get("status") != "ok":
-        raise AssertionError(f"bot.feishu.app_secret was not ok:\n{doctor}")
-    assert_not_contains(doctor, SMOKE_SECRET)
+    secret_check = checks.get("bot.feishu.app_secret", {})
+    if secret_check.get("status") != "missing" or secret_check.get("detail") != f"{SMOKE_SECRET_ENV} is not set":
+        raise AssertionError(f"bot.feishu.app_secret did not report the missing environment variable:\n{doctor}")
+    assert_not_contains(doctor, SMOKE_APP_ID)
     doctor_contracts = {
         "home_bound": checks.get("bot.home", {}).get("detail") == str(home),
-        "credentials_ok": checks.get("bot.credentials", {}).get("status") == "ok",
-        "feishu_secret_resolved": checks.get("bot.feishu.app_secret", {}).get("status") == "ok",
-        "secret_redacted": SMOKE_SECRET not in doctor,
+        "connection_recorded": checks.get("bot.connections", {}).get("status") == "ok",
+        "missing_secret_reported": secret_check.get("status") == "missing",
+        "missing_secret_named": secret_check.get("detail") == f"{SMOKE_SECRET_ENV} is not set",
+        "app_id_redacted": SMOKE_APP_ID not in doctor,
     }
 
     plan = run(
@@ -164,18 +188,19 @@ def smoke(binary: Path, home: Path) -> dict[str, object]:
     assert_contains(plan, str(home))
     assert_contains(plan, ".env")
     assert_contains(plan, "service definitions do not embed secret values")
-    assert_not_contains(plan, SMOKE_SECRET)
+    assert_not_contains(plan, SMOKE_APP_ID)
     plan_contracts = {
         "renders_service_plan": "gateway service plan:" in plan,
         "pins_reames_agent_home": "REAMES_AGENT_HOME" in plan and str(home) in plan,
         "documents_credentials_env": ".env" in plan,
         "documents_no_secret_embedding": "service definitions do not embed secret values" in plan,
-        "secret_redacted": SMOKE_SECRET not in plan,
+        "app_id_redacted": SMOKE_APP_ID not in plan,
     }
     ambient_home = home.parent / "ambient-home"
     selected_home = home.parent / "selected-foreground-home"
-    write_foreground_probe_home(ambient_home, enabled=True)
-    write_foreground_probe_home(selected_home, enabled=False)
+    ambient_workspace = prepare_workspace(ambient_home)
+    run(setup_args(binary, ambient_home, ambient_workspace), env=env)
+    selected_home.mkdir(parents=True, exist_ok=True)
     foreground_env = env.copy()
     foreground_env["REAMES_AGENT_HOME"] = str(ambient_home)
     foreground_code, foreground = run_result(
@@ -195,10 +220,10 @@ def smoke(binary: Path, home: Path) -> dict[str, object]:
             "gateway run --home did not bind to the selected foreground home "
             f"(exit={foreground_code}):\n{foreground}"
         )
-    assert_not_contains(foreground, SMOKE_SECRET)
+    assert_not_contains(foreground, SMOKE_APP_ID)
     foreground_contracts = {
         "home_overrides_ambient_env": foreground_code == 1 and "gateway is not enabled" in foreground,
-        "secret_redacted": SMOKE_SECRET not in foreground,
+        "app_id_redacted": SMOKE_APP_ID not in foreground,
     }
     return {
         "status": "passed",
@@ -206,6 +231,7 @@ def smoke(binary: Path, home: Path) -> dict[str, object]:
         "binary": str(binary),
         "home": str(home),
         "workspace": str(workspace),
+        "setup": setup_contracts,
         "doctor": doctor_contracts,
         "service_plan": plan_contracts,
         "foreground_run": foreground_contracts,

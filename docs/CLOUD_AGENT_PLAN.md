@@ -58,6 +58,13 @@ reames-agent feedback draft --home "$REAMES_AGENT_HOME" --limit 20
 
 ```bash
 # 当前 Reames 可用的前台调试入口
+reames-agent gateway setup --home "$REAMES_AGENT_HOME" --channel feishu \
+  --app-id APP_ID --app-secret-env FEISHU_BOT_APP_SECRET \
+  --workspace /srv/reames/project --pairing --dry-run
+reames-agent gateway setup --home "$REAMES_AGENT_HOME" --channel feishu \
+  --app-id APP_ID --app-secret-env FEISHU_BOT_APP_SECRET \
+  --workspace /srv/reames/project --pairing
+reames-agent gateway doctor --deep --home "$REAMES_AGENT_HOME"
 reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu
 reames-agent bot start --home "$REAMES_AGENT_HOME" --channels feishu
 
@@ -187,7 +194,9 @@ flowchart TD
 
 - 飞书消息进入云端 Gateway service，而不是占用用户的 CLI 终端。
 - 支持文本任务、状态查询、取消、审批和会话恢复。
-- IM 用户、群、项目 workspace 和审批角色可配置。
+- IM 用户、群、项目 workspace 和审批角色可配置；`gateway setup` 已为
+  飞书/Lark、QQ 和微信提供 fail-closed、幂等、原子且脱敏的无界面配置事务，
+  下一步是在干净云节点执行 setup → doctor → service install/run 实战。
 - 飞书卡片只承载交互，不污染模型 prompt。
 - 建立 Linux systemd / Windows Scheduled Task / macOS launchd 的后台服务安装、启动、停止和状态查询。
 

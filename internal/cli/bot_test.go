@@ -477,6 +477,84 @@ func TestGatewayInstallDryRunPrintsServiceLifecyclePlan(t *testing.T) {
 	}
 }
 
+func TestGatewaySetupHeadlessDeploymentChainWithoutRealSecret(t *testing.T) {
+	isolateBotUserConfig(t)
+	home := filepath.Join(t.TempDir(), "gateway-home")
+	workspace := filepath.Join(t.TempDir(), "project")
+	setupOut := captureStdout(t, func() {
+		rc := gatewayCommand([]string{
+			"setup",
+			"--home", home,
+			"--channel", "feishu",
+			"--app-id", "fixture-app-id",
+			"--app-secret-env", "FIXTURE_FEISHU_SECRET",
+			"--workspace", workspace,
+			"--model", "deepseek-pro",
+			"--pairing",
+		}, "test-version")
+		if rc != 0 {
+			t.Fatalf("gateway setup rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{
+		"gateway setup plan:",
+		"action: create",
+		"connection_id: feishu-feishu",
+		"app_id=set app_secret_env=FIXTURE_FEISHU_SECRET",
+		"pairing=true",
+		"write: applied atomically",
+	} {
+		if !strings.Contains(setupOut, want) {
+			t.Fatalf("gateway setup output missing %q:\n%s", want, setupOut)
+		}
+	}
+	if strings.Contains(setupOut, "fixture-app-id") {
+		t.Fatalf("gateway setup printed application identifier instead of redacting it:\n%s", setupOut)
+	}
+
+	doctorOut := captureStdout(t, func() {
+		if rc := gatewayCommand([]string{"doctor", "--json", "--home", home}, "test-version"); rc != 0 {
+			t.Fatalf("gateway doctor rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{
+		`"name":"bot.enabled","status":"ok"`,
+		`"name":"bot.feishu.app_secret","status":"missing","detail":"FIXTURE_FEISHU_SECRET is not set"`,
+		`"name":"bot.connections","status":"ok","detail":"enabled=1 total=1"`,
+	} {
+		if !strings.Contains(doctorOut, want) {
+			t.Fatalf("gateway doctor output missing %s:\n%s", want, doctorOut)
+		}
+	}
+
+	serviceOut := captureStdout(t, func() {
+		if rc := gatewayCommand([]string{"install", "--dry-run", "--home", home, "--channels", "feishu", "--dir", workspace}, "test-version"); rc != 0 {
+			t.Fatalf("gateway install --dry-run rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{"gateway service plan:", "REAMES_AGENT_HOME=" + home, "gateway", "run", "--channels", "feishu"} {
+		if !strings.Contains(serviceOut, want) {
+			t.Fatalf("gateway service output missing %q:\n%s", want, serviceOut)
+		}
+	}
+}
+
+func TestGatewaySetupDryRunLeavesSelectedHomeUntouched(t *testing.T) {
+	isolateBotUserConfig(t)
+	home := filepath.Join(t.TempDir(), "preview-home")
+	out := captureStdout(t, func() {
+		if rc := gatewayCommand([]string{"setup", "--home", home, "--channel", "weixin", "--account-id", "fixture-account", "--admins", "owner", "--dry-run"}, "test-version"); rc != 0 {
+			t.Fatalf("gateway setup --dry-run rc = %d, want 0", rc)
+		}
+	})
+	if !strings.Contains(out, "write: skipped (dry-run)") {
+		t.Fatalf("gateway setup dry-run output:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(home, "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("gateway setup dry-run touched selected home: %v", err)
+	}
+}
+
 func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
 	out := captureStdout(t, func() {
 		if rc := gatewayCommand([]string{"help"}, "test-version"); rc != 0 {
@@ -484,6 +562,7 @@ func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
+		"reames-agent gateway setup",
 		"reames-agent gateway run",
 		"reames-agent gateway install",
 		"--home PATH",
@@ -493,6 +572,7 @@ func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
 		"systemd, launchd, or Windows Scheduled Task",
 		"<Reames Agent home>/.env",
 		"do not embed secret values",
+		"only secret environment variable names",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("gateway help output missing %q:\n%s", want, out)

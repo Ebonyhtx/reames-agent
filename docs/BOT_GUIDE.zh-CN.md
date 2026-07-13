@@ -134,6 +134,12 @@ HTTP 调用使用带超时的 client，避免平台请求卡住后无限阻塞 g
 无界面网关启动：
 
 ```sh
+reames-agent gateway setup --home ~/.reames-agent --channel feishu \
+  --app-id APP_ID --app-secret-env FEISHU_BOT_APP_SECRET \
+  --workspace /path/to/project --pairing --dry-run
+reames-agent gateway setup --home ~/.reames-agent --channel feishu \
+  --app-id APP_ID --app-secret-env FEISHU_BOT_APP_SECRET \
+  --workspace /path/to/project --pairing
 reames-agent bot doctor
 reames-agent bot doctor --deep
 reames-agent gateway doctor --deep --home ~/.reames-agent
@@ -141,6 +147,24 @@ reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
 reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
 reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu --dir /path/to/project
 ```
+
+`gateway setup` 是无界面部署的配置入口，支持 `feishu`、`lark`、`qq` 和
+`weixin`。飞书/Lark/QQ 使用 `--app-id` 与 `--app-secret-env`；微信使用
+`--account-id` 与 `--token-env`。secret 参数只接受常规大写环境变量名，命令行
+不接受或保存 secret 值。可以用 `--connection-id` 固定多实例连接 ID，并用
+`--workspace`、`--model` 与 `--tool-approval ask|auto|yolo` 设置连接级默认值。
+
+访问控制必须显式选择：`--pairing`、`--users`、`--groups`、`--approvers`、
+`--admins` 或有意使用 `--allow-all`。这些列表可重复传入或使用逗号分隔。
+默认更新会合并并保留旧 access；需要从旧的开放配置收窄时，使用
+`--reset-access` 后同时给出新规则。没有这些规则的新连接会 fail closed，
+不会因为默认配置或空 allowlist 意外开放。
+
+`--dry-run` 会严格解析现有 TOML、验证凭据引用与访问边界，并输出稳定的脱敏
+计划，但不会创建或改写文件。正式执行使用原子替换，并按连接 ID 幂等更新：
+保留其他连接、provider、route、`created_at`、session mappings 和未被替换的
+访问配置；完全相同的重跑不会刷新 `updated_at` 或重写配置。配置损坏时 setup
+直接报错，不会用默认配置覆盖原文件。
 
 `--channels` 用来选择接受哪些已配置的 IM 输入。`feishu` 和 `lark` 会选择对应
 飞书系连接，`weixin` 会选择已保存的微信 iLink 账号，`qq` 会选择已配置的 QQ

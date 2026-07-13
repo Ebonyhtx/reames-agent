@@ -370,7 +370,7 @@ func mergeTOMLProviderAccess(paths []string) ([]string, bool, error) {
 // of resetting to defaults. Reames Agent's global .env is loaded so api_key_env
 // resolution works while the wizard decides which keys are still missing.
 func LoadForEdit(path string) *Config {
-	cfg, err := loadForEditStrict(path, true)
+	cfg, err := loadForEditChecked(path, true, true)
 	if err == nil {
 		return cfg
 	}
@@ -382,7 +382,7 @@ func LoadForEdit(path string) *Config {
 }
 
 func LoadForEditWithoutCredentials(path string) *Config {
-	cfg, err := loadForEditStrict(path, false)
+	cfg, err := loadForEditChecked(path, false, true)
 	if err == nil {
 		return cfg
 	}
@@ -392,7 +392,15 @@ func LoadForEditWithoutCredentials(path string) *Config {
 	return cfg
 }
 
-func loadForEditStrict(path string, loadCredentials bool) (*Config, error) {
+// LoadForEditStrict loads one config file on top of defaults and returns parse
+// or migration errors instead of silently falling back to defaults. Callers
+// that only preview a mutation can disable normalization persistence so a
+// dry-run never changes the file it inspects.
+func LoadForEditStrict(path string, persistNormalization bool) (*Config, error) {
+	return loadForEditChecked(path, true, persistNormalization)
+}
+
+func loadForEditChecked(path string, loadCredentials bool, persistNormalization bool) (*Config, error) {
 	if loadCredentials {
 		loadDotEnvForEditPath(path)
 	}
@@ -406,7 +414,7 @@ func loadForEditStrict(path string, loadCredentials bool) (*Config, error) {
 		return nil, err
 	}
 	changed := normalizeConfigForEdit(cfg)
-	if changed && strings.TrimSpace(path) != "" {
+	if changed && persistNormalization && strings.TrimSpace(path) != "" {
 		if _, err := os.Stat(path); err == nil {
 			if err := cfg.SaveTo(path); err != nil {
 				return nil, err

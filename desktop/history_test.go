@@ -363,6 +363,10 @@ func TestHistoryForTabUsesPinnedSessionBeforeControllerReady(t *testing.T) {
 	if len(got) != 1 || got[0].Role != "user" || got[0].Content != "warm prompt" {
 		t.Fatalf("pending controller history = %+v, want warm prompt", got)
 	}
+	page := app.HistoryPageForTab(tab.ID, 0, 60)
+	if len(page.Messages) != 1 || page.Messages[0].Role != "user" || page.Messages[0].Content != "warm prompt" || page.TotalTurns != 1 {
+		t.Fatalf("pending controller history page = %+v, want one warm prompt turn", page)
+	}
 }
 
 func historyMemoryCompilerContract(t *testing.T, sourceEvent string) string {
