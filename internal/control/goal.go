@@ -62,24 +62,25 @@ type goalMachine struct {
 // can replace the whole projection instead of layering new state over stale
 // in-memory fields.
 type goalState struct {
-	Goal               string              `json:"goal,omitempty"`
-	Status             string              `json:"status,omitempty"`
-	ResearchMode       GoalResearchMode    `json:"researchMode,omitempty"`
-	AutoResearchTaskID string              `json:"autoResearchTaskID,omitempty"`
-	Turns              int                 `json:"turns,omitempty"`
-	Blocks             int                 `json:"blocks,omitempty"`
-	Block              string              `json:"block,omitempty"`
-	Strict             bool                `json:"strict,omitempty"`
-	Intercepts         int                 `json:"intercepts,omitempty"`
-	InterceptMsg       string              `json:"interceptMsg,omitempty"`
-	SelfCheckPending   bool                `json:"selfCheckPending,omitempty"`
-	IdleTurns          int                 `json:"idleTurns,omitempty"`
-	PlanMode           bool                `json:"planMode,omitempty"`
-	TodosKnown         bool                `json:"todosKnown,omitempty"`
-	Todos              []evidence.TodoItem `json:"todos,omitempty"`
-	MessageCount       int                 `json:"messageCount,omitempty"`
-	TranscriptDigest   string              `json:"transcriptDigest,omitempty"`
-	Revision           uint64              `json:"revision,omitempty"`
+	Goal               string                 `json:"goal,omitempty"`
+	Status             string                 `json:"status,omitempty"`
+	ResearchMode       GoalResearchMode       `json:"researchMode,omitempty"`
+	AutoResearchTaskID string                 `json:"autoResearchTaskID,omitempty"`
+	Turns              int                    `json:"turns,omitempty"`
+	Blocks             int                    `json:"blocks,omitempty"`
+	Block              string                 `json:"block,omitempty"`
+	Strict             bool                   `json:"strict,omitempty"`
+	Intercepts         int                    `json:"intercepts,omitempty"`
+	InterceptMsg       string                 `json:"interceptMsg,omitempty"`
+	SelfCheckPending   bool                   `json:"selfCheckPending,omitempty"`
+	IdleTurns          int                    `json:"idleTurns,omitempty"`
+	PlanMode           bool                   `json:"planMode,omitempty"`
+	TodosKnown         bool                   `json:"todosKnown,omitempty"`
+	Todos              []evidence.TodoItem    `json:"todos,omitempty"`
+	MessageCount       int                    `json:"messageCount,omitempty"`
+	TranscriptDigest   string                 `json:"transcriptDigest,omitempty"`
+	DurableEvidence    *evidence.DurableState `json:"durableEvidence,omitempty"`
+	Revision           uint64                 `json:"revision,omitempty"`
 }
 
 type goalRuntimeProjection struct {
@@ -87,6 +88,7 @@ type goalRuntimeProjection struct {
 	todos            []evidence.TodoItem
 	messageCount     int
 	transcriptDigest string
+	durableEvidence  evidence.DurableState
 }
 
 // goalAdvanceInput carries everything the FSM needs for one continuation step,
@@ -101,6 +103,7 @@ type goalAdvanceInput struct {
 	planMode         bool
 	messageCount     int
 	transcriptDigest string
+	durableEvidence  evidence.DurableState
 }
 
 // goalAdvanceResult reports the FSM step's outcome. data/path/ok describe the
@@ -327,6 +330,7 @@ func (g *goalMachine) advance(in goalAdvanceInput) goalAdvanceResult {
 	runtime := goalRuntimeProjection{
 		planMode: in.planMode, todos: in.todos,
 		messageCount: in.messageCount, transcriptDigest: in.transcriptDigest,
+		durableEvidence: in.durableEvidence,
 	}
 	res.path, res.data, res.revision, res.ok = g.buildStateLocked(runtime)
 	return res
@@ -371,8 +375,17 @@ func (g *goalMachine) stateLocked(runtime goalRuntimeProjection) goalState {
 		Todos:              append([]evidence.TodoItem(nil), runtime.todos...),
 		MessageCount:       runtime.messageCount,
 		TranscriptDigest:   runtime.transcriptDigest,
+		DurableEvidence:    durableEvidencePointer(runtime.durableEvidence),
 		Revision:           g.revision,
 	}
+}
+
+func durableEvidencePointer(state evidence.DurableState) *evidence.DurableState {
+	if !state.WritePending && len(state.VerifiedChecks) == 0 {
+		return nil
+	}
+	clone := state.Clone()
+	return &clone
 }
 
 func (g *goalMachine) snapshotData(runtime goalRuntimeProjection) json.RawMessage {
@@ -689,6 +702,9 @@ func (c *Controller) goalTodos() []evidence.TodoItem {
 
 func (c *Controller) goalRuntimeProjection() goalRuntimeProjection {
 	projection := goalRuntimeProjection{planMode: c.PlanMode(), todos: c.goalTodos()}
+	if c.executor != nil {
+		projection.durableEvidence = c.executor.DurableEvidenceState()
+	}
 	if c.executor != nil && c.executor.Session() != nil {
 		projection.messageCount, projection.transcriptDigest = c.executor.Session().TranscriptAnchor()
 	}
@@ -708,10 +724,14 @@ func (c *Controller) persistGoalState(path string, data []byte, revision uint64,
 func (c *Controller) restoreSessionRuntime(sessionPath string) {
 	state, ok := c.goals.restoreSessionState(sessionPath)
 	if !ok {
+		if c.executor != nil {
+			c.executor.ClearDurableEvidence()
+		}
 		c.setPlanMode(false, false)
 		return
 	}
 	c.restoreRuntimeTodos(state)
+	c.restoreRuntimeEvidence(state)
 	c.setPlanMode(state.PlanMode, false)
 }
 
@@ -721,6 +741,7 @@ func (c *Controller) restoreCheckpointRuntime(data []byte) bool {
 		return false
 	}
 	c.restoreRuntimeTodos(state)
+	c.restoreRuntimeEvidence(state)
 	c.setPlanMode(state.PlanMode, false)
 	c.goals.persistRuntime(c.goalRuntimeProjection())
 	return true
@@ -729,6 +750,7 @@ func (c *Controller) restoreCheckpointRuntime(data []byte) bool {
 func (c *Controller) restoreCheckpointState(state goalState) {
 	c.goals.applyCheckpointState(state)
 	c.restoreRuntimeTodos(state)
+	c.restoreRuntimeEvidence(state)
 	c.setPlanMode(state.PlanMode, false)
 	c.goals.persistRuntime(c.goalRuntimeProjection())
 }
@@ -766,6 +788,25 @@ func (c *Controller) restoreRuntimeTodos(state goalState) {
 	if session == nil || state.MessageCount >= session.Len() {
 		c.executor.RestoreTodoState(append([]evidence.TodoItem(nil), state.Todos...))
 	}
+}
+
+func (c *Controller) restoreRuntimeEvidence(state goalState) {
+	if c.executor == nil {
+		return
+	}
+	c.executor.ClearDurableEvidence()
+	if state.DurableEvidence == nil || state.TranscriptDigest == "" {
+		return
+	}
+	session := c.executor.Session()
+	if session == nil {
+		return
+	}
+	equal, _ := session.CompareTranscriptAnchor(state.MessageCount, state.TranscriptDigest)
+	if !equal {
+		return
+	}
+	c.executor.RestoreDurableEvidence(state.DurableEvidence.Clone())
 }
 
 func writeSessionRuntimeData(sessionPath string, data []byte) error {

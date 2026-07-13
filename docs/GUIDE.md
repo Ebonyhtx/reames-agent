@@ -820,9 +820,15 @@ uncertain mutation boundary and requires later verification; it is never
 accepted as successful proof. Background tasks may outlive the invoking turn,
 but late receipts and checkpoint callbacks are rejected once a newer turn is
 active, preventing old work from proving a new answer. Inspect the job result
-and disk again in that case. This bridge is in-memory, not crash-resumable or
-durable evidence. Shell commands have no static file preview, so child `bash`
-has the same per-file checkpoint limitation as root `bash`.
+and disk again in that case. The effects bridge itself is in-memory and not a
+crash-resumable child receipt journal. A child writer invalidates the parent's
+older durable project-check references, but a child-only bash check remains
+current-turn evidence because its tool call is not in the parent transcript;
+run the check from the root before a later continuation needs durable proof.
+Root project-check references persist only as command hashes and tool-call IDs,
+and are revalidated against an exact transcript anchor on recovery. Shell
+commands have no static file preview, so child `bash` has the same per-file
+checkpoint limitation as root `bash`.
 
 Use `read_only_task` when planning needs isolated, deeper research without
 granting write-capable delegation. Use `read_only_skill` when the same need is

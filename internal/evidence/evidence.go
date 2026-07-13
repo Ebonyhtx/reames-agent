@@ -2,6 +2,8 @@ package evidence
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"path/filepath"
 	"runtime"
@@ -35,6 +37,7 @@ type TodoStepMatch struct {
 // the current agent turn and is not serialized into prompts or session state.
 type Receipt struct {
 	ToolName         string          `json:"tool_name"`
+	ToolCallID       string          `json:"tool_call_id,omitempty"`
 	Args             json.RawMessage `json:"args,omitempty"`
 	Success          bool            `json:"success"`
 	Command          string          `json:"command,omitempty"`
@@ -49,6 +52,35 @@ type Receipt struct {
 	ParentToolCallID string          `json:"parent_tool_call_id,omitempty"`
 	SubagentDepth    int             `json:"subagent_depth,omitempty"`
 	Todos            []TodoItem      `json:"todos,omitempty"`
+}
+
+// VerificationReference is the minimum durable pointer to one successful
+// project check. CheckHash identifies the configured check without persisting
+// its command text; ToolCallID must resolve to a successful bash call in the
+// transcript anchored by the runtime sidecar before recovery accepts it.
+type VerificationReference struct {
+	CheckHash  string `json:"checkHash"`
+	ToolCallID string `json:"toolCallID"`
+}
+
+// DurableState carries verification references across continuation turns. A
+// writer boundary sets WritePending and clears VerifiedChecks; every configured
+// project check must then acquire a new reference before final readiness passes.
+type DurableState struct {
+	WritePending   bool                    `json:"writePending,omitempty"`
+	VerifiedChecks []VerificationReference `json:"verifiedChecks,omitempty"`
+}
+
+func (s DurableState) Clone() DurableState {
+	s.VerifiedChecks = append([]VerificationReference(nil), s.VerifiedChecks...)
+	return s
+}
+
+// ProjectCheckHash returns the stable, non-reversible identity stored for a
+// configured project-check command.
+func ProjectCheckHash(command string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(command)))
+	return hex.EncodeToString(sum[:])
 }
 
 // Ledger stores the receipts available to complete_step for the current turn.
@@ -77,6 +109,22 @@ func (l *Ledger) Reset() {
 	defer l.mu.Unlock()
 	l.receipts = nil
 	l.generation++
+}
+
+// Rotate atomically returns the current receipt epoch and starts the next one.
+// A background RecordAtGeneration either lands in the returned batch or sees
+// the advanced generation and is rejected; no receipt can fall between a
+// separate snapshot and reset.
+func (l *Ledger) Rotate() []Receipt {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := cloneReceipts(l.receipts)
+	l.receipts = nil
+	l.generation++
+	return out
 }
 
 func normalizeReceipt(r Receipt) Receipt {
@@ -330,6 +378,30 @@ func (l *Ledger) HasSuccessfulCommandAfter(command string, after int) bool {
 	return false
 }
 
+// LatestCommandResultAfter reports the result of the most recent matching bash
+// receipt after the boundary. A later failure intentionally overrides an
+// earlier success; final readiness must not certify a check whose latest run
+// failed merely because an older run in the same writer epoch passed.
+func (l *Ledger) LatestCommandResultAfter(command string, after int) (success bool, found bool) {
+	command = strings.TrimSpace(command)
+	if l == nil || command == "" {
+		return false, false
+	}
+	start := after + 1
+	if start < 0 {
+		start = 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := len(l.receipts) - 1; i >= start; i-- {
+		r := l.receipts[i]
+		if r.ToolName == "bash" && CommandMatches(command, r.Command) {
+			return r.Success, true
+		}
+	}
+	return false, false
+}
+
 func (l *Ledger) HasSuccessfulCompleteStepAfter(after int) bool {
 	if l == nil {
 		return false
@@ -565,8 +637,22 @@ func (l *Ledger) Receipts(limit int) []Receipt {
 	if start < 0 {
 		start = 0
 	}
-	out := make([]Receipt, len(l.receipts)-start)
-	copy(out, l.receipts[start:])
+	return cloneReceipts(l.receipts[start:])
+}
+
+// AllReceipts returns an atomic deep copy of the current receipt epoch.
+func (l *Ledger) AllReceipts() []Receipt {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return cloneReceipts(l.receipts)
+}
+
+func cloneReceipts(in []Receipt) []Receipt {
+	out := make([]Receipt, len(in))
+	copy(out, in)
 	for i := range out {
 		out[i].Args = append(json.RawMessage(nil), out[i].Args...)
 		out[i].Paths = append([]string(nil), out[i].Paths...)

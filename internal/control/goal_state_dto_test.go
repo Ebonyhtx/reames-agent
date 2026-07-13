@@ -4,14 +4,20 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"reames-agent/internal/agent"
+	"reames-agent/internal/event"
 	"reames-agent/internal/evidence"
+	"reames-agent/internal/instruction"
+	"reames-agent/internal/provider"
 )
 
 func TestGoalStateV2RoundTrip(t *testing.T) {
+	checkHash := evidence.ProjectCheckHash("go test ./...")
 	original := GoalStateV2{
 		Version:            GoalStateVersion,
 		Goal:               "fix the build",
@@ -24,6 +30,12 @@ func TestGoalStateV2RoundTrip(t *testing.T) {
 		Todos:              []evidence.TodoItem{{Content: "verify persistence", Status: "completed"}},
 		MessageCount:       4,
 		TranscriptDigest:   "abc123",
+		DurableEvidence: &evidence.DurableState{
+			WritePending: true,
+			VerifiedChecks: []evidence.VerificationReference{{
+				CheckHash: checkHash, ToolCallID: "bash-1",
+			}},
+		},
 	}
 
 	data, err := json.Marshal(original)
@@ -53,6 +65,111 @@ func TestGoalStateV2RoundTrip(t *testing.T) {
 	}
 	if restored.MessageCount != 4 || restored.TranscriptDigest != "abc123" {
 		t.Fatalf("transcript anchor = count %d digest %q", restored.MessageCount, restored.TranscriptDigest)
+	}
+	if restored.DurableEvidence == nil || !restored.DurableEvidence.WritePending || len(restored.DurableEvidence.VerifiedChecks) != 1 {
+		t.Fatalf("DurableEvidence = %+v", restored.DurableEvidence)
+	}
+	if strings.Contains(string(data), "go test ./...") {
+		t.Fatalf("runtime sidecar exposed project-check command text: %s", data)
+	}
+}
+
+func TestGoalStateDurableEvidenceRoundTripDeepCopies(t *testing.T) {
+	state := &evidence.DurableState{WritePending: true, VerifiedChecks: []evidence.VerificationReference{{CheckHash: "hash", ToolCallID: "call"}}}
+	v2 := GoalStateV2{DurableEvidence: state}
+	internal := v2.ToGoalState()
+	state.VerifiedChecks[0].ToolCallID = "mutated-source"
+	if got := internal.DurableEvidence.VerifiedChecks[0].ToolCallID; got != "call" {
+		t.Fatalf("ToGoalState retained source alias: %q", got)
+	}
+
+	back := FromGoalState(internal)
+	internal.DurableEvidence.VerifiedChecks[0].ToolCallID = "mutated-internal"
+	if got := back.DurableEvidence.VerifiedChecks[0].ToolCallID; got != "call" {
+		t.Fatalf("FromGoalState retained internal alias: %q", got)
+	}
+}
+
+func TestRestoreRuntimeEvidenceRequiresExactTranscriptAnchor(t *testing.T) {
+	check := instruction.VerifyCheck{Command: "go test ./...", SourcePath: "AGENTS.md"}
+	session := agent.NewSession("sys")
+	session.Add(provider.Message{Role: provider.RoleUser, Content: "verify"})
+	session.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "bash-1", Name: "bash", Arguments: `{"command":"go test ./..."}`}}})
+	session.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "bash-1", Name: "bash", Content: "ok"})
+	executor := agent.New(nil, nil, session, agent.Options{ProjectChecks: []instruction.VerifyCheck{check}}, event.Discard)
+	c := New(Options{Executor: executor})
+	count, digest := session.TranscriptAnchor()
+	state := goalState{
+		MessageCount: count, TranscriptDigest: digest,
+		DurableEvidence: &evidence.DurableState{WritePending: true, VerifiedChecks: []evidence.VerificationReference{{
+			CheckHash: evidence.ProjectCheckHash(check.Command), ToolCallID: "bash-1",
+		}}},
+	}
+
+	c.restoreRuntimeEvidence(state)
+	if got := executor.DurableEvidenceState(); len(got.VerifiedChecks) != 1 {
+		t.Fatalf("exact anchored evidence was not restored: %+v", got)
+	}
+
+	session.Add(provider.Message{Role: provider.RoleUser, Content: "newer suffix"})
+	c.restoreRuntimeEvidence(state)
+	if got := executor.DurableEvidenceState(); got.WritePending || len(got.VerifiedChecks) != 0 {
+		t.Fatalf("append-only transcript accepted stale evidence: %+v", got)
+	}
+}
+
+func TestDurableEvidenceSurvivesSessionCrashResume(t *testing.T) {
+	dir := t.TempDir()
+	sessionPath := filepath.Join(dir, "session.jsonl")
+	check := instruction.VerifyCheck{Command: "go test ./...", SourcePath: "AGENTS.md"}
+	hash := evidence.ProjectCheckHash(check.Command)
+	refState := evidence.DurableState{WritePending: true, VerifiedChecks: []evidence.VerificationReference{{CheckHash: hash, ToolCallID: "bash-1"}}}
+
+	session := agent.NewSession("sys")
+	for _, msg := range []provider.Message{
+		{Role: provider.RoleUser, Content: "implement and verify"},
+		{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "write-1", Name: "write_file", Arguments: `{"path":"a.go","content":"package a"}`}}},
+		{Role: provider.RoleTool, ToolCallID: "write-1", Name: "write_file", Content: "written"},
+		{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "bash-1", Name: "bash", Arguments: `{"command":"go test ./..."}`}}},
+		{Role: provider.RoleTool, ToolCallID: "bash-1", Name: "bash", Content: "ok"},
+	} {
+		session.Add(msg)
+	}
+	if err := session.SaveSnapshot(sessionPath); err != nil {
+		t.Fatalf("SaveSnapshot: %v", err)
+	}
+
+	firstExecutor := agent.New(nil, nil, session, agent.Options{ProjectChecks: []instruction.VerifyCheck{check}}, event.Discard)
+	firstExecutor.RestoreDurableEvidence(refState)
+	first := New(Options{Executor: firstExecutor, SessionPath: sessionPath})
+	path, data, revision, ok := first.goals.set("ship safely", GoalResearchOff, "", first.goalRuntimeProjection())
+	first.persistGoalState(path, data, revision, ok)
+	if !ok {
+		t.Fatal("first runtime did not produce sidecar data")
+	}
+	sidecar, err := os.ReadFile(goalStatePath(sessionPath))
+	if err != nil {
+		t.Fatalf("read sidecar: %v", err)
+	}
+	if strings.Contains(string(sidecar), check.Command) {
+		t.Fatalf("sidecar leaked project-check command: %s", sidecar)
+	}
+
+	loaded, err := agent.LoadSession(sessionPath)
+	if err != nil {
+		t.Fatalf("LoadSession: %v", err)
+	}
+	secondExecutor := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{ProjectChecks: []instruction.VerifyCheck{check}}, event.Discard)
+	second := New(Options{Executor: secondExecutor, SessionPath: sessionPath})
+	second.Resume(loaded, sessionPath)
+	if second.Goal() != "ship safely" || second.GoalStatus() != GoalStatusRunning {
+		t.Fatalf("resumed goal = %q status %q", second.Goal(), second.GoalStatus())
+	}
+	if got := secondExecutor.DurableEvidenceState(); !got.WritePending || len(got.VerifiedChecks) != 1 || got.VerifiedChecks[0].ToolCallID != "bash-1" {
+		t.Fatalf("resumed durable evidence = %+v", got)
+	}
+	if got := secondExecutor.GoalReadinessFailure(); got != "" {
+		t.Fatalf("resumed readiness = %q, want verified writer epoch", got)
 	}
 }
 

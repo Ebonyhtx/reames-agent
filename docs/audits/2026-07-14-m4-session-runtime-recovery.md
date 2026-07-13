@@ -67,7 +67,7 @@ git diff --check
 ## 未关闭边界
 
 - writable 子代理的进程内 effects 归并已在 `2026-07-14-m4-writable-subagent-effects.md` 关闭；跨 turn/crash 的 durable effect journal 仍未实现。
-- 跨 continuation 的成功读取/验证循环检测与 durable evidence 最小引用。
+- 跨 continuation 的成功读取/验证循环与 durable evidence 最小引用已由 `2026-07-14-m4-durable-evidence.md` 后续批次关闭；完整 child effect journal 仍未实现。
 - runtime/checkpoint 持久化失败向 writer 的 fail-closed 传播和断电窗口。
 - RestoreCode 的 handle-relative no-reparse/resolve-beneath 写入、`RewindBoth` 跨 transcript/runtime/workspace durable journal，以及 ACL/xattr/硬链接身份恢复。
 - 后台 Task crash-resume 与 compaction 后恢复。

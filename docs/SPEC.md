@@ -373,6 +373,14 @@ func (p Policy) Decide(toolName string, readOnly bool, args json.RawMessage) Dec
   assumption. Completion requires the concrete request, output format,
   constraints, and relevant verification expectations to be satisfied or
   explicitly reported as unverified.
+  Project-check receipts use a two-level evidence model: the full receipt ledger
+  remains current-turn memory, while the runtime sidecar may retain only the
+  configured command hash and root bash tool-call ID for the latest writer
+  epoch. A new writer or mutation attempt invalidates prior references, and a
+  later failed check overrides an earlier success. Crash recovery accepts a
+  reference only when the transcript count/digest matches exactly and the ID
+  resolves to that check's latest successful tool result after the latest
+  writer. Append/rewrite divergence and child-only receipts require rechecking.
   Goals that look like long-horizon research, debugging, optimization, or
   implementation work automatically add an AutoResearch protocol to the same
   transient active-goal user block. AutoResearch is a Goal strategy, not a

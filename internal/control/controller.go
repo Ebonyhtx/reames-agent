@@ -1696,6 +1696,13 @@ func (c *Controller) SetGoal(goal string) {
 }
 
 func (c *Controller) SetGoalWithResearchMode(goal string, researchMode GoalResearchMode) {
+	normalizedGoal := strings.TrimSpace(goal)
+	currentGoal, currentStatus, _, _ := c.goals.snapshot()
+	if c.executor != nil && (normalizedGoal == "" || currentGoal != normalizedGoal || currentStatus != GoalStatusRunning) {
+		// A fresh goal must not inherit verification references from unrelated
+		// work. Reapplying the same running goal keeps its continuation epoch.
+		c.executor.ResetDurableEvidenceEpoch()
+	}
 	taskID, blockReason := c.ensureAutoResearchTask(goal, researchMode)
 	path, data, revision, ok := c.goals.set(goal, researchMode, taskID, c.goalRuntimeProjection())
 	c.persistGoalState(path, data, revision, ok)

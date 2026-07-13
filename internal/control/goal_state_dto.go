@@ -51,29 +51,30 @@ type goalStateV1 struct {
 	Todos              []evidence.TodoItem `json:"todos,omitempty"`
 }
 
-// GoalStateV2 persists the complete recoverable Goal/Plan/Todo projection.
-// Evidence receipts remain transcript-derived/current-turn state and are not
-// represented as durable proof by this sidecar.
+// GoalStateV2 persists the recoverable Goal/Plan/Todo projection plus bounded
+// project-check references. Full receipts remain turn-local; recovered refs
+// are accepted only after their transcript anchor and tool results validate.
 type GoalStateV2 struct {
-	Version            int                 `json:"version"`
-	Goal               string              `json:"goal,omitempty"`
-	Status             string              `json:"status,omitempty"`
-	ResearchMode       GoalResearchMode    `json:"researchMode,omitempty"`
-	AutoResearchTaskID string              `json:"autoResearchTaskID,omitempty"`
-	Turns              int                 `json:"turns,omitempty"`
-	Blocks             int                 `json:"blocks,omitempty"`
-	Block              string              `json:"block,omitempty"`
-	Strict             bool                `json:"strict"`
-	Intercepts         int                 `json:"intercepts,omitempty"`
-	InterceptMsg       string              `json:"interceptMsg,omitempty"`
-	SelfCheckPending   bool                `json:"selfCheckPending,omitempty"`
-	IdleTurns          int                 `json:"idleTurns,omitempty"`
-	PlanMode           bool                `json:"planMode,omitempty"`
-	TodosKnown         bool                `json:"todosKnown"`
-	Todos              []evidence.TodoItem `json:"todos,omitempty"`
-	MessageCount       int                 `json:"messageCount,omitempty"`
-	TranscriptDigest   string              `json:"transcriptDigest,omitempty"`
-	Revision           uint64              `json:"revision,omitempty"`
+	Version            int                    `json:"version"`
+	Goal               string                 `json:"goal,omitempty"`
+	Status             string                 `json:"status,omitempty"`
+	ResearchMode       GoalResearchMode       `json:"researchMode,omitempty"`
+	AutoResearchTaskID string                 `json:"autoResearchTaskID,omitempty"`
+	Turns              int                    `json:"turns,omitempty"`
+	Blocks             int                    `json:"blocks,omitempty"`
+	Block              string                 `json:"block,omitempty"`
+	Strict             bool                   `json:"strict"`
+	Intercepts         int                    `json:"intercepts,omitempty"`
+	InterceptMsg       string                 `json:"interceptMsg,omitempty"`
+	SelfCheckPending   bool                   `json:"selfCheckPending,omitempty"`
+	IdleTurns          int                    `json:"idleTurns,omitempty"`
+	PlanMode           bool                   `json:"planMode,omitempty"`
+	TodosKnown         bool                   `json:"todosKnown"`
+	Todos              []evidence.TodoItem    `json:"todos,omitempty"`
+	MessageCount       int                    `json:"messageCount,omitempty"`
+	TranscriptDigest   string                 `json:"transcriptDigest,omitempty"`
+	DurableEvidence    *evidence.DurableState `json:"durableEvidence,omitempty"`
+	Revision           uint64                 `json:"revision,omitempty"`
 }
 
 func FromGoalState(gs goalState) GoalStateV2 {
@@ -96,6 +97,7 @@ func FromGoalState(gs goalState) GoalStateV2 {
 		Todos:              append([]evidence.TodoItem(nil), gs.Todos...),
 		MessageCount:       gs.MessageCount,
 		TranscriptDigest:   gs.TranscriptDigest,
+		DurableEvidence:    durableEvidencePointerValue(gs.DurableEvidence),
 		Revision:           gs.Revision,
 	}
 }
@@ -119,8 +121,17 @@ func (v GoalStateV2) ToGoalState() goalState {
 		Todos:              append([]evidence.TodoItem(nil), v.Todos...),
 		MessageCount:       v.MessageCount,
 		TranscriptDigest:   v.TranscriptDigest,
+		DurableEvidence:    durableEvidencePointerValue(v.DurableEvidence),
 		Revision:           v.Revision,
 	}
+}
+
+func durableEvidencePointerValue(state *evidence.DurableState) *evidence.DurableState {
+	if state == nil {
+		return nil
+	}
+	clone := state.Clone()
+	return &clone
 }
 
 func (v goalStateV1) toGoalState() goalState {

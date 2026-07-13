@@ -305,6 +305,7 @@ func (o *turnOrchestrator) advanceGoalAfterTurn(selfCheckTurn bool) bool {
 		planMode:         runtime.planMode,
 		messageCount:     runtime.messageCount,
 		transcriptDigest: runtime.transcriptDigest,
+		durableEvidence:  runtime.durableEvidence,
 	})
 	c.persistGoalState(res.path, res.data, res.revision, res.ok)
 	if res.notice != "" {

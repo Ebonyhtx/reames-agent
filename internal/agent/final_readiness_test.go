@@ -65,6 +65,108 @@ func TestFinalReadinessFailureBranches(t *testing.T) {
 	}
 }
 
+func TestDurableProjectChecksSurviveContinuationAndNewWriterInvalidates(t *testing.T) {
+	check := instruction.VerifyCheck{Command: "go test ./...", SourcePath: "AGENTS.md", Line: 3}
+	ledger := evidence.NewLedger()
+	a := &Agent{evidence: ledger, projectChecks: []instruction.VerifyCheck{check}}
+	ledger.Record(evidence.Receipt{ToolName: "write_file", ToolCallID: "w1", Success: true, Write: true, Paths: []string{"a.go"}})
+	ledger.Record(evidence.Receipt{ToolName: "bash", ToolCallID: "b1", Success: true, Command: "go test ./..."})
+
+	state := a.DurableEvidenceState()
+	if !state.WritePending || len(state.VerifiedChecks) != 1 {
+		t.Fatalf("durable state after verification = %+v", state)
+	}
+	a.consumeDurableReceipts(ledger.Rotate())
+	if got := a.GoalReadinessFailure(); got != "" {
+		t.Fatalf("cross-continuation readiness = %q, want prior verified writer epoch accepted", got)
+	}
+
+	ledger.Record(evidence.Receipt{ToolName: "edit_file", ToolCallID: "w2", Success: false, Write: true, MutationAttempt: true, Paths: []string{"a.go"}})
+	if got := a.GoalReadinessFailure(); !strings.Contains(got, "go test ./...") {
+		t.Fatalf("readiness after mutation attempt = %q, want old verification invalidated", got)
+	}
+}
+
+func TestDurableProjectCheckLatestFailureInvalidatesSuccess(t *testing.T) {
+	check := instruction.VerifyCheck{Command: "go test ./...", SourcePath: "AGENTS.md"}
+	ledger := readinessLedger(
+		evidence.Receipt{ToolName: "write_file", ToolCallID: "w1", Success: true, Write: true},
+		evidence.Receipt{ToolName: "bash", ToolCallID: "b1", Success: true, Command: "go test ./..."},
+		evidence.Receipt{ToolName: "bash", ToolCallID: "b2", Success: false, Command: "go test ./..."},
+	)
+	a := &Agent{evidence: ledger, projectChecks: []instruction.VerifyCheck{check}}
+	state := a.DurableEvidenceState()
+	if !state.WritePending || len(state.VerifiedChecks) != 0 {
+		t.Fatalf("durable state after later failed check = %+v", state)
+	}
+	if got := a.GoalReadinessFailure(); !strings.Contains(got, "go test ./...") {
+		t.Fatalf("readiness after failed check = %q", got)
+	}
+}
+
+func TestRestoreDurableEvidenceRequiresSuccessfulReferencedBash(t *testing.T) {
+	check := instruction.VerifyCheck{Command: "go test ./...", SourcePath: "AGENTS.md"}
+	hash := evidence.ProjectCheckHash(check.Command)
+	newAgent := func(result string, suffix ...provider.Message) *Agent {
+		session := NewSession("sys")
+		session.Add(provider.Message{Role: provider.RoleUser, Content: "verify"})
+		session.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "b1", Name: "bash", Arguments: `{"command":"go test ./..."}`}}})
+		session.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "b1", Name: "bash", Content: result})
+		for _, msg := range suffix {
+			session.Add(msg)
+		}
+		return &Agent{session: session, evidence: evidence.NewLedger(), projectChecks: []instruction.VerifyCheck{check}}
+	}
+	state := evidence.DurableState{WritePending: true, VerifiedChecks: []evidence.VerificationReference{{CheckHash: hash, ToolCallID: "b1"}}}
+
+	success := newAgent("ok")
+	success.RestoreDurableEvidence(state)
+	if got := success.DurableEvidenceState(); len(got.VerifiedChecks) != 1 {
+		t.Fatalf("successful referenced bash was not restored: %+v", got)
+	}
+
+	failed := newAgent("error: exit status 1")
+	failed.RestoreDurableEvidence(state)
+	if got := failed.DurableEvidenceState(); !got.WritePending || len(got.VerifiedChecks) != 0 {
+		t.Fatalf("failed referenced bash was trusted: %+v", got)
+	}
+
+	laterFailure := newAgent("ok",
+		provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "b2", Name: "bash", Arguments: `{"command":"go test ./..."}`}}},
+		provider.Message{Role: provider.RoleTool, ToolCallID: "b2", Name: "bash", Content: "error: exit status 1"},
+	)
+	laterFailure.RestoreDurableEvidence(state)
+	if got := laterFailure.DurableEvidenceState(); len(got.VerifiedChecks) != 0 {
+		t.Fatalf("earlier success survived a later failed check: %+v", got)
+	}
+
+	laterWriter := newAgent("ok",
+		provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "w2", Name: "write_file", Arguments: `{"path":"a.go","content":"changed"}`}}},
+		provider.Message{Role: provider.RoleTool, ToolCallID: "w2", Name: "write_file", Content: "written"},
+	)
+	laterWriter.RestoreDurableEvidence(state)
+	if got := laterWriter.DurableEvidenceState(); len(got.VerifiedChecks) != 0 {
+		t.Fatalf("earlier success survived a later writer boundary: %+v", got)
+	}
+}
+
+func TestResetDurableEvidenceEpochDoesNotReabsorbPriorTurn(t *testing.T) {
+	check := instruction.VerifyCheck{Command: "go test ./..."}
+	ledger := readinessLedger(
+		evidence.Receipt{ToolName: "write_file", ToolCallID: "w1", Success: true, Write: true},
+		evidence.Receipt{ToolName: "bash", ToolCallID: "b1", Success: true, Command: "go test ./..."},
+	)
+	a := &Agent{evidence: ledger, projectChecks: []instruction.VerifyCheck{check}}
+	if got := a.DurableEvidenceState(); len(got.VerifiedChecks) != 1 {
+		t.Fatalf("precondition durable state = %+v", got)
+	}
+	a.ResetDurableEvidenceEpoch()
+	a.consumeDurableReceipts(ledger.Rotate())
+	if got := a.DurableEvidenceState(); got.WritePending || len(got.VerifiedChecks) != 0 {
+		t.Fatalf("fresh goal reabsorbed prior-turn evidence: %+v", got)
+	}
+}
+
 func TestFinalReadinessAllowsIncompleteTodosInPlanMode(t *testing.T) {
 	todo := evidence.Receipt{ToolName: "todo_write", Success: true, Todos: []evidence.TodoItem{{Content: "draft implementation plan", Status: "pending"}}}
 	a := &Agent{evidence: readinessLedger(todo)}

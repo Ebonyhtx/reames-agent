@@ -316,6 +316,13 @@ type Agent struct {
 	// complete_step validate that cited evidence happened before the claim.
 	evidence *evidence.Ledger
 
+	// durableEvidence is the prompt-invisible, transcript-referenced project
+	// verification state for the latest writer epoch. It survives continuation
+	// turns; Controller persists it in the runtime sidecar and restores it only
+	// after the sidecar's transcript anchor and referenced tool results validate.
+	durableEvidenceMu sync.Mutex
+	durableEvidence   evidence.DurableState
+
 	// todoState is the host's canonical task list: the latest successful
 	// todo_write with completions applied by complete_step. Unlike the per-turn
 	// ledger it survives turn boundaries and compaction (it never rides in the
@@ -736,6 +743,7 @@ func (a *Agent) SetSession(s *Session) {
 	if a.evidence != nil {
 		a.evidence.Reset()
 	}
+	a.ClearDurableEvidence()
 	if s != nil {
 		a.rebuildTodoState(s.Snapshot())
 	} else {
@@ -1072,7 +1080,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	a.steerConsumed = false
 	a.steerMu.Unlock()
 	if a.evidence != nil {
-		a.evidence.Reset()
+		a.consumeDurableReceipts(a.evidence.Rotate())
 	}
 	a.repeatSuccessCounts = nil
 	a.blockedTurnStreak = 0
@@ -1379,6 +1387,190 @@ func (a *Agent) EvidenceSnapshot() evidence.Snapshot {
 	return a.evidence.Snapshot(50)
 }
 
+// DurableEvidenceState returns a bounded copy of the latest writer epoch's
+// project-check references. It first folds any receipts that arrived since the
+// last projection, including writable subagent effects merged into this turn.
+func (a *Agent) DurableEvidenceState() evidence.DurableState {
+	if a == nil {
+		return evidence.DurableState{}
+	}
+	a.reconcileDurableEvidence()
+	a.durableEvidenceMu.Lock()
+	defer a.durableEvidenceMu.Unlock()
+	return a.durableEvidence.Clone()
+}
+
+// ClearDurableEvidence invalidates all cross-turn verification references.
+func (a *Agent) ClearDurableEvidence() {
+	if a == nil {
+		return
+	}
+	a.durableEvidenceMu.Lock()
+	a.durableEvidence = evidence.DurableState{}
+	a.durableEvidenceMu.Unlock()
+}
+
+// ResetDurableEvidenceEpoch starts a fresh task contract: it clears both the
+// durable writer/check state and any receipts left by the preceding user turn,
+// so the next Run cannot rotate unrelated work into the new goal.
+func (a *Agent) ResetDurableEvidenceEpoch() {
+	if a == nil {
+		return
+	}
+	if a.evidence != nil {
+		a.evidence.Reset()
+	}
+	a.ClearDurableEvidence()
+}
+
+// RestoreDurableEvidence accepts only references that resolve to successful
+// root bash calls in the currently loaded transcript. The Controller separately
+// requires an exact runtime transcript anchor before invoking this method.
+func (a *Agent) RestoreDurableEvidence(state evidence.DurableState) {
+	if a == nil || !state.WritePending || len(a.projectChecks) == 0 {
+		a.ClearDurableEvidence()
+		return
+	}
+	checks := make(map[string]string, len(a.projectChecks))
+	for _, check := range a.projectChecks {
+		command := strings.TrimSpace(check.Command)
+		if command != "" {
+			checks[evidence.ProjectCheckHash(command)] = command
+		}
+	}
+	msgs := a.Session().Snapshot()
+	successful := successfulToolCallIDs(msgs)
+	type checkCall struct {
+		ref     evidence.VerificationReference
+		order   int
+		success bool
+	}
+	latest := make(map[string]checkCall, len(checks))
+	latestWriter := -1
+	order := 0
+	for _, msg := range msgs {
+		for _, call := range msg.ToolCalls {
+			receipt := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), successful[call.ID], false)
+			if receipt.Write {
+				// A failed writer may have partially mutated disk, so every writer
+				// call is a conservative recovery boundary.
+				latestWriter = order
+			}
+			if call.Name == "bash" {
+				for hash, command := range checks {
+					if evidence.CommandMatches(command, receipt.Command) {
+						latest[hash] = checkCall{
+							ref:   evidence.VerificationReference{CheckHash: hash, ToolCallID: call.ID},
+							order: order, success: successful[call.ID],
+						}
+					}
+				}
+			}
+			order++
+		}
+	}
+	valid := make(map[string]evidence.VerificationReference, len(state.VerifiedChecks))
+	for _, ref := range state.VerifiedChecks {
+		if _, ok := checks[ref.CheckHash]; !ok || strings.TrimSpace(ref.ToolCallID) == "" {
+			continue
+		}
+		call, ok := latest[ref.CheckHash]
+		if ok && call.success && call.order > latestWriter && call.ref.ToolCallID == ref.ToolCallID {
+			valid[ref.CheckHash] = ref
+		}
+	}
+	a.durableEvidenceMu.Lock()
+	a.durableEvidence = evidence.DurableState{
+		WritePending:   true,
+		VerifiedChecks: a.orderedVerificationReferences(valid),
+	}
+	a.durableEvidenceMu.Unlock()
+}
+
+func (a *Agent) reconcileDurableEvidence() {
+	if a == nil || a.evidence == nil {
+		return
+	}
+	a.consumeDurableReceipts(a.evidence.AllReceipts())
+}
+
+func (a *Agent) consumeDurableReceipts(receipts []evidence.Receipt) {
+	if a == nil || len(receipts) == 0 {
+		return
+	}
+	latestWriter := -1
+	for i, receipt := range receipts {
+		if receipt.Write && (receipt.Success || receipt.MutationAttempt) {
+			latestWriter = i
+		}
+	}
+
+	a.durableEvidenceMu.Lock()
+	defer a.durableEvidenceMu.Unlock()
+	refs := make(map[string]evidence.VerificationReference, len(a.durableEvidence.VerifiedChecks))
+	for _, ref := range a.durableEvidence.VerifiedChecks {
+		refs[ref.CheckHash] = ref
+	}
+	start := 0
+	if latestWriter >= 0 {
+		a.durableEvidence.WritePending = len(a.projectChecks) > 0
+		clear(refs)
+		start = latestWriter + 1
+	}
+	if !a.durableEvidence.WritePending {
+		a.durableEvidence.VerifiedChecks = nil
+		return
+	}
+	for _, receipt := range receipts[start:] {
+		if receipt.ToolName != "bash" || receipt.Source != "" || strings.TrimSpace(receipt.ToolCallID) == "" {
+			continue
+		}
+		for _, check := range a.projectChecks {
+			command := strings.TrimSpace(check.Command)
+			if command == "" || !evidence.CommandMatches(command, receipt.Command) {
+				continue
+			}
+			hash := evidence.ProjectCheckHash(command)
+			if receipt.Success {
+				refs[hash] = evidence.VerificationReference{CheckHash: hash, ToolCallID: receipt.ToolCallID}
+			} else {
+				delete(refs, hash)
+			}
+		}
+	}
+	a.durableEvidence.VerifiedChecks = a.orderedVerificationReferences(refs)
+}
+
+func (a *Agent) orderedVerificationReferences(refs map[string]evidence.VerificationReference) []evidence.VerificationReference {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]evidence.VerificationReference, 0, len(refs))
+	seen := make(map[string]bool, len(refs))
+	for _, check := range a.projectChecks {
+		hash := evidence.ProjectCheckHash(check.Command)
+		if ref, ok := refs[hash]; ok && !seen[hash] {
+			seen[hash] = true
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
+func (a *Agent) hasDurableProjectCheck(command string) bool {
+	hash := evidence.ProjectCheckHash(command)
+	state := a.DurableEvidenceState()
+	if !state.WritePending {
+		return false
+	}
+	for _, ref := range state.VerifiedChecks {
+		if ref.CheckHash == hash {
+			return true
+		}
+	}
+	return false
+}
+
 type finalReadinessCheck struct {
 	applies              bool
 	reason               string
@@ -1414,7 +1606,8 @@ func (a *Agent) finalReadinessCheck(allowLoopGuard bool) finalReadinessCheck {
 		}
 	}
 	writer, hasWriter := a.evidence.LatestWriterBoundaryIndex()
-	if !hasWriter {
+	durable := a.DurableEvidenceState()
+	if !hasWriter && !durable.WritePending {
 		if len(missing) > 0 {
 			if allowLoopGuard && a.loopGuardAllowsFinal() {
 				return out
@@ -1434,7 +1627,16 @@ func (a *Agent) finalReadinessCheck(allowLoopGuard bool) finalReadinessCheck {
 		if command == "" {
 			continue
 		}
-		if !a.evidence.HasSuccessfulCommandAfter(command, writer) {
+		after := -1
+		if hasWriter {
+			after = writer
+		}
+		latestSuccess, ranThisTurn := a.evidence.LatestCommandResultAfter(command, after)
+		verified := latestSuccess
+		if !ranThisTurn {
+			verified = a.hasDurableProjectCheck(command)
+		}
+		if !verified {
 			out.missingProjectChecks++
 			missing = append(missing, fmt.Sprintf("run %q from %s after the latest write", command, finalReadinessCheckSource(check)))
 		}
@@ -2561,6 +2763,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	if a.evidence != nil {
 		if call.Name == "complete_step" {
 			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), err == nil, t.ReadOnly())
+			rec.ToolCallID = call.ID
 			rec.MutationAttempt = mutationAttempt
 			a.evidence.Record(rec)
 			if a.subagentEffects != nil {
@@ -2571,6 +2774,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 			}
 		} else {
 			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), err == nil, t.ReadOnly())
+			rec.ToolCallID = call.ID
 			rec.MutationAttempt = mutationAttempt
 			a.evidence.Record(rec)
 			if a.subagentEffects != nil {

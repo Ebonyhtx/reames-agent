@@ -2,7 +2,9 @@ package evidence
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -170,6 +172,57 @@ func TestLedgerGenerationRejectsLateReceiptsAndCopiesNestedState(t *testing.T) {
 	}
 	if !ledger.RecordAtGeneration(Receipt{ToolName: "bash", Success: true, Command: "go test ./..."}, ledger.Generation()) {
 		t.Fatal("current-generation receipt was rejected")
+	}
+}
+
+func TestLedgerRotateAtomicallyAdvancesGeneration(t *testing.T) {
+	ledger := NewLedger()
+	generation := ledger.Generation()
+	receipt := Receipt{
+		ToolName: "bash", ToolCallID: "call-1", Success: true,
+		Command: "go test ./...", Paths: []string{"internal/agent/agent.go"},
+	}
+	ledger.Record(receipt)
+
+	rotated := ledger.Rotate()
+	if len(rotated) != 1 || rotated[0].ToolCallID != "call-1" {
+		t.Fatalf("Rotate() = %+v, want the prior receipt", rotated)
+	}
+	rotated[0].Paths[0] = "mutated"
+	if ledger.Len() != 0 {
+		t.Fatalf("Rotate() left receipts behind: %+v", ledger.AllReceipts())
+	}
+	if ledger.Generation() == generation {
+		t.Fatal("Rotate() did not advance the generation")
+	}
+	if ledger.RecordAtGeneration(receipt, generation) {
+		t.Fatal("receipt from the rotated generation was accepted")
+	}
+}
+
+func TestProjectCheckHashIsStableAndDoesNotExposeCommand(t *testing.T) {
+	first := ProjectCheckHash("  go test ./...  ")
+	second := ProjectCheckHash("go test ./...")
+	if first != second || len(first) != sha256.Size*2 {
+		t.Fatalf("ProjectCheckHash() = %q and %q", first, second)
+	}
+	if strings.Contains(first, "go test") {
+		t.Fatalf("ProjectCheckHash() exposed command text: %q", first)
+	}
+}
+
+func TestLatestCommandResultAfterUsesLatestMatchingRun(t *testing.T) {
+	ledger := NewLedger()
+	ledger.Record(Receipt{ToolName: "write_file", Success: true, Write: true})
+	boundary, _ := ledger.LatestWriterBoundaryIndex()
+	ledger.Record(Receipt{ToolName: "bash", Success: true, Command: "go test ./..."})
+	ledger.Record(Receipt{ToolName: "bash", Success: false, Command: "go test ./..."})
+	if success, found := ledger.LatestCommandResultAfter("go test ./...", boundary); !found || success {
+		t.Fatalf("LatestCommandResultAfter() = success %v found %v, want latest failure", success, found)
+	}
+	ledger.Record(Receipt{ToolName: "bash", Success: true, Command: "go test ./..."})
+	if success, found := ledger.LatestCommandResultAfter("go test ./...", boundary); !found || !success {
+		t.Fatalf("LatestCommandResultAfter() = success %v found %v, want recovered success", success, found)
 	}
 }
 
