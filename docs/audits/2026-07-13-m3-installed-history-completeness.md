@@ -215,3 +215,32 @@ This locally reproduces the offscreen condition, but only a new installed
 runner can prove the previously failing candidate. M3 remains open until
 Windows installed interaction and the subsequent strict accessibility step
 both pass.
+
+## Seventh installed-candidate result and M3 closeout
+
+The viewport-aware smoke landed as commit `68218d6`. CI `29262192635` passed
+8/8 and CodeQL `29262193090` passed 3/3. The single manually dispatched Desktop
+candidate `29262541971` then passed all three platform jobs:
+
+- Linux and macOS installed candidates passed.
+- Windows native cold/warm startup passed in 7.031/2.016 seconds. The installer
+  SHA-256 was
+  `2BDAA4E9FC5E87CD498A9E528D49F480B8277B7D9B4514081EF11E2C674D6C19`;
+  the installed executable SHA-256 was
+  `927FEF13D22B0F609DDC72FA35D0BF07451CAC6402BA2CBEBA38456E8D8010F1`.
+- Windows interaction completed 19 Provider requests, all five recovery
+  scenarios, Stop, disk persistence and same project/workspace/session
+  recovery. Before navigation the marker was present but offscreen, while the
+  assistant was absent from UIA and its onscreen diagnostic was false. After
+  strict InvokePattern activated question 1, both user and assistant were
+  present and onscreen; `recovery_verified=true`.
+- Strict installed accessibility actually ran after interaction. Skip focus,
+  Settings dialog semantics, background isolation, dialog focus, opener focus
+  restoration and strict-Invoke-only checks all passed.
+- Native, interaction and accessibility evidence each reported
+  `boundary_changes=[]`, no errors, successful cleanup and temporary-state
+  removal.
+
+This closes the automated installed-artifact requirement for M3. It does not
+claim NVDA/Narrator listening quality or Windows High Contrast manual evidence;
+those remain separate external/manual checks.
