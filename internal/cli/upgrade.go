@@ -5,17 +5,21 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"reames-agent/internal/config"
@@ -31,7 +35,10 @@ const (
 	ghAPIReleases  = "https://api.github.com/repos/" + ghOwner + "/" + ghRepo + "/releases"
 	ghDownloadBase = "https://github.com/" + ghOwner + "/" + ghRepo + "/releases/download"
 	upgradeTimeout = 60 * time.Second
+	versionTimeout = 10 * time.Second
 )
+
+var errUpgradeLocked = errors.New("another upgrade or rollback is already running")
 
 // ghRelease is the subset of the GitHub release API response we need.
 type ghRelease struct {
@@ -51,7 +58,12 @@ func upgradeCommand(args []string, version string) int {
 	fs := flag.NewFlagSet("upgrade", flag.ContinueOnError)
 	checkOnly := fs.Bool("check", false, "check for updates without installing")
 	force := fs.Bool("force", false, "reinstall even if already on the latest version")
+	rollback := fs.Bool("rollback", false, "swap the current binary with its retained predecessor")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 || (*rollback && (*checkOnly || *force)) {
+		fs.Usage()
 		return 2
 	}
 
@@ -60,6 +72,17 @@ func upgradeCommand(args []string, version string) int {
 	if !ok {
 		fmt.Fprintf(os.Stderr, "%s %s\n", i18n.M.ErrorPrefix, i18n.M.UpgradeDevBuild)
 		return 1
+	}
+	if *rollback {
+		fmt.Println(i18n.M.UpgradeRollbackApplying)
+		previous, err := rollbackBinary(cur)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeRollbackFailed+"\n", i18n.M.ErrorPrefix, err)
+			return 1
+		}
+		fmt.Printf(i18n.M.UpgradeRollbackSuccessFmt+"\n", cur, previous)
+		fmt.Println(i18n.M.UpgradeGatewayRestartHint)
+		return 0
 	}
 
 	// 2. Build HTTP client using configured proxy.
@@ -144,14 +167,15 @@ func upgradeCommand(args []string, version string) int {
 		return 1
 	}
 
-	// 10. Replace the running binary.
+	// 10. Health-check and transactionally replace the running binary.
 	fmt.Println(i18n.M.UpgradeApplying)
-	if err := replaceBinary(binary); err != nil {
+	if err := replaceBinary(binary, latest); err != nil {
 		fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeApplyFailed+"\n", i18n.M.ErrorPrefix, err)
 		return 1
 	}
 
 	fmt.Println(upgradeSuccessMessage(cur, latest))
+	fmt.Println(i18n.M.UpgradeGatewayRestartHint)
 	return 0
 }
 
@@ -338,14 +362,9 @@ func extractFromZip(data []byte, name string) ([]byte, error) {
 	return nil, fmt.Errorf("%q not found in zip archive", name)
 }
 
-// replaceBinary writes newBin to the running executable's path atomically.
-//
-// On Unix this is a simple temp-file + rename. On Windows the running
-// executable is memory-mapped and cannot be overwritten directly, so we
-// rename it aside to .reamesAgent.old first, then place the new binary.
-// The .old file is cleaned up best-effort (Windows may still hold a lock
-// on it; we hide it in that case).
-func replaceBinary(newBin []byte) error {
+// replaceBinary verifies and publishes newBin while retaining the immediate
+// predecessor at <executable>.previous.
+func replaceBinary(newBin []byte, expectedVersion string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("locate executable: %w", err)
@@ -357,57 +376,325 @@ func replaceBinary(newBin []byte) error {
 
 	dir := filepath.Dir(resolved)
 	base := filepath.Base(resolved)
-	tmpPath := filepath.Join(dir, fmt.Sprintf(".%s.new", base))
+	unlock, err := acquireUpgradeLock(filepath.Join(dir, "."+base+".upgrade.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return replaceBinaryAt(resolved, newBin, expectedVersion, realUpgradeOps())
+}
 
-	// Write new binary to .new temp file.
-	if err := os.WriteFile(tmpPath, newBin, 0o755); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("write temp: %w", err)
+func replaceBinaryAt(target string, newBin []byte, expectedVersion string, ops upgradeOps) error {
+	dir := filepath.Dir(target)
+	base := filepath.Base(target)
+	staged, err := writeUpgradeCandidate(dir, base, newBin)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(staged)
+	if err := ops.verify(staged, expectedVersion); err != nil {
+		return fmt.Errorf("candidate health check: %w", err)
+	}
+	return installUpgradeCandidate(target, staged, expectedVersion, ops)
+}
+
+func rollbackBinary(currentVersion string) (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("locate executable: %w", err)
+	}
+	target, err := resolveSymlinks(exe)
+	if err != nil {
+		return "", fmt.Errorf("resolve symlinks: %w", err)
+	}
+	base := filepath.Base(target)
+	unlock, err := acquireUpgradeLock(filepath.Join(filepath.Dir(target), "."+base+".upgrade.lock"))
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+
+	previousVersion, err := probeBinaryVersion(target + ".previous")
+	if err != nil {
+		return "", fmt.Errorf("verify previous binary: %w", err)
+	}
+	if err := swapWithPrevious(target, currentVersion, previousVersion, realUpgradeOps()); err != nil {
+		return "", err
+	}
+	return previousVersion, nil
+}
+
+type upgradeOps struct {
+	rename   func(string, string) error
+	remove   func(string) error
+	lstat    func(string) (os.FileInfo, error)
+	tempPath func(string, string) (string, error)
+	verify   func(string, string) error
+}
+
+func realUpgradeOps() upgradeOps {
+	return upgradeOps{
+		rename:   os.Rename,
+		remove:   os.Remove,
+		lstat:    os.Lstat,
+		tempPath: unusedSiblingPath,
+		verify:   verifyBinaryVersion,
+	}
+}
+
+func writeUpgradeCandidate(dir, base string, data []byte) (string, error) {
+	f, err := os.CreateTemp(dir, "."+base+".candidate-*")
+	if err != nil {
+		return "", fmt.Errorf("create candidate: %w", err)
+	}
+	path := f.Name()
+	ok := false
+	defer func() {
+		if !ok {
+			_ = os.Remove(path)
+		}
+	}()
+	if err := f.Chmod(0o755); err != nil {
+		_ = f.Close()
+		return "", fmt.Errorf("set candidate permissions: %w", err)
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return "", fmt.Errorf("write candidate: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return "", fmt.Errorf("sync candidate: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("close candidate: %w", err)
+	}
+	ok = true
+	return path, nil
+}
+
+func installUpgradeCandidate(target, staged, expectedVersion string, ops upgradeOps) error {
+	previous := target + ".previous"
+	failed, err := ops.tempPath(filepath.Dir(target), "."+filepath.Base(target)+".failed-*")
+	if err != nil {
+		return fmt.Errorf("reserve failed-candidate path: %w", err)
+	}
+	oldPrevious, hadPrevious, err := preserveExistingPrevious(previous, ops)
+	if err != nil {
+		return err
+	}
+	restoreOldPrevious := func() error {
+		if !hadPrevious {
+			return nil
+		}
+		return ops.rename(oldPrevious, previous)
 	}
 
-	if runtime.GOOS == "windows" {
-		return commitWindows(resolved, tmpPath, base, dir)
+	if err := ops.rename(target, previous); err != nil {
+		return joinUpgradeRollback(fmt.Errorf("retain current binary: %w", err), restoreOldPrevious())
 	}
-
-	// Unix: atomic rename .new → target.
-	if err := os.Rename(tmpPath, resolved); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("rename: %w", err)
+	if err := ops.rename(staged, target); err != nil {
+		return joinUpgradeRollback(
+			fmt.Errorf("publish candidate: %w", err),
+			rollbackUpgradePublish(target, previous, oldPrevious, hadPrevious, "", ops),
+		)
+	}
+	if err := ops.verify(target, expectedVersion); err != nil {
+		return joinUpgradeRollback(
+			fmt.Errorf("post-install health check: %w", err),
+			rollbackUpgradePublish(target, previous, oldPrevious, hadPrevious, failed, ops),
+		)
+	}
+	if hadPrevious {
+		if err := ops.remove(oldPrevious); err != nil {
+			return joinUpgradeRollback(
+				fmt.Errorf("remove superseded previous binary: %w", err),
+				rollbackUpgradePublish(target, previous, oldPrevious, true, failed, ops),
+			)
+		}
 	}
 	return nil
 }
 
-// commitWindows performs the two-phase rename on Windows:
-//  1. Rename running exe → .old (allowed while running)
-//  2. Rename .new → target
-//  3. Best-effort remove .old (hide if still locked)
-func commitWindows(target, newPath, base, dir string) error {
-	oldPath := filepath.Join(dir, fmt.Sprintf(".%s.old", base))
-
-	// Remove any leftover .old from a previous update.
-	_ = os.Remove(oldPath)
-
-	// Move the running executable aside.
-	if err := os.Rename(target, oldPath); err != nil {
-		os.Remove(newPath)
-		return fmt.Errorf("rename running exe aside: %w", err)
+func preserveExistingPrevious(previous string, ops upgradeOps) (string, bool, error) {
+	info, err := ops.lstat(previous)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
 	}
+	if err != nil {
+		return "", false, fmt.Errorf("inspect previous binary: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", false, fmt.Errorf("previous binary is not a regular file: %s", previous)
+	}
+	saved, err := ops.tempPath(filepath.Dir(previous), "."+filepath.Base(previous)+".saved-*")
+	if err != nil {
+		return "", false, fmt.Errorf("reserve previous snapshot: %w", err)
+	}
+	if err := ops.rename(previous, saved); err != nil {
+		return "", false, fmt.Errorf("snapshot previous binary: %w", err)
+	}
+	return saved, true, nil
+}
 
-	// Move the new binary into place.
-	if err := os.Rename(newPath, target); err != nil {
-		// Rollback: try to restore the old binary.
-		if rerr := os.Rename(oldPath, target); rerr != nil {
-			return fmt.Errorf("replace failed (%v); rollback also failed: %w", err, rerr)
+func rollbackUpgradePublish(target, previous, oldPrevious string, hadPrevious bool, failed string, ops upgradeOps) error {
+	var errs []error
+	quarantined := false
+	if failed != "" {
+		if err := ops.rename(target, failed); err != nil {
+			if removeErr := ops.remove(target); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				errs = append(errs, fmt.Errorf("quarantine failed candidate: %w", err))
+				errs = append(errs, fmt.Errorf("remove failed candidate in place: %w", removeErr))
+				return errors.Join(errs...)
+			}
+		} else {
+			quarantined = true
 		}
-		return fmt.Errorf("rename new binary: %w", err)
 	}
+	if err := ops.rename(previous, target); err != nil {
+		errs = append(errs, fmt.Errorf("restore current binary: %w", err))
+	} else if hadPrevious {
+		if err := ops.rename(oldPrevious, previous); err != nil {
+			errs = append(errs, fmt.Errorf("restore previous binary: %w", err))
+		}
+	}
+	if quarantined {
+		if err := ops.remove(failed); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, fmt.Errorf("remove failed candidate: %w", err))
+		}
+	}
+	return errors.Join(errs...)
+}
 
-	// Best-effort cleanup of the old binary.
-	if err := os.Remove(oldPath); err != nil {
-		// Windows may hold a lock; hide the file so it doesn't clutter the dir.
-		hideFileWindows(oldPath)
+func swapWithPrevious(target, currentVersion, previousVersion string, ops upgradeOps) error {
+	previous := target + ".previous"
+	savedCurrent, err := ops.tempPath(filepath.Dir(target), "."+filepath.Base(target)+".rollback-*")
+	if err != nil {
+		return fmt.Errorf("reserve rollback path: %w", err)
+	}
+	if err := ops.rename(target, savedCurrent); err != nil {
+		return fmt.Errorf("snapshot current binary: %w", err)
+	}
+	if err := ops.rename(previous, target); err != nil {
+		return joinUpgradeRollback(fmt.Errorf("publish previous binary: %w", err), restoreRename(savedCurrent, target, ops))
+	}
+	if err := ops.verify(target, previousVersion); err != nil {
+		return joinUpgradeRollback(fmt.Errorf("rollback health check: %w", err), restoreSwap(target, previous, savedCurrent, ops))
+	}
+	if err := ops.rename(savedCurrent, previous); err != nil {
+		return joinUpgradeRollback(fmt.Errorf("retain replaced %s binary: %w", currentVersion, err), restoreSwap(target, previous, savedCurrent, ops))
 	}
 	return nil
+}
+
+func joinUpgradeRollback(primary, rollback error) error {
+	if rollback == nil {
+		return primary
+	}
+	return errors.Join(primary, fmt.Errorf("binary rollback encountered errors; installed state may be degraded; manual repair is required: %w", rollback))
+}
+
+func restoreRename(from, to string, ops upgradeOps) error {
+	if err := ops.rename(from, to); err != nil {
+		return fmt.Errorf("restore current binary: %w", err)
+	}
+	return nil
+}
+
+func restoreSwap(target, previous, savedCurrent string, ops upgradeOps) error {
+	if err := ops.rename(target, previous); err != nil {
+		return fmt.Errorf("restore previous binary: %w", err)
+	}
+	return restoreRename(savedCurrent, target, ops)
+}
+
+func unusedSiblingPath(dir, pattern string) (string, error) {
+	f, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	path := f.Name()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	if err := os.Remove(path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func verifyBinaryVersion(path, expected string) error {
+	version, err := probeBinaryVersion(path)
+	if err != nil {
+		return err
+	}
+	if version != expected {
+		return fmt.Errorf("reported version %s, want %s", version, expected)
+	}
+	return nil
+}
+
+func probeBinaryVersion(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("binary is not a regular file: %s", path)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), versionTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, "version")
+	var output limitedOutput
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("version command timed out: %w", ctx.Err())
+		}
+		return "", fmt.Errorf("version command failed: %w (%s)", err, strings.TrimSpace(output.String()))
+	}
+	return parseBinaryVersionOutput(output.String())
+}
+
+func parseBinaryVersionOutput(output string) (string, error) {
+	fields := strings.Fields(strings.TrimSpace(output))
+	if len(fields) != 2 || fields[0] != "reames-agent" {
+		return "", fmt.Errorf("unexpected version output %q", strings.TrimSpace(output))
+	}
+	version, ok := normalizeVersion(fields[1])
+	if !ok {
+		return "", fmt.Errorf("invalid reported version %q", fields[1])
+	}
+	if fields[1] != version {
+		return "", fmt.Errorf("non-canonical reported version %q", fields[1])
+	}
+	return version, nil
+}
+
+type limitedOutput struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (w *limitedOutput) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	const limit = 4096
+	if remaining := limit - w.buf.Len(); remaining > 0 {
+		if len(p) < remaining {
+			remaining = len(p)
+		}
+		_, _ = w.buf.Write(p[:remaining])
+	}
+	return len(p), nil
+}
+
+func (w *limitedOutput) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
 }
 
 // resolveSymlinks follows symlinks; falls back to the original path on error.

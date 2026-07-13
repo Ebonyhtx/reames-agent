@@ -21,6 +21,7 @@
 - [桌面端 Hooks](./DESKTOP_HOOKS.zh-CN.md)
 - [快捷键](#快捷键)
 - [权限与沙盒](#权限与沙盒)
+- [备份与二进制回滚](#备份与二进制回滚)
 - [插件（MCP）](#插件mcp)
 - [斜杠命令](#斜杠命令)
 - [@ 引用](#-引用)
@@ -423,6 +424,12 @@ bash 会以明确报错拒绝执行，而不是返回空输出。同一 workspac
 low-integrity token 下较脆弱。运行 `reames-agent doctor` 可查看解析到的 shell、沙盒
 可用性，以及项目 `reames-agent.toml` 是否固定了 `[sandbox]`（项目文件优先级高于
 Settings/用户配置；沙盒配置变更需 reload session config 或新开会话才生效）。
+
+## 备份与二进制回滚
+
+停止所有 Reames Agent 进程后，用 `backup create --offline --out FILE` 创建敏感的 home/state 归档，用 `backup verify FILE` 检查内嵌 manifest 与逐文件哈希。内嵌哈希只证明归档自洽；恢复前仍应与单独保存的 SHA-256 比对。恢复先运行 `backup restore --dry-run --home NEW_PATH FILE`，确认后改用 `--offline`，且目标必须不存在。分离 state root 时同时传 `--state-home NEW_PATH`。归档排除已知凭据文件，但会话、记忆和自定义配置仍可能含 secret；详细限制见[部署指南](./DEPLOY.md#7-备份恢复与二进制回滚)。
+
+`reames-agent upgrade` 会验证并保留上一二进制为 `<executable>.previous`；`reames-agent upgrade --rollback` 在当前版与上一版间切换并继续保留被替换版。独立 Gateway 不会自动重启，升级或回滚后按需执行 `reames-agent gateway restart`。
 
 ## 插件（MCP）
 

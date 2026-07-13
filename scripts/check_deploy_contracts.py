@@ -103,6 +103,30 @@ def check() -> list[str]:
         "docs/DEPLOY.md must distinguish foreground gateway debugging from the current background service lifecycle.",
         failures,
     )
+    require(
+        "reames-agent backup create --offline" in deploy
+        and "reames-agent backup verify" in deploy
+        and "reames-agent backup restore --dry-run" in deploy,
+        "docs/DEPLOY.md must document the offline backup, independent verification, and restore dry-run workflow.",
+        failures,
+    )
+    require(
+        "内嵌 manifest" in deploy and "只证明归档自洽" in deploy and "单独保存、可信传递" in deploy,
+        "docs/DEPLOY.md must distinguish embedded backup self-consistency from an independently trusted digest.",
+        failures,
+    )
+    require(
+        "reames-agent upgrade --rollback" in deploy
+        and "<executable>.previous" in deploy
+        and "reames-agent gateway restart" in deploy,
+        "docs/DEPLOY.md must document updater predecessor retention, rollback, and explicit Gateway restart.",
+        failures,
+    )
+    require(
+        "没有 durable crash journal" in deploy and "Windows 的实际保护还依赖目标目录 ACL" in deploy,
+        "docs/DEPLOY.md must preserve backup/upgrade crash and Windows ACL limits.",
+        failures,
+    )
 
     env_example = read(".env.example")
     require("REAMES_AGENT_SERVE_TOKEN" in env_example, ".env.example must include the serve token env hint.", failures)

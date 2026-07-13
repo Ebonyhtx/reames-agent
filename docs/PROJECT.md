@@ -2,7 +2,7 @@
 
 > 状态：当前产品方向的权威说明
 >
-> 更新：2026-07-13
+> 更新：2026-07-14
 
 ## 一句话定位
 
@@ -47,7 +47,8 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 - M1 真实任务闭环已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复以及五类原生失败恢复均有分层证据。
 - 24 个内置工具，具备权限、沙箱、检查点、记忆、技能、插件、定时任务、LSP 和证据账本等模块。
 - M3 Desktop 日用化已关闭：关闭态/次级界面与简中/繁中词典按需拆包并受真实产物硬预算保护，模态隔离、Transcript 语义和严格 Windows UIA 可访问性 smoke 已交付。commit `68218d6` 的 CI `29262192635` 8/8、CodeQL `29262193090` 3/3；candidate `29262541971` 的 Linux/macOS installed 与 Windows 全链路均通过。Windows native cold/warm 为 7.031/2.016 秒；interaction 完成 19 请求、五类失败恢复、停止和同 project/workspace/session 恢复，跳转前 marker present 但 offscreen、assistant 不在 UIA，严格 InvokePattern 定位问题 1 后 user/assistant 均 present + onscreen，`recovery_verified=true`；strict accessibility 随后实际执行并通过。三份 smoke 的 `boundary_changes=[]` 且无 errors。自动证据不等于 NVDA/Narrator 实际听感或 Windows High Contrast 人工验证。
-- M6 的无界面配置与 credential-free 运维预检已形成纵向链路：`gateway setup` 支持飞书/Lark、QQ、微信，secret 只引用大写环境变量名，访问控制 fail closed，dry-run 零落盘，更新原子、幂等并保留其他连接、route、access 和 session mappings；同一隔离 home 的真实 CLI 二进制覆盖 setup → doctor → service-plan、localhost Provider 一次性 `run`/会话落盘、反馈脱敏/去重/维护草稿。WSL2 真实 systemd user manager 进一步通过带空格 binary/home/workspace 的 install、同名重装生效、status、restart、stop/start、journal、loopback webhook readiness 与 uninstall `LoadState=not-found`，但 `Linger=no`，不替代 logout/reboot、干净云节点、真实 Provider 或真实 IM 回环证据。CLI 自升级的官方仓库、六平台 GoReleaser 资产名和 Windows 包内二进制名合同已修复，公开签名 release 的实际升级/回滚仍未验证。
+- M6 的无界面配置与 credential-free 运维预检已形成纵向链路：`gateway setup` 支持飞书/Lark、QQ、微信，secret 只引用大写环境变量名，访问控制 fail closed，dry-run 零落盘，更新原子、幂等并保留其他连接、route、access 和 session mappings；同一隔离 home 的真实 CLI 二进制覆盖 setup → doctor → service-plan、localhost Provider 一次性 `run`/会话落盘、反馈脱敏/去重/维护草稿。WSL2 真实 systemd user manager 进一步通过带空格 binary/home/workspace 的 install、同名重装生效、status、restart、stop/start、journal、loopback webhook readiness 与 uninstall `LoadState=not-found`，但 `Linger=no`，不替代 logout/reboot、干净云节点、真实 Provider 或真实 IM 回环证据。
+- M6 本地恢复基线已补齐三条确定性链路：Linux user-scope `gateway install` 会先执行 `systemd-analyze --user verify`，并对旧 unit bytes/mode、enabled/active 状态做快照和分层回滚；`backup create/verify/restore` 支持 home/state 分根、已知凭据排除、内嵌哈希自洽验证和仅恢复到不存在的新目标；CLI updater 会实际执行候选与安装后 `version` 健康检查、保留 `<executable>.previous`，并支持互斥锁保护的 `upgrade --rollback`。这些证据来自本地故障注入、race/vet 和跨平台编译，不等于跨根崩溃原子性、Windows 目标目录 ACL 保护、macOS/Windows Gateway 安装事务，也不替代干净云节点或公开签名 release 的实际演练。
 - 当前最大风险不是“缺功能”，而是插件供应链、远程入口与云节点运维加固、真实 IM 回环及生产签名链尚未完全闭环；统一 control 边界和 Desktop 日用化门槛已关闭并有远端 CI/CodeQL/candidate 证据，transport 对 `agent/provider/tool` 的生产直连为零，版本化 command/event/display DTO、prompt metadata、会话持久化/复制、Desktop session-store、ACP/CLI 装配和终端渲染路径已收口。
 - `site/`、`workers/` 等遗留产品面仍需按运行引用、发布依赖和替代实现逐批判断，不能一次性盲删。
 

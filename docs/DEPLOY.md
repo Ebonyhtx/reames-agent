@@ -209,6 +209,43 @@ reames-agent gateway run --home "$HOME/.reames-agent" --channels feishu
 
 正式命令会按平台选择 service manager：Linux 使用 user systemd，macOS 使用 launchd，Windows 使用 Scheduled Task。`--scope system` 只渲染计划并要求管理员/root 手动确认，避免误改系统级服务。
 
+Linux user-scope 的 `gateway install` 会在写入后先执行 `systemd-analyze --user verify`，并在变更前快照旧 unit 的 bytes/mode 与 enabled/active 状态。写入、reload、enable、restart 或 is-active 失败时会尝试恢复快照；如果旧 unit 写回或恢复后的 daemon-reload 失败，会 fail closed、停止后续 manager 操作并明确要求人工修复。该自动回滚范围只覆盖 Linux user-scope install，不适用于 macOS launchd、Windows Scheduled Task、uninstall 或 `--scope system`。
+
+### 7. 备份、恢复与二进制回滚
+
+备份前必须停止所有会写入 Reames home/state 的进程，包括 CLI、Desktop、`serve`、`bot`、Gateway 和 cron worker。`--offline` 是运维者对这一事实的显式确认，不是跨进程全局锁：
+
+```bash
+reames-agent backup create --offline --out /srv/backups/reames-2026-07-14.zip \
+  --home "$REAMES_AGENT_HOME"
+reames-agent backup verify /srv/backups/reames-2026-07-14.zip
+```
+
+当 `REAMES_AGENT_STATE_HOME` 与 home 不同时，create 和 restore 都应显式传 `--state-home`。归档排除 `.env`、legacy credentials、微信账号、pairing、cache 和 lock/lease 等已知凭据或运行时文件，但 session、memory 和自定义 config 仍可能包含用户粘贴的 secret，因此归档始终按敏感数据保存。Unix 会收紧归档和恢复文件权限；Windows 的实际保护还依赖目标目录 ACL。
+
+`backup verify` 的内嵌 manifest 与逐文件 SHA-256 只证明归档自洽，不证明来源真实性。恢复前必须将命令输出的 archive SHA-256 与单独保存、可信传递的记录或签名比对：
+
+```bash
+reames-agent backup restore --dry-run \
+  --home /srv/reames-restored \
+  /srv/backups/reames-2026-07-14.zip
+reames-agent backup restore --offline \
+  --home /srv/reames-restored \
+  /srv/backups/reames-2026-07-14.zip
+```
+
+restore 只接受不存在的 `NEW_PATH`，不支持原地覆盖。分根归档还必须提供一个不存在的 `--state-home NEW_PATH`；恢复后重新配置 Provider 和 IM 凭据。多根提交会在后续 publish/sync 失败时做进程内 best-effort 回滚，但没有 durable crash journal，断电或强杀后不能宣称跨根全局原子；失败或强杀还可能留下 `.reames-restore-*` staging 或仅创建的空 parent，应人工核对后清理。
+
+CLI 自升级会先校验 SHA256SUMS，再实际执行候选二进制的 `version`；发布后再次健康检查，并把立即前一版本保留为 `<executable>.previous`。升级和回滚共用同目录互斥锁：
+
+```bash
+reames-agent upgrade
+reames-agent upgrade --rollback
+reames-agent gateway restart
+```
+
+发布或安装后健康检查失败会尝试恢复更新前的 current/previous 组合；`--rollback` 会交换二者并保留被替换版本。命令不会静默重启独立 Gateway，所以升级或回滚后应显式执行 `gateway restart`。这些保证有本地实际候选执行与故障注入证据，但没有 durable crash journal，也不等于公开签名 release 已在真实 Linux/macOS/Windows 安装上完成升级/回滚演练。
+
 ## Docker 部署（推荐）
 
 ```bash

@@ -21,6 +21,7 @@
 - [Desktop hooks](#desktop-hooks)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Permissions & sandbox](#permissions--sandbox)
+- [Backup and binary rollback](#backup-and-binary-rollback)
 - [Plugins (MCP)](#plugins-mcp)
 - [Slash commands](#slash-commands)
 - [@ references](#-references)
@@ -529,6 +530,12 @@ only under Git-for-Windows/MSYS2 bash, try `[tools.shell] prefer =
 a project `reames-agent.toml` pins `[sandbox]` (a project file overrides
 Settings/user-config edits, and sandbox changes take effect after a session
 config reload or a new session).
+
+## Backup and binary rollback
+
+After stopping every Reames Agent process, use `backup create --offline --out FILE` to create a sensitive home/state archive and `backup verify FILE` to check its embedded manifest and per-file hashes. Embedded hashes prove self-consistency only; compare the archive SHA-256 with a separately trusted record before restore. Start with `backup restore --dry-run --home NEW_PATH FILE`, then use `--offline` to publish to a target that does not exist. A split state root also requires `--state-home NEW_PATH`. Known credential files are excluded, but sessions, memory, and custom config may still contain secrets; see the [deployment guide](./DEPLOY.md#7-备份恢复与二进制回滚) for the full limits.
+
+`reames-agent upgrade` verifies and retains the prior binary as `<executable>.previous`. `reames-agent upgrade --rollback` swaps current and previous while retaining the replaced version. A separately running Gateway is not restarted automatically; run `reames-agent gateway restart` when needed after either operation.
 
 ## Plugins (MCP)
 

@@ -3,19 +3,15 @@
 package gatewayservice
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"html"
 	"os"
-	"os/exec"
 	pathpkg "path"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
-
-	"reames-agent/internal/fileutil"
 )
 
 const (
@@ -154,62 +150,6 @@ func targetPathIsAbs(goos, value string) bool {
 	return len(value) >= 3 && ((value[0] >= 'A' && value[0] <= 'Z') || (value[0] >= 'a' && value[0] <= 'z')) && value[1] == ':' && (value[2] == '\\' || value[2] == '/')
 }
 
-// Apply builds and applies a lifecycle operation. With DryRun, it only returns
-// the rendered plan. Actual install defaults to user-level service management.
-func Apply(ctx context.Context, opts Options) (Result, error) {
-	plan, err := BuildPlan(runtime.GOOS, opts)
-	if err != nil {
-		return Result{}, err
-	}
-	if opts.DryRun {
-		return Result{Plan: plan}, nil
-	}
-	if opts.Scope == "system" {
-		return Result{Plan: plan}, errors.New("system-scope gateway service changes require manual approval; re-run with --dry-run and install the rendered plan as administrator/root")
-	}
-	for _, f := range plan.Files {
-		if err := os.MkdirAll(filepath.Dir(f.Path), 0o755); err != nil {
-			return Result{Plan: plan}, err
-		}
-		if err := fileutil.AtomicWriteFile(f.Path, []byte(f.Content), f.Mode); err != nil {
-			return Result{Plan: plan}, err
-		}
-	}
-	var outputs []string
-	for _, c := range plan.Commands {
-		var err error
-		outputs, err = runCommand(ctx, outputs, c)
-		if err != nil {
-			return Result{Plan: plan, Outputs: outputs}, err
-		}
-	}
-	for _, path := range plan.Deletes {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return Result{Plan: plan, Outputs: outputs}, err
-		}
-	}
-	for _, c := range plan.PostCommands {
-		var err error
-		outputs, err = runCommand(ctx, outputs, c)
-		if err != nil {
-			return Result{Plan: plan, Outputs: outputs}, err
-		}
-	}
-	return Result{Plan: plan, Outputs: outputs}, nil
-}
-
-func runCommand(ctx context.Context, outputs []string, c Command) ([]string, error) {
-	cmd := exec.CommandContext(ctx, c.Name, c.Args...)
-	out, err := cmd.CombinedOutput()
-	if len(out) > 0 {
-		outputs = append(outputs, strings.TrimSpace(string(out)))
-	}
-	if err != nil {
-		return outputs, fmt.Errorf("%s %s: %w", c.Name, strings.Join(c.Args, " "), err)
-	}
-	return outputs, nil
-}
-
 // FormatPlan returns a stable human-readable representation for dry-runs and logs.
 func FormatPlan(plan Plan) string {
 	var b strings.Builder
@@ -243,7 +183,10 @@ func linuxPlan(opts Options) (Plan, error) {
 	switch opts.Action {
 	case "install":
 		plan.Files = append(plan.Files, File{Path: unitPath, Mode: 0o644, Content: systemdUnit(opts)})
-		plan.Commands = append(plan.Commands, Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "daemon-reload")})
+		plan.Commands = append(plan.Commands,
+			Command{Name: "systemd-analyze", Args: systemdAnalyzeArgs(opts.Scope, "verify", unitPath)},
+			Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "daemon-reload")},
+		)
 		if opts.StartNow {
 			plan.Commands = append(plan.Commands,
 				Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "enable", serviceName)},
@@ -463,6 +406,13 @@ func launchdDomain(scope string) string {
 }
 
 func systemctlArgs(scope string, args ...string) []string {
+	if scope == "user" {
+		return append([]string{"--user"}, args...)
+	}
+	return args
+}
+
+func systemdAnalyzeArgs(scope string, args ...string) []string {
 	if scope == "user" {
 		return append([]string{"--user"}, args...)
 	}

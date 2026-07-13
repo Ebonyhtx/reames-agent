@@ -120,6 +120,9 @@ func Run(args []string, version string) int {
 	case "feedback":
 		configureCLIThemeFromConfigNoProbe()
 		return feedbackCommand(rest)
+	case "backup":
+		configureCLIThemeFromConfigNoProbe()
+		return backupCommand(rest, version)
 	case "review":
 		configureCLIThemeFromConfigNoProbe()
 		return reviewCommand(rest)

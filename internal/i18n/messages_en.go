@@ -416,6 +416,10 @@ var English = Messages{
 	UpgradeApplying:            "Replacing binary…",
 	UpgradeApplyFailed:         "failed to apply update: %v",
 	UpgradeSuccessFmt:          "Updated %s → %s",
+	UpgradeRollbackApplying:    "Rolling back to the retained previous version…",
+	UpgradeRollbackFailed:      "rollback failed: %v",
+	UpgradeRollbackSuccessFmt:  "Rolled back %s → %s",
+	UpgradeGatewayRestartHint:  "If Gateway is running, apply this binary with: reames-agent gateway restart",
 
 	UsageBody: `reames-agent — a config- and plugin-driven coding agent (multi-model)
 
@@ -434,9 +438,10 @@ Usage:
   reames-agent doctor [--json]                              print redacted local diagnostics
   reames-agent doctor session <branch-id> [--zip] [--out PATH]  export a session conflict diagnostic zip
   reames-agent feedback submit|summary|draft [--home PATH] [--json]  submit, inspect, and draft local feedback
+  reames-agent backup create|verify|restore                    create and restore sensitive home/state backups
   reames-agent gateway run|install|start|stop|restart|status|uninstall  IM gateway daemon/service lifecycle
   reames-agent bot start|doctor|weixin-login                legacy bot gateway commands
-  reames-agent upgrade [--check] [--force]                   self-update to the latest release (also: reames-agent update)
+  reames-agent upgrade [--check] [--force] | --rollback      update or swap with the retained previous version (also: reames-agent update)
   reames-agent version
   reames-agent help
 

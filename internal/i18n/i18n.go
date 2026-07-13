@@ -457,6 +457,10 @@ type Messages struct {
 	UpgradeApplying            string // "Replacing binary…"
 	UpgradeApplyFailed         string // "failed to apply update: %v"
 	UpgradeSuccessFmt          string // "Updated %s → %s"
+	UpgradeRollbackApplying    string // "Rolling back to the retained previous version…"
+	UpgradeRollbackFailed      string // "rollback failed: %v"
+	UpgradeRollbackSuccessFmt  string // "Rolled back %s → %s"
+	UpgradeGatewayRestartHint  string // restart guidance for a separately running gateway
 
 	// usage / help
 	UsageBody string // full multi-line help text

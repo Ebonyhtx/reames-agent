@@ -383,9 +383,10 @@ var ChineseTraditional = Messages{
   reames-agent doctor [--json]                              輸出脫敏的本機診斷資訊
   reames-agent doctor session <branch-id> [--zip] [--out PATH]  匯出會話衝突診斷 zip
   reames-agent feedback submit|summary|draft [--home PATH] [--json]  提交、查看本機回饋並產生維護草稿
+  reames-agent backup create|verify|restore                    建立和還原敏感的 home/state 備份
   reames-agent gateway run|install|start|stop|restart|status|uninstall  IM Gateway 前台/後台服務生命週期
   reames-agent bot start|doctor|weixin-login                舊版 bot 閘道命令
-  reames-agent upgrade [--check] [--force]                   自更新至最新版本（也可用：reames-agent update）
+  reames-agent upgrade [--check] [--force] | --rollback      更新或切換到保留的上一版本（也可用：reames-agent update）
   reames-agent version
   reames-agent help
 
@@ -448,4 +449,8 @@ var ChineseTraditional = Messages{
 	UpgradeApplying:            "正在替換二進位制檔案…",
 	UpgradeApplyFailed:         "應用更新失敗：%v",
 	UpgradeSuccessFmt:          "已更新 %s → %s",
+	UpgradeRollbackApplying:    "正在回滾到保留的上一版本…",
+	UpgradeRollbackFailed:      "回滾失敗：%v",
+	UpgradeRollbackSuccessFmt:  "已回滾 %s → %s",
+	UpgradeGatewayRestartHint:  "如 Gateway 正在執行，請執行以下命令套用此版本：reames-agent gateway restart",
 }

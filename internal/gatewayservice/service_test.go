@@ -1,6 +1,10 @@
 package gatewayservice
 
 import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -41,11 +45,12 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 	if strings.Contains(unit, "DEEPSEEK_API_KEY") || strings.Contains(unit, "FEISHU_BOT_APP_SECRET") {
 		t.Fatalf("systemd unit embedded secret env names:\n%s", unit)
 	}
-	if len(plan.Commands) != 4 || plan.Commands[0].Name != "systemctl" {
-		t.Fatalf("commands = %#v, want daemon-reload + enable + restart + is-active", plan.Commands)
+	if len(plan.Commands) != 5 || plan.Commands[0].Name != "systemd-analyze" || plan.Commands[1].Name != "systemctl" {
+		t.Fatalf("commands = %#v, want verify + daemon-reload + enable + restart + is-active", plan.Commands)
 	}
 	formatted := FormatPlan(plan)
 	for _, want := range []string{
+		`"systemd-analyze" "--user" "verify"`,
 		`"systemctl" "--user" "enable" "reames-agent-gateway.service"`,
 		`"systemctl" "--user" "restart" "reames-agent-gateway.service"`,
 		`"systemctl" "--user" "is-active" "--quiet" "reames-agent-gateway.service"`,
@@ -53,6 +58,490 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 		if !strings.Contains(formatted, want) {
 			t.Fatalf("install plan missing %q:\n%s", want, formatted)
 		}
+	}
+}
+
+func TestLinuxInstallRollbackRemovesNewDefinitionAfterStartFailure(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	plan := Plan{
+		GOOS:   "linux",
+		Action: "install",
+		Files:  []File{{Path: unitPath, Content: "new unit\n", Mode: 0o644}},
+		Commands: []Command{
+			{Name: "systemd-analyze", Args: []string{"--user", "verify", unitPath}},
+			{Name: "systemctl", Args: []string{"--user", "daemon-reload"}},
+			{Name: "systemctl", Args: []string{"--user", "enable", "reames-agent-gateway.service"}},
+			{Name: "systemctl", Args: []string{"--user", "restart", "reames-agent-gateway.service"}},
+		},
+	}
+
+	var calls []string
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{}, nil, nil
+	}
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		line := command.Name + " " + strings.Join(command.Args, " ")
+		calls = append(calls, line)
+		if strings.Contains(line, " restart ") {
+			return "restart failed", errors.New("exit 1")
+		}
+		return "", nil
+	}
+
+	_, err := applyLinuxInstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, plan, deps)
+	if err == nil || !strings.Contains(err.Error(), "restart reames-agent-gateway.service") {
+		t.Fatalf("applyPlan error = %v, want restart failure", err)
+	}
+	if _, statErr := os.Stat(unitPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("new unit survived failed install: %v", statErr)
+	}
+	joined := strings.Join(calls, "\n")
+	if !strings.Contains(joined, "disable reames-agent-gateway.service") {
+		t.Fatalf("rollback did not disable the partially installed service:\n%s", joined)
+	}
+}
+
+func TestLinuxInstallRollbackRestoresRunningDefinitionAndState(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(unitPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMode := before.Mode().Perm()
+	plan := Plan{
+		GOOS:   "linux",
+		Action: "install",
+		Files:  []File{{Path: unitPath, Content: "new unit\n", Mode: 0o644}},
+		Commands: []Command{
+			{Name: "systemd-analyze", Args: []string{"--user", "verify", unitPath}},
+			{Name: "systemctl", Args: []string{"--user", "daemon-reload"}},
+			{Name: "systemctl", Args: []string{"--user", "enable", "reames-agent-gateway.service"}},
+			{Name: "systemctl", Args: []string{"--user", "restart", "reames-agent-gateway.service"}},
+		},
+	}
+
+	restarts := 0
+	var calls []string
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{active: true, enabled: true}, nil, nil
+	}
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		line := command.Name + " " + strings.Join(command.Args, " ")
+		calls = append(calls, line)
+		if strings.Contains(line, " restart ") {
+			restarts++
+			if restarts == 1 {
+				return "restart failed", errors.New("exit 1")
+			}
+		}
+		return "", nil
+	}
+
+	_, err = applyLinuxInstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, plan, deps)
+	if err == nil || !strings.Contains(err.Error(), "restart reames-agent-gateway.service") {
+		t.Fatalf("applyPlan error = %v, want restart failure", err)
+	}
+	got, readErr := os.ReadFile(unitPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(got) != "old unit\n" {
+		t.Fatalf("restored unit = %q, want old unit", got)
+	}
+	info, statErr := os.Stat(unitPath)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if info.Mode().Perm() != wantMode {
+		t.Fatalf("restored mode = %#o, want original %#o", info.Mode().Perm(), wantMode)
+	}
+	if restarts != 2 {
+		t.Fatalf("restart calls = %d, want failed apply + rollback restart", restarts)
+	}
+	joined := strings.Join(calls, "\n")
+	if !strings.Contains(joined, "enable reames-agent-gateway.service") {
+		t.Fatalf("rollback did not restore enabled state:\n%s", joined)
+	}
+}
+
+func TestLinuxInstallRefusesStateThatCannotBeRestoredExactly(t *testing.T) {
+	run := func(_ context.Context, command Command) (string, error) {
+		if systemctlVerb(command) == "is-enabled" {
+			return "static", nil
+		}
+		return "inactive", nil
+	}
+	_, _, err := probeLinuxServiceState(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, true, run)
+	if err == nil || !strings.Contains(err.Error(), "cannot be restored exactly") {
+		t.Fatalf("probeLinuxServiceState error = %v, want exact-state refusal", err)
+	}
+}
+
+func TestLinuxFreshInstallReportsRollbackDisableFailure(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	plan := Plan{
+		GOOS:   "linux",
+		Action: "install",
+		Files:  []File{{Path: unitPath, Content: "new unit\n", Mode: 0o644}},
+		Commands: []Command{
+			{Name: "systemctl", Args: []string{"--user", "enable", "reames-agent-gateway.service"}},
+			{Name: "systemctl", Args: []string{"--user", "restart", "reames-agent-gateway.service"}},
+		},
+	}
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{}, nil, nil
+	}
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		switch systemctlVerb(command) {
+		case "restart":
+			return "", errors.New("restart failed")
+		case "disable":
+			return "", errors.New("disable rollback failed")
+		default:
+			return "", nil
+		}
+	}
+
+	_, err := applyLinuxInstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, plan, deps)
+	if err == nil || !strings.Contains(err.Error(), "disable rollback failed") {
+		t.Fatalf("applyLinuxInstall error = %v, want rollback failure", err)
+	}
+}
+
+func TestLinuxInstallRollbackRestoreWriteFailureFailsClosedAndReportsDegradedState(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plan := Plan{
+		GOOS:   "linux",
+		Action: "install",
+		Files:  []File{{Path: unitPath, Content: "new unit\n", Mode: 0o644}},
+		Commands: []Command{
+			{Name: "systemctl", Args: []string{"--user", "daemon-reload"}},
+			{Name: "systemctl", Args: []string{"--user", "enable", "reames-agent-gateway.service"}},
+			{Name: "systemctl", Args: []string{"--user", "restart", "reames-agent-gateway.service"}},
+		},
+	}
+
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{enabled: true, active: true}, []string{"snapshot output"}, nil
+	}
+	writes := 0
+	deps.atomicWriteFile = func(path string, data []byte, mode os.FileMode) error {
+		writes++
+		if writes == 2 {
+			return errors.New("injected definition restore failure")
+		}
+		return os.WriteFile(path, data, mode)
+	}
+	var calls []string
+	restarts := 0
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		verb := systemctlVerb(command)
+		calls = append(calls, verb)
+		if verb == "restart" {
+			restarts++
+			if restarts == 1 {
+				return "forward restart output", errors.New("injected restart failure")
+			}
+		}
+		return "rollback " + verb + " output", nil
+	}
+
+	result, err := applyLinuxInstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, plan, deps)
+	if err == nil || !strings.Contains(err.Error(), "injected restart failure") || !strings.Contains(err.Error(), "injected definition restore failure") {
+		t.Fatalf("applyLinuxInstall error = %v, want forward and rollback errors", err)
+	}
+	for _, want := range []string{"rollback linux gateway service install", "restore service definition " + unitPath, "degraded", "manual repair"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("applyLinuxInstall error = %v, want %q", err, want)
+		}
+	}
+	if writes != 2 {
+		t.Fatalf("atomic writes = %d, want new definition + failed old definition restore", writes)
+	}
+	data, readErr := os.ReadFile(unitPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != "new unit\n" {
+		t.Fatalf("unit after degraded rollback = %q, want new unit still on disk", data)
+	}
+	if joinedCalls := strings.Join(calls, ","); joinedCalls != "daemon-reload,enable,restart" {
+		t.Fatalf("rollback changed manager state after definition restore failure: calls=%s", joinedCalls)
+	}
+	joinedOutputs := strings.Join(result.Outputs, "\n")
+	for _, want := range []string{"snapshot output", "forward restart output"} {
+		if !strings.Contains(joinedOutputs, want) {
+			t.Fatalf("result outputs missing %q:\n%s", want, joinedOutputs)
+		}
+	}
+}
+
+func TestLinuxInstallRollbackReloadFailureStopsStateRestore(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plan := Plan{
+		GOOS:   "linux",
+		Action: "install",
+		Files:  []File{{Path: unitPath, Content: "new unit\n", Mode: 0o644}},
+		Commands: []Command{
+			{Name: "systemctl", Args: []string{"--user", "daemon-reload"}},
+			{Name: "systemctl", Args: []string{"--user", "enable", "reames-agent-gateway.service"}},
+			{Name: "systemctl", Args: []string{"--user", "restart", "reames-agent-gateway.service"}},
+		},
+	}
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{enabled: true, active: true}, nil, nil
+	}
+	var calls []string
+	reloads := 0
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		verb := systemctlVerb(command)
+		calls = append(calls, verb)
+		switch verb {
+		case "restart":
+			return "", errors.New("injected forward restart failure")
+		case "daemon-reload":
+			reloads++
+			if reloads == 2 {
+				return "", errors.New("injected rollback reload failure")
+			}
+		}
+		return "", nil
+	}
+
+	_, err := applyLinuxInstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, plan, deps)
+	if err == nil {
+		t.Fatal("applyLinuxInstall succeeded, want rollback reload failure")
+	}
+	for _, want := range []string{"injected forward restart failure", "injected rollback reload failure", "degraded", "manual repair"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("applyLinuxInstall error = %v, want %q", err, want)
+		}
+	}
+	if got := strings.Join(calls, ","); got != "daemon-reload,enable,restart,daemon-reload" {
+		t.Fatalf("commands after rollback reload failure = %s", got)
+	}
+	data, readErr := os.ReadFile(unitPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != "old unit\n" {
+		t.Fatalf("restored unit = %q, want old unit", data)
+	}
+}
+
+func TestLinuxFreshInstallRollbackRemoveFailureSkipsReloadAndReportsDegradedState(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	plan := Plan{
+		GOOS:     "linux",
+		Action:   "install",
+		Files:    []File{{Path: unitPath, Content: "new unit\n", Mode: 0o644}},
+		Commands: []Command{{Name: "systemctl", Args: []string{"--user", "daemon-reload"}}},
+	}
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{}, nil, nil
+	}
+	deps.remove = func(string) error { return errors.New("injected unit remove failure") }
+	var calls []string
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		calls = append(calls, systemctlVerb(command))
+		return "", errors.New("injected forward reload failure")
+	}
+
+	_, err := applyLinuxInstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, plan, deps)
+	if err == nil {
+		t.Fatal("applyLinuxInstall succeeded, want rollback remove failure")
+	}
+	for _, want := range []string{"injected forward reload failure", "injected unit remove failure", "degraded", "manual repair"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("applyLinuxInstall error = %v, want %q", err, want)
+		}
+	}
+	if got := strings.Join(calls, ","); got != "daemon-reload" {
+		t.Fatalf("commands after fresh unit remove failure = %s", got)
+	}
+	data, readErr := os.ReadFile(unitPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != "new unit\n" {
+		t.Fatalf("unit after degraded rollback = %q, want new unit", data)
+	}
+}
+
+func TestLinuxRollbackUsesFreshContextAfterForwardCancellation(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	plan := Plan{
+		GOOS:   "linux",
+		Action: "install",
+		Files:  []File{{Path: unitPath, Content: "new unit\n", Mode: 0o644}},
+		Commands: []Command{
+			{Name: "systemctl", Args: []string{"--user", "daemon-reload"}},
+		},
+	}
+	ctx, cancelForward := context.WithCancel(context.Background())
+	defer cancelForward()
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{}, nil, nil
+	}
+	rollbackContextCreated := false
+	deps.newRollbackContext = func(parent context.Context) (context.Context, context.CancelFunc) {
+		if !errors.Is(parent.Err(), context.Canceled) {
+			t.Fatalf("rollback parent error = %v, want canceled forward context", parent.Err())
+		}
+		rollbackContextCreated = true
+		return context.WithCancel(context.Background())
+	}
+	calls := 0
+	deps.runCommand = func(commandCtx context.Context, _ Command) (string, error) {
+		calls++
+		if calls == 1 {
+			cancelForward()
+			return "forward canceled output", context.Canceled
+		}
+		if commandCtx.Err() != nil {
+			t.Fatalf("rollback command inherited cancellation: %v", commandCtx.Err())
+		}
+		return "rollback reload output", nil
+	}
+
+	result, err := applyLinuxInstall(ctx, Options{Name: defaultServiceName, Scope: "user"}, plan, deps)
+	if !errors.Is(err, context.Canceled) || !rollbackContextCreated || calls != 2 {
+		t.Fatalf("apply result err=%v rollbackContext=%v calls=%d", err, rollbackContextCreated, calls)
+	}
+	if _, statErr := os.Stat(unitPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("fresh unit survived canceled install rollback: %v", statErr)
+	}
+	if got := strings.Join(result.Outputs, "\n"); !strings.Contains(got, "forward canceled output") || !strings.Contains(got, "rollback reload output") {
+		t.Fatalf("forward/rollback outputs not preserved:\n%s", got)
+	}
+}
+
+func TestLinuxRollbackRestoresAllSupportedOldServiceStates(t *testing.T) {
+	states := []struct {
+		name        string
+		state       linuxServiceState
+		wantEnable  string
+		wantRuntime string
+	}{
+		{name: "enabled-active", state: linuxServiceState{enabled: true, active: true}, wantEnable: "enable", wantRuntime: "restart"},
+		{name: "enabled-inactive", state: linuxServiceState{enabled: true}, wantEnable: "enable", wantRuntime: "stop"},
+		{name: "disabled-active", state: linuxServiceState{active: true}, wantEnable: "disable", wantRuntime: "restart"},
+		{name: "disabled-inactive", state: linuxServiceState{}, wantEnable: "disable", wantRuntime: "stop"},
+	}
+	for _, tc := range states {
+		t.Run(tc.name, func(t *testing.T) {
+			unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+			if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			plan := Plan{
+				GOOS:   "linux",
+				Action: "install",
+				Files:  []File{{Path: unitPath, Content: "new unit\n", Mode: 0o644}},
+				Commands: []Command{
+					{Name: "systemctl", Args: []string{"--user", "enable", "reames-agent-gateway.service"}},
+					{Name: "systemctl", Args: []string{"--user", "restart", "reames-agent-gateway.service"}},
+				},
+			}
+			deps := defaultApplyDeps()
+			deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+				return tc.state, nil, nil
+			}
+			var calls []string
+			failed := false
+			deps.runCommand = func(_ context.Context, command Command) (string, error) {
+				verb := systemctlVerb(command)
+				calls = append(calls, verb)
+				if verb == "restart" && !failed {
+					failed = true
+					return "", errors.New("forward restart failed")
+				}
+				return "", nil
+			}
+			if _, err := applyLinuxInstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, plan, deps); err == nil {
+				t.Fatal("applyLinuxInstall succeeded, want injected restart failure")
+			}
+			if len(calls) < 4 || calls[len(calls)-2] != tc.wantEnable || calls[len(calls)-1] != tc.wantRuntime {
+				t.Fatalf("rollback calls = %v, want final %s,%s", calls, tc.wantEnable, tc.wantRuntime)
+			}
+		})
+	}
+}
+
+func TestLinuxStartNowFalseRollbackLeavesServiceStateUntouched(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plan := Plan{
+		GOOS:   "linux",
+		Action: "install",
+		Files:  []File{{Path: unitPath, Content: "new unit\n", Mode: 0o644}},
+		Commands: []Command{
+			{Name: "systemd-analyze", Args: []string{"--user", "verify", unitPath}},
+			{Name: "systemctl", Args: []string{"--user", "daemon-reload"}},
+		},
+	}
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{enabled: true, active: true}, nil, nil
+	}
+	var verbs []string
+	reloads := 0
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		if command.Name != "systemctl" {
+			return "", nil
+		}
+		verb := systemctlVerb(command)
+		verbs = append(verbs, verb)
+		if verb == "daemon-reload" {
+			reloads++
+			if reloads == 1 {
+				return "", errors.New("forward reload failed")
+			}
+		}
+		return "", nil
+	}
+	if _, err := applyLinuxInstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, plan, deps); err == nil {
+		t.Fatal("applyLinuxInstall succeeded, want reload failure")
+	}
+	if got := strings.Join(verbs, ","); got != "daemon-reload,daemon-reload" {
+		t.Fatalf("StartNow=false rollback mutated enable/runtime state: %s", got)
+	}
+}
+
+func TestApplyDryRunAndSystemScopeHaveNoSideEffects(t *testing.T) {
+	deps := defaultApplyDeps()
+	deps.goos = "linux"
+	called := false
+	deps.mkdirAll = func(string, os.FileMode) error { called = true; return nil }
+	deps.atomicWriteFile = func(string, []byte, os.FileMode) error { called = true; return nil }
+	deps.runCommand = func(context.Context, Command) (string, error) { called = true; return "", nil }
+	opts := Options{Action: "install", Executable: "/usr/bin/reames-agent", DryRun: true}
+	result, err := applyWithDeps(context.Background(), opts, deps)
+	if err != nil || called || len(result.Plan.Files) != 1 {
+		t.Fatalf("dry-run result=%+v err=%v called=%v", result, err, called)
+	}
+	opts.DryRun = false
+	opts.Scope = "system"
+	if _, err := applyWithDeps(context.Background(), opts, deps); err == nil || !strings.Contains(err.Error(), "manual approval") || called {
+		t.Fatalf("system-scope err=%v called=%v", err, called)
 	}
 }
 
