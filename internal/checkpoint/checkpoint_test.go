@@ -94,6 +94,32 @@ func TestRestoreToTurnZero(t *testing.T) {
 	}
 }
 
+func TestSnapshotForTurnRejectsLateBackgroundEffect(t *testing.T) {
+	root := t.TempDir()
+	late := filepath.Join(root, "late.txt")
+	current := filepath.Join(root, "current.txt")
+	s := New("", root)
+	s.Begin(0, "first", 0)
+	turn, ok := s.CurrentTurn()
+	if !ok || turn != 0 {
+		t.Fatalf("CurrentTurn = %d, %v, want 0, true", turn, ok)
+	}
+	s.Begin(1, "second", 2)
+
+	s.SnapshotForTurn(turn, diff.Change{Path: late, Kind: diff.Create})
+	s.SnapshotForTurn(1, diff.Change{Path: current, Kind: diff.Create})
+	metas := s.List()
+	if len(metas) != 2 {
+		t.Fatalf("checkpoint metadata = %+v, want two turns", metas)
+	}
+	if len(metas[0].Paths) != 0 {
+		t.Fatalf("late effect mutated finalized turn: %+v", metas[0])
+	}
+	if len(metas[1].Paths) != 1 || metas[1].Paths[0] != current {
+		t.Fatalf("current checkpoint paths = %+v, want only %q", metas[1].Paths, current)
+	}
+}
+
 func TestRestorePreservesGB18030Encoding(t *testing.T) {
 	root := t.TempDir()
 	a := filepath.Join(root, "gbk.txt")

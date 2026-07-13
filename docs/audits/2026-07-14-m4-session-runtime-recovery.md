@@ -2,7 +2,7 @@
 
 日期：2026-07-14
 
-状态：M4 第一批本地实现完成；最终远端 CI/CodeQL 待本批集中 push 后补证据。本文不声明整个 M4 完成。
+状态：M4 第一批已由远端 CI/CodeQL 验证；本文不声明整个 M4 完成。
 
 ## 问题
 
@@ -62,12 +62,11 @@ python scripts/smoke_gateway_headless.py --out "$env:TEMP\reames-agent-headless-
 git diff --check
 ```
 
-上述命令及其扩展门禁已在本轮新增 hardening 后重新通过：`go build ./...`、`go vet ./...`、`go test ./internal/...`、五个恢复核心包 race、Desktop Go 全测、前端 `pnpm test:all` 与 production build、111 个 Python 测试（2 skipped）、Node upstream 合同、builtin tool 合同、docs/public/deploy/release 合同和六目标 `CGO_ENABLED=0` 交叉编译。修订后的 `verify-baseline.ps1 -SkipDesktop -SkipFrontendHint` 也实际通过，schema v2 headless Gateway 报告写入系统 TEMP 而非仓库 `artifacts/`。远端 CI/CodeQL 仍只能在单次集中 push 后作为额外证据。
+上述命令及其扩展门禁已在本轮新增 hardening 后重新通过：`go build ./...`、`go vet ./...`、`go test ./internal/...`、五个恢复核心包 race、Desktop Go 全测、前端 `pnpm test:all` 与 production build、111 个 Python 测试（2 skipped）、Node upstream 合同、builtin tool 合同、docs/public/deploy/release 合同和六目标 `CGO_ENABLED=0` 交叉编译。修订后的 `verify-baseline.ps1 -SkipDesktop -SkipFrontendHint` 也实际通过，schema v2 headless Gateway 报告写入系统 TEMP 而非仓库 `artifacts/`。commit `f35e0af` 的远端 CI `29285435177` 8/8、CodeQL `29285435130` 3/3 均成功。
 
 ## 未关闭边界
 
-- `task` / `parallel_tasks` 的父子共享并发、token、time、step 预算与 root/child cancellation 账本。
-- writable 子代理的文件、checkpoint、evidence 结构化归并和 partial failure。
+- writable 子代理的进程内 effects 归并已在 `2026-07-14-m4-writable-subagent-effects.md` 关闭；跨 turn/crash 的 durable effect journal 仍未实现。
 - 跨 continuation 的成功读取/验证循环检测与 durable evidence 最小引用。
 - runtime/checkpoint 持久化失败向 writer 的 fail-closed 传播和断电窗口。
 - RestoreCode 的 handle-relative no-reparse/resolve-beneath 写入、`RewindBoth` 跨 transcript/runtime/workspace durable journal，以及 ACL/xattr/硬链接身份恢复。

@@ -614,6 +614,11 @@ func charsOfMessages(msgs []provider.Message) int {
 func (a *Agent) summarize(ctx context.Context, region []provider.Message, instructions string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, summaryTimeout)
 	defer cancel()
+	release, err := a.acquireDelegationRound(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	sys := summarySystemPrompt
 	if strings.TrimSpace(instructions) != "" {
 		sys += "\n\nAdditional focus for this compaction (prioritize keeping this):\n" + strings.TrimSpace(instructions)
@@ -633,18 +638,34 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 	// unblocks on timeout instead of pinning the "compacting…" placeholder forever.
 	var b strings.Builder
 	var usage *provider.Usage
-	emitUsage := func() {
+	usageRecorded := false
+	recordUsage := func() error {
+		if usageRecorded {
+			return nil
+		}
+		usageRecorded = true
 		if usage != nil && usage.TotalTokens > 0 {
 			a.sink.Emit(event.Event{Kind: event.Usage, Usage: usage, Pricing: a.pricing, UsageSource: event.UsageSourceCompaction})
 		}
+		if a.delegation != nil {
+			if err := a.delegation.RecordUsage(usage); err != nil {
+				return a.delegation.budgetError(err)
+			}
+		}
+		return nil
 	}
 	for {
 		select {
 		case <-ctx.Done():
+			if err := recordUsage(); err != nil {
+				return "", err
+			}
 			return "", ctx.Err()
 		case chunk, ok := <-ch:
 			if !ok {
-				emitUsage()
+				if err := recordUsage(); err != nil {
+					return "", err
+				}
 				s := strings.TrimSpace(b.String())
 				if s == "" {
 					return "", fmt.Errorf("summarizer returned empty output")
@@ -657,6 +678,9 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 			case provider.ChunkUsage:
 				usage = chunk.Usage
 			case provider.ChunkError:
+				if err := recordUsage(); err != nil {
+					return "", err
+				}
 				return "", chunk.Err
 			}
 		}

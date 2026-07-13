@@ -19,11 +19,14 @@ func RunReviewSubagent(ctx context.Context, reviewSkill skill.Skill, cfg *config
 	if err != nil {
 		return "", err
 	}
-	return agent.RunSubAgentWithSession(ctx, prov, reviewSubagentRegistry(reviewSkill, cfg), agent.NewSession(reviewSkill.Body), task, agent.Options{
-		MaxSteps:      12,
-		Temperature:   cfg.Agent.Temperature,
-		Pricing:       entry.Price,
-		ContextWindow: entry.ContextWindow,
+	runCtx, ledger, cleanup := agent.EnsureDelegationLedger(ctx, subagentDelegationLimits(cfg))
+	defer cleanup()
+	return agent.RunSubAgentWithSession(runCtx, prov, reviewSubagentRegistry(reviewSkill, cfg), agent.NewSession(reviewSkill.Body), task, agent.Options{
+		MaxSteps:         12,
+		Temperature:      cfg.Agent.Temperature,
+		Pricing:          entry.Price,
+		ContextWindow:    entry.ContextWindow,
+		DelegationLedger: ledger,
 	}, event.Discard)
 }
 

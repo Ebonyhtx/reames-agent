@@ -298,6 +298,28 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	} else {
 		b.WriteString("# max_subagent_depth = 2   # nested subagent delegation depth; set 1 to disable nested delegation\n")
 	}
+	if scope != RenderScopeProject {
+		if c.Agent.SubagentMaxConcurrency != defaults.Agent.SubagentMaxConcurrency {
+			fmt.Fprintf(&b, "subagent_max_concurrency = %d   # active provider rounds shared by one delegation tree; 0 = unlimited\n", c.Agent.SubagentMaxConcurrency)
+		} else {
+			b.WriteString("# subagent_max_concurrency = 3   # active provider rounds shared by one delegation tree\n")
+		}
+		if c.Agent.SubagentMaxSteps != defaults.Agent.SubagentMaxSteps {
+			fmt.Fprintf(&b, "subagent_max_steps = %d   # aggregate provider rounds across the tree; 0 = unlimited\n", c.Agent.SubagentMaxSteps)
+		} else {
+			b.WriteString("# subagent_max_steps = 100   # aggregate provider rounds across the tree\n")
+		}
+		if c.Agent.SubagentMaxTokens != defaults.Agent.SubagentMaxTokens {
+			fmt.Fprintf(&b, "subagent_max_tokens = %d   # aggregate reported tokens across the tree; 0 = unlimited\n", c.Agent.SubagentMaxTokens)
+		} else {
+			b.WriteString("# subagent_max_tokens = 0   # optional aggregate token cap; 0 = unlimited\n")
+		}
+		if c.Agent.SubagentMaxDurationSeconds != defaults.Agent.SubagentMaxDurationSeconds {
+			fmt.Fprintf(&b, "subagent_max_duration_seconds = %d   # wall-clock cap per delegation tree; 0 = unlimited\n", c.Agent.SubagentMaxDurationSeconds)
+		} else {
+			b.WriteString("# subagent_max_duration_seconds = 0   # optional wall-clock cap; 0 = unlimited\n")
+		}
+	}
 	if c.Agent.OutputStyle != "" {
 		fmt.Fprintf(&b, "output_style = %q   # persona/tone folded into the prompt\n", c.Agent.OutputStyle)
 	} else {

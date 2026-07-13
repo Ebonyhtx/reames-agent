@@ -199,6 +199,7 @@ type TaskTool struct {
 	baseEffort          string
 	identityProfile     func(modelRef, effort string) (string, string)
 	maxSubagentDepth    int
+	delegationLimits    DelegationLimits
 }
 
 // NewTaskTool wires a task tool to the parent agent's environment so its
@@ -254,6 +255,13 @@ func (t *TaskTool) WithTranscriptIdentityResolver(resolve func(modelRef, effort 
 
 func (t *TaskTool) WithMaxSubagentDepth(depth int) *TaskTool {
 	t.maxSubagentDepth = NormalizeMaxSubagentDepth(depth)
+	return t
+}
+
+// WithDelegationLimits configures the shared resource ledger created for each
+// new foreground or background delegation tree.
+func (t *TaskTool) WithDelegationLimits(limits DelegationLimits) *TaskTool {
+	t.delegationLimits = limits
 	return t
 }
 
@@ -466,6 +474,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			return "", fmt.Errorf("background execution is not available in this context")
 		}
 		nested := subSinkFor(parentID, parent)
+		effects, _ := SubagentEffectsFromContext(ctx)
 		label := p.Description
 		if label == "" {
 			label = "task"
@@ -477,17 +486,18 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			}
 		}
 		job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
+			jobCtx = WithSubagentEffects(jobCtx, effects)
 			defer run.Release()
 			defer func() {
 				if r := recover(); r != nil {
 					panicErr := fmt.Errorf("internal error: panic: %v\n%s", r, debug.Stack())
-					result = FormatSubagentRunResult("", run, true)
+					result = FormatSubagentRunResult(panicErr.Error(), run, true)
 					err = errors.Join(panicErr, t.transcripts.SaveFailed(run))
 				}
 			}()
 			answer, err := t.runSubSession(jobCtx, p.Prompt, subReg, nested, maxSteps, prov, pricing, ctxWin, run.Session, childDepth)
 			if err != nil {
-				return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
+				return FormatSubagentRunResult(err.Error(), run, true), errors.Join(err, t.transcripts.SaveFailed(run))
 			}
 			if err := t.transcripts.SaveCompleted(run); err != nil {
 				return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
@@ -748,6 +758,9 @@ func (t *TaskTool) resolveSubSessionRuntime(modelRef, effort string) (provider.P
 }
 
 func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session, childDepth int) (string, error) {
+	ctx, ledger, cleanup := EnsureDelegationLedger(ctx, t.delegationLimits)
+	defer cleanup()
+	effects, _ := SubagentEffectsFromContext(ctx)
 	prompt = t.withWorkspaceContext(prompt)
 	return RunSubAgentWithSession(ctx, prov, subReg, sess, prompt, Options{
 		MaxSteps:            maxSteps,
@@ -767,6 +780,8 @@ func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *too
 		ReasoningLanguage:   ReasoningLanguageFromContext(ctx),
 		SubagentDepth:       childDepth,
 		MaxSubagentDepth:    t.maxDepth(),
+		DelegationLedger:    ledger,
+		SubagentEffects:     effects,
 	}, sink)
 }
 
@@ -837,6 +852,11 @@ func RunSubAgentWithSession(ctx context.Context, prov provider.Provider, reg *to
 	}
 	sub := New(prov, reg, sess, opts, sink)
 	if err := sub.Run(ctx, prompt); err != nil {
+		if opts.DelegationLedger != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+			if cause := opts.DelegationLedger.Cause(); cause != nil {
+				return "", fmt.Errorf("sub-agent: %w", opts.DelegationLedger.budgetError(cause))
+			}
+		}
 		return "", fmt.Errorf("sub-agent: %w", err)
 	}
 	// Walk the session backwards for the last assistant message with content —

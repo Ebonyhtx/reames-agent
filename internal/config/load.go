@@ -47,6 +47,10 @@ func LoadForRoot(root string) (*Config, error) {
 	}
 	globalMaxSteps := cfg.Agent.MaxSteps
 	globalPlannerMaxSteps := cfg.Agent.PlannerMaxSteps
+	globalSubagentMaxConcurrency := cfg.Agent.SubagentMaxConcurrency
+	globalSubagentMaxSteps := cfg.Agent.SubagentMaxSteps
+	globalSubagentMaxTokens := cfg.Agent.SubagentMaxTokens
+	globalSubagentMaxDurationSeconds := cfg.Agent.SubagentMaxDurationSeconds
 	globalMemoryCompiler := cfg.Agent.MemoryCompiler
 
 	tomlSources = append(tomlSources, projectTOML)
@@ -55,9 +59,13 @@ func LoadForRoot(root string) (*Config, error) {
 	}
 	// Runtime step caps are user/global controls, not project policy. Keep the
 	// project config's other fields, but do not let ./reames-agent.toml override
-	// the user's execution and planner round limits.
+	// the user's execution, planner, or delegation-tree resource limits.
 	cfg.Agent.MaxSteps = globalMaxSteps
 	cfg.Agent.PlannerMaxSteps = globalPlannerMaxSteps
+	cfg.Agent.SubagentMaxConcurrency = globalSubagentMaxConcurrency
+	cfg.Agent.SubagentMaxSteps = globalSubagentMaxSteps
+	cfg.Agent.SubagentMaxTokens = globalSubagentMaxTokens
+	cfg.Agent.SubagentMaxDurationSeconds = globalSubagentMaxDurationSeconds
 	cfg.Agent.MemoryCompiler = globalMemoryCompiler
 	// toml.DecodeFile replaces [[plugins]] wholesale, so cfg.Plugins now holds
 	// only the last file's. Re-merge by name across all sources (later wins) so a

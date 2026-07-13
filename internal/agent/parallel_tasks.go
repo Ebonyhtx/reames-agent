@@ -104,6 +104,8 @@ func (p *ParallelTasksTool) Execute(ctx context.Context, args json.RawMessage) (
 	if p.taskTool == nil {
 		return "", fmt.Errorf("parallel_tasks is not configured")
 	}
+	ctx, _, cleanup := EnsureDelegationLedger(ctx, p.taskTool.delegationLimits)
+	defer cleanup()
 
 	parentID, sink, _, ok := CallContext(ctx)
 	if !ok || sink == nil {
@@ -183,23 +185,7 @@ func (p *ParallelTasksTool) Execute(ctx context.Context, args json.RawMessage) (
 			}
 
 			sess := NewSession(DefaultReadOnlyTaskSystemPrompt)
-			output, runErr := RunSubAgentWithSession(ctx, prov, subReg, sess, p.taskTool.withWorkspaceContext(t.Prompt), Options{
-				MaxSteps:            max,
-				Temperature:         p.taskTool.temperature,
-				Pricing:             pricing,
-				UsageSource:         event.UsageSourceSubagent,
-				Gate:                p.taskTool.gate,
-				ContextWindow:       ctxWin,
-				RecentKeep:          p.taskTool.recentKeep,
-				SoftCompactRatio:    p.taskTool.softCompactRatio,
-				ToolResultSnipRatio: p.taskTool.toolResultSnipRatio,
-				CompactRatio:        p.taskTool.compactRatio,
-				CompactForceRatio:   p.taskTool.compactForceRatio,
-				ArchiveDir:          p.taskTool.archiveDir,
-				KeepPolicy:          p.taskTool.keepPolicy,
-				SubagentDepth:       childDepth,
-				MaxSubagentDepth:    p.taskTool.maxDepth(),
-			}, nested)
+			output, runErr := p.taskTool.runSubSession(ctx, t.Prompt, subReg, nested, max, prov, pricing, ctxWin, sess, childDepth)
 
 			if ctx.Err() != nil && runErr == nil {
 				runErr = ctx.Err()
@@ -266,7 +252,10 @@ func (p *ParallelTasksTool) Execute(ctx context.Context, args json.RawMessage) (
 		case r := <-doneCh:
 			processResult(r)
 		case <-ctx.Done():
-			err := ctx.Err()
+			err := context.Cause(ctx)
+			if err == nil {
+				err = ctx.Err()
+			}
 		drain:
 			for {
 				select {
@@ -283,7 +272,10 @@ func (p *ParallelTasksTool) Execute(ctx context.Context, args json.RawMessage) (
 	}
 	wg.Wait()
 	if parallelTasksWereCancelled(statuses) {
-		err := ctx.Err()
+		err := context.Cause(ctx)
+		if err == nil {
+			err = ctx.Err()
+		}
 		if err == nil {
 			err = context.Canceled
 		}

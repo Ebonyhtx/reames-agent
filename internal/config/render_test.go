@@ -169,6 +169,10 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	orig.Agent.SubagentModel = "mimo-pro"
 	orig.Agent.SubagentModels = map[string]string{"review": "deepseek-pro"}
 	orig.Agent.MaxSubagentDepth = 3
+	orig.Agent.SubagentMaxConcurrency = 2
+	orig.Agent.SubagentMaxSteps = 77
+	orig.Agent.SubagentMaxTokens = 12345
+	orig.Agent.SubagentMaxDurationSeconds = 90
 	orig.Agent.Keep = []string{"errors", "user_marked"}
 	orig.Agent.RecentKeep = 4
 	orig.Tools.BashTimeoutSeconds = intPtr(900)
@@ -401,6 +405,9 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	}
 	if got.Agent.MaxSubagentDepth != 3 {
 		t.Errorf("max_subagent_depth = %d, want 3", got.Agent.MaxSubagentDepth)
+	}
+	if got.Agent.SubagentMaxConcurrency != 2 || got.Agent.SubagentMaxSteps != 77 || got.Agent.SubagentMaxTokens != 12345 || got.Agent.SubagentMaxDurationSeconds != 90 {
+		t.Errorf("subagent budgets not preserved: %+v", got.Agent)
 	}
 	if got.Tools.BashTimeoutSeconds == nil || *got.Tools.BashTimeoutSeconds != 900 {
 		t.Errorf("tools.bash_timeout_seconds = %v, want 900", got.Tools.BashTimeoutSeconds)
@@ -721,7 +728,7 @@ func TestScopedRenderSeparatesUserAndProjectConfig(t *testing.T) {
 	}
 
 	project := RenderTOMLForScope(c, RenderScopeProject)
-	for _, forbidden := range []string{"[desktop]", "[notifications]", "close_behavior =", "default_tool_approval_mode =", "check_updates =", "max_steps", "planner_max_steps"} {
+	for _, forbidden := range []string{"[desktop]", "[notifications]", "close_behavior =", "default_tool_approval_mode =", "check_updates =", "max_steps", "planner_max_steps", "subagent_max_concurrency", "subagent_max_tokens", "subagent_max_duration_seconds"} {
 		if strings.Contains(project, forbidden) {
 			t.Fatalf("project render should not contain %q:\n%s", forbidden, project)
 		}

@@ -979,6 +979,12 @@ type AgentConfig struct {
 	SubagentEffort      string            `toml:"subagent_effort"`
 	SubagentEfforts     map[string]string `toml:"subagent_efforts"`
 	MaxSubagentDepth    int               `toml:"max_subagent_depth"`
+	// Subagent resource budgets are shared by one complete delegation tree,
+	// including nested task/skill children and parallel_tasks siblings.
+	SubagentMaxConcurrency     int `toml:"subagent_max_concurrency"`      // active provider rounds; 0 = unlimited
+	SubagentMaxSteps           int `toml:"subagent_max_steps"`            // aggregate provider rounds; 0 = unlimited
+	SubagentMaxTokens          int `toml:"subagent_max_tokens"`           // aggregate reported tokens; 0 = unlimited
+	SubagentMaxDurationSeconds int `toml:"subagent_max_duration_seconds"` // wall clock per tree; 0 = unlimited
 	// OutputStyle selects a persona/tone block folded into the system prompt at
 	// startup (a built-in like "explanatory"/"learning"/"concise", or a custom
 	// .reames-agent/output-styles/<name>.md). Empty = the unmodified prompt.
@@ -1516,14 +1522,16 @@ func Default() *Config {
 			// the user cancels, or the provider errors. Context stays bounded by
 			// compaction, not by a round count. Set a positive agent.max_steps only
 			// if you want a hard guard against runaway.
-			MaxSteps:            0,
-			PlannerMaxSteps:     0,
-			AutoPlan:            "off",
-			SoftCompactRatio:    0.5,
-			ToolResultSnipRatio: 0.6,
-			CompactRatio:        0.8,
-			CompactForceRatio:   0.9,
-			MaxSubagentDepth:    2,
+			MaxSteps:               0,
+			PlannerMaxSteps:        0,
+			AutoPlan:               "off",
+			SoftCompactRatio:       0.5,
+			ToolResultSnipRatio:    0.6,
+			CompactRatio:           0.8,
+			CompactForceRatio:      0.9,
+			MaxSubagentDepth:       2,
+			SubagentMaxConcurrency: 3,
+			SubagentMaxSteps:       100,
 		},
 		// Mode "ask" with no rules keeps `reames-agent run` autonomous (no TTY → ask
 		// resolves to allow) while `reamesAgent` prompts before writers. Users add

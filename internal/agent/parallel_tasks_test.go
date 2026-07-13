@@ -104,6 +104,66 @@ func TestParallelTasksForegroundCompletesAndClosesWorkers(t *testing.T) {
 	}
 }
 
+func TestParallelTasksSharesProviderConcurrencyBudget(t *testing.T) {
+	prov := &parallelBudgetProvider{started: make(chan struct{}, 8), release: make(chan struct{})}
+	task := newTestTaskTool(t, prov, tool.NewRegistry(), "sys", "", "", nil).
+		WithDelegationLimits(DelegationLimits{MaxConcurrent: 2, MaxSteps: 20})
+	parallel := NewParallelTasksTool(task, tool.NewRegistry())
+	ctx := withCallContext(context.Background(), "parallel-call", event.Discard, nil, false)
+
+	done := make(chan struct {
+		out string
+		err error
+	}, 1)
+	go func() {
+		out, err := parallel.Execute(ctx, json.RawMessage(`{
+			"tasks": [
+				{"prompt": "one"},
+				{"prompt": "two"},
+				{"prompt": "three"},
+				{"prompt": "four"},
+				{"prompt": "five"}
+			]
+		}`))
+		done <- struct {
+			out string
+			err error
+		}{out: out, err: err}
+	}()
+
+	for range 2 {
+		select {
+		case <-prov.started:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for initial parallel provider rounds")
+		}
+	}
+	select {
+	case <-prov.started:
+		t.Fatal("parallel_tasks started a third provider round before a slot was released")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(prov.release)
+
+	select {
+	case got := <-done:
+		if got.err != nil {
+			t.Fatalf("Execute: %v\n%s", got.err, got.out)
+		}
+		if !strings.Contains(got.out, "Completed 5 parallel tasks") {
+			t.Fatalf("missing aggregate output: %s", got.out)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("parallel_tasks did not drain after provider slots were released")
+	}
+	if peak := prov.peak.Load(); peak != 2 {
+		t.Fatalf("provider peak = %d, want 2", peak)
+	}
+	if calls := prov.calls.Load(); calls != 5 {
+		t.Fatalf("provider calls = %d, want 5", calls)
+	}
+}
+
 func TestParallelTasksInjectsWorkspaceContextIntoChildren(t *testing.T) {
 	workspace := t.TempDir()
 	task := NewTaskTool(promptRoutingProvider{}, nil, tool.NewRegistry(), 20, 0, 0, 0, 0, 0, 0, 0.0, "", "sys", nil, 0, "", "", nil).
@@ -202,6 +262,40 @@ func (parallelStaticProvider) Stream(context.Context, provider.Request) (<-chan 
 	ch <- provider.Chunk{Type: provider.ChunkText, Text: "ok"}
 	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
+	return ch, nil
+}
+
+type parallelBudgetProvider struct {
+	started chan struct{}
+	release chan struct{}
+	calls   atomic.Int32
+	active  atomic.Int32
+	peak    atomic.Int32
+}
+
+func (p *parallelBudgetProvider) Name() string { return "parallel-budget" }
+
+func (p *parallelBudgetProvider) Stream(ctx context.Context, _ provider.Request) (<-chan provider.Chunk, error) {
+	p.calls.Add(1)
+	active := p.active.Add(1)
+	for {
+		peak := p.peak.Load()
+		if active <= peak || p.peak.CompareAndSwap(peak, active) {
+			break
+		}
+	}
+	p.started <- struct{}{}
+	ch := make(chan provider.Chunk, 2)
+	go func() {
+		defer p.active.Add(-1)
+		defer close(ch)
+		select {
+		case <-p.release:
+			ch <- provider.Chunk{Type: provider.ChunkText, Text: "ok"}
+			ch <- provider.Chunk{Type: provider.ChunkDone}
+		case <-ctx.Done():
+		}
+	}()
 	return ch, nil
 }
 

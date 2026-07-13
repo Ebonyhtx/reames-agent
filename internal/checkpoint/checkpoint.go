@@ -277,6 +277,27 @@ func (s *Store) Bounds() map[int]int {
 // Only the first touch of a path in the current turn is kept (that is its
 // turn-start content). A no-op before the first Begin.
 func (s *Store) Snapshot(ch diff.Change) {
+	s.snapshot(ch, nil)
+}
+
+// CurrentTurn returns the active checkpoint turn. Callers can use the value
+// with SnapshotForTurn to bind delayed background effects to their origin turn.
+func (s *Store) CurrentTurn() (int, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cur == nil {
+		return 0, false
+	}
+	return s.cur.Turn, true
+}
+
+// SnapshotForTurn records ch only while turn remains the active checkpoint.
+// It prevents a late background writer from landing in a newer turn.
+func (s *Store) SnapshotForTurn(turn int, ch diff.Change) {
+	s.snapshot(ch, &turn)
+}
+
+func (s *Store) snapshot(ch diff.Change, expectedTurn *int) {
 	if ch.Path == "" {
 		return
 	}
@@ -301,7 +322,7 @@ func (s *Store) Snapshot(ch diff.Change) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.cur == nil || s.seen[identity] {
+	if s.cur == nil || (expectedTurn != nil && s.cur.Turn != *expectedTurn) || s.seen[identity] {
 		return
 	}
 	var content *string

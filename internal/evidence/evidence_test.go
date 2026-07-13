@@ -145,6 +145,34 @@ func TestLedgerResetClearsTurnReceipts(t *testing.T) {
 	}
 }
 
+func TestLedgerGenerationRejectsLateReceiptsAndCopiesNestedState(t *testing.T) {
+	ledger := NewLedger()
+	generation := ledger.Generation()
+	match := &TodoStepMatch{Found: true, Index: 1, Content: "verify", Status: "completed"}
+	ledger.Record(Receipt{ToolName: "complete_step", Success: true, Step: "verify", TodoStep: match})
+
+	match.Content = "mutated input"
+	receipts := ledger.Receipts(1)
+	if len(receipts) != 1 || receipts[0].TodoStep == nil || receipts[0].TodoStep.Content != "verify" {
+		t.Fatalf("record did not isolate TodoStep: %+v", receipts)
+	}
+	receipts[0].TodoStep.Content = "mutated output"
+	if got := ledger.Receipts(1)[0].TodoStep.Content; got != "verify" {
+		t.Fatalf("receipt snapshot leaked TodoStep mutation: %q", got)
+	}
+
+	ledger.Reset()
+	if ledger.RecordAtGeneration(Receipt{ToolName: "bash", Success: true, Command: "go test ./..."}, generation) {
+		t.Fatal("stale background receipt was accepted after reset")
+	}
+	if ledger.Len() != 0 {
+		t.Fatalf("late receipt contaminated new generation: %+v", ledger.Receipts(10))
+	}
+	if !ledger.RecordAtGeneration(Receipt{ToolName: "bash", Success: true, Command: "go test ./..."}, ledger.Generation()) {
+		t.Fatal("current-generation receipt was rejected")
+	}
+}
+
 func TestContextCarriesLedger(t *testing.T) {
 	ledger := NewLedger()
 	ctx := WithLedger(context.Background(), ledger)

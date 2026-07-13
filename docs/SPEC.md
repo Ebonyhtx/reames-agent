@@ -518,11 +518,11 @@ Reames Agent's global `<Reames Agent home>/.env`, shared by CLI and desktop. Pro
 `.env`, home `.env`, inherited shell environment variables, legacy credentials,
 and the OS keyring are not provider-key runtime fallbacks. Project `.env` still
 feeds workspace-scoped, non-provider `${VAR}` expansion for MCP/plugin settings
-without importing provider keys or Reames Agent control variables. Step-limit
-preferences belong in the user config.
+without importing provider keys or Reames Agent control variables. Execution
+resource limits belong in the user config.
 Project `reames-agent.toml` does not override `agent.max_steps` or
-`agent.planner_max_steps`, and it does not override the user-level Memory v5
-compiler switch.
+`agent.planner_max_steps`, any `agent.subagent_max_*` tree budget, or the
+user-level Memory v5 compiler switch.
 
 ```toml
 default_model = "deepseek"   # provider name (→ its default model) or "provider/model"
@@ -545,6 +545,11 @@ reasoning_language = "auto"       # visible reasoning text: auto|zh|en
 # planner_model = "deepseek-pro"   # optional: two-model collaboration (low-frequency planner)
 # subagent_model = "deepseek-pro"   # optional default for runAs=subagent skills
 # subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }
+# max_subagent_depth = 2             # nested delegation depth
+# subagent_max_concurrency = 3       # user/global only; active provider streams per tree
+# subagent_max_steps = 100           # user/global only; aggregate provider rounds per tree
+# subagent_max_tokens = 0            # user/global only; reported tokens; 0 = unlimited
+# subagent_max_duration_seconds = 0  # user/global only; wall clock; 0 = unlimited
 
 # A vendor endpoint exposing several models under one base_url/key.
 [[providers]]
@@ -617,6 +622,20 @@ args    = []
 ```
 
 `reames-agent setup` writes this default config so the CLI is usable out of the box.
+
+The four `subagent_max_*` values apply to one complete delegation tree,
+including nested task/skill children, parallel siblings, and compaction calls.
+Concurrency counts active Provider streams rather than child lifetimes. Usage
+received before a terminal stream error is still charged to the tree. Writable
+children propagate only structured read/write/command receipts, immediate
+parent tool-call provenance, and previewed pre-edit callbacks to ancestor
+Agents; child model text, tool output, transcript, Todo, and `complete_step`
+state remain local. Successful verification must follow the child write.
+Failed/cancelled previewed writers establish an uncertain mutation boundary.
+Turn generations and turn-scoped checkpoint callbacks reject late background
+effects after a newer turn starts. These ledgers and bridges are process-local,
+not durable proof or crash-resume state; `bash` cannot provide per-file
+checkpoints because its targets cannot be previewed statically.
 
 `[ui].cursor_shape` is normalized to `underline`, `block`, or `bar`; empty or
 unknown values fall back to `underline`. It applies to the Bubble Tea CLI/TUI

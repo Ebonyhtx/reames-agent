@@ -1238,6 +1238,10 @@ func TestLoadForRootKeepsGlobalAgentStepLimitsOverProject(t *testing.T) {
 [agent]
 max_steps = 17
 planner_max_steps = 9
+subagent_max_concurrency = 2
+subagent_max_steps = 71
+subagent_max_tokens = 12000
+subagent_max_duration_seconds = 90
 temperature = 0.4
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -1248,6 +1252,10 @@ default_model = "deepseek-pro"
 [agent]
 max_steps = 3
 planner_max_steps = 4
+subagent_max_concurrency = 20
+subagent_max_steps = 999
+subagent_max_tokens = 999999
+subagent_max_duration_seconds = 9999
 temperature = 0.8
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -1259,6 +1267,9 @@ temperature = 0.8
 	}
 	if cfg.Agent.MaxSteps != 17 || cfg.Agent.PlannerMaxSteps != 9 {
 		t.Fatalf("agent steps = max:%d planner:%d, want global 17/9", cfg.Agent.MaxSteps, cfg.Agent.PlannerMaxSteps)
+	}
+	if cfg.Agent.SubagentMaxConcurrency != 2 || cfg.Agent.SubagentMaxSteps != 71 || cfg.Agent.SubagentMaxTokens != 12000 || cfg.Agent.SubagentMaxDurationSeconds != 90 {
+		t.Fatalf("subagent budgets should remain global: %+v", cfg.Agent)
 	}
 	if cfg.Agent.Temperature != 0.8 {
 		t.Fatalf("agent temperature = %v, want project override to keep working for other agent settings", cfg.Agent.Temperature)
@@ -1275,6 +1286,10 @@ func TestLoadForRootIgnoresProjectAgentStepLimitsWithoutUserConfig(t *testing.T)
 [agent]
 max_steps = 3
 planner_max_steps = 4
+subagent_max_concurrency = 20
+subagent_max_steps = 999
+subagent_max_tokens = 999999
+subagent_max_duration_seconds = 9999
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1285,6 +1300,9 @@ planner_max_steps = 4
 	}
 	if cfg.Agent.MaxSteps != 0 || cfg.Agent.PlannerMaxSteps != 0 {
 		t.Fatalf("agent steps = max:%d planner:%d, want built-in global defaults 0/0", cfg.Agent.MaxSteps, cfg.Agent.PlannerMaxSteps)
+	}
+	if cfg.Agent.SubagentMaxConcurrency != 3 || cfg.Agent.SubagentMaxSteps != 100 || cfg.Agent.SubagentMaxTokens != 0 || cfg.Agent.SubagentMaxDurationSeconds != 0 {
+		t.Fatalf("subagent budgets = %+v, want built-in global defaults", cfg.Agent)
 	}
 }
 

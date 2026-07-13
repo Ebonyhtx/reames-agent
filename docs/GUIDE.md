@@ -68,6 +68,10 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # subagent_model = "deepseek-pro"     # optional default for runAs=subagent skills
 # subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }
 # max_subagent_depth = 2              # nested delegation depth; set 1 for the old single-layer boundary
+# subagent_max_concurrency = 3         # user/global only; active provider rounds per delegation tree
+# subagent_max_steps = 100             # user/global only; aggregate provider rounds per tree
+# subagent_max_tokens = 0              # user/global only; aggregate reported tokens; 0 = unlimited
+# subagent_max_duration_seconds = 0    # user/global only; wall-clock tree budget; 0 = unlimited
 auto_plan = "off"                  # user-level only; off|on; off keeps plan mode manual
 # auto_plan_classifier = "deepseek-flash"   # optional; only borderline tasks call it
 tool_result_snip_ratio = 0.6       # shorten stale tool output before summary compaction
@@ -779,8 +783,9 @@ executor. Writer and workflow tools remain executor-only. `max_steps` limits the
 executor; `planner_max_steps` limits only the planner, and either can be set to
 `0` for no round limit.
 
-Keep step-limit preferences in the user config. Project `./reames-agent.toml` files
-do not override `max_steps` or `planner_max_steps`.
+Keep execution-resource preferences in the user config. Project
+`./reames-agent.toml` files do not override `max_steps`, `planner_max_steps`, or
+the four `subagent_max_*` tree budgets.
 
 Subagent skills inherit the executor model by default. Set `subagent_model` to
 run them on another configured model, or use `subagent_models` to override only
@@ -794,6 +799,30 @@ subagents do not receive recursive agent/skill tools. Set
 intended for workflows such as Superpowers where a workflow skill may dispatch a
 reviewer subagent, while still avoiding unbounded recursion and background
 fanout.
+
+Every foreground `task`, `read_only_task`, `parallel_tasks`, or subagent skill
+creates or inherits one tree-wide ledger. The default permits three concurrent
+provider streams and 100 aggregate provider rounds; token and wall-clock limits
+are opt-in. A concurrency slot is held only while a provider stream is active,
+so a parent waiting on a nested child cannot deadlock at the limit. Foreground
+trees inherit turn cancellation. A background `task` instead inherits the
+session job context, remains alive across turns, and is cancelled by job/session
+teardown. Provider usage is reported after a response, so a single response can
+cross `subagent_max_tokens`; the runtime records the real total and cancels the
+remaining tree immediately after that receipt.
+
+Writer-capable subagents use a prompt-invisible effects bridge. Their structured
+read/write/command receipts and previewed file changes are merged into the
+invoking turn, so a child verification can satisfy the parent's project checks
+only when it follows the child write, and the parent's checkpoint can rewind a
+previewable child edit. A failed or cancelled previewed writer is retained as an
+uncertain mutation boundary and requires later verification; it is never
+accepted as successful proof. Background tasks may outlive the invoking turn,
+but late receipts and checkpoint callbacks are rejected once a newer turn is
+active, preventing old work from proving a new answer. Inspect the job result
+and disk again in that case. This bridge is in-memory, not crash-resumable or
+durable evidence. Shell commands have no static file preview, so child `bash`
+has the same per-file checkpoint limitation as root `bash`.
 
 Use `read_only_task` when planning needs isolated, deeper research without
 granting write-capable delegation. Use `read_only_skill` when the same need is

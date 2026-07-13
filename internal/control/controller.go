@@ -472,6 +472,7 @@ func New(opts Options) *Controller {
 		c.executor.SetPreEditHook(func(ch diff.Change) {
 			c.checkpoints.snapshot(ch)
 		})
+		c.executor.SetSubagentPreEditHookFactory(c.checkpoints.scopedSnapshot)
 		c.executor.SetMemoryQueue(c)
 	}
 	return c

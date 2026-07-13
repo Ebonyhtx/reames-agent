@@ -221,6 +221,10 @@ type Agent struct {
 	maxDuration time.Duration
 	totalTokens int64
 	startTime   time.Time
+	delegation  *DelegationLedger
+	// subagentEffects forwards structured child receipts and pre-edit snapshots
+	// to ancestor Agents without sharing child transcript or readiness state.
+	subagentEffects *SubagentEffects
 	// executorHandoffGuard is enabled by Coordinator for the executor agent. The
 	// per-turn marker check in Run keeps ordinary single-model turns unaffected.
 	executorHandoffGuard bool
@@ -288,6 +292,10 @@ type Agent struct {
 	// tool.Previewer (so bash, whose targets are unknowable, is never tracked).
 	// Set via SetPreEditHook.
 	onPreEdit func(diff.Change)
+	// subagentPreEditHook captures a turn-scoped checkpoint callback for a
+	// delegated writer. The controller uses it to reject late background effects
+	// after another turn or session has become current.
+	subagentPreEditHook func() func(diff.Change)
 
 	// jobs, when non-nil, is the session's background-job manager. executeOne
 	// stamps it onto each tool call's context so the background tools (bash
@@ -698,6 +706,12 @@ func (a *Agent) SetMemoryQueue(q memory.Queue) { a.memQueue = q }
 // controller wires it to its per-session checkpoint store; nil disables capture.
 func (a *Agent) SetPreEditHook(fn func(diff.Change)) { a.onPreEdit = fn }
 
+// SetSubagentPreEditHookFactory installs the turn-scoped checkpoint callback
+// factory used only by delegated writers. Root writers keep using SetPreEditHook.
+func (a *Agent) SetSubagentPreEditHookFactory(fn func() func(diff.Change)) {
+	a.subagentPreEditHook = fn
+}
+
 // Session returns the agent's current conversation, useful for persistence
 // hooks that need to read the message log between turns. sessMu serialises this
 // pointer read against SetSession, so a frontend (serve's concurrent /history and
@@ -900,6 +914,11 @@ type Options struct {
 	// depth 0; child subagents are depth 1. MaxSubagentDepth caps delegation.
 	SubagentDepth    int
 	MaxSubagentDepth int
+	// DelegationLedger is shared by every descendant of one subagent tree. Root
+	// executor sessions leave it nil and create a ledger only when delegating.
+	DelegationLedger *DelegationLedger
+	// SubagentEffects is the ancestor bridge inherited by a child Agent.
+	SubagentEffects *SubagentEffects
 
 	// MemoryCompiler enables Memory v5 execution trace writeback and cache-safe
 	// execution-contract compilation.
@@ -977,6 +996,8 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 		maxTokens:                opts.MaxTokens,
 		maxDuration:              opts.MaxDuration,
 		startTime:                time.Now(),
+		delegation:               opts.DelegationLedger,
+		subagentEffects:          opts.SubagentEffects,
 		maxStepsKey:              maxStepsKey,
 		temperature:              opts.Temperature,
 		pricing:                  opts.Pricing,
@@ -1136,6 +1157,27 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 
 		text, reasoning, signature, calls, usage, interrupted, partialToolStarted, err := a.stream(ctx, step+1)
 		if err != nil {
+			// A provider may report usage before a terminal stream error. Account
+			// that receipt even when the visible response must be recovered.
+			if usage != nil && usage.TotalTokens > 0 {
+				cacheDiagnostics := CompareShape(prevPrefixShape, prefixShape, usage)
+				a.lastPrefixShape = prefixShape
+				a.haveLastPrefixShape = true
+				a.sink.Emit(event.Event{Kind: event.Usage, Usage: usage, Pricing: a.pricing,
+					UsageSource:      a.usageSource,
+					CacheDiagnostics: &cacheDiagnostics,
+					SessionHit:       int(a.sessCacheHit.Load()), SessionMiss: int(a.sessCacheMiss.Load())})
+				a.sink.Emit(event.Event{Kind: event.CacheUpdated, CacheDiagnostics: &cacheDiagnostics,
+					SessionHit: int(a.sessCacheHit.Load()), SessionMiss: int(a.sessCacheMiss.Load())})
+			}
+			if usage != nil {
+				a.totalTokens += int64(usage.TotalTokens)
+			}
+			if a.delegation != nil {
+				if budgetErr := a.delegation.RecordUsage(usage); budgetErr != nil {
+					return a.delegation.budgetError(budgetErr)
+				}
+			}
 			if interrupted && streamRecoveries < maxStreamRecoveries {
 				streamRecoveries++
 				if hasVisibleFinalAnswer(text) {
@@ -1175,6 +1217,10 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 		if usage != nil {
 			a.totalTokens += int64(usage.TotalTokens)
 		}
+		var delegationBudgetErr error
+		if a.delegation != nil {
+			delegationBudgetErr = a.delegation.RecordUsage(usage)
+		}
 		if msg, ok := finishReasonMessage(usage); ok {
 			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: msg})
 		}
@@ -1192,6 +1238,15 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 			ToolCalls:          calls,
 			MemoryCitations:    a.memoryCitations(),
 		})
+		if delegationBudgetErr != nil {
+			if len(calls) > 0 {
+				results := a.executeBatch(ctx, calls)
+				for i, call := range calls {
+					a.session.Add(provider.Message{Role: provider.RoleTool, Content: results[i], ToolCallID: call.ID, Name: call.Name})
+				}
+			}
+			return a.delegation.budgetError(delegationBudgetErr)
+		}
 
 		if len(calls) == 0 {
 			readiness := a.finalReadinessCheck(true)
@@ -1358,7 +1413,7 @@ func (a *Agent) finalReadinessCheck(allowLoopGuard bool) finalReadinessCheck {
 			missing = append(missing, finalReadinessIncompleteTodos(incomplete))
 		}
 	}
-	writer, hasWriter := a.evidence.LatestSuccessfulWriterIndex()
+	writer, hasWriter := a.evidence.LatestWriterBoundaryIndex()
 	if !hasWriter {
 		if len(missing) > 0 {
 			if allowLoopGuard && a.loopGuardAllowsFinal() {
@@ -1834,6 +1889,11 @@ func streamRecoveryMessage(hasPartialText, hadPartialTool bool) string {
 // accumulated text and reasoning are also returned so the caller can round-trip
 // reasoning on the next turn.
 func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, []provider.ToolCall, *provider.Usage, bool, bool, error) {
+	release, err := a.acquireDelegationRound(ctx)
+	if err != nil {
+		return "", "", "", nil, nil, false, false, err
+	}
+	defer release()
 	ctx = provider.WithRetryNotify(ctx, func(info provider.RetryInfo) {
 		a.sink.Emit(event.Event{Kind: event.Retrying, RetryAttempt: info.Attempt, RetryMax: info.Max})
 	})
@@ -1933,7 +1993,7 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 				stored, _ := finishReasoning()
 				return text.String(), stored, signature, calls, usage, true, partialToolStarted, chunk.Err
 			}
-			return "", "", "", nil, nil, false, false, chunk.Err
+			return "", "", "", nil, usage, false, false, chunk.Err
 		}
 	}
 }
@@ -2447,10 +2507,17 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	// rewound. Fires after all gating (the edit is cleared to run) and only for
 	// tools that can describe their change; a Preview error means the edit will
 	// likely fail anyway, so we skip rather than snapshot a stale state.
-	if a.onPreEdit != nil && !t.ReadOnly() {
+	mutationAttempt := false
+	if !t.ReadOnly() {
 		if pv, ok := t.(tool.Previewer); ok {
 			if change, perr := pv.Preview(json.RawMessage(call.Arguments)); perr == nil {
-				a.onPreEdit(change)
+				mutationAttempt = true
+				if a.onPreEdit != nil {
+					a.onPreEdit(change)
+				}
+				if a.subagentEffects != nil {
+					a.subagentEffects.snapshot(change)
+				}
 			}
 		}
 	}
@@ -2466,6 +2533,10 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	if a.jobs != nil {
 		cctx = jobs.WithManager(cctx, a.jobs)
 	}
+	if a.delegation != nil {
+		cctx = WithDelegationLedger(cctx, a.delegation)
+	}
+	cctx = WithSubagentEffects(cctx, a.effectsForChild(call.ID))
 	if a.sandboxEscapeApprover != nil {
 		cctx = sandbox.WithEscapeApprover(cctx, a.sandboxEscapeApprover)
 	}
@@ -2490,13 +2561,21 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	if a.evidence != nil {
 		if call.Name == "complete_step" {
 			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), err == nil, t.ReadOnly())
+			rec.MutationAttempt = mutationAttempt
 			a.evidence.Record(rec)
+			if a.subagentEffects != nil {
+				a.subagentEffects.record(rec, a.subagentDepth)
+			}
 			if err == nil {
 				a.advanceCanonicalTodo(rec.Step)
 			}
 		} else {
 			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), err == nil, t.ReadOnly())
+			rec.MutationAttempt = mutationAttempt
 			a.evidence.Record(rec)
+			if a.subagentEffects != nil {
+				a.subagentEffects.record(rec, a.subagentDepth)
+			}
 			if err == nil && call.Name == "todo_write" {
 				a.setTodoState(rec.Todos)
 			}

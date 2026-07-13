@@ -727,6 +727,37 @@ func TestTaskToolBackgroundResultIncludesReferenceGuidance(t *testing.T) {
 	}
 }
 
+func TestTaskToolBackgroundUsesJobScopedDelegationDeadline(t *testing.T) {
+	store := NewSubagentStore(t.TempDir())
+	task := NewTaskTool(stuckStreamProvider{}, nil, tool.NewRegistry(), 20, 0, 0, 0, 0, 0, 0, 0.0, "", "sys", nil, 0, "", "", nil).
+		WithTranscripts(store, t.TempDir(), "base-model", "base-effort").
+		WithDelegationLimits(DelegationLimits{MaxConcurrent: 1, MaxSteps: 10, MaxDuration: 30 * time.Millisecond})
+
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	ctx := jobs.WithManager(jobs.WithSession(testTaskContext(), "parent-session"), jm)
+	out, err := task.Execute(ctx, []byte(`{"prompt":"deadline task","run_in_background":true}`))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	ref := subagentRefFromOutput(t, out)
+	jobID := extractJobID(out)
+	res := jm.WaitForSession(context.Background(), "parent-session", []string{jobID}, 5)
+	if len(res) != 1 || res[0].Status != jobs.Failed {
+		t.Fatalf("background job result = %+v, want deadline failure", res)
+	}
+	if !strings.Contains(res[0].Output, ErrDelegationTimeBudget.Error()) {
+		t.Fatalf("background output = %q, want delegation deadline cause", res[0].Output)
+	}
+	meta, err := store.LoadMeta(ref)
+	if err != nil {
+		t.Fatalf("LoadMeta: %v", err)
+	}
+	if meta.Status != SubagentFailed {
+		t.Fatalf("subagent status = %q, want failed", meta.Status)
+	}
+}
+
 func TestTaskToolBackgroundAncestorContinuationIncludesForkGuidance(t *testing.T) {
 	sub := &mockProvider{name: "sub", streams: [][]provider.Chunk{
 		{

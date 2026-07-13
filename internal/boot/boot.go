@@ -71,6 +71,27 @@ func agentKeepPolicy(keep []string) agent.KeepPolicy {
 	return p
 }
 
+func subagentDelegationLimits(cfg *config.Config) agent.DelegationLimits {
+	if cfg == nil {
+		return agent.DelegationLimits{}
+	}
+	seconds := int64(cfg.Agent.SubagentMaxDurationSeconds)
+	const maxDurationSeconds = int64((1<<63 - 1) / int64(time.Second))
+	if seconds > maxDurationSeconds {
+		seconds = maxDurationSeconds
+	}
+	var duration time.Duration
+	if seconds > 0 {
+		duration = time.Duration(seconds) * time.Second
+	}
+	return agent.DelegationLimits{
+		MaxConcurrent: cfg.Agent.SubagentMaxConcurrency,
+		MaxSteps:      cfg.Agent.SubagentMaxSteps,
+		MaxTokens:     int64(cfg.Agent.SubagentMaxTokens),
+		MaxDuration:   duration,
+	}
+}
+
 // Options carries the per-run knobs a frontend chooses; everything else is read
 // from configuration. Model "" falls back to the configured default_model;
 // MaxSteps 0 uses the config/default. RequireKey forces the executor's API key to
@@ -599,6 +620,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	taskModel := firstNonEmpty(cfg.Agent.SubagentModels["task"], cfg.Agent.SubagentModel)
 	taskEffort := firstNonEmpty(cfg.Agent.SubagentEfforts["task"], cfg.Agent.SubagentEffort)
 	maxSubagentDepth := agent.NormalizeMaxSubagentDepth(cfg.Agent.MaxSubagentDepth)
+	delegationLimits := subagentDelegationLimits(cfg)
 	taskToolAdded := false
 	readOnlyTaskToolAdded := false
 	var taskTool *agent.TaskTool
@@ -610,7 +632,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			taskModel, taskEffort, resolveSubagentProvider).
 			WithTranscripts(subagentStore, root, modelName, entry.Effort).
 			WithTranscriptIdentityResolver(subagentIdentity).
-			WithMaxSubagentDepth(maxSubagentDepth)
+			WithMaxSubagentDepth(maxSubagentDepth).
+			WithDelegationLimits(delegationLimits)
 	}
 	addTaskTool := func() string {
 		if taskToolAdded {
@@ -697,7 +720,10 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			}
 		}
 		sysPrompt := agent.DefaultReadOnlyTaskSystemPrompt + "\n\nSkill instructions:\n" + sk.Body
-		return agent.RunSubAgentWithSession(sctx, prov, subReg, agent.NewSession(sysPrompt), task, agent.Options{
+		runCtx, ledger, cleanup := agent.EnsureDelegationLedger(sctx, delegationLimits)
+		defer cleanup()
+		effects, _ := agent.SubagentEffectsFromContext(sctx)
+		return agent.RunSubAgentWithSession(runCtx, prov, subReg, agent.NewSession(sysPrompt), task, agent.Options{
 			MaxSteps:            steps,
 			Temperature:         cfg.Agent.Temperature,
 			Pricing:             price,
@@ -714,6 +740,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			ReasoningLanguage:   agent.ReasoningLanguageFromContext(sctx),
 			SubagentDepth:       childDepth,
 			MaxSubagentDepth:    maxSubagentDepth,
+			DelegationLedger:    ledger,
+			SubagentEffects:     effects,
 		}, agent.NestedSink(sctx, event.Discard))
 	}
 	// Writer-capable subagent skills reuse the sub-agent machinery via this
@@ -787,7 +815,10 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 				steps = 5
 			}
 		}
-		answer, err := agent.RunSubAgentWithSession(sctx, prov, subReg, run.Session, task, agent.Options{
+		runCtx, ledger, cleanup := agent.EnsureDelegationLedger(sctx, delegationLimits)
+		defer cleanup()
+		effects, _ := agent.SubagentEffectsFromContext(sctx)
+		answer, err := agent.RunSubAgentWithSession(runCtx, prov, subReg, run.Session, task, agent.Options{
 			MaxSteps:          steps,
 			Temperature:       cfg.Agent.Temperature,
 			Pricing:           price,
@@ -800,6 +831,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			ReasoningLanguage: agent.ReasoningLanguageFromContext(sctx),
 			SubagentDepth:     childDepth,
 			MaxSubagentDepth:  maxSubagentDepth,
+			DelegationLedger:  ledger,
+			SubagentEffects:   effects,
 		}, agent.NestedSink(sctx, event.Discard))
 		if err != nil {
 			return "", errors.Join(err, subagentStore.SaveFailed(run))

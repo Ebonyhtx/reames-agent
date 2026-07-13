@@ -34,23 +34,28 @@ type TodoStepMatch struct {
 // Receipt is the host-runtime record of one tool call. It stays in memory for
 // the current agent turn and is not serialized into prompts or session state.
 type Receipt struct {
-	ToolName  string          `json:"tool_name"`
-	Args      json.RawMessage `json:"args,omitempty"`
-	Success   bool            `json:"success"`
-	Command   string          `json:"command,omitempty"`
-	Step      string          `json:"step,omitempty"`
-	StepProof bool            `json:"step_proof,omitempty"`
-	TodoStep  *TodoStepMatch  `json:"todo_step,omitempty"`
-	Paths     []string        `json:"paths,omitempty"`
-	Read      bool            `json:"read,omitempty"`
-	Write     bool            `json:"write,omitempty"`
-	Todos     []TodoItem      `json:"todos,omitempty"`
+	ToolName         string          `json:"tool_name"`
+	Args             json.RawMessage `json:"args,omitempty"`
+	Success          bool            `json:"success"`
+	Command          string          `json:"command,omitempty"`
+	Step             string          `json:"step,omitempty"`
+	StepProof        bool            `json:"step_proof,omitempty"`
+	TodoStep         *TodoStepMatch  `json:"todo_step,omitempty"`
+	Paths            []string        `json:"paths,omitempty"`
+	Read             bool            `json:"read,omitempty"`
+	Write            bool            `json:"write,omitempty"`
+	MutationAttempt  bool            `json:"mutation_attempt,omitempty"`
+	Source           string          `json:"source,omitempty"`
+	ParentToolCallID string          `json:"parent_tool_call_id,omitempty"`
+	SubagentDepth    int             `json:"subagent_depth,omitempty"`
+	Todos            []TodoItem      `json:"todos,omitempty"`
 }
 
 // Ledger stores the receipts available to complete_step for the current turn.
 type Ledger struct {
-	mu       sync.Mutex
-	receipts []Receipt
+	mu         sync.Mutex
+	receipts   []Receipt
+	generation uint64
 }
 
 // Snapshot is a bounded, read-only projection for status surfaces. It is
@@ -71,14 +76,10 @@ func (l *Ledger) Reset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.receipts = nil
+	l.generation++
 }
 
-// Record appends a receipt. Failed receipts are retained for auditability but
-// are never accepted by the HasSuccessful* matchers.
-func (l *Ledger) Record(r Receipt) {
-	if l == nil {
-		return
-	}
+func normalizeReceipt(r Receipt) Receipt {
 	r.Command = strings.TrimSpace(r.Command)
 	r.Step = strings.TrimSpace(r.Step)
 	r.Paths = normalizePaths(r.Paths)
@@ -88,15 +89,59 @@ func (l *Ledger) Record(r Receipt) {
 		copy(cp, r.Args)
 		r.Args = cp
 	}
+	if r.TodoStep != nil {
+		match := *r.TodoStep
+		r.TodoStep = &match
+	}
+	return r
+}
 
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (l *Ledger) recordLocked(r Receipt) {
 	if r.ToolName == "complete_step" && r.Step != "" && r.TodoStep == nil {
 		if match := latestTodoStep(r.Step, l.receipts); match.Found {
 			r.TodoStep = &match
 		}
 	}
 	l.receipts = append(l.receipts, r)
+}
+
+// Record appends a receipt. Failed receipts are retained for auditability but
+// are never accepted by the HasSuccessful* matchers.
+func (l *Ledger) Record(r Receipt) {
+	if l == nil {
+		return
+	}
+	r = normalizeReceipt(r)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.recordLocked(r)
+}
+
+// Generation identifies the current turn-local receipt epoch. Reset advances
+// it so background work from an older turn cannot contaminate a newer turn.
+func (l *Ledger) Generation() uint64 {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.generation
+}
+
+// RecordAtGeneration appends only when generation is still current. It returns
+// false when a cross-turn background receipt was intentionally rejected.
+func (l *Ledger) RecordAtGeneration(r Receipt, generation uint64) bool {
+	if l == nil {
+		return false
+	}
+	r = normalizeReceipt(r)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.generation != generation {
+		return false
+	}
+	l.recordLocked(r)
+	return true
 }
 
 // Len returns the number of receipts recorded this turn, giving callers a
@@ -487,6 +532,51 @@ func (l *Ledger) LatestSuccessfulWriterIndex() (int, bool) {
 		}
 	}
 	return latest, latest >= 0
+}
+
+// LatestWriterBoundaryIndex returns the latest successful write or previewed
+// writer attempt. A failed/cancelled writer may have partially touched disk, so
+// final readiness must require verification after that boundary even though it
+// cannot be accepted as successful proof.
+func (l *Ledger) LatestWriterBoundaryIndex() (int, bool) {
+	if l == nil {
+		return 0, false
+	}
+	latest := -1
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i, r := range l.receipts {
+		if r.Write && (r.Success || r.MutationAttempt) {
+			latest = i
+		}
+	}
+	return latest, latest >= 0
+}
+
+// Receipts returns up to limit most recent receipts in chronological order.
+// It is intended for runtime audit/status and tests, not prompt injection.
+func (l *Ledger) Receipts(limit int) []Receipt {
+	if l == nil || limit <= 0 {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	start := len(l.receipts) - limit
+	if start < 0 {
+		start = 0
+	}
+	out := make([]Receipt, len(l.receipts)-start)
+	copy(out, l.receipts[start:])
+	for i := range out {
+		out[i].Args = append(json.RawMessage(nil), out[i].Args...)
+		out[i].Paths = append([]string(nil), out[i].Paths...)
+		out[i].Todos = append([]TodoItem(nil), out[i].Todos...)
+		if out[i].TodoStep != nil {
+			match := *out[i].TodoStep
+			out[i].TodoStep = &match
+		}
+	}
+	return out
 }
 
 func (l *Ledger) MatchLatestTodoStep(step string) (TodoStepMatch, bool) {

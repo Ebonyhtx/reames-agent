@@ -153,6 +153,25 @@ func (m *checkpointManager) snapshot(ch diff.Change) {
 	}
 }
 
+// scopedSnapshot captures the current store and checkpoint turn for delegated
+// writers. A background child that finishes after a later turn starts cannot
+// append its pre-edit bytes to that later turn's checkpoint.
+func (m *checkpointManager) scopedSnapshot() func(diff.Change) {
+	m.mu.Lock()
+	store := m.store
+	m.mu.Unlock()
+	if store == nil {
+		return nil
+	}
+	turn, ok := store.CurrentTurn()
+	if !ok {
+		return nil
+	}
+	return func(ch diff.Change) {
+		store.SnapshotForTurn(turn, ch)
+	}
+}
+
 // truncateFrom renumbers future turns from `turn` and drops every boundary at or
 // after it — the conversation-rewind renumber after the message log is cut back.
 func (m *checkpointManager) truncateFrom(turn int) error {
