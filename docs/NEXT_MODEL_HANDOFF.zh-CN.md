@@ -31,7 +31,7 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 - M0 已关闭：普通 CI、CodeQL、六目标 CLI candidate、三平台 Desktop candidate 和原生安装 smoke 均有历史远端证据。
 - M1 已关闭：真实 Provider、原生会话/工作区/停止、文件审批/落盘/回退、重启恢复，以及 401/429/断流/权限拒绝/工具超时均有分层证据。
 - M2 已关闭：依赖棘轮 allowlist 已归零，结构化错误、版本化 command/event/display DTO、prompt metadata、会话持久化、Desktop/ACP/CLI 装配和终端渲染边界均已收口；完整本地门禁及远端 CI/CodeQL 已通过。
-- M3 进行中：可访问性批次已由 `827e0b4` 交付，普通 CI `29229513429` 8/8、CodeQL `29229513359` 3/3。candidate `29229871453` 的 Linux/macOS 与 Windows native 通过，但 Windows interaction 两次在同一重启 transcript 可见性断点失败；当前未提交 pinned-history 预载修复已通过完整本地 production native/accessibility/interaction，仍需新 commit 的 installed candidate。
+- M3 进行中：M3+M6 commit `c2dc1a3` 的普通 CI `29241651878` 8/8、CodeQL `29241651981` 3/3。candidate `29242006740` 的 Linux/macOS 与 Windows native 通过，但 Windows interaction 仍在重启 transcript 可见性断点失败，accessibility 未执行；当前 follow-up 已补无 session-path 的 tab-ID 预载与 canonical event-log 后端回退，本地 production native/interaction/accessibility 全绿，仍需新 commit 的 installed candidate。
 - M6 进行中：Gateway service、headless smoke、feedback 和本批四渠道 `gateway setup` 确定性闭环已具备；真实 IM 与干净云节点仍缺外部证据。
 
 唯一执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
@@ -67,16 +67,16 @@ commit `7d07c89` 已推送；普通 CI run `29216174519` 为 8/8、CodeQL run `2
 
 ## 当前 M3 + M6 批次
 
-- M3：恢复 tab 在 controller `ready=false` 时先从 pinned session event log 预载历史，仍锁定发送；ready 后复用缓存并补 ancillary，关闭托管 runner 慢启动导致的空 transcript 窗口。
+- M3：恢复 tab 在 controller `ready=false` 时无条件按 tab ID 从 pinned session event log 预载历史，不依赖首份 metadata 已带 session path；controller 投影为空时后端回退 0 B checkpoint 对应的 canonical event log，发送仍锁定，ready 后复用缓存并补 ancillary。
 - M6：新增 `internal/gatewaysetup` 和 `reames-agent gateway setup`，覆盖 Feishu/Lark、QQ、Weixin、workspace/model/connection ID、secret-env-only、显式 access、`--reset-access`、redacted dry-run、严格 TOML、原子幂等写入。
 - 测试：四渠道、状态保留、byte-for-byte 幂等、损坏配置和误传 secret fail closed、setup → doctor → service dry-run；ready-event/missed-ready/pinned page；完整前端与本地 production Wails native/accessibility/interaction。
 
-candidate `29229871453` attempt 1/2 的 Windows interaction 均失败；本批 pinned-history 修复即使完成本地门禁和普通 CI，也不能把源码 Wails 证据冒充 installed candidate。
+candidate `29229871453` attempt 1/2 与 `29242006740` 的 Windows interaction 均失败；后者的 Linux/macOS installed、Windows native、19 请求/五类失败恢复/停止/落盘均通过，但重启 UI 仍未显示消息，accessibility 未执行。当前 follow-up 即使完成本地门禁，也不能把源码 Wails 证据冒充 installed candidate。
 
 ## 下一执行顺序
 
-1. 守候本批集中 push 后的普通 CI/CodeQL，不为纯证据另做碎片提交。
-2. 对新 commit 运行 Desktop candidate，必须让 Windows installed interaction 越过两次失败断点，并实际执行 strict accessibility step。
+1. 显式暂存、集中提交并 push 当前 follow-up，随后守候普通 CI/CodeQL。
+2. 对新 commit 运行 Desktop candidate，必须让 Windows installed interaction 越过三次失败断点，并实际执行 strict accessibility step。
 3. 远端关闭后进入干净云节点 CLI + gateway setup/doctor/service + feedback，再做真实飞书回环。
 
 ## 长期未关闭项
@@ -91,6 +91,6 @@ candidate `29229871453` attempt 1/2 的 Windows interaction 均失败；本批 p
 
 ## 当前证据边界
 
-新 production bundle：entry 628,743 B、base initial JS 869,545 B、最坏本地化 984,999 B、initial CSS 511,305 B，预算通过。Wails executable 48,050,688 B，SHA-256 `A4D22842BB5C107AA1E9F6829947046338FBD15826AADF035AFCDD0234F4E8A0`；native cold/warm 0.5/1.5 秒，strict accessibility 3/3 InvokePattern，interaction 19 请求与五类失败恢复、停止和重启恢复通过，边界变化和 errors 为空。
+新 production bundle：entry 628,747 B、base initial JS 869,549 B、最坏本地化 985,003 B、initial CSS 511,305 B，预算通过。Wails executable 48,051,712 B，SHA-256 `870FF1EC6B31A235175C7366ABE503CDCF05D4C551EC5973B0204C5EED83121D`；native cold/warm 稳定响应 2.016/1.500 秒，strict accessibility 3/3 InvokePattern，interaction 19 请求与五类失败恢复、停止和同 session path 重启恢复通过，边界变化和 errors 为空。
 
 这些仍是本地源码 production 证据。新 commit 的安装器 candidate、NVDA/Narrator、Windows High Contrast、真实云节点、真实飞书和签名安装器仍分别是远端或 `external-blocked` 证据。受保护的 `.agents/`、`artifacts/`、`docs/audits/2026-07-09-reference-feature-gap-map.md` 禁止暂存。

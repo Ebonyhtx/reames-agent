@@ -369,6 +369,57 @@ func TestHistoryForTabUsesPinnedSessionBeforeControllerReady(t *testing.T) {
 	}
 }
 
+func TestHistoryForTabFallsBackToCanonicalEventLogBeforeControllerTranscript(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	root := globalTabWorkspaceRoot()
+	dir := desktopSessionDir(root)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir: %v", err)
+	}
+	path := filepath.Join(dir, "pending-event-controller.jsonl")
+	session := agent.NewSession("")
+	if err := session.SaveSnapshot(path); err != nil {
+		t.Fatalf("SaveSnapshot empty checkpoint: %v", err)
+	}
+	session.Add(provider.Message{Role: provider.RoleUser, Content: "event prompt"})
+	session.Add(provider.Message{Role: provider.RoleAssistant, Content: "event answer"})
+	if err := session.SaveSnapshot(path); err != nil {
+		t.Fatalf("SaveSnapshot event suffix: %v", err)
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() != 0 {
+		t.Fatalf("checkpoint size = %v, %v; want zero-byte compatibility checkpoint", info, err)
+	}
+	if info, err := os.Stat(store.SessionEventLog(path)); err != nil || info.Size() == 0 {
+		t.Fatalf("event log size = %v, %v; want non-empty canonical log", info, err)
+	}
+
+	blank := agent.NewSession("")
+	ag := agent.New(stubProvider{}, tool.NewRegistry(), blank, agent.Options{}, event.Discard)
+	ctrl := control.New(control.Options{Executor: ag, SessionDir: dir, SessionPath: path, Sink: event.Discard})
+	app := NewApp()
+	tab := &WorkspaceTab{
+		ID:            "pending-event",
+		Scope:         "global",
+		WorkspaceRoot: root,
+		SessionPath:   path,
+		Ctrl:          ctrl,
+		Ready:         true,
+		disabledMCP:   map[string]ServerView{},
+	}
+	app.tabs[tab.ID] = tab
+	app.tabOrder = []string{tab.ID}
+	app.activeTabID = tab.ID
+
+	page := app.HistoryPageForTab(tab.ID, 0, 60)
+	if len(page.Messages) != 2 || page.TotalTurns != 1 || page.Messages[0].Content != "event prompt" || page.Messages[1].Content != "event answer" {
+		t.Fatalf("event-log history page = %+v, want restored prompt and answer", page)
+	}
+	messages := app.HistoryForTab(tab.ID)
+	if len(messages) != 2 || messages[0].Content != "event prompt" || messages[1].Content != "event answer" {
+		t.Fatalf("event-log history = %+v, want restored prompt and answer", messages)
+	}
+}
+
 func historyMemoryCompilerContract(t *testing.T, sourceEvent string) string {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{

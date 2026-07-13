@@ -85,7 +85,10 @@ ready 不等待 ancillary 且 history 只读取一次。新 production Wails exe
 `A4D22842BB5C107AA1E9F6829947046338FBD15826AADF035AFCDD0234F4E8A0`；本地 native
 cold/warm 均为 0.5 秒首响、1.5 秒稳定，严格 accessibility 3/3 InvokePattern，
 interaction 19 请求、五类恢复、停止和重启恢复通过，边界变化与 errors 均为空。
-该新提交尚需安装器 candidate 远端复核。
+commit `c2dc1a3` 的 candidate `29242006740` 已通过 Linux/macOS installed 与
+Windows native，但 Windows interaction 在重启 transcript 可见性处失败，因此
+strict accessibility step 仍未执行；当前 follow-up 必须先越过 interaction，才算
+获得本审计所需的安装器级无障碍证据。
 
 ## 证据边界
 

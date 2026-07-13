@@ -62,7 +62,10 @@ function tabMeta(ready: boolean): TabMeta {
     gitBranch: "main",
     topicId: "topic-ready",
     topicTitle: "Ready race",
-    sessionPath: "/repo/sessions/ready.jsonl",
+    // The first Wails snapshot can expose the restored tab before its
+    // controller has reconciled the pinned path. History remains addressable
+    // by tab ID and must not wait for this metadata field.
+    sessionPath: ready ? "/repo/sessions/ready.jsonl" : undefined,
     label: "model",
     ready,
     running: false,
@@ -180,7 +183,7 @@ await act(async () => {
 });
 
 await waitFor("initial not-ready metadata", () => controller?.activeTabId === "tab-ready" && controller.state.meta?.ready === false);
-eq(historyCalls, 1, "startup preloads pinned history before the restored controller is ready");
+eq(historyCalls, 1, "startup preloads pinned history by tab ID when initial session metadata is absent");
 eq(metaCalls, 0, "startup readiness wait does not call ancillary meta");
 
 await act(async () => {

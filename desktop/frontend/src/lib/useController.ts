@@ -1548,10 +1548,10 @@ export function useController() {
     // empty conversation. Keep send locked on ready=false, preload history
     // only, then reconcile runtime metadata and ancillary state after ready.
     const persistedSessionPath = (active.sessionPath ?? "").trim();
-    const persistedHistory = !reset && !active.ready && persistedSessionPath
+    const persistedHistory = !reset && !active.ready
       ? loadSessionDataForTab(active.id, false, "startup", {
         historyOnly: true,
-        sessionPath: persistedSessionPath,
+        sessionPath: persistedSessionPath || undefined,
       })
       : undefined;
     const settled = await waitForTabReady(active.id, STARTUP_TAB_READY_TIMEOUT_MS);

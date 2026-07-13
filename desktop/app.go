@@ -4161,7 +4161,7 @@ func (a *App) HistoryPageForTab(tabID string, beforeTurn, limit int) HistoryPage
 	msgs := ctrl.Transcript()
 	dir := controllerSessionDir(ctrl)
 	path := ctrl.SessionPath()
-	return historyPageFromTranscript(
+	page := historyPageFromTranscript(
 		msgs,
 		sessionTranscriptDisplayResolver(dir, path),
 		sessionPlannerDisplayTurns(dir, path),
@@ -4169,6 +4169,16 @@ func (a *App) HistoryPageForTab(tabID string, beforeTurn, limit int) HistoryPage
 		beforeTurn,
 		limit,
 	)
+	if page.TotalTurns > 0 || strings.TrimSpace(sessionPath) == "" {
+		return page
+	}
+	// A restored controller may become observable before its in-memory
+	// transcript projection is populated. The pinned event log is already
+	// durable and remains the authoritative read-only fallback.
+	if diskPage, err := previewSessionPage(sessionDir, sessionPath, beforeTurn, limit); err == nil && diskPage.TotalTurns > 0 {
+		return diskPage
+	}
+	return page
 }
 
 func normalizeHistoryPageLimit(limit int) int {
@@ -4254,12 +4264,28 @@ func (a *App) HistoryForTab(tabID string) []HistoryMessage {
 	msgs := ctrl.Transcript()
 	dir := controllerSessionDir(ctrl)
 	path := ctrl.SessionPath()
-	return historyMessagesWithPlannerDisplays(
+	messages := historyMessagesWithPlannerDisplays(
 		msgs,
 		sessionTranscriptDisplayResolver(dir, path),
 		sessionPlannerDisplayTurns(dir, path),
 		ctrl.CheckpointTurnsByMessageIndex(),
 	)
+	if historyMessagesHaveUserTurn(messages) || strings.TrimSpace(sessionPath) == "" {
+		return messages
+	}
+	if diskMessages, err := previewSessionMessages(sessionDir, sessionPath); err == nil && historyMessagesHaveUserTurn(diskMessages) {
+		return diskMessages
+	}
+	return messages
+}
+
+func historyMessagesHaveUserTurn(messages []HistoryMessage) bool {
+	for _, message := range messages {
+		if message.Role == "user" {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) HistoryCheckpointTurnsForTab(tabID string) []int {
