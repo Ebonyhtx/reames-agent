@@ -2,7 +2,7 @@
 
 日期：2026-07-14
 
-状态：本地实现与完整门禁完成；本批远端 CI/CodeQL 待集中 push 后补证据。本文只关闭共享预算子项，不声明 M4 完成。
+状态：本地实现与完整门禁完成；commit `84167d3` 的 CodeQL 3/3 通过，CI 7/8，唯一失败为本文与 companion audit 漏入总索引。索引修复需由后续 CI 复验。本文只关闭共享预算子项，不声明 M4 完成。
 
 ## 问题
 
@@ -46,7 +46,9 @@ go test ./internal/config -run "TestRenderTOMLRoundTrips$|TestScopedRenderSepara
 go test ./internal/agent ./internal/config ./internal/boot -count=1
 ```
 
-聚焦回归之后，本大批又统一通过 `go build ./...`、`go vet ./...`、`go test ./internal/...`、Agent/Control/Evidence/Checkpoint/Board race、Desktop `go vet ./...` 与 `go test ./...`、前端 `pnpm test:all` 与 production build、111 个 Python 测试（2 skipped）、Node/工具/docs/public/deploy/release 合同、六目标 `CGO_ENABLED=0` 交叉编译和 `verify-baseline.ps1 -SkipDesktop -SkipFrontendHint`。基线脚本实际完成 localhost Gateway smoke，报告与六平台二进制均写入系统 TEMP；品牌残留计数为 0，`git diff --check` 通过。远端证据仍只在本批单次集中 push 后成立。
+聚焦回归之后，本大批又统一通过 `go build ./...`、`go vet ./...`、`go test ./internal/...`、Agent/Control/Evidence/Checkpoint/Board race、Desktop `go vet ./...` 与 `go test ./...`、前端 `pnpm test:all` 与 production build、111 个 Python 测试（2 skipped）、Node/工具/docs/public/deploy/release 合同、六目标 `CGO_ENABLED=0` 交叉编译和 `verify-baseline.ps1 -SkipDesktop -SkipFrontendHint`。基线脚本实际完成 localhost Gateway smoke，报告与六平台二进制均写入系统 TEMP；品牌残留计数为 0，`git diff --check` 通过。
+
+远端 commit `84167d37540f0df55aac7c8cce3bb90ddf940e4e` 的 CodeQL run `29289472229` 为 Go、Actions、JavaScript/TypeScript 3/3 通过；CI run `29289472287` 为 7/8 jobs 通过，Core Go、Desktop Go、Desktop frontend、Upstream watch、Deployment、Release 与 Cross-compile 均成功。唯一失败的 `Public readiness and docs` 明确报告 `DOCS_INDEX.md` 未索引本审计与 companion audit；这不否定实现门禁，但在索引修复的新 CI 全绿前不能声称该 commit 达到完整远端基线。
 
 ## 未关闭边界
 
