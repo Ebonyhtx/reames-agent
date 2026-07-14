@@ -28,13 +28,13 @@ type RegistryIndex struct {
 	Registry string          `json:"registry"`
 }
 
-// DefaultRegistryURL is the default plugin registry endpoint.
-const DefaultRegistryURL = "https://plugins.reames-agent.io/index.json"
-
-// FetchRegistry downloads the plugin index from url (default if empty).
+// FetchRegistry downloads a plugin index from an explicitly configured URL.
+// Reames Agent does not advertise a default registry until an operated,
+// versioned endpoint and its trust policy have release evidence.
 func FetchRegistry(url string, client *http.Client) (*RegistryIndex, error) {
+	url = strings.TrimSpace(url)
 	if url == "" {
-		url = DefaultRegistryURL
+		return nil, fmt.Errorf("plugin registry URL is not configured")
 	}
 	if client == nil {
 		client = &http.Client{Timeout: 15 * time.Second}

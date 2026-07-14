@@ -4,7 +4,7 @@ import { asArray } from "../lib/array";
 import { app, openExternal } from "../lib/bridge";
 import { useT } from "../lib/i18n";
 import { mcpServerLifecycleActions, mcpServerRetryableFromAvailableList } from "../lib/mcpServerLifecycle";
-import type { CapabilitiesView, MCPServerInput, PluginHookView, PluginInstallOptions, PluginMCPServerView, PluginSkillView, PluginView, ServerView, SkillRootSkillView, SkillRootView, SkillsSettingsView, SkillView, TabMeta } from "../lib/types";
+import type { CapabilitiesView, MCPServerInput, PluginHookView, PluginInstallOptions, PluginMCPServerView, PluginOperationAction, PluginOperationView, PluginSkillView, PluginView, ServerView, SkillRootSkillView, SkillRootView, SkillsSettingsView, SkillView, TabMeta } from "../lib/types";
 import { InlineConfirmButton } from "./InlineConfirmButton";
 import { ResizableDrawer } from "./ResizableDrawer";
 import { Tooltip } from "./Tooltip";
@@ -1592,27 +1592,19 @@ function AddServerForm({
   );
 }
 
-type PluginInstallPlanAction = {
-  action?: string;
-  kind?: string;
-  name?: string;
-  source?: string;
-  status?: string;
-  message?: string;
-  error?: string;
-};
-
-type PluginInstallPlanView = {
-  raw: string;
-  ok?: boolean;
-  status?: string;
-  name?: string;
-  actions: PluginInstallPlanAction[];
-  warnings: string[];
-  error?: string;
-};
-
 type PluginInstallMode = "local" | "git";
+type PluginLifecycleKind = "update" | "rollback" | "remove";
+type PluginLifecyclePlan = { kind: PluginLifecycleKind; plan: PluginOperationView };
+type PluginNotice = { message: string; tone: "success" | "warning" };
+type PluginEnableApproval = {
+	name: string;
+	digest: string;
+	permissions: string[];
+	trustStatus: string;
+	skills: number;
+	hooks: number;
+	mcpServers: number;
+};
 
 // PluginsSettingsPage is the desktop plugin package manager embedded inside
 // Settings. It mirrors the MCP/Skills density: install planning on top, package
@@ -1629,10 +1621,13 @@ export function PluginsSettingsPage() {
 	const [name, setName] = useState("");
 	const [link, setLink] = useState(false);
 	const [replace, setReplace] = useState(false);
-	const [plan, setPlan] = useState<PluginInstallPlanView | null>(null);
-	const [notice, setNotice] = useState<string | null>(null);
+	const [plan, setPlan] = useState<PluginOperationView | null>(null);
+	const [plannedInputKey, setPlannedInputKey] = useState("");
+	const [lifecyclePlans, setLifecyclePlans] = useState<Record<string, PluginLifecyclePlan>>({});
+	const [notice, setNotice] = useState<PluginNotice | null>(null);
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 	const [diagnostics, setDiagnostics] = useState<Record<string, PluginView>>({});
+	const [enableApproval, setEnableApproval] = useState<PluginEnableApproval | null>(null);
 
 	const reload = useCallback(async () => {
 		const [meta, tabs] = await Promise.all([
@@ -1659,9 +1654,12 @@ export function PluginsSettingsPage() {
 		setNotice(null);
 		try {
 			const result = await fn();
-			if (typeof result === "string" && result.trim()) {
-				const parsed = parsePluginInstallPlan(result);
-				setNotice(pluginPlanNotice(parsed, t));
+			if (isPluginOperation(result)) {
+				if (["failed", "blocked", "denied"].includes(result.status) || (!result.ok && result.status !== "partial")) {
+					throw new Error(pluginOperationFailure(result));
+				}
+				const nextNotice = pluginOperationNotice(result, t);
+				if (nextNotice) setNotice(nextNotice);
 			}
 			if (reloadAfter) await reload();
 			return true;
@@ -1675,35 +1673,82 @@ export function PluginsSettingsPage() {
 	};
 
 	const sourceValue = (installMode === "local" ? localSource : gitSource).trim();
-	const installOptions = (): PluginInstallOptions => ({
+	const installOptions = (planId?: string): PluginInstallOptions => ({
 		dryRun: false,
 		link: installMode === "local" ? link : false,
 		replace,
 		name: installMode === "git" ? name.trim() || undefined : undefined,
+		planId,
 	});
+	const installInputKey = JSON.stringify({ source: sourceValue, mode: installMode, link: installMode === "local" && link, replace, name: installMode === "git" ? name.trim() : "" });
 	const actionBusy = busy || !snapshotKey || !plugins;
 	const canPlan = sourceValue.length > 0 && !actionBusy;
+	const canInstall = canApplyPluginPlan(plan) && plannedInputKey === installInputKey && !actionBusy;
 	const summary = plugins ? pluginListSummary(plugins, t) : "";
 	const togglePlugin = useCallback((pluginName: string) => {
 		setExpanded((prev) => { const next = new Set(prev); if (next.has(pluginName)) next.delete(pluginName); else next.add(pluginName); return next; });
 	}, []);
+	const requestPluginEnabled = (plugin: PluginView, enabled: boolean) => {
+		if (!enabled) {
+			setEnableApproval(null);
+			void run(() => app.SetPluginEnabled(plugin.name, false, plugin.digest || "", asArray(plugin.permissions)));
+			return;
+		}
+		setEnableApproval({
+			name: plugin.name,
+			digest: plugin.digest || "",
+			permissions: [...asArray(plugin.permissions)],
+			trustStatus: plugin.trustStatus || "",
+			skills: plugin.skills,
+			hooks: plugin.hooks,
+			mcpServers: plugin.mcpServers,
+		});
+		setExpanded((prev) => {
+			const next = new Set(prev);
+			next.add(plugin.name);
+			return next;
+		});
+	};
+	const approvePluginEnabled = () => {
+		const approval = enableApproval;
+		if (!approval) return;
+		void run(async () => {
+			try {
+				await app.SetPluginEnabled(approval.name, true, approval.digest, approval.permissions);
+			} finally {
+				setEnableApproval(null);
+			}
+		});
+	};
 	const setMode = (mode: PluginInstallMode) => {
 		setInstallMode(mode);
 		setPlan(null);
+		setPlannedInputKey("");
 	};
 	const previewInstall = () => {
 		if (!sourceValue) return;
+		setPlan(null);
+		setPlannedInputKey("");
 		void run(async () => {
-			const raw = await app.PlanPluginInstall(sourceValue, { ...installOptions(), dryRun: true });
-			setPlan(parsePluginInstallPlan(raw));
+			const operation = await app.PlanPluginInstall(sourceValue, { ...installOptions(), dryRun: true });
+			if (!canApplyPluginPlan(operation)) throw new Error(pluginOperationFailure(operation));
+			setPlan(operation);
+			setPlannedInputKey(installInputKey);
 		}, false);
 	};
 	const install = () => {
-		if (!sourceValue) return;
+		if (!sourceValue || !canApplyPluginPlan(plan) || plannedInputKey !== installInputKey) return;
 		void run(async () => {
-			const raw = await app.InstallPlugin(sourceValue, installOptions());
-			setPlan(parsePluginInstallPlan(raw));
-			return raw;
+			try {
+				const operation = await app.InstallPlugin(sourceValue, installOptions(plan.planId));
+				setPlan(operation);
+				setPlannedInputKey("");
+				return operation;
+			} catch (error) {
+				setPlan(null);
+				setPlannedInputKey("");
+				throw error;
+			}
 		});
 	};
 	const runDoctor = (pluginName: string) => {
@@ -1720,10 +1765,54 @@ export function PluginsSettingsPage() {
 	const updateLocalSource = (value: string) => {
 		setLocalSource(value);
 		setPlan(null);
+		setPlannedInputKey("");
 	};
 	const updateGitSource = (value: string) => {
 		setGitSource(value);
 		setPlan(null);
+		setPlannedInputKey("");
+	};
+	const invalidateInstallPlan = () => {
+		setPlan(null);
+		setPlannedInputKey("");
+	};
+	const planLifecycle = (kind: PluginLifecycleKind, pluginName: string) => {
+		setLifecyclePlans((prev) => {
+			const next = { ...prev };
+			delete next[pluginName];
+			return next;
+		});
+		void run(async () => {
+			const operation = kind === "update"
+				? await app.PlanPluginUpdate(pluginName)
+				: kind === "rollback"
+					? await app.PlanPluginRollback(pluginName)
+					: await app.PlanPluginRemove(pluginName);
+			if (!canApplyPluginPlan(operation)) throw new Error(pluginOperationFailure(operation));
+			setLifecyclePlans((prev) => ({ ...prev, [pluginName]: { kind, plan: operation } }));
+			return operation;
+		}, false);
+	};
+	const applyLifecycle = (kind: PluginLifecycleKind, pluginName: string) => {
+		const pending = lifecyclePlans[pluginName];
+		if (!pending || pending.kind !== kind || !canApplyPluginPlan(pending.plan)) return;
+		const planId = pending.plan.planId;
+		void run(async () => {
+			try {
+				const operation = kind === "update"
+					? await app.UpdatePlugin(pluginName, planId)
+					: kind === "rollback"
+						? await app.RollbackPlugin(pluginName, planId)
+						: await app.RemovePlugin(pluginName, planId);
+				return operation;
+			} finally {
+				setLifecyclePlans((prev) => {
+					const next = { ...prev };
+					delete next[pluginName];
+					return next;
+				});
+			}
+		});
 	};
 	const pickPluginFolder = () => {
 		void run(async () => {
@@ -1738,7 +1827,7 @@ export function PluginsSettingsPage() {
 	return (
 		<section className="mem-section">
 			{err && <div className="banner banner--error">{err}</div>}
-			{notice && !err && <div className="banner banner--success">{notice}</div>}
+			{notice && !err && <div className={`banner banner--${notice.tone}`}>{notice.message}</div>}
 			<div className="cap-plugin-installer">
 				<div className="cap-plugin-installer__head">
 					<div className="cap-plugin-installer__copy">
@@ -1795,7 +1884,7 @@ export function PluginsSettingsPage() {
 									aria-label={t("caps.pluginInstallName")}
 									placeholder={t("caps.pluginInstallNamePlaceholder")}
 									value={name}
-									onChange={(e) => setName(e.target.value)}
+									onInput={(e) => { setName(e.currentTarget.value); invalidateInstallPlan(); }}
 								/>
 							</div>
 						</div>
@@ -1803,7 +1892,7 @@ export function PluginsSettingsPage() {
 					<div className="cap-plugin-installer__options">
 						<div className="cap-plugin-option-block">
 							<label className="cap-plugin-option">
-								<input type="checkbox" checked={replace} disabled={actionBusy} onChange={(e) => setReplace(e.target.checked)} />
+								<input type="checkbox" checked={replace} disabled={actionBusy} onChange={(e) => { setReplace(e.target.checked); invalidateInstallPlan(); }} />
 								<span>{t("caps.pluginReplace")}</span>
 							</label>
 							<div className="cap-plugin-option-hint">{t("caps.pluginReplaceHint")}</div>
@@ -1811,7 +1900,7 @@ export function PluginsSettingsPage() {
 						{installMode === "local" && (
 							<div className="cap-plugin-option-block">
 								<label className="cap-plugin-option">
-									<input type="checkbox" checked={link} disabled={actionBusy} onChange={(e) => setLink(e.target.checked)} />
+									<input type="checkbox" checked={link} disabled={actionBusy} onChange={(e) => { setLink(e.target.checked); invalidateInstallPlan(); }} />
 									<span>{t("caps.pluginLink")}</span>
 								</label>
 								<div className="cap-plugin-option-hint">{t("caps.pluginLinkHint")}</div>
@@ -1822,7 +1911,7 @@ export function PluginsSettingsPage() {
 						<button className="btn btn--small" type="button" disabled={!canPlan} onClick={previewInstall}>
 							{t("caps.pluginPreview")}
 						</button>
-						<button className="btn btn--primary btn--small" type="button" disabled={!canPlan} onClick={install}>
+						<button className="btn btn--primary btn--small" type="button" disabled={!canInstall} onClick={install}>
 							{t("caps.pluginInstall")}
 						</button>
 					</div>
@@ -1855,11 +1944,16 @@ export function PluginsSettingsPage() {
 								diagnostic={diagnostics[plugin.name]}
 								busy={actionBusy}
 								expanded={expanded.has(plugin.name)}
+								pending={lifecyclePlans[plugin.name]}
+								enableApproval={enableApproval?.name === plugin.name ? enableApproval : undefined}
 								onToggleDetails={() => togglePlugin(plugin.name)}
-								onToggleEnabled={(enabled) => void run(() => app.SetPluginEnabled(plugin.name, enabled))}
-								onUpdate={() => void run(() => app.UpdatePlugin(plugin.name))}
+								onToggleEnabled={(enabled) => requestPluginEnabled(plugin, enabled)}
+								onApproveEnable={approvePluginEnabled}
+								onCancelEnable={() => setEnableApproval(null)}
+								onUpdate={() => lifecyclePlans[plugin.name]?.kind === "update" ? applyLifecycle("update", plugin.name) : planLifecycle("update", plugin.name)}
+								onRollback={() => lifecyclePlans[plugin.name]?.kind === "rollback" ? applyLifecycle("rollback", plugin.name) : planLifecycle("rollback", plugin.name)}
 								onDoctor={() => runDoctor(plugin.name)}
-								onRemove={() => void run(() => app.RemovePlugin(plugin.name))}
+								onRemove={() => lifecyclePlans[plugin.name]?.kind === "remove" ? applyLifecycle("remove", plugin.name) : planLifecycle("remove", plugin.name)}
 							/>
 						))}
 					</div>
@@ -1869,17 +1963,19 @@ export function PluginsSettingsPage() {
 	);
 }
 
-function PluginPlanPreview({ plan }: { plan: PluginInstallPlanView }) {
+function PluginPlanPreview({ plan }: { plan: PluginOperationView }) {
 	const t = useT();
+	const isError = ["failed", "blocked", "denied"].includes(plan.status) || (!plan.ok && plan.status !== "partial");
+	const isWarning = plan.status === "partial" || plan.actions.some((action) => action.riskLevel === "high");
 	return (
-		<div className={`cap-plugin-plan${plan.error ? " cap-plugin-plan--error" : ""}`}>
+		<div className={`cap-plugin-plan${isError ? " cap-plugin-plan--error" : isWarning ? " cap-plugin-plan--warning" : ""}`}>
 			<div className="cap-plugin-plan__head">
-				<div className="cap-plugin-plan__title">{plan.error ? t("caps.pluginPlanError") : t("caps.pluginPlanReady")}</div>
+				<div className="cap-plugin-plan__title">{isError ? t("caps.pluginPlanError") : t("caps.pluginPlanReady")}</div>
 				{plan.status && <span className="cap-source-badge">{plan.status}</span>}
 			</div>
 			{plan.name && <div className="cap-plugin-plan__meta">{plan.name}</div>}
-			{plan.error && <div className="cap-plugin-plan__warning">{plan.error}</div>}
-			{plan.warnings.map((warning, idx) => (
+			{plan.planId && <div className="cap-plugin-plan__meta">{t("caps.pluginPlanId")}: <code>{plan.planId}</code></div>}
+			{asArray(plan.warnings).map((warning, idx) => (
 				<div className="cap-plugin-plan__warning" key={`${warning}-${idx}`}>{warning}</div>
 			))}
 			{plan.actions.length > 0 ? (
@@ -1888,14 +1984,23 @@ function PluginPlanPreview({ plan }: { plan: PluginInstallPlanView }) {
 						<div className="cap-plugin-action" key={`${action.action || action.kind || "action"}-${idx}`}>
 							<span className="cap-plugin-action__name">{pluginPlanActionLabel(action, t)}</span>
 							{action.status && <span className="cap-source-badge">{action.status}</span>}
+							{action.riskLevel && <span className={`cap-source-badge cap-plugin-risk--${action.riskLevel}`}>{t("caps.pluginRisk", { risk: action.riskLevel })}</span>}
 							{action.source && <span className="cap-plugin-action__source">{action.source}</span>}
-							{action.message && <span className="cap-plugin-action__source">{action.message}</span>}
+							{(action.currentVersion || action.version) && <span className="cap-plugin-action__source">{t("caps.pluginVersionChange", { current: action.currentVersion || "-", next: action.version || "-" })}</span>}
+							{action.trustStatus && <span className="cap-plugin-action__source">{t("caps.pluginTrust")}: {action.trustStatus}</span>}
+							{action.willEnable !== undefined && <span className="cap-plugin-action__source">{action.willEnable ? t("caps.pluginWillEnable") : t("caps.pluginWillStayDisabled")}</span>}
+							{action.rollbackAvailable && <span className="cap-plugin-action__source">{t("caps.pluginRollbackAvailable")}</span>}
+							{asArray(action.addedPermissions).length > 0 && <span className="cap-plugin-plan__warning">{t("caps.pluginAddedPermissions")}: {asArray(action.addedPermissions).join(", ")}</span>}
+							{asArray(action.removedPermissions).length > 0 && <span className="cap-plugin-action__source">{t("caps.pluginRemovedPermissions")}: {asArray(action.removedPermissions).join(", ")}</span>}
+							{asArray(action.permissions).length > 0 && <span className="cap-plugin-action__source">{t("caps.pluginPermissions")}: {asArray(action.permissions).join(", ")}</span>}
+							{asArray(action.riskReasons).map((reason, reasonIndex) => <span className="cap-plugin-plan__warning" key={`${reason}-${reasonIndex}`}>{reason}</span>)}
+							{asArray(action.warnings).map((warning, warningIndex) => <span className="cap-plugin-plan__warning" key={`${warning}-${warningIndex}`}>{warning}</span>)}
 							{action.error && <span className="cap-plugin-plan__warning">{action.error}</span>}
 						</div>
 					))}
 				</div>
 			) : (
-				<pre className="cap-plugin-plan__raw">{plan.raw}</pre>
+				plan.next && <div className="cap-plugin-plan__warning">{plan.next}</div>
 			)}
 		</div>
 	);
@@ -1906,9 +2011,14 @@ function PluginRow({
 	diagnostic,
 	busy,
 	expanded,
+	pending,
+	enableApproval,
 	onToggleDetails,
 	onToggleEnabled,
+	onApproveEnable,
+	onCancelEnable,
 	onUpdate,
+	onRollback,
 	onDoctor,
 	onRemove,
 }: {
@@ -1916,9 +2026,14 @@ function PluginRow({
 	diagnostic?: PluginView;
 	busy: boolean;
 	expanded: boolean;
+	pending?: PluginLifecyclePlan;
+	enableApproval?: PluginEnableApproval;
 	onToggleDetails: () => void;
 	onToggleEnabled: (enabled: boolean) => void;
+	onApproveEnable: () => void;
+	onCancelEnable: () => void;
 	onUpdate: () => void;
+	onRollback: () => void;
 	onDoctor: () => void;
 	onRemove: () => void;
 }) {
@@ -1926,6 +2041,7 @@ function PluginRow({
 	const status = plugin.error ? "failed" : plugin.enabled ? "connected" : "disabled";
 	const warnings = pluginWarnings(plugin, diagnostic);
 	const sub = plugin.error || pluginCapabilitiesSummary(plugin, t);
+	const canEnable = plugin.enabled || Boolean(plugin.digest);
 	return (
 		<div className={`cap-server-entry cap-plugin-entry${plugin.enabled ? "" : " cap-server-entry--disabled"}`}>
 			<Tooltip label={plugin.error} disabled={!plugin.error} fill block>
@@ -1956,7 +2072,7 @@ function PluginRow({
 								<input
 									type="checkbox"
 									checked={plugin.enabled}
-									disabled={busy}
+									disabled={busy || !canEnable}
 									onChange={(e) => onToggleEnabled(e.target.checked)}
 								/>
 								<span className="cap-switch__track" />
@@ -1967,6 +2083,14 @@ function PluginRow({
 			</Tooltip>
 			{expanded && (
 				<div className="cap-server-details">
+					{enableApproval && (
+						<PluginEnableApprovalReview
+							approval={enableApproval}
+							busy={busy}
+							onApprove={onApproveEnable}
+							onCancel={onCancelEnable}
+						/>
+					)}
 					<div className="cap-detail-grid">
 						<div className="cap-detail">
 							<span className="cap-detail__label">{t("caps.status")}</span>
@@ -1990,6 +2114,50 @@ function PluginRow({
 								<span className="cap-detail__code">{plugin.root}</span>
 							</div>
 						)}
+						{plugin.manifestSchema !== undefined && (
+							<div className="cap-detail">
+								<span className="cap-detail__label">{t("caps.pluginSchema")}</span>
+								<span className="cap-detail__value">{plugin.manifestSchema}</span>
+							</div>
+						)}
+						{plugin.installMode && (
+							<div className="cap-detail">
+								<span className="cap-detail__label">{t("caps.pluginInstallMode")}</span>
+								<span className="cap-detail__value">{plugin.installMode}</span>
+							</div>
+						)}
+						{plugin.trustStatus && (
+							<div className="cap-detail">
+								<span className="cap-detail__label">{t("caps.pluginTrust")}</span>
+								<span className="cap-detail__value">{plugin.trustStatus}</span>
+							</div>
+						)}
+						{plugin.sourceKind && (
+							<div className="cap-detail">
+								<span className="cap-detail__label">{t("caps.pluginSourceKind")}</span>
+								<span className="cap-detail__value">{plugin.sourceKind}{plugin.sourceRevision ? ` @ ${plugin.sourceRevision}` : ""}</span>
+							</div>
+						)}
+						{plugin.digest && (
+							<div className="cap-detail cap-detail--wide">
+								<span className="cap-detail__label">{t("caps.pluginDigest")}</span>
+								<span className="cap-detail__code">{plugin.digest}</span>
+							</div>
+						)}
+						<div className="cap-detail cap-detail--wide">
+							<span className="cap-detail__label">{t("caps.pluginPermissions")}</span>
+							<span className="cap-detail__code">{asArray(plugin.permissions).join(", ") || t("caps.pluginNoPermissions")}</span>
+						</div>
+						<div className="cap-detail cap-detail--wide">
+							<span className="cap-detail__label">{t("caps.pluginGrantedPermissions")}</span>
+							<span className="cap-detail__code">{asArray(plugin.grantedPermissions).join(", ") || t("caps.pluginNoPermissions")}</span>
+						</div>
+						{plugin.rollback && (
+							<div className="cap-detail cap-detail--wide">
+								<span className="cap-detail__label">{t("caps.pluginRollbackTarget")}</span>
+								<span className="cap-detail__code">{plugin.rollback.version || "-"}{plugin.rollback.digest ? ` · ${plugin.rollback.digest}` : ""}</span>
+							</div>
+						)}
 					</div>
 					{plugin.description && <div className="cap-plugin-description">{plugin.description}</div>}
 					<PluginUsageDetails plugin={plugin} />
@@ -1997,24 +2165,64 @@ function PluginRow({
 					{warnings.map((warning, idx) => (
 						<div className="cap-source__warning" key={`${plugin.name}-warning-${idx}`}>{warning}</div>
 					))}
+					{pending && <PluginPlanPreview plan={pending.plan} />}
 					<div className="cap-detail-actions">
 						<button className="btn btn--small" disabled={busy} type="button" onClick={onUpdate}>
-							{t("caps.pluginUpdate")}
+							{pending?.kind === "update" ? t("caps.pluginApplyUpdate") : t("caps.pluginUpdate")}
 						</button>
+						{plugin.rollback && (
+							<button className="btn btn--small" disabled={busy} type="button" onClick={onRollback}>
+								{pending?.kind === "rollback" ? t("caps.pluginApplyRollback") : t("caps.pluginRollback")}
+							</button>
+						)}
 						<button className="btn btn--small" disabled={busy} type="button" onClick={onDoctor}>
 							{t("caps.pluginDoctor")}
 						</button>
-						<InlineConfirmButton
-							label={t("caps.pluginRemove")}
-							confirmLabel={t("caps.pluginConfirmRemove")}
-							cancelLabel={t("common.cancel")}
-							disabled={busy}
-							danger
-							onConfirm={onRemove}
-						/>
+						{pending?.kind === "remove" ? (
+							<button className="btn btn--danger btn--small" disabled={busy} type="button" onClick={onRemove}>{t("caps.pluginApplyRemove")}</button>
+						) : (
+							<InlineConfirmButton
+								label={t("caps.pluginRemove")}
+								confirmLabel={t("caps.pluginConfirmRemove")}
+								cancelLabel={t("common.cancel")}
+								disabled={busy}
+								danger
+								onConfirm={onRemove}
+							/>
+						)}
 					</div>
 				</div>
 			)}
+		</div>
+	);
+}
+
+function PluginEnableApprovalReview({
+	approval,
+	busy,
+	onApprove,
+	onCancel,
+}: {
+	approval: PluginEnableApproval;
+	busy: boolean;
+	onApprove: () => void;
+	onCancel: () => void;
+}) {
+	const t = useT();
+	return (
+		<div className="cap-plugin-plan cap-plugin-plan--warning" role="group" aria-label={t("caps.pluginEnableReview")}>
+			<div className="cap-plugin-plan__head">
+				<div className="cap-plugin-plan__title">{t("caps.pluginEnableReview")}</div>
+				<span className="cap-source-badge">{approval.name}</span>
+			</div>
+			<div className="cap-plugin-plan__meta">{t("caps.pluginTrust")}: {approval.trustStatus || "-"}</div>
+			<div className="cap-plugin-plan__meta">{t("caps.pluginDigest")}: <code>{approval.digest}</code></div>
+			<div className="cap-plugin-plan__meta">{t("caps.pluginPermissions")}: <code>{approval.permissions.join(", ") || t("caps.pluginNoPermissions")}</code></div>
+			<div className="cap-plugin-plan__meta">{t("caps.pluginCounts", { skills: approval.skills, hooks: approval.hooks, mcps: approval.mcpServers })}</div>
+			<div className="cap-detail-actions">
+				<button className="btn btn--small" disabled={busy} type="button" onClick={onCancel}>{t("common.cancel")}</button>
+				<button className="btn btn--primary btn--small" disabled={busy || !approval.digest} type="button" onClick={onApprove}>{t("caps.pluginApproveEnable")}</button>
+			</div>
 		</div>
 	);
 }
@@ -2126,6 +2334,14 @@ function normalizePluginView(plugin: PluginView): PluginView {
 		skillDetails: asArray(plugin.skillDetails),
 		hookDetails: asArray(plugin.hookDetails),
 		mcpServerDetails: asArray(plugin.mcpServerDetails),
+		permissions: asArray(plugin.permissions),
+		grantedPermissions: asArray(plugin.grantedPermissions),
+		rollback: plugin.rollback ? {
+			...plugin.rollback,
+			enabled: Boolean(plugin.rollback.enabled),
+			permissions: asArray(plugin.rollback.permissions),
+			grantedPermissions: asArray(plugin.rollback.grantedPermissions),
+		} : undefined,
 		warnings: asArray(plugin.warnings),
 	};
 }
@@ -2160,49 +2376,35 @@ function pluginWarnings(plugin: PluginView, diagnostic?: PluginView): string[] {
 	return Array.from(new Set(warnings.filter((warning) => warning.trim().length > 0)));
 }
 
-function parsePluginInstallPlan(raw: string): PluginInstallPlanView {
-	try {
-		const value = JSON.parse(raw) as Record<string, unknown>;
-		const actions = (Array.isArray(value.actions) ? value.actions : []).flatMap((action) => {
-			if (!action || typeof action !== "object") return [];
-			const item = action as Record<string, unknown>;
-			return [{
-				action: stringValue(item.action),
-				kind: stringValue(item.kind),
-				name: stringValue(item.name),
-				source: stringValue(item.source),
-				status: stringValue(item.status),
-				message: stringValue(item.message),
-				error: stringValue(item.error),
-			}];
-		});
-		return {
-			raw,
-			ok: typeof value.ok === "boolean" ? value.ok : undefined,
-			status: stringValue(value.status),
-			name: stringValue(value.name),
-			actions,
-			warnings: (Array.isArray(value.warnings) ? value.warnings : []).flatMap((warning) => typeof warning === "string" ? [warning] : []),
-			error: stringValue(value.error),
-		};
-	} catch {
-		return { raw, actions: [], warnings: [] };
-	}
+function isPluginOperation(value: unknown): value is PluginOperationView {
+	if (!value || typeof value !== "object") return false;
+	const operation = value as Partial<PluginOperationView>;
+	return typeof operation.ok === "boolean" && typeof operation.status === "string" && Array.isArray(operation.actions);
 }
 
-function stringValue(value: unknown): string | undefined {
-	return typeof value === "string" && value.trim() ? value.trim() : undefined;
+function canApplyPluginPlan(plan: PluginOperationView | null | undefined): plan is PluginOperationView & { planId: string } {
+	return Boolean(plan?.ok && plan.status === "planned" && plan.planId?.trim());
 }
 
-function pluginPlanActionLabel(action: PluginInstallPlanAction, t: ReturnType<typeof useT>): string {
+function pluginOperationFailure(operation: PluginOperationView): string {
+	const actionError = operation.actions.find((action) => action.error)?.error;
+	return actionError || operation.next || asArray(operation.warnings)[0] || `Plugin operation ${operation.status || "failed"}`;
+}
+
+function pluginPlanActionLabel(action: PluginOperationAction, t: ReturnType<typeof useT>): string {
 	const verb = action.action || action.kind || t("caps.pluginAction");
 	return [verb, action.name].filter(Boolean).join(" · ");
 }
 
-function pluginPlanNotice(plan: PluginInstallPlanView, t: ReturnType<typeof useT>): string {
-	if (plan.error) return plan.error;
-	if (plan.status === "done" || plan.status === "applied" || plan.status === "complete") return t("caps.pluginPlanInstalled");
-	return plan.status ? t("caps.pluginPlanStatus", { status: plan.status }) : t("caps.pluginPlanComplete");
+function pluginOperationNotice(operation: PluginOperationView, t: ReturnType<typeof useT>): PluginNotice | null {
+	if (operation.status === "planned") return null;
+	if (operation.status === "partial") {
+		return { message: operation.next || t("caps.pluginPlanPartial"), tone: "warning" };
+	}
+	if (operation.status === "done" && operation.ok) {
+		return { message: t("caps.pluginPlanComplete"), tone: "success" };
+	}
+	return { message: pluginOperationFailure(operation), tone: "warning" };
 }
 
 // MCPServersSettingsPage is a self-contained MCP servers management page

@@ -10753,6 +10753,9 @@ body > .mermaid-diagram--fullscreen {
 .cap-plugin-plan--error {
   border-left-color: var(--err);
 }
+.cap-plugin-plan--warning {
+  border-left-color: var(--warn);
+}
 .cap-plugin-plan__head {
   display: flex;
   align-items: center;
@@ -10803,6 +10806,14 @@ body > .mermaid-diagram--fullscreen {
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1.4;
+}
+.cap-plugin-risk--high {
+  color: var(--err);
+  border-color: color-mix(in srgb, var(--err) 45%, var(--border));
+}
+.cap-plugin-risk--medium {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
 }
 .cap-plugin-description {
   margin-top: 8px;

@@ -745,6 +745,16 @@ export interface PluginView {
   source?: string;
   root: string;
   manifestKind?: string;
+  manifestSchema?: number;
+  installMode?: string;
+  sourceKind?: string;
+  sourceRevision?: string;
+  trustStatus?: string;
+  digest?: string;
+  permissions?: string[];
+  grantedPermissions?: string[];
+  lifecycleSecurity?: number;
+  rollback?: PluginRollbackView;
   enabled: boolean;
   skills: number;
   hooks: number;
@@ -754,6 +764,14 @@ export interface PluginView {
   mcpServerDetails?: PluginMCPServerView[];
   warnings?: string[];
   error?: string;
+}
+export interface PluginRollbackView {
+  version?: string;
+  digest?: string;
+  trustStatus?: string;
+  permissions?: string[];
+  grantedPermissions?: string[];
+  enabled: boolean;
 }
 export interface PluginSkillView {
   name: string;
@@ -780,6 +798,57 @@ export interface PluginInstallOptions {
   link?: boolean;
   replace?: boolean;
   name?: string;
+  planId?: string;
+}
+export interface PluginOperationKinds {
+  skill: number;
+  mcp: number;
+  plugin: number;
+}
+export interface PluginOperationAction {
+  kind?: string;
+  action?: string;
+  status?: string;
+  riskLevel?: string;
+  riskReasons?: string[];
+  name?: string;
+  source?: string;
+  target?: string;
+  scope?: string;
+  mode?: string;
+  manifestKind?: string;
+  version?: string;
+  currentVersion?: string;
+  digest?: string;
+  currentDigest?: string;
+  permissions?: string[];
+  addedPermissions?: string[];
+  removedPermissions?: string[];
+  permissionSource?: string;
+  sourceKind?: string;
+  sourceRevision?: string;
+  trustStatus?: string;
+  willEnable?: boolean;
+  rollbackAvailable?: boolean;
+  warnings?: string[];
+  error?: string;
+  next?: string;
+}
+export interface PluginOperationView {
+  ok: boolean;
+  status: string;
+  op: string;
+  applied: boolean;
+  source?: string;
+  name?: string;
+  kind?: string;
+  kinds?: PluginOperationKinds;
+  scope?: string;
+  mode?: string;
+  planId?: string;
+  actions: PluginOperationAction[];
+  warnings?: string[];
+  next?: string;
 }
 export interface MCPServerInput {
   name: string;

@@ -1443,6 +1443,13 @@ type PluginEntry struct {
 	// without blocking chat. Unknown non-empty values fall back to "background".
 	Tier         string `toml:"tier"`
 	expansionEnv map[string]string
+	packageOwner string
+}
+
+// PluginPackageOwner reports the installed plugin package that contributed
+// this in-memory MCP entry. It is never rendered to user-authored config.
+func (e PluginEntry) PluginPackageOwner() string {
+	return e.packageOwner
 }
 
 func (e PluginEntry) ShouldAutoStart() bool {

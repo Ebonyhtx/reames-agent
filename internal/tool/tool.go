@@ -231,6 +231,27 @@ func (r *Registry) Add(t Tool) {
 	r.canon[name] = provider.CanonicalizeSchema(t.Schema())
 }
 
+// Remove unregisters one exact tool name. It does not suspend the name, so a
+// later runtime rebuild or explicit Add can restore it.
+func (r *Registry) Remove(name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.tools[name]; !ok {
+		return false
+	}
+	delete(r.tools, name)
+	delete(r.canon, name)
+	kept := r.order[:0]
+	for _, existing := range r.order {
+		if existing != name {
+			kept = append(kept, existing)
+		}
+	}
+	r.order = kept
+	return true
+}
+
 // RemovePrefix unregisters every tool whose name starts with prefix — used to
 // drop an MCP server's "mcp__<server>__" namespace when it's disconnected — and
 // returns the count removed.

@@ -10,11 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"reames-agent/internal/config"
+	"reames-agent/internal/pluginpkg"
 	"reames-agent/internal/skill"
 	"reames-agent/internal/tool"
 )
@@ -53,6 +55,26 @@ func execInstall(t *testing.T, tl tool.Tool, args map[string]any) response {
 		t.Fatalf("response JSON %q: %v", out, err)
 	}
 	return resp
+}
+
+func execPlannedMutation(t *testing.T, tl tool.Tool, args map[string]any) response {
+	t.Helper()
+	preview := make(map[string]any, len(args)+2)
+	for key, value := range args {
+		preview[key] = value
+	}
+	preview["apply"] = false
+	planned := execInstall(t, tl, preview)
+	if !planned.OK || planned.Status != "planned" || planned.PlanID == "" || planned.Applied {
+		t.Fatalf("mutation plan = %+v", planned)
+	}
+	apply := make(map[string]any, len(args)+2)
+	for key, value := range args {
+		apply[key] = value
+	}
+	apply["apply"] = true
+	apply["planId"] = planned.PlanID
+	return execInstall(t, tl, apply)
 }
 
 func writeFile(t *testing.T, path, content string) {
@@ -169,6 +191,7 @@ func TestApplyLocalCodexPluginPackage(t *testing.T) {
 		"source": src,
 		"kind":   "plugin",
 		"apply":  true,
+		"planId": planned.PlanID,
 	})
 	if !done.OK || done.Status != "done" {
 		t.Fatalf("apply response = %+v", done)
@@ -181,7 +204,11 @@ func TestApplyLocalCodexPluginPackage(t *testing.T) {
 	if !strings.Contains(string(raw), `"name": "superpowers"`) || !strings.Contains(string(raw), `"manifestKind": "codex"`) {
 		t.Fatalf("state file = %s", raw)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".reames-agent", "plugins", "superpowers", ".codex-plugin", "plugin.json")); err != nil {
+	installedRoot := installedPluginRoot(t, home, "superpowers")
+	if !strings.Contains(filepath.ToSlash(installedRoot), "/plugins/superpowers/versions/") {
+		t.Fatalf("installed root = %q, want immutable generation", installedRoot)
+	}
+	if _, err := os.Stat(filepath.Join(installedRoot, ".codex-plugin", "plugin.json")); err != nil {
 		t.Fatalf("installed plugin missing: %v", err)
 	}
 }
@@ -215,6 +242,7 @@ func TestApplyLocalClaudePluginPackage(t *testing.T) {
 		"source": src,
 		"kind":   "plugin",
 		"apply":  true,
+		"planId": planned.PlanID,
 	})
 	if !done.OK || done.Status != "done" {
 		t.Fatalf("apply response = %+v", done)
@@ -227,9 +255,393 @@ func TestApplyLocalClaudePluginPackage(t *testing.T) {
 	if !strings.Contains(string(raw), `"name": "ui-ux-pro-max"`) || !strings.Contains(string(raw), `"manifestKind": "claude"`) {
 		t.Fatalf("state file = %s", raw)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".reames-agent", "plugins", "ui-ux-pro-max", ".claude-plugin", "plugin.json")); err != nil {
+	installedRoot := installedPluginRoot(t, home, "ui-ux-pro-max")
+	if !strings.Contains(filepath.ToSlash(installedRoot), "/plugins/ui-ux-pro-max/versions/") {
+		t.Fatalf("installed root = %q, want immutable generation", installedRoot)
+	}
+	if _, err := os.Stat(filepath.Join(installedRoot, ".claude-plugin", "plugin.json")); err != nil {
 		t.Fatalf("installed plugin missing: %v", err)
 	}
+}
+
+func TestPluginPackageUpdatePermissionExpansionAndRollback(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	reamesHome := filepath.Join(home, ".reames-agent")
+	src := filepath.Join(t.TempDir(), "lifecycle")
+	writeFile(t, filepath.Join(src, pluginpkg.NativeManifest), `{
+  "schemaVersion": 1,
+  "name": "lifecycle",
+  "version": "1.0.0",
+  "description": "Lifecycle fixture",
+  "skills": ["skills"],
+  "permissions": ["skills.load"]
+}`)
+	writeFile(t, filepath.Join(src, "skills", "lifecycle", "SKILL.md"), "---\nname: lifecycle\ndescription: Lifecycle fixture\n---\nRun lifecycle.")
+
+	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
+	installPlan := execInstall(t, tl, map[string]any{
+		"source": src, "kind": "plugin",
+	})
+	installed := execInstall(t, tl, map[string]any{
+		"source": src, "kind": "plugin", "apply": true, "planId": installPlan.PlanID,
+	})
+	if !installed.OK || installed.Actions[0].WillEnable {
+		t.Fatalf("initial install = %+v, want disabled success", installed)
+	}
+	active, ok, err := pluginpkg.FindInstalled(reamesHome, "lifecycle")
+	if err != nil || !ok {
+		t.Fatalf("find installed v1: ok=%t err=%v", ok, err)
+	}
+	if err := pluginpkg.Enable(reamesHome, pluginpkg.EnableRequest{
+		Name: active.Name, ExpectedDigest: active.Digest, GrantedPermissions: active.Permissions,
+	}); err != nil {
+		t.Fatalf("enable v1: %v", err)
+	}
+
+	writeFile(t, filepath.Join(src, pluginpkg.NativeManifest), `{
+  "schemaVersion": 1,
+  "name": "lifecycle",
+  "version": "2.0.0",
+  "description": "Lifecycle fixture v2",
+  "skills": ["skills"],
+  "hooks": {"before_tool": [{"command": "check.cmd"}]},
+  "permissions": ["skills.load", "hooks.execute"]
+}`)
+	writeFile(t, filepath.Join(src, "check.cmd"), "@echo off\r\nexit /b 0\r\n")
+	planned := execInstall(t, tl, map[string]any{
+		"source": src, "kind": "plugin", "replace": true,
+	})
+	if !planned.OK || planned.Status != "planned" || planned.PlanID == "" {
+		t.Fatalf("update plan = %+v", planned)
+	}
+	if got := planned.Actions[0]; got.Action != "update_plugin_package" || got.WillEnable || !slices.Contains(got.AddedPermissions, pluginpkg.PermissionHooksExecute) {
+		t.Fatalf("update action = %+v, want permission expansion and disabled result", got)
+	}
+
+	updated := execInstall(t, tl, map[string]any{
+		"source": src, "kind": "plugin", "replace": true, "apply": true, "planId": planned.PlanID,
+	})
+	if !updated.OK || updated.Actions[0].Version != "2.0.0" || updated.Actions[0].WillEnable || !updated.Actions[0].RollbackAvailable {
+		t.Fatalf("updated = %+v", updated)
+	}
+
+	rollbackPlan := execInstall(t, tl, map[string]any{
+		"op": "rollback", "kind": "plugin", "name": "lifecycle",
+	})
+	if !rollbackPlan.OK || rollbackPlan.Status != "planned" || rollbackPlan.Applied || rollbackPlan.PlanID == "" {
+		t.Fatalf("rollback plan = %+v", rollbackPlan)
+	}
+	rolledBack := execInstall(t, tl, map[string]any{
+		"op": "rollback", "kind": "plugin", "name": "lifecycle", "apply": true, "planId": rollbackPlan.PlanID,
+	})
+	if !rolledBack.OK || !rolledBack.Applied || rolledBack.Actions[0].Action != "rollback_plugin_package" || rolledBack.Actions[0].Version != "1.0.0" || !rolledBack.Actions[0].WillEnable {
+		t.Fatalf("rollback = %+v", rolledBack)
+	}
+	active, ok, err = pluginpkg.FindInstalled(reamesHome, "lifecycle")
+	if err != nil || !ok || active.Version != "1.0.0" || !active.Enabled || active.Previous == nil || active.Previous.Version != "2.0.0" {
+		t.Fatalf("active after rollback = %+v ok=%t err=%v", active, ok, err)
+	}
+}
+
+func TestPluginPackageApplyRequiresCurrentPlanID(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	src := filepath.Join(t.TempDir(), "planned-plugin")
+	manifest := filepath.Join(src, pluginpkg.NativeManifest)
+	writeFile(t, manifest, `{
+  "schemaVersion": 1,
+  "name": "planned-plugin",
+  "version": "1.0.0",
+  "skills": ["skills"],
+  "permissions": ["skills.load"]
+}`)
+	writeFile(t, filepath.Join(src, "skills", "fixture", "SKILL.md"), "---\nname: fixture\ndescription: fixture\n---\nRun fixture.\n")
+	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
+	planned := execInstall(t, tl, map[string]any{"source": src, "kind": "plugin"})
+
+	applyWithoutPlan, _ := json.Marshal(map[string]any{"source": src, "kind": "plugin", "apply": true})
+	if _, err := tl.Execute(context.Background(), applyWithoutPlan); !errors.Is(err, ErrApprovalDenied) {
+		t.Fatalf("apply without planId error = %v, want ErrApprovalDenied", err)
+	}
+
+	writeFile(t, manifest, `{
+  "schemaVersion": 1,
+  "name": "planned-plugin",
+  "version": "2.0.0",
+  "skills": ["skills"],
+  "permissions": ["skills.load"]
+}`)
+	applyStalePlan, _ := json.Marshal(map[string]any{
+		"source": src, "kind": "plugin", "apply": true, "planId": planned.PlanID,
+	})
+	if _, err := tl.Execute(context.Background(), applyStalePlan); !errors.Is(err, ErrApprovalDenied) {
+		t.Fatalf("apply stale planId error = %v, want ErrApprovalDenied", err)
+	}
+	if _, ok, err := pluginpkg.FindInstalled(filepath.Join(home, ".reames-agent"), "planned-plugin"); err != nil || ok {
+		t.Fatalf("plugin installed after rejected plans: ok=%t err=%v", ok, err)
+	}
+}
+
+func TestPluginPackageUpdateRejectsStateChangeDuringApproval(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	reamesHome := filepath.Join(home, ".reames-agent")
+	src := filepath.Join(t.TempDir(), "update-race")
+	manifest := filepath.Join(src, pluginpkg.NativeManifest)
+	writeFile(t, manifest, `{"schemaVersion":1,"name":"update-race","version":"1.0.0","skills":["skills"],"permissions":["skills.load"]}`)
+	writeFile(t, filepath.Join(src, "skills", "fixture", "SKILL.md"), "---\nname: fixture\ndescription: fixture\n---\nRun.\n")
+	baseTool := NewTool(Options{ProjectRoot: project, HomeDir: home})
+	installPlan := execInstall(t, baseTool, map[string]any{"source": src, "kind": "plugin"})
+	installed := execInstall(t, baseTool, map[string]any{
+		"source": src, "kind": "plugin", "apply": true, "planId": installPlan.PlanID,
+	})
+	if !installed.OK {
+		t.Fatalf("install = %+v", installed)
+	}
+	current, ok, err := pluginpkg.FindInstalled(reamesHome, "update-race")
+	if err != nil || !ok {
+		t.Fatalf("find installed: ok=%t err=%v", ok, err)
+	}
+	if err := pluginpkg.Enable(reamesHome, pluginpkg.EnableRequest{
+		Name: current.Name, ExpectedDigest: current.Digest, GrantedPermissions: current.Permissions,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, manifest, `{"schemaVersion":1,"name":"update-race","version":"2.0.0","skills":["skills"],"permissions":["skills.load"]}`)
+	updatePlan := execInstall(t, baseTool, map[string]any{"source": src, "kind": "plugin", "replace": true})
+
+	racingTool := NewTool(Options{
+		ProjectRoot: project,
+		HomeDir:     home,
+		Approval: func([]ApprovalAction) error {
+			return pluginpkg.SetEnabled(reamesHome, "update-race", false)
+		},
+	})
+	resp := execInstall(t, racingTool, map[string]any{
+		"source": src, "kind": "plugin", "replace": true, "apply": true, "planId": updatePlan.PlanID,
+	})
+	if resp.OK || resp.Status != "failed" || len(resp.Actions) != 1 || !strings.Contains(resp.Actions[0].Error, "state changed after approval") {
+		t.Fatalf("racing update response = %+v", resp)
+	}
+	current, ok, err = pluginpkg.FindInstalled(reamesHome, "update-race")
+	if err != nil || !ok || current.Version != "1.0.0" || current.Enabled {
+		t.Fatalf("state after rejected update = %+v ok=%t err=%v", current, ok, err)
+	}
+}
+
+func TestPluginPackagePermissionExpandingUpdateRevokesOwnedMCP(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	reamesHome := filepath.Join(home, ".reames-agent")
+	source := filepath.Join(t.TempDir(), "runtime-revoke")
+	manifest := filepath.Join(source, pluginpkg.NativeManifest)
+	writeFile(t, manifest, `{"schemaVersion":1,"name":"runtime-revoke","version":"1.0.0","mcpServers":{"owned-server":{"command":"bin/helper"}},"permissions":["mcp.stdio"]}`)
+	writeFile(t, filepath.Join(source, "bin", "helper"), "helper")
+
+	var genericDisconnects atomic.Int32
+	var ownedDisconnects atomic.Int32
+	var runtimeChanges atomic.Int32
+	var disconnectedPlugin, disconnectedServer string
+	tl := NewTool(Options{
+		ProjectRoot: project,
+		HomeDir:     home,
+		OnDisconnect: func(string) bool {
+			genericDisconnects.Add(1)
+			return true
+		},
+		OnPluginDisconnect: func(pluginName, serverName string) bool {
+			disconnectedPlugin, disconnectedServer = pluginName, serverName
+			ownedDisconnects.Add(1)
+			return true
+		},
+		OnPluginRuntimeChange: func(pluginName string) []string {
+			if pluginName != "runtime-revoke" {
+				t.Fatalf("runtime revocation plugin = %q", pluginName)
+			}
+			runtimeChanges.Add(1)
+			return []string{"runtime generation revoked"}
+		},
+	})
+	installPlan := execInstall(t, tl, map[string]any{"source": source, "kind": "plugin"})
+	execInstall(t, tl, map[string]any{
+		"source": source, "kind": "plugin", "apply": true, "planId": installPlan.PlanID,
+	})
+	installed, ok, err := pluginpkg.FindInstalled(reamesHome, "runtime-revoke")
+	if err != nil || !ok {
+		t.Fatalf("find installed: ok=%t err=%v", ok, err)
+	}
+	if !installed.MCPServerNamesBound || len(installed.MCPServerNames) != 1 || installed.MCPServerNames[0] != "owned-server" {
+		t.Fatalf("bound MCP ownership = %+v", installed)
+	}
+	if err := pluginpkg.Enable(reamesHome, pluginpkg.EnableRequest{
+		Name: installed.Name, ExpectedDigest: installed.Digest, GrantedPermissions: installed.Permissions,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, manifest, `{"schemaVersion":1,"name":"runtime-revoke","version":"2.0.0","skills":["skills"],"mcpServers":{"owned-server":{"command":"bin/helper"}},"permissions":["mcp.stdio","skills.load"]}`)
+	writeFile(t, filepath.Join(source, "skills", "fixture", "SKILL.md"), "---\nname: fixture\ndescription: fixture\n---\nRun.\n")
+	updatePlan := execInstall(t, tl, map[string]any{"source": source, "kind": "plugin", "replace": true})
+	updated := execInstall(t, tl, map[string]any{
+		"source": source, "kind": "plugin", "replace": true, "apply": true, "planId": updatePlan.PlanID,
+	})
+	if !updated.OK || updated.Actions[0].WillEnable {
+		t.Fatalf("permission-expanding update = %+v", updated)
+	}
+	if genericDisconnects.Load() != 0 {
+		t.Fatalf("generic disconnect called %d times for package-owned MCP", genericDisconnects.Load())
+	}
+	if ownedDisconnects.Load() != 1 || disconnectedPlugin != "runtime-revoke" || disconnectedServer != "owned-server" {
+		t.Fatalf("owned disconnect = count=%d plugin=%q server=%q", ownedDisconnects.Load(), disconnectedPlugin, disconnectedServer)
+	}
+	if runtimeChanges.Load() != 1 || !slices.Contains(updated.Warnings, "runtime generation revoked") {
+		t.Fatalf("runtime revocation = count=%d warnings=%v", runtimeChanges.Load(), updated.Warnings)
+	}
+	current, ok, err := pluginpkg.FindInstalled(reamesHome, "runtime-revoke")
+	if err != nil || !ok || current.Enabled {
+		t.Fatalf("updated state = %+v ok=%t err=%v", current, ok, err)
+	}
+}
+
+func TestPluginPackageRollbackRejectsStateChangeDuringApproval(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	reamesHome := filepath.Join(home, ".reames-agent")
+	src := filepath.Join(t.TempDir(), "rollback-race")
+	manifest := filepath.Join(src, pluginpkg.NativeManifest)
+	writeFile(t, manifest, `{"schemaVersion":1,"name":"rollback-race","version":"1.0.0","skills":["skills"],"permissions":["skills.load"]}`)
+	writeFile(t, filepath.Join(src, "skills", "fixture", "SKILL.md"), "---\nname: fixture\ndescription: fixture\n---\nRun.\n")
+	first, err := pluginpkg.Install(reamesHome, pluginpkg.InstallRequest{Name: "rollback-race", Source: src, SourceRoot: src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pluginpkg.Enable(reamesHome, pluginpkg.EnableRequest{
+		Name: first.Installed.Name, ExpectedDigest: first.Installed.Digest, GrantedPermissions: first.Installed.Permissions,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, manifest, `{"schemaVersion":1,"name":"rollback-race","version":"2.0.0","skills":["skills"],"permissions":["skills.load"]}`)
+	if _, err := pluginpkg.Install(reamesHome, pluginpkg.InstallRequest{Name: "rollback-race", Source: src, SourceRoot: src, Replace: true}); err != nil {
+		t.Fatal(err)
+	}
+	baseTool := NewTool(Options{ProjectRoot: project, HomeDir: home})
+	rollbackPlan := execInstall(t, baseTool, map[string]any{"op": "rollback", "kind": "plugin", "name": "rollback-race"})
+	racingTool := NewTool(Options{
+		ProjectRoot: project,
+		HomeDir:     home,
+		Approval: func([]ApprovalAction) error {
+			return pluginpkg.SetEnabled(reamesHome, "rollback-race", false)
+		},
+	})
+	resp := execInstall(t, racingTool, map[string]any{
+		"op": "rollback", "kind": "plugin", "name": "rollback-race", "apply": true, "planId": rollbackPlan.PlanID,
+	})
+	if resp.OK || resp.Status != "failed" || !strings.Contains(resp.Actions[0].Error, "state changed after approval") {
+		t.Fatalf("racing rollback response = %+v", resp)
+	}
+	current, ok, err := pluginpkg.FindInstalled(reamesHome, "rollback-race")
+	if err != nil || !ok || current.Version != "2.0.0" || current.Enabled || current.Previous == nil || current.Previous.Version != "1.0.0" {
+		t.Fatalf("state after rejected rollback = %+v ok=%t err=%v", current, ok, err)
+	}
+}
+
+func TestPluginPackageUninstallRejectsStateChangeDuringApproval(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	reamesHome := filepath.Join(home, ".reames-agent")
+	src := filepath.Join(t.TempDir(), "uninstall-race")
+	writeFile(t, filepath.Join(src, pluginpkg.NativeManifest), `{"schemaVersion":1,"name":"uninstall-race","version":"1.0.0","skills":["skills"],"permissions":["skills.load"]}`)
+	writeFile(t, filepath.Join(src, "skills", "fixture", "SKILL.md"), "---\nname: fixture\ndescription: fixture\n---\nRun.\n")
+	baseTool := NewTool(Options{ProjectRoot: project, HomeDir: home})
+	installPlan := execInstall(t, baseTool, map[string]any{"source": src, "kind": "plugin"})
+	execInstall(t, baseTool, map[string]any{
+		"source": src, "kind": "plugin", "apply": true, "planId": installPlan.PlanID,
+	})
+	installed, ok, err := pluginpkg.FindInstalled(reamesHome, "uninstall-race")
+	if err != nil || !ok {
+		t.Fatalf("find installed: ok=%t err=%v", ok, err)
+	}
+	removePlan := execInstall(t, baseTool, map[string]any{
+		"op": "uninstall", "kind": "plugin", "name": installed.Name,
+	})
+	racingTool := NewTool(Options{
+		ProjectRoot: project,
+		HomeDir:     home,
+		Approval: func([]ApprovalAction) error {
+			return pluginpkg.Enable(reamesHome, pluginpkg.EnableRequest{
+				Name: installed.Name, ExpectedDigest: installed.Digest, GrantedPermissions: installed.Permissions,
+			})
+		},
+	})
+	resp := execInstall(t, racingTool, map[string]any{
+		"op": "uninstall", "kind": "plugin", "name": installed.Name, "apply": true, "planId": removePlan.PlanID,
+	})
+	if resp.OK || resp.Status != "failed" || !strings.Contains(resp.Actions[0].Error, "state changed after approval") {
+		t.Fatalf("racing uninstall response = %+v", resp)
+	}
+	current, ok, err := pluginpkg.FindInstalled(reamesHome, installed.Name)
+	if err != nil || !ok || !current.Enabled {
+		t.Fatalf("state after rejected uninstall = %+v ok=%t err=%v", current, ok, err)
+	}
+}
+
+func TestPluginPackageUninstallDoesNotRemoveSameNameSkillOrMCP(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	reamesHome := filepath.Join(home, ".reames-agent")
+	const name = "shared-name"
+
+	skillPath := filepath.Join(project, ".reames-agent", "skills", name+".md")
+	writeFile(t, skillPath, "---\nname: shared-name\ndescription: independent skill\n---\nRun.\n")
+	cfgPath := filepath.Join(project, "reames-agent.toml")
+	cfg := config.LoadForEdit(cfgPath)
+	if err := cfg.UpsertPlugin(config.PluginEntry{Name: name, Type: "http", URL: "https://mcp.example.com/mcp"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.SaveTo(cfgPath); err != nil {
+		t.Fatal(err)
+	}
+
+	source := filepath.Join(t.TempDir(), name)
+	writeFile(t, filepath.Join(source, pluginpkg.NativeManifest), `{"schemaVersion":1,"name":"shared-name","version":"1.0.0","skills":["skills"],"permissions":["skills.load"]}`)
+	writeFile(t, filepath.Join(source, "skills", "fixture", "SKILL.md"), "---\nname: fixture\ndescription: fixture\n---\nRun.\n")
+	if _, err := pluginpkg.Install(reamesHome, pluginpkg.InstallRequest{Name: name, Source: source, SourceRoot: source}); err != nil {
+		t.Fatal(err)
+	}
+
+	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
+	resp := execPlannedMutation(t, tl, map[string]any{
+		"op": "uninstall", "kind": "plugin", "name": name,
+	})
+	if !resp.OK || len(resp.Actions) != 1 || resp.Actions[0].Kind != "plugin" {
+		t.Fatalf("plugin-only uninstall response = %+v", resp)
+	}
+	if _, ok, err := pluginpkg.FindInstalled(reamesHome, name); err != nil || ok {
+		t.Fatalf("plugin remains after uninstall: ok=%t err=%v", ok, err)
+	}
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Fatalf("same-name skill was removed: %v", err)
+	}
+	remaining := config.LoadForEdit(cfgPath)
+	if len(remaining.Plugins) != 1 || remaining.Plugins[0].Name != name {
+		t.Fatalf("same-name MCP entry changed: %+v", remaining.Plugins)
+	}
+}
+
+func installedPluginRoot(t *testing.T, home, name string) string {
+	t.Helper()
+	state, err := pluginpkg.LoadState(filepath.Join(home, ".reames-agent"))
+	if err != nil {
+		t.Fatalf("load plugin state: %v", err)
+	}
+	for _, installed := range state.Plugins {
+		if installed.Name == name {
+			return pluginpkg.ResolveRoot(filepath.Join(home, ".reames-agent"), installed.Root)
+		}
+	}
+	t.Fatalf("plugin %q missing from state", name)
+	return ""
 }
 
 func TestApplyLocalSkillFileCopiesToProject(t *testing.T) {
@@ -1198,7 +1610,7 @@ func TestUninstallRemovesSkillByName(t *testing.T) {
 	writeFile(t, target, "---\nname: doomed\ndescription: Doomed\n---\nbody")
 
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	resp := execInstall(t, tl, map[string]any{
+	resp := execPlannedMutation(t, tl, map[string]any{
 		"op":    "uninstall",
 		"name":  "doomed",
 		"scope": "project",
@@ -1230,7 +1642,7 @@ func TestUninstallRemovesRegisteredSkillRootByContainedSkillName(t *testing.T) {
 		t.Fatalf("install response = %+v", install)
 	}
 
-	resp := execInstall(t, tl, map[string]any{
+	resp := execPlannedMutation(t, tl, map[string]any{
 		"op":    "uninstall",
 		"name":  "alpha",
 		"scope": "project",
@@ -1267,7 +1679,7 @@ func TestUninstallRemovesMCPAndDisconnects(t *testing.T) {
 			return true
 		},
 	})
-	resp := execInstall(t, tl, map[string]any{
+	resp := execPlannedMutation(t, tl, map[string]any{
 		"op":    "uninstall",
 		"name":  "ed",
 		"scope": "project",
@@ -1294,7 +1706,7 @@ func TestUninstallWithoutScopePrefersProjectSkill(t *testing.T) {
 	writeFile(t, globalTarget, "---\nname: dupe\ndescription: Global\n---\nbody")
 
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	resp := execInstall(t, tl, map[string]any{
+	resp := execPlannedMutation(t, tl, map[string]any{
 		"op":   "uninstall",
 		"name": "dupe",
 	})
@@ -1337,7 +1749,7 @@ func TestUninstallWithoutScopeFallsBackToGlobalMCP(t *testing.T) {
 			return true
 		},
 	})
-	resp := execInstall(t, tl, map[string]any{
+	resp := execPlannedMutation(t, tl, map[string]any{
 		"op":   "uninstall",
 		"name": name,
 	})

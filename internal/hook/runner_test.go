@@ -377,6 +377,40 @@ func TestPayloadJSON(t *testing.T) {
 	}
 }
 
+func TestRunnerDisablePluginRevokesOnlyOwnedHooks(t *testing.T) {
+	pluginHook := func(name string) ResolvedHook {
+		return ResolvedHook{
+			HookConfig: HookConfig{
+				Command: "echo " + name,
+				Env:     map[string]string{"REAMES_AGENT_PLUGIN_NAME": name},
+			},
+			Event: PostToolUse,
+			Scope: ScopePlugin,
+		}
+	}
+	runner := NewRunner([]ResolvedHook{
+		pluginHook("alpha"),
+		pluginHook("beta"),
+		{HookConfig: HookConfig{Command: "echo global"}, Event: PostToolUse, Scope: ScopeGlobal},
+	}, t.TempDir(), nil, nil)
+
+	if removed := runner.DisablePlugin("alpha"); removed != 1 {
+		t.Fatalf("DisablePlugin removed %d hooks, want 1", removed)
+	}
+	got := runner.Hooks()
+	if len(got) != 2 {
+		t.Fatalf("hooks after revoke = %+v, want beta + global", got)
+	}
+	for _, h := range got {
+		if h.Scope == ScopePlugin && h.Env["REAMES_AGENT_PLUGIN_NAME"] == "alpha" {
+			t.Fatalf("revoked hook remains active: %+v", h)
+		}
+	}
+	if removed := runner.DisablePlugin("alpha"); removed != 0 {
+		t.Fatalf("second DisablePlugin removed %d hooks, want 0", removed)
+	}
+}
+
 // --- capping behavior ---
 
 func TestCappedBuffer(t *testing.T) {

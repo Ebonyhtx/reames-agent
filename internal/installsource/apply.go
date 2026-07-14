@@ -43,8 +43,10 @@ func (t *installSourceTool) apply(ctx context.Context, req request, act *action)
 		}
 	case "plugin":
 		switch act.Action {
-		case "install_plugin_package":
+		case "install_plugin_package", "update_plugin_package":
 			return t.applyInstallPluginPackage(ctx, req, act)
+		case "rollback_plugin_package":
+			return t.applyRollbackPluginPackage(act)
 		case "remove_plugin_package":
 			return t.applyRemovePluginPackage(req, act)
 		default:

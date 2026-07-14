@@ -897,6 +897,13 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		reg.Add(command.NewSlashCommandTool(slashEntries))
 	}
 	installSourceAdded := false
+	pluginRuntime := &pluginRuntimeCallbacks{}
+	pluginPackageMCPOwners := make(map[string]string)
+	for _, entry := range cfg.Plugins {
+		if owner := entry.PluginPackageOwner(); owner != "" {
+			pluginPackageMCPOwners[entry.Name] = owner
+		}
+	}
 	addInstallSourceTool := func() string {
 		if installSourceAdded {
 			return "install_source is already enabled."
@@ -937,6 +944,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 				}
 				return false
 			},
+			OnPluginDisconnect:    pluginRuntime.disconnectMCP,
+			OnPluginRuntimeChange: pluginRuntime.revoke,
 		}))
 		return "enabled install_source."
 	}
@@ -1163,6 +1172,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		SubagentStore:          subagentStore,
 		Registry:               reg,
 		PluginCtx:              ctx,
+		PluginMCPOwners:        pluginPackageMCPOwners,
 		WorkspaceRoot:          root,
 		ExternalFolderToolRefs: readPathResolver,
 		AutoPlan:               cfg.Agent.AutoPlan,
@@ -1207,7 +1217,36 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	if classifier != nil {
 		ctrlOpts.Classifier = classifier
 	}
-	return control.New(ctrlOpts), nil
+	ctrl := control.New(ctrlOpts)
+	pluginRuntime.bind(ctrl)
+	return ctrl, nil
+}
+
+// pluginRuntimeCallbacks are installed in the model-visible install_source
+// tool before the Controller exists, then bound before Build returns. Routing
+// through the Controller is essential: its owner map follows live same-name
+// user MCP takeovers, while the configuration snapshot above intentionally
+// describes only what was loaded at startup.
+type pluginRuntimeCallbacks struct {
+	ctrl *control.Controller
+}
+
+func (c *pluginRuntimeCallbacks) bind(ctrl *control.Controller) {
+	c.ctrl = ctrl
+}
+
+func (c *pluginRuntimeCallbacks) disconnectMCP(pluginName, serverName string) bool {
+	if c == nil || c.ctrl == nil {
+		return false
+	}
+	return c.ctrl.DisconnectPluginMCP(pluginName, serverName)
+}
+
+func (c *pluginRuntimeCallbacks) revoke(pluginName string) []string {
+	if c == nil || c.ctrl == nil {
+		return nil
+	}
+	return c.ctrl.RevokePluginRuntime(pluginName)
 }
 
 func rememberPermissionRule(workspaceRoot, rule string) control.RememberResult {

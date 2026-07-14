@@ -44,6 +44,7 @@ import type {
   ModelInfo,
   NetworkView,
   PluginInstallOptions,
+  PluginOperationView,
   PluginView,
   ProjectNode,
   PromptHistoryResult,
@@ -191,11 +192,15 @@ export interface AppBindings {
   MCPServers(): Promise<ServerView[]>;
   SkillsSettings(): Promise<SkillsSettingsView>;
   Plugins(): Promise<PluginView[]>;
-  PlanPluginInstall(source: string, options: PluginInstallOptions): Promise<string>;
-  InstallPlugin(source: string, options: PluginInstallOptions): Promise<string>;
-  RemovePlugin(name: string): Promise<void>;
-  SetPluginEnabled(name: string, enabled: boolean): Promise<void>;
-  UpdatePlugin(name: string): Promise<string>;
+  PlanPluginInstall(source: string, options: PluginInstallOptions): Promise<PluginOperationView>;
+  InstallPlugin(source: string, options: PluginInstallOptions): Promise<PluginOperationView>;
+  PlanPluginRemove(name: string): Promise<PluginOperationView>;
+  RemovePlugin(name: string, planId: string): Promise<PluginOperationView>;
+  SetPluginEnabled(name: string, enabled: boolean, expectedDigest: string, grantedPermissions: string[]): Promise<void>;
+  PlanPluginUpdate(name: string): Promise<PluginOperationView>;
+  UpdatePlugin(name: string, planId: string): Promise<PluginOperationView>;
+  PlanPluginRollback(name: string): Promise<PluginOperationView>;
+  RollbackPlugin(name: string, planId: string): Promise<PluginOperationView>;
   PluginDoctor(name: string): Promise<PluginView>;
   AddMCPServer(input: MCPServerInput): Promise<number>;
   UpdateMCPServer(name: string, input: MCPServerInput): Promise<void>;

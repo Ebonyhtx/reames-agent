@@ -6,6 +6,8 @@
 package pluginpkg
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,13 +20,36 @@ import (
 
 	"reames-agent/internal/fileutil"
 	"reames-agent/internal/frontmatter"
+
+	"golang.org/x/mod/semver"
 )
 
 const (
-	NativeManifest = "reamesAgent-plugin.json"
-	CodexManifest  = ".codex-plugin/plugin.json"
-	ClaudeManifest = ".claude-plugin/plugin.json"
-	StateFilename  = "plugin-packages.json"
+	NativeManifest       = "reames-agent-plugin.json"
+	LegacyNativeManifest = "reamesAgent-plugin.json"
+	CodexManifest        = ".codex-plugin/plugin.json"
+	ClaudeManifest       = ".claude-plugin/plugin.json"
+	StateFilename        = "plugin-packages.json"
+	StateLockFile        = "plugin-packages.lock"
+
+	NativeSchemaVersion      = 1
+	StateSchemaVersion       = 2
+	LifecycleSecurityVersion = 1
+	PermissionSkillsLoad     = "skills.load"
+	PermissionHooksContext   = "hooks.context"
+	PermissionHooksExecute   = "hooks.execute"
+	PermissionMCPStdio       = "mcp.stdio"
+	PermissionMCPRemote      = "mcp.remote"
+	PermissionSourceDeclared = "declared"
+	PermissionSourceLegacy   = "inferred-legacy"
+	PermissionSourceCompat   = "inferred-compatibility"
+	InstallModeCopy          = "copy"
+	InstallModeLink          = "link"
+	SourceKindLocal          = "local-directory"
+	SourceKindGitHub         = "github"
+	TrustLocalSnapshot       = "local-snapshot"
+	TrustGitHubUnsigned      = "github-https-unsigned"
+	TrustMutableLink         = "local-link-mutable"
 
 	claudeSettingsPath = ".claude/settings.json"
 	claudeInstructions = "CLAUDE.md"
@@ -70,14 +95,17 @@ type MCPServerRef struct {
 
 // Manifest is the normalized manifest shape used by Reames Agent.
 type Manifest struct {
-	Name        string
-	Version     string
-	Description string
-	Homepage    string
-	Repository  string
-	Skills      []string
-	Hooks       map[string][]Hook
-	MCPServers  map[string]MCPServer
+	SchemaVersion    int
+	Name             string
+	Version          string
+	Description      string
+	Homepage         string
+	Repository       string
+	Skills           []string
+	Hooks            map[string][]Hook
+	MCPServers       map[string]MCPServer
+	Permissions      []string
+	PermissionSource string
 }
 
 type Hook struct {
@@ -109,13 +137,48 @@ type State struct {
 }
 
 type InstalledPlugin struct {
-	Name         string `json:"name"`
-	Source       string `json:"source,omitempty"`
-	Root         string `json:"root"`
-	Version      string `json:"version,omitempty"`
-	Description  string `json:"description,omitempty"`
-	ManifestKind string `json:"manifestKind,omitempty"`
-	Enabled      bool   `json:"enabled"`
+	Name                string         `json:"name"`
+	Source              string         `json:"source,omitempty"`
+	Root                string         `json:"root"`
+	Version             string         `json:"version,omitempty"`
+	Description         string         `json:"description,omitempty"`
+	ManifestKind        string         `json:"manifestKind,omitempty"`
+	ManifestSchema      int            `json:"manifestSchema,omitempty"`
+	InstallMode         string         `json:"installMode,omitempty"`
+	SourceKind          string         `json:"sourceKind,omitempty"`
+	SourceRevision      string         `json:"sourceRevision,omitempty"`
+	TrustStatus         string         `json:"trustStatus,omitempty"`
+	Digest              string         `json:"digest,omitempty"`
+	Permissions         []string       `json:"permissions,omitempty"`
+	GrantedPermissions  []string       `json:"grantedPermissions,omitempty"`
+	MCPServerNames      []string       `json:"mcpServerNames,omitempty"`
+	MCPServerNamesBound bool           `json:"mcpServerNamesBound,omitempty"`
+	LifecycleSecurity   int            `json:"lifecycleSecurity,omitempty"`
+	Enabled             bool           `json:"enabled"`
+	Previous            *PluginRelease `json:"previous,omitempty"`
+}
+
+// PluginRelease is a complete restorable plugin generation. Keeping the
+// previous release in state makes rollback an atomic state-pointer update;
+// copied generation directories remain immutable.
+type PluginRelease struct {
+	Source              string   `json:"source,omitempty"`
+	Root                string   `json:"root"`
+	Version             string   `json:"version,omitempty"`
+	Description         string   `json:"description,omitempty"`
+	ManifestKind        string   `json:"manifestKind,omitempty"`
+	ManifestSchema      int      `json:"manifestSchema,omitempty"`
+	InstallMode         string   `json:"installMode,omitempty"`
+	SourceKind          string   `json:"sourceKind,omitempty"`
+	SourceRevision      string   `json:"sourceRevision,omitempty"`
+	TrustStatus         string   `json:"trustStatus,omitempty"`
+	Digest              string   `json:"digest,omitempty"`
+	Permissions         []string `json:"permissions,omitempty"`
+	GrantedPermissions  []string `json:"grantedPermissions,omitempty"`
+	MCPServerNames      []string `json:"mcpServerNames,omitempty"`
+	MCPServerNamesBound bool     `json:"mcpServerNamesBound,omitempty"`
+	LifecycleSecurity   int      `json:"lifecycleSecurity,omitempty"`
+	Enabled             bool     `json:"enabled"`
 }
 
 type InstalledPackage struct {
@@ -124,10 +187,32 @@ type InstalledPackage struct {
 	Warnings  []string
 }
 
+// EnableRequest binds an enable decision to the exact content and permission
+// set the caller displayed. Mutable links and concurrently updated packages
+// cannot silently expand that approval.
+type EnableRequest struct {
+	Name               string
+	ExpectedDigest     string
+	GrantedPermissions []string
+}
+
 func IsValidName(name string) bool { return validName.MatchString(strings.TrimSpace(name)) }
+
+// InstalledStateToken is an opaque digest of the complete persisted lifecycle
+// state for one plugin. Plans use it for optimistic concurrency; apply compares
+// it again while holding the state lock.
+func InstalledStateToken(installed InstalledPlugin) string {
+	body, _ := json.Marshal(installed)
+	sum := sha256.Sum256(body)
+	return "sha256-plugin-state-v1:" + hex.EncodeToString(sum[:])
+}
 
 func StatePath(reamesAgentHome string) string {
 	return filepath.Join(reamesAgentHome, StateFilename)
+}
+
+func StateLockPath(reamesAgentHome string) string {
+	return filepath.Join(reamesAgentHome, StateLockFile)
 }
 
 func PluginsDir(reamesAgentHome string) string {
@@ -143,7 +228,7 @@ func LoadState(reamesAgentHome string) (State, error) {
 	b, err := os.ReadFile(StatePath(reamesAgentHome))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return State{Version: 1}, nil
+			return State{Version: StateSchemaVersion}, nil
 		}
 		return State{}, err
 	}
@@ -153,13 +238,20 @@ func LoadState(reamesAgentHome string) (State, error) {
 	if st.Version == 0 {
 		st.Version = 1
 	}
+	if st.Version > StateSchemaVersion {
+		return State{}, fmt.Errorf("plugin state schema %d is newer than supported schema %d", st.Version, StateSchemaVersion)
+	}
+	if err := validateStateEntries(st); err != nil {
+		return State{}, err
+	}
 	sort.SliceStable(st.Plugins, func(i, j int) bool { return st.Plugins[i].Name < st.Plugins[j].Name })
 	return st, nil
 }
 
 func SaveState(reamesAgentHome string, st State) error {
-	if st.Version == 0 {
-		st.Version = 1
+	st.Version = StateSchemaVersion
+	if err := validateStateEntries(st); err != nil {
+		return err
 	}
 	sort.SliceStable(st.Plugins, func(i, j int) bool { return st.Plugins[i].Name < st.Plugins[j].Name })
 	b, err := json.MarshalIndent(st, "", "  ")
@@ -167,67 +259,168 @@ func SaveState(reamesAgentHome string, st State) error {
 		return err
 	}
 	b = append(b, '\n')
-	return fileutil.AtomicWriteFile(StatePath(reamesAgentHome), b, 0o644)
+	return writeStateFile(StatePath(reamesAgentHome), b, 0o600)
 }
 
-// stateMu serialises the read-modify-write of the state file within this
-// process. SaveState writes atomically (tmpfile + rename), so concurrent
-// callers never see a half-written file; this lock additionally prevents two
-// in-process load-modify-save cycles from clobbering each other's edit. It is
-// not a cross-process lock — concurrent Reames Agent processes can still race.
+func validateStateEntries(st State) error {
+	seen := make(map[string]struct{}, len(st.Plugins))
+	for _, installed := range st.Plugins {
+		if !IsValidName(installed.Name) {
+			return fmt.Errorf("plugin state contains invalid name %q", installed.Name)
+		}
+		if _, duplicate := seen[installed.Name]; duplicate {
+			return fmt.Errorf("plugin state contains duplicate plugin %q", installed.Name)
+		}
+		seen[installed.Name] = struct{}{}
+		if err := validateBoundMCPServerNames(installed.Name, installed.MCPServerNames, installed.MCPServerNamesBound); err != nil {
+			return err
+		}
+		if installed.Previous != nil {
+			if err := validateBoundMCPServerNames(installed.Name, installed.Previous.MCPServerNames, installed.Previous.MCPServerNamesBound); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateBoundMCPServerNames(pluginName string, names []string, bound bool) error {
+	if !bound {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		if !IsValidName(name) {
+			return fmt.Errorf("plugin %q state contains invalid MCP server name %q", pluginName, name)
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return fmt.Errorf("plugin %q state contains duplicate MCP server name %q", pluginName, name)
+		}
+		seen[name] = struct{}{}
+	}
+	return nil
+}
+
+var writeStateFile = fileutil.AtomicWriteFile
+
+// stateMu serialises state and lifecycle mutations within this process. Every
+// mutation also takes StateLockPath so separate CLI/Desktop processes cannot
+// lose one another's atomic load-modify-save update.
 var stateMu sync.Mutex
+
+func withStateMutation(reamesAgentHome string, fn func(State) (State, error)) error {
+	return withStateLock(reamesAgentHome, func() error {
+		st, err := LoadState(reamesAgentHome)
+		if err != nil {
+			return err
+		}
+		st, err = fn(st)
+		if err != nil {
+			return err
+		}
+		return SaveState(reamesAgentHome, st)
+	})
+}
+
+func withStateLock(reamesAgentHome string, fn func() error) error {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+	if err := os.MkdirAll(reamesAgentHome, 0o700); err != nil {
+		return err
+	}
+	unlock, err := acquireStateFileLock(StateLockPath(reamesAgentHome))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return fn()
+}
 
 func Upsert(reamesAgentHome string, p InstalledPlugin) error {
 	if !IsValidName(p.Name) {
 		return fmt.Errorf("invalid plugin name %q", p.Name)
 	}
-	stateMu.Lock()
-	defer stateMu.Unlock()
-	st, err := LoadState(reamesAgentHome)
-	if err != nil {
-		return err
-	}
-	for i := range st.Plugins {
-		if st.Plugins[i].Name == p.Name {
-			st.Plugins[i] = p
-			return SaveState(reamesAgentHome, st)
+	return withStateMutation(reamesAgentHome, func(st State) (State, error) {
+		for i := range st.Plugins {
+			if st.Plugins[i].Name == p.Name {
+				st.Plugins[i] = p
+				return st, nil
+			}
 		}
-	}
-	st.Plugins = append(st.Plugins, p)
-	return SaveState(reamesAgentHome, st)
+		st.Plugins = append(st.Plugins, p)
+		return st, nil
+	})
 }
 
 func Remove(reamesAgentHome, name string) (InstalledPlugin, bool, error) {
-	stateMu.Lock()
-	defer stateMu.Unlock()
-	st, err := LoadState(reamesAgentHome)
-	if err != nil {
-		return InstalledPlugin{}, false, err
-	}
-	for i, p := range st.Plugins {
-		if p.Name != name {
-			continue
+	var removed InstalledPlugin
+	var found bool
+	err := withStateMutation(reamesAgentHome, func(st State) (State, error) {
+		for i, p := range st.Plugins {
+			if p.Name != name {
+				continue
+			}
+			removed, found = p, true
+			st.Plugins = append(st.Plugins[:i], st.Plugins[i+1:]...)
+			return st, nil
 		}
-		st.Plugins = append(st.Plugins[:i], st.Plugins[i+1:]...)
-		return p, true, SaveState(reamesAgentHome, st)
-	}
-	return InstalledPlugin{}, false, nil
+		return st, nil
+	})
+	return removed, found, err
 }
 
 func SetEnabled(reamesAgentHome, name string, enabled bool) error {
-	stateMu.Lock()
-	defer stateMu.Unlock()
-	st, err := LoadState(reamesAgentHome)
-	if err != nil {
-		return err
+	if enabled {
+		return fmt.Errorf("enabling plugin %q requires an expected digest and explicit permission grants", name)
 	}
-	for i := range st.Plugins {
-		if st.Plugins[i].Name == name {
-			st.Plugins[i].Enabled = enabled
-			return SaveState(reamesAgentHome, st)
+	return withStateMutation(reamesAgentHome, func(st State) (State, error) {
+		for i := range st.Plugins {
+			if st.Plugins[i].Name != name {
+				continue
+			}
+			st.Plugins[i].Enabled = false
+			return st, nil
 		}
+		return st, fmt.Errorf("plugin %q is not installed", name)
+	})
+}
+
+func Enable(reamesAgentHome string, req EnableRequest) error {
+	req.Name = strings.TrimSpace(req.Name)
+	req.ExpectedDigest = strings.TrimSpace(req.ExpectedDigest)
+	if !IsValidName(req.Name) {
+		return fmt.Errorf("invalid plugin name %q", req.Name)
 	}
-	return fmt.Errorf("plugin %q is not installed", name)
+	if req.ExpectedDigest == "" {
+		return fmt.Errorf("enabling plugin %q requires a non-empty expected digest", req.Name)
+	}
+	grants := append([]string(nil), req.GrantedPermissions...)
+	sort.Strings(grants)
+	return withStateMutation(reamesAgentHome, func(st State) (State, error) {
+		for i := range st.Plugins {
+			if st.Plugins[i].Name != req.Name {
+				continue
+			}
+			if st.Plugins[i].LifecycleSecurity != LifecycleSecurityVersion {
+				return st, fmt.Errorf("plugin %q is a legacy install; reinstall it before enabling", req.Name)
+			}
+			verified, err := verifyInstalled(reamesAgentHome, st.Plugins[i], false)
+			if err != nil {
+				return st, err
+			}
+			if verified.Digest != req.ExpectedDigest {
+				return st, fmt.Errorf("plugin %s content changed after approval: got %s, want %s", req.Name, verified.Digest, req.ExpectedDigest)
+			}
+			if !sameStrings(grants, verified.Permissions) {
+				return st, fmt.Errorf("plugin %s permission grant mismatch: got %v, want exact set %v", req.Name, grants, verified.Permissions)
+			}
+			verified.GrantedPermissions = grants
+			verified.Enabled = true
+			st.Plugins[i] = verified
+			return st, nil
+		}
+		return st, fmt.Errorf("plugin %q is not installed", req.Name)
+	})
 }
 
 func LoadInstalled(reamesAgentHome string) ([]InstalledPackage, []string) {
@@ -241,13 +434,16 @@ func LoadInstalled(reamesAgentHome string) ([]InstalledPackage, []string) {
 		if !installed.Enabled {
 			continue
 		}
-		root := ResolveRoot(reamesAgentHome, installed.Root)
-		pkg, pkgWarnings, err := ParseDir(root)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s: %v", installed.Name, err))
+		if installed.LifecycleSecurity != LifecycleSecurityVersion {
+			warnings = append(warnings, fmt.Sprintf("%s: legacy installation is blocked from runtime loading; reinstall it to establish content integrity and permission grants", installed.Name))
 			continue
 		}
-		out = append(out, InstalledPackage{Installed: installed, Package: pkg, Warnings: pkgWarnings})
+		verified, pkg, pkgWarnings, verifyErr := verifyInstalledDetailed(reamesAgentHome, installed, false)
+		if verifyErr != nil {
+			warnings = append(warnings, fmt.Sprintf("%s: %v", installed.Name, verifyErr))
+			continue
+		}
+		out = append(out, InstalledPackage{Installed: verified, Package: pkg, Warnings: pkgWarnings})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Installed.Name < out[j].Installed.Name })
 	return out, warnings
@@ -269,28 +465,66 @@ func RelativeRoot(reamesAgentHome, root string) string {
 
 func ParseDir(root string) (Package, []string, error) {
 	root = filepath.Clean(root)
-	if pkg, warnings, err := parseNative(filepath.Join(root, NativeManifest), root); err == nil {
-		return pkg, warnings, nil
+	parsers := []struct {
+		path  string
+		parse func(string, string) (Package, []string, error)
+	}{
+		{NativeManifest, parseNative},
+		{LegacyNativeManifest, parseLegacyNative},
+		{CodexManifest, parseCodex},
+		{ClaudeManifest, parseClaudePlugin},
 	}
-	if pkg, warnings, err := parseCodex(filepath.Join(root, CodexManifest), root); err == nil {
-		return pkg, warnings, nil
+	for _, candidate := range parsers {
+		path := filepath.Join(root, candidate.path)
+		info, err := os.Lstat(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return Package{}, nil, err
+		}
+		if !info.Mode().IsRegular() {
+			return Package{}, nil, fmt.Errorf("plugin manifest %s is not a regular file", candidate.path)
+		}
+		return candidate.parse(path, root)
 	}
-	if pkg, warnings, err := parseClaudePlugin(filepath.Join(root, ClaudeManifest), root); err == nil {
-		return pkg, warnings, nil
+	return Package{}, nil, fmt.Errorf("no %s, %s, %s, or %s found", NativeManifest, LegacyNativeManifest, CodexManifest, ClaudeManifest)
+}
+
+// InspectDir binds parsed capabilities to a stable content digest. Callers
+// that present or persist a package plan must not combine a manifest parsed
+// from one directory state with the digest of another.
+func InspectDir(root string) (Package, []string, string, error) {
+	digestBefore, err := ContentDigest(root)
+	if err != nil {
+		return Package{}, nil, "", err
 	}
-	return Package{}, nil, fmt.Errorf("no %s, %s, or %s found", NativeManifest, CodexManifest, ClaudeManifest)
+	pkg, warnings, err := ParseDir(root)
+	if err != nil {
+		return Package{}, warnings, "", err
+	}
+	digestAfter, err := ContentDigest(root)
+	if err != nil {
+		return Package{}, warnings, "", err
+	}
+	if digestBefore != digestAfter {
+		return Package{}, warnings, "", fmt.Errorf("plugin content changed during inspection: before %s, after %s", digestBefore, digestAfter)
+	}
+	return pkg, warnings, digestAfter, nil
 }
 
 func parseNative(path, root string) (Package, []string, error) {
 	var raw struct {
-		Name        string               `json:"name"`
-		Version     string               `json:"version"`
-		Description string               `json:"description"`
-		Homepage    string               `json:"homepage"`
-		Repository  string               `json:"repository"`
-		Skills      json.RawMessage      `json:"skills"`
-		Hooks       map[string][]Hook    `json:"hooks"`
-		MCPServers  map[string]MCPServer `json:"mcpServers"`
+		SchemaVersion int                  `json:"schemaVersion"`
+		Name          string               `json:"name"`
+		Version       string               `json:"version"`
+		Description   string               `json:"description"`
+		Homepage      string               `json:"homepage"`
+		Repository    string               `json:"repository"`
+		Skills        json.RawMessage      `json:"skills"`
+		Hooks         map[string][]Hook    `json:"hooks"`
+		MCPServers    map[string]MCPServer `json:"mcpServers"`
+		Permissions   []string             `json:"permissions"`
 	}
 	if err := readJSONFile(path, &raw); err != nil {
 		return Package{}, nil, err
@@ -300,23 +534,39 @@ func parseNative(path, root string) (Package, []string, error) {
 		return Package{}, nil, err
 	}
 	manifest := Manifest{
-		Name:        strings.TrimSpace(raw.Name),
-		Version:     strings.TrimSpace(raw.Version),
-		Description: strings.TrimSpace(raw.Description),
-		Homepage:    strings.TrimSpace(raw.Homepage),
-		Repository:  strings.TrimSpace(raw.Repository),
-		Skills:      skills,
-		Hooks:       normalizeHooks(raw.Hooks),
-		MCPServers:  raw.MCPServers,
+		SchemaVersion: raw.SchemaVersion,
+		Name:          strings.TrimSpace(raw.Name),
+		Version:       strings.TrimSpace(raw.Version),
+		Description:   strings.TrimSpace(raw.Description),
+		Homepage:      strings.TrimSpace(raw.Homepage),
+		Repository:    strings.TrimSpace(raw.Repository),
+		Skills:        skills,
+		Hooks:         normalizeHooks(raw.Hooks),
+		MCPServers:    raw.MCPServers,
 	}
 	if err := validateManifest(root, &manifest); err != nil {
 		return Package{}, nil, err
 	}
 	warnings := applyClaudeCompatibility(root, &manifest)
+	permissionWarnings, err := finalizePermissions(&manifest, "reames-agent", raw.Permissions)
+	warnings = append(warnings, permissionWarnings...)
+	if err != nil {
+		return Package{}, warnings, err
+	}
 	if err := validateManifest(root, &manifest); err != nil {
 		return Package{}, warnings, err
 	}
 	return Package{Root: root, ManifestKind: "reames-agent", Manifest: manifest}, warnings, nil
+}
+
+func parseLegacyNative(path, root string) (Package, []string, error) {
+	pkg, warnings, err := parseNative(path, root)
+	if err != nil {
+		return pkg, warnings, err
+	}
+	pkg.ManifestKind = "reames-agent-legacy"
+	warnings = append([]string{fmt.Sprintf("legacy native manifest filename %s is deprecated; rename it to %s", LegacyNativeManifest, NativeManifest)}, warnings...)
+	return pkg, warnings, nil
 }
 
 func parseCodex(path, root string) (Package, []string, error) {
@@ -368,6 +618,11 @@ func parseCodexLike(path, root, kind string, includeCodexSessionStartHook bool) 
 		warnings = append(warnings, applyClaudeConventionDirs(root, &manifest)...)
 	}
 	warnings = append(warnings, applyClaudeCompatibility(root, &manifest)...)
+	permissionWarnings, err := finalizePermissions(&manifest, kind, nil)
+	warnings = append(warnings, permissionWarnings...)
+	if err != nil {
+		return Package{}, warnings, err
+	}
 	if err := validateManifest(root, &manifest); err != nil {
 		return Package{}, warnings, err
 	}
@@ -430,6 +685,8 @@ func ManifestPath(kind string) string {
 	switch kind {
 	case "reames-agent":
 		return NativeManifest
+	case "reames-agent-legacy":
+		return LegacyNativeManifest
 	case "codex":
 		return CodexManifest
 	case "claude":
@@ -440,7 +697,7 @@ func ManifestPath(kind string) string {
 }
 
 func ManifestPaths() []string {
-	return []string{NativeManifest, CodexManifest, ClaudeManifest}
+	return []string{NativeManifest, LegacyNativeManifest, CodexManifest, ClaudeManifest}
 }
 
 func applyClaudeCompatibility(root string, manifest *Manifest) []string {
@@ -629,6 +886,128 @@ func normalizeHooks(in map[string][]Hook) map[string][]Hook {
 		}
 	}
 	return out
+}
+
+var knownPermissions = map[string]bool{
+	PermissionSkillsLoad:   true,
+	PermissionHooksContext: true,
+	PermissionHooksExecute: true,
+	PermissionMCPStdio:     true,
+	PermissionMCPRemote:    true,
+}
+
+// RequiredPermissions derives the minimum permission set from the components
+// the parser will actually expose. It is the authoritative source for install,
+// enable, doctor, and runtime loading checks.
+func RequiredPermissions(m Manifest) []string {
+	seen := map[string]bool{}
+	if len(m.Skills) > 0 {
+		seen[PermissionSkillsLoad] = true
+	}
+	for _, hooks := range m.Hooks {
+		for _, hook := range hooks {
+			if strings.TrimSpace(hook.ContextFile) != "" {
+				seen[PermissionHooksContext] = true
+			}
+			if strings.TrimSpace(hook.Command) != "" {
+				seen[PermissionHooksExecute] = true
+			}
+		}
+	}
+	for _, server := range m.MCPServers {
+		if strings.TrimSpace(server.Command) != "" {
+			seen[PermissionMCPStdio] = true
+		}
+		if strings.TrimSpace(server.URL) != "" {
+			seen[PermissionMCPRemote] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for permission := range seen {
+		out = append(out, permission)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func finalizePermissions(m *Manifest, kind string, declared []string) ([]string, error) {
+	required := RequiredPermissions(*m)
+	if kind != "reames-agent" {
+		m.Permissions = required
+		m.PermissionSource = PermissionSourceCompat
+		return nil, nil
+	}
+	if m.SchemaVersion == 0 {
+		m.Permissions = required
+		m.PermissionSource = PermissionSourceLegacy
+		return []string{fmt.Sprintf("legacy native manifest has no schemaVersion=1 permission contract; inferred: %s", permissionList(required))}, nil
+	}
+	if m.SchemaVersion != NativeSchemaVersion {
+		return nil, fmt.Errorf("unsupported native plugin schemaVersion %d (supported: %d)", m.SchemaVersion, NativeSchemaVersion)
+	}
+	if !validPluginVersion(m.Version) {
+		return nil, fmt.Errorf("native plugin schemaVersion %d requires a semantic version, got %q", NativeSchemaVersion, m.Version)
+	}
+	normalized, err := normalizePermissions(declared)
+	if err != nil {
+		return nil, err
+	}
+	if !sameStrings(normalized, required) {
+		return nil, fmt.Errorf("manifest permissions %v do not match required permissions %v", normalized, required)
+	}
+	m.Permissions = normalized
+	m.PermissionSource = PermissionSourceDeclared
+	return nil, nil
+}
+
+func normalizePermissions(in []string) ([]string, error) {
+	seen := map[string]bool{}
+	for _, raw := range in {
+		permission := strings.ToLower(strings.TrimSpace(raw))
+		if !knownPermissions[permission] {
+			return nil, fmt.Errorf("unknown plugin permission %q", raw)
+		}
+		if seen[permission] {
+			return nil, fmt.Errorf("duplicate plugin permission %q", permission)
+		}
+		seen[permission] = true
+	}
+	out := make([]string, 0, len(seen))
+	for permission := range seen {
+		out = append(out, permission)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func validPluginVersion(version string) bool {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return false
+	}
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	return semver.IsValid(version)
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func permissionList(permissions []string) string {
+	if len(permissions) == 0 {
+		return "none"
+	}
+	return strings.Join(permissions, ", ")
 }
 
 func validateManifest(root string, m *Manifest) error {

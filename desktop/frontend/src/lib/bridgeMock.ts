@@ -10,7 +10,7 @@ import { modeHasAutoApproveTools, modeWithAutoApproveTools, modeWithPlan, normal
 import type {
   BotSettingsView, DesktopStartupSettingsView, HistoryMessage, HistoryPage, HookConfigView,
   HooksSettingsView, MCPServerInput, MemorySuggestion, Mode, NetworkView, PluginInstallOptions,
-  PluginView, ProjectNode, PromptHistoryEntry, ProviderPresetView, ProviderView, ServerView,
+  PluginOperationView, PluginView, ProjectNode, PromptHistoryEntry, ProviderPresetView, ProviderView, ServerView,
   SessionMeta, SettingsView, SkillRootView, SkillSuggestion, SkillView, TabMeta, ToolApprovalMode,
   UpdateProgress, WireEvent,
 } from "./types";
@@ -334,6 +334,37 @@ export function makeMockApp(): AppBindings {
     },
   ];
   let capPlugins: PluginView[] = [];
+  const mockPluginPlan = (op: string, name: string, action: string, source = ""): PluginOperationView => ({
+    ok: true,
+    status: "planned",
+    op,
+    applied: false,
+    source: source || undefined,
+    name,
+    kind: "plugin",
+    kinds: { skill: 0, mcp: 0, plugin: 1 },
+    scope: "global",
+    mode: "copy",
+    planId: `mock:${op}:${name}:${source}`,
+    actions: [{
+      kind: "plugin",
+      action,
+      name,
+      source: source || undefined,
+      status: "planned",
+      riskLevel: op === "install" ? "medium" : "high",
+      permissions: ["skills.load"],
+      trustStatus: source.startsWith("git:") ? "github-https-unsigned" : "local-snapshot",
+      rollbackAvailable: op === "rollback",
+    }],
+  });
+  const mockPluginDone = (plan: PluginOperationView): PluginOperationView => ({
+    ...plan,
+    ok: true,
+    status: "done",
+    applied: true,
+    actions: plan.actions.map((action) => ({ ...action, status: "done" })),
+  });
   const mockSwitchWorkspace = async (path: string) => {
     cwd = path || "~";
     workspaces = [cwd, ...workspaces.filter((p) => p !== cwd)].slice(0, 12);
@@ -1855,15 +1886,12 @@ export function makeMockApp(): AppBindings {
     },
     async PlanPluginInstall(source: string, options: PluginInstallOptions) {
       const name = options.name || source.split("/").filter(Boolean).pop()?.replace(/\.git$/, "") || "plugin";
-      return JSON.stringify({
-        ok: true,
-        status: "planned",
-        kind: "plugin",
-        actions: [{ kind: "plugin", action: "install_plugin_package", name, source, status: "planned" }],
-      });
+      return mockPluginPlan("install", name, "install_plugin_package", source);
     },
     async InstallPlugin(source: string, options: PluginInstallOptions) {
       const name = options.name || source.split("/").filter(Boolean).pop()?.replace(/\.git$/, "") || "plugin";
+      const plan = mockPluginPlan("install", name, "install_plugin_package", source);
+      if (options.planId !== plan.planId) throw new Error("plugin apply requires the matching preview planId");
       const existing = capPlugins.findIndex((p) => p.name === name);
       const view: PluginView = {
         name,
@@ -1872,7 +1900,15 @@ export function makeMockApp(): AppBindings {
         source,
         root: `~/.reames-agent/plugins/${name}`,
         manifestKind: "reames-agent",
-        enabled: true,
+        manifestSchema: 1,
+        installMode: options.link ? "link" : "copy",
+        sourceKind: source.startsWith("git:") ? "github" : "local-directory",
+        trustStatus: source.startsWith("git:") ? "github-https-unsigned" : "local-snapshot",
+        digest: `sha256:mock-${name}`,
+        permissions: ["skills.load"],
+        grantedPermissions: [],
+        lifecycleSecurity: 1,
+        enabled: false,
         skills: 1,
         hooks: 0,
         mcpServers: 0,
@@ -1880,17 +1916,55 @@ export function makeMockApp(): AppBindings {
       };
       if (existing >= 0) capPlugins[existing] = view;
       else capPlugins.push(view);
-      return JSON.stringify({ ok: true, status: "done", kind: "plugin", actions: [{ kind: "plugin", name }] });
+      return mockPluginDone(plan);
     },
-    async RemovePlugin(name: string) {
+    async PlanPluginRemove(name: string) {
+      return mockPluginPlan("uninstall", name, "uninstall_plugin_package");
+    },
+    async RemovePlugin(name: string, planId: string) {
+      const plan = mockPluginPlan("uninstall", name, "uninstall_plugin_package");
+      if (planId !== plan.planId) throw new Error("plugin removal requires the matching preview planId");
       capPlugins = capPlugins.filter((p) => p.name !== name);
+      return mockPluginDone(plan);
     },
-    async SetPluginEnabled(name: string, enabled: boolean) {
+    async SetPluginEnabled(name: string, enabled: boolean, expectedDigest: string, grantedPermissions: string[]) {
+      const plugin = capPlugins.find((p) => p.name === name);
+      if (enabled && (!plugin || plugin.digest !== expectedDigest || JSON.stringify(plugin.permissions || []) !== JSON.stringify(grantedPermissions))) {
+        throw new Error("plugin content or permissions changed after approval");
+      }
       capPlugins = capPlugins.map((p) => p.name === name ? { ...p, enabled } : p);
     },
-    async UpdatePlugin(name: string) {
-      capPlugins = capPlugins.map((p) => p.name === name ? { ...p, version: p.version || "dev" } : p);
-      return JSON.stringify({ ok: true, status: "done", kind: "plugin", name });
+    async PlanPluginUpdate(name: string) {
+      const plugin = capPlugins.find((p) => p.name === name);
+      return mockPluginPlan("install", name, "update_plugin_package", plugin?.source || "");
+    },
+    async UpdatePlugin(name: string, planId: string) {
+      const plugin = capPlugins.find((p) => p.name === name);
+      const plan = mockPluginPlan("install", name, "update_plugin_package", plugin?.source || "");
+      if (planId !== plan.planId) throw new Error("plugin update requires the matching preview planId");
+      capPlugins = capPlugins.map((p) => p.name === name ? {
+        ...p,
+        version: p.version || "dev",
+        rollback: { version: p.version, digest: p.digest, trustStatus: p.trustStatus, permissions: p.permissions, grantedPermissions: p.grantedPermissions, enabled: p.enabled },
+      } : p);
+      return mockPluginDone(plan);
+    },
+    async PlanPluginRollback(name: string) {
+      return mockPluginPlan("rollback", name, "rollback_plugin_package");
+    },
+    async RollbackPlugin(name: string, planId: string) {
+      const plan = mockPluginPlan("rollback", name, "rollback_plugin_package");
+      if (planId !== plan.planId) throw new Error("plugin rollback requires the matching preview planId");
+      capPlugins = capPlugins.map((p) => p.name === name && p.rollback ? {
+        ...p,
+        version: p.rollback.version,
+        digest: p.rollback.digest,
+        trustStatus: p.rollback.trustStatus,
+        permissions: p.rollback.permissions,
+        grantedPermissions: p.rollback.grantedPermissions,
+        enabled: p.rollback.enabled,
+      } : p);
+      return mockPluginDone(plan);
     },
     async PluginDoctor(name: string) {
       return capPlugins.find((p) => p.name === name) || {

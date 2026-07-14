@@ -190,29 +190,21 @@ func TestLoadPermissionRequestHook(t *testing.T) {
 func TestLoadIncludesPluginSessionStartHook(t *testing.T) {
 	home := t.TempDir()
 	reamesAgentHome := filepath.Join(home, ".reames-agent")
-	root := filepath.Join(reamesAgentHome, "plugins", "superpowers")
+	source := filepath.Join(t.TempDir(), "superpowers")
 	writeSettings(t, home, `{"hooks":{"PostToolUse":[{"command":"echo global"}]}}`)
-	writeHookTestFile(t, filepath.Join(root, pluginpkg.CodexManifest), `{
+	writeHookTestFile(t, filepath.Join(source, pluginpkg.CodexManifest), `{
   "name": "superpowers",
   "version": "6.1.0",
   "skills": "./skills/"
 }`)
-	writeHookTestFile(t, filepath.Join(root, "hooks", "session-start-codex"), "#!/usr/bin/env bash\necho ok\n")
-	if err := pluginpkg.Upsert(reamesAgentHome, pluginpkg.InstalledPlugin{
-		Name:         "superpowers",
-		Root:         "plugins/superpowers",
-		Version:      "6.1.0",
-		ManifestKind: "codex",
-		Enabled:      true,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	writeHookTestFile(t, filepath.Join(source, "hooks", "session-start-codex"), "#!/usr/bin/env bash\necho ok\n")
+	root := installAndEnableHookPlugin(t, reamesAgentHome, source, "superpowers")
 
 	got := Load(LoadOptions{HomeDir: home, ProjectRoot: "/workspace", Trusted: true})
 	if len(got) != 2 {
 		t.Fatalf("hooks = %+v, want plugin + global", got)
 	}
-	if got[0].Scope != ScopePlugin || got[0].Event != SessionStart {
+	if got[0].Scope != ScopePlugin || got[0].Event != SessionStart || got[0].Cwd != root {
 		t.Fatalf("first hook = %+v, want plugin SessionStart", got[0])
 	}
 	if got[0].Env["REAMES_AGENT_PLUGIN_NAME"] != "superpowers" || got[0].Env["REAMES_AGENT_WORKSPACE_ROOT"] != "/workspace" {
@@ -226,14 +218,14 @@ func TestLoadIncludesPluginSessionStartHook(t *testing.T) {
 func TestLoadIncludesPluginClaudeCompatibilityHooks(t *testing.T) {
 	home := t.TempDir()
 	reamesAgentHome := filepath.Join(home, ".reames-agent")
-	root := filepath.Join(reamesAgentHome, "plugins", "claude-pack")
-	writeHookTestFile(t, filepath.Join(root, pluginpkg.CodexManifest), `{
+	source := filepath.Join(t.TempDir(), "claude-pack")
+	writeHookTestFile(t, filepath.Join(source, pluginpkg.CodexManifest), `{
   "name": "claude-pack",
   "version": "1.0.0",
   "skills": "skills"
 }`)
-	writeHookTestFile(t, filepath.Join(root, "CLAUDE.md"), "Use the bundled workflow.")
-	writeHookTestFile(t, filepath.Join(root, ".claude", "settings.json"), `{
+	writeHookTestFile(t, filepath.Join(source, "CLAUDE.md"), "Use the bundled workflow.")
+	writeHookTestFile(t, filepath.Join(source, ".claude", "settings.json"), `{
   "hooks": {
     "PostToolUse": [
       {
@@ -252,15 +244,7 @@ func TestLoadIncludesPluginClaudeCompatibilityHooks(t *testing.T) {
     ]
   }
 }`)
-	if err := pluginpkg.Upsert(reamesAgentHome, pluginpkg.InstalledPlugin{
-		Name:         "claude-pack",
-		Root:         "plugins/claude-pack",
-		Version:      "1.0.0",
-		ManifestKind: "codex",
-		Enabled:      true,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	root := installAndEnableHookPlugin(t, reamesAgentHome, source, "claude-pack")
 
 	got := Load(LoadOptions{HomeDir: home, ProjectRoot: "/workspace", Trusted: true})
 	if len(got) != 3 {
@@ -285,6 +269,24 @@ func TestLoadIncludesPluginClaudeCompatibilityHooks(t *testing.T) {
 	if h := byEvent[PostToolUse]; h.Env["CLAUDE_PROJECT_DIR"] != "/workspace" || h.Env["REAMES_AGENT_PLUGIN_NAME"] != "claude-pack" {
 		t.Fatalf("plugin env = %#v", h.Env)
 	}
+}
+
+func installAndEnableHookPlugin(t *testing.T, home, source, name string) string {
+	t.Helper()
+	result, err := pluginpkg.Install(home, pluginpkg.InstallRequest{
+		Name: name, Source: source, SourceRoot: source,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pluginpkg.Enable(home, pluginpkg.EnableRequest{
+		Name:               result.Installed.Name,
+		ExpectedDigest:     result.Installed.Digest,
+		GrantedPermissions: result.Installed.Permissions,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return pluginpkg.ResolveRoot(home, result.Installed.Root)
 }
 
 func TestReamesAgentHomeOverridesGlobalHookPaths(t *testing.T) {

@@ -22,6 +22,7 @@ import (
 	"reames-agent/internal/agent"
 	"reames-agent/internal/agent/testutil"
 	"reames-agent/internal/config"
+	"reames-agent/internal/control"
 	"reames-agent/internal/event"
 	"reames-agent/internal/memory"
 	"reames-agent/internal/netclient"
@@ -31,6 +32,41 @@ import (
 	"reames-agent/internal/tool"
 	"reames-agent/internal/tool/builtin"
 )
+
+type bootPluginRuntimeTool string
+
+func (t bootPluginRuntimeTool) Name() string        { return string(t) }
+func (t bootPluginRuntimeTool) Description() string { return string(t) }
+func (bootPluginRuntimeTool) Schema() json.RawMessage {
+	return json.RawMessage(`{"type":"object"}`)
+}
+func (bootPluginRuntimeTool) Execute(context.Context, json.RawMessage) (string, error) {
+	return "", nil
+}
+func (bootPluginRuntimeTool) ReadOnly() bool { return true }
+
+func TestPluginRuntimeCallbacksHonorDynamicMCPOwnerTakeover(t *testing.T) {
+	reg := tool.NewRegistry()
+	reg.Add(bootPluginRuntimeTool("mcp__shared__connect"))
+	ctrl := control.New(control.Options{
+		Registry:        reg,
+		PluginMCPOwners: map[string]string{"shared": "fixture"},
+	})
+	defer ctrl.Close()
+	callbacks := &pluginRuntimeCallbacks{}
+	callbacks.bind(ctrl)
+
+	if !ctrl.DisconnectMCPServer("shared") {
+		t.Fatal("disconnecting the package MCP placeholder failed")
+	}
+	reg.Add(bootPluginRuntimeTool("mcp__shared__connect"))
+	if callbacks.disconnectMCP("fixture", "shared") {
+		t.Fatal("model-host plugin callback disconnected a same-name user takeover")
+	}
+	if _, ok := reg.Get("mcp__shared__connect"); !ok {
+		t.Fatal("same-name user MCP tools were removed by the plugin callback")
+	}
+}
 
 func TestAgentKeepPolicyFromConfig(t *testing.T) {
 	if got := agentKeepPolicy(nil); got != agent.KeepErrors {

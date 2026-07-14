@@ -40,7 +40,8 @@ type MCPConnector func(config.PluginEntry) (MCPConnectResult, error)
 // nil to allow the install, or a non-nil error to refuse it. The action
 // list reflects the exact set the apply step is about to perform; a host
 // (e.g. the desktop TUI) can show it to the user and decide synchronously.
-type ApprovalFunc func(actions []action) error
+type ApprovalAction = action
+type ApprovalFunc func(actions []ApprovalAction) error
 
 // OnDisconnectFunc tells the host to remove a server from the live session and
 // drop the corresponding mcp__<name>__ tools from its Registry. It returns true
@@ -48,25 +49,40 @@ type ApprovalFunc func(actions []action) error
 // old connection only when there was one.
 type OnDisconnectFunc func(serverName string) bool
 
+// OnPluginDisconnectFunc revokes a live MCP server only when the host confirms
+// that the server came from the named plugin package. This prevents a package
+// uninstall from disconnecting a same-name server owned by user config.
+type OnPluginDisconnectFunc func(pluginName, serverName string) bool
+
+// OnPluginRuntimeChangeFunc fail-closes non-MCP capabilities from the previous
+// plugin generation in the current host. Returned warnings are included in the
+// structured operation result so callers know a rebuild or new session is
+// required before the verified generation becomes available.
+type OnPluginRuntimeChangeFunc func(pluginName string) []string
+
 // Options configure the install_source tool. ProjectRoot "" and HomeDir
 // "" fall back to os.Getwd / os.UserHomeDir at construction time.
 type Options struct {
-	ProjectRoot  string
-	HomeDir      string
-	HTTPClient   *http.Client
-	ConnectMCP   MCPConnector
-	OnDisconnect OnDisconnectFunc
-	Approval     ApprovalFunc
+	ProjectRoot           string
+	HomeDir               string
+	HTTPClient            *http.Client
+	ConnectMCP            MCPConnector
+	OnDisconnect          OnDisconnectFunc
+	OnPluginDisconnect    OnPluginDisconnectFunc
+	OnPluginRuntimeChange OnPluginRuntimeChangeFunc
+	Approval              ApprovalFunc
 }
 
 type installSourceTool struct {
-	root         string
-	home         string
-	reamesAgentHome string
-	httpClient   *http.Client
-	connectMCP   MCPConnector
-	onDisconnect OnDisconnectFunc
-	approval     ApprovalFunc
+	root                  string
+	home                  string
+	reamesAgentHome       string
+	httpClient            *http.Client
+	connectMCP            MCPConnector
+	onDisconnect          OnDisconnectFunc
+	onPluginDisconnect    OnPluginDisconnectFunc
+	onPluginRuntimeChange OnPluginRuntimeChangeFunc
+	approval              ApprovalFunc
 }
 
 // NewTool returns a tool.Tool that callers register with the agent's
@@ -105,13 +121,15 @@ func NewTool(opts Options) tool.Tool {
 	// prompt-injected source can't reach cloud metadata / internal services.
 	client = ssrfGuardClient(client)
 	return &installSourceTool{
-		root:         root,
-		home:         home,
-		reamesAgentHome: reamesAgentHome,
-		httpClient:   client,
-		connectMCP:   opts.ConnectMCP,
-		onDisconnect: opts.OnDisconnect,
-		approval:     opts.Approval,
+		root:                  root,
+		home:                  home,
+		reamesAgentHome:       reamesAgentHome,
+		httpClient:            client,
+		connectMCP:            opts.ConnectMCP,
+		onDisconnect:          opts.OnDisconnect,
+		onPluginDisconnect:    opts.OnPluginDisconnect,
+		onPluginRuntimeChange: opts.OnPluginRuntimeChange,
+		approval:              opts.Approval,
 	}
 }
 
@@ -119,20 +137,20 @@ func (*installSourceTool) Name() string   { return "install_source" }
 func (*installSourceTool) ReadOnly() bool { return false }
 
 func (*installSourceTool) Description() string {
-	return "Plan, install, or uninstall a Reames Agent skill, MCP server, or plugin package from a URL, local file/folder, .mcp.json, executable, or package name. Two-phase: with apply=false (default) returns a deterministic plan with per-action risk level; with apply=true copies/registers skills, connects/persists MCP servers, or installs plugin packages after validation. op='uninstall' removes a previously installed skill, MCP server, or plugin package by name."
+	return "Plan, install, uninstall, or roll back a Reames Agent skill, MCP server, or plugin package from a URL, local file/folder, .mcp.json, executable, or package name. Plugin install/update/rollback/uninstall operations return a deterministic plan with per-action risk and require the same planId when applied. op='uninstall' removes an installed item; op='rollback' restores a plugin's previous verified generation."
 }
 
 func (*installSourceTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
-  "op":{"type":"string","enum":["install","uninstall"],"description":"Whether to install (default) or uninstall."},
-  "source":{"type":"string","description":"URL, local file/folder path, .mcp.json path, or package name to install from. Ignored when op=uninstall (use name instead)."},
+	  "op":{"type":"string","enum":["install","uninstall","rollback"],"description":"Whether to install (default), uninstall, or roll back a plugin to its previous verified generation."},
+	  "source":{"type":"string","description":"URL, local file/folder path, .mcp.json path, or package name to install from. Ignored for uninstall and rollback (use name instead)."},
   "kind":{"type":"string","enum":["auto","skill","mcp","plugin"],"description":"Capability kind. Defaults to auto."},
-  "apply":{"type":"boolean","description":"false (default) only returns an install plan; true performs the planned writes/connects. Ignored for op=uninstall."},
+	  "apply":{"type":"boolean","description":"false (default) returns a deterministic plan; true performs the plan and requires its matching planId for plugin install, update, rollback, and uninstall."},
   "scope":{"type":"string","enum":["project","global"],"description":"Where to persist config or copy skills. MCP installs default to global so every project can use them; project-root .mcp.json imports default to project; skills default to project when a workspace exists, otherwise global."},
   "mode":{"type":"string","enum":["auto","copy","link","register"],"description":"Skill install mode. auto registers multi-skill roots and copies single skills into the canonical <skill-name>/SKILL.md layout; copy copies skill files/folders; link creates symlinks; register adds a skill root to [skills].paths."},
-  "name":{"type":"string","description":"Optional override for the installed MCP server or single skill name. Required for op=uninstall when removing by name."},
+	  "name":{"type":"string","description":"Optional install name override. Required for uninstall and rollback."},
   "transport":{"type":"string","enum":["auto","stdio","http","sse"],"description":"MCP transport override. URL sources default to http unless --sse-like; package sources default to stdio."},
   "command":{"type":"string","description":"Optional stdio MCP command override for package/local executable installs."},
   "args":{"type":"array","items":{"type":"string"},"description":"Optional stdio MCP args override."},
@@ -159,14 +177,14 @@ func (t *installSourceTool) Execute(ctx context.Context, raw json.RawMessage) (s
 	if req.Op == "" {
 		req.Op = "install"
 	}
-	if req.Op != "install" && req.Op != "uninstall" {
-		return "", fmt.Errorf("install_source: op %q is not supported (want install|uninstall)", req.Op)
+	if req.Op != "install" && req.Op != "uninstall" && req.Op != "rollback" {
+		return "", fmt.Errorf("install_source: op %q is not supported (want install|uninstall|rollback)", req.Op)
 	}
 	if req.Op == "install" && req.Source == "" {
 		return "", errors.New("install_source requires a non-empty source")
 	}
-	if req.Op == "uninstall" && strings.TrimSpace(req.Name) == "" {
-		return "", errors.New("install_source: op=uninstall requires a non-empty name")
+	if (req.Op == "uninstall" || req.Op == "rollback") && strings.TrimSpace(req.Name) == "" {
+		return "", fmt.Errorf("install_source: op=%s requires a non-empty name", req.Op)
 	}
 	req.Kind = normalizeKind(req.Kind)
 	req.Scope, req.scopeExplicit = t.normalizeScope(req.Scope)
@@ -177,7 +195,10 @@ func (t *installSourceTool) Execute(ctx context.Context, raw json.RawMessage) (s
 	}
 
 	if req.Op == "uninstall" {
-		return t.executeUninstall(req), nil
+		return t.executeUninstall(ctx, req)
+	}
+	if req.Op == "rollback" {
+		return t.executeRollback(ctx, req)
 	}
 
 	actions, warnings, err := t.plan(ctx, req)
@@ -225,6 +246,9 @@ func (t *installSourceTool) Execute(ctx context.Context, raw json.RawMessage) (s
 		return marshalJSON(out), nil
 	}
 
+	if containsPluginAction(actions) && req.PlanID == "" {
+		return "", newErr(ErrApprovalDenied, "plugin apply requires the planId returned by a prior preview")
+	}
 	if req.PlanID != "" && req.PlanID != planID {
 		return "", newErr(ErrApprovalDenied, "planId mismatch (got %s, expected %s); re-plan and re-approve", req.PlanID, planID)
 	}
@@ -300,15 +324,14 @@ func (t *installSourceTool) executeApply(ctx context.Context, req request, actio
 }
 
 // executeUninstall handles op=uninstall. It locates the named entry in the
-// active config (skills via the on-disk layout, MCP via cfg.Plugins) and
-// asks the host to disconnect. We do not consult the approval hook for
-// uninstall: the user already named the entry, and removal is the inverse
-// of the install they authorized.
-func (t *installSourceTool) executeUninstall(req request) string {
+// active config (skills via the on-disk layout, MCP via cfg.Plugins), requires
+// the exact preview planId, consults the host approval hook, and then asks the
+// host to disconnect the approved runtime entry.
+func (t *installSourceTool) executeUninstall(ctx context.Context, req request) (string, error) {
 	actions := []action{}
 	scopes := t.uninstallSearchScopes(req)
 	for _, scope := range scopes {
-		actions = t.uninstallActionsForScope(req.Name, scope)
+		actions = t.uninstallActionsForScope(req.Name, scope, req.Kind)
 		if len(actions) > 0 {
 			break
 		}
@@ -330,15 +353,42 @@ func (t *installSourceTool) executeUninstall(req request) string {
 			Name:    req.Name,
 			Scope:   scope,
 			Next:    "No installed skill or MCP server matched that name in the chosen scope.",
-		})
+		}), nil
+	}
+	planID := computePlanID(req, actions)
+	if !req.Apply {
+		for i := range actions {
+			actions[i].Status = "planned"
+		}
+		return marshalJSON(response{
+			OK: true, Status: "planned", Op: req.Op, Applied: false, Source: req.Source, Name: req.Name,
+			Kind: summarizeKind(actions), Kinds: kindCounts(actions), Scope: scope, PlanID: planID,
+			Actions: publicActions(actions), Next: "Review the removal plan, then call again with apply=true and the same planId.",
+		}), nil
+	}
+	if req.PlanID == "" {
+		return "", newErr(ErrApprovalDenied, "uninstall requires the planId returned by a prior preview")
+	}
+	if req.PlanID != planID {
+		return "", newErr(ErrApprovalDenied, "planId mismatch (got %s, expected %s); re-plan and re-approve", req.PlanID, planID)
+	}
+	if t.approval != nil {
+		if err := t.approval(publicActions(actions)); err != nil {
+			return marshalJSON(response{
+				OK: false, Status: "denied", Op: req.Op, Applied: false, Source: req.Source, Name: req.Name,
+				Kind: summarizeKind(actions), Kinds: kindCounts(actions), Scope: scope, PlanID: planID,
+				Actions: publicActions(actions), Warnings: []string{"host approval was denied: " + err.Error()},
+				Next: "Keep the installed item or review a different removal plan.",
+			}), nil
+		}
 	}
 
-	// Uninstall is destructive but symmetric with a previously approved
-	// install, so we apply directly. Each action is independent.
+	// Each action is independent after the exact removal plan is approved.
 	ok := true
 	anySucceeded := false
+	var warnings []string
 	for i := range actions {
-		if err := t.apply(context.Background(), req, &actions[i]); err != nil {
+		if err := t.apply(ctx, req, &actions[i]); err != nil {
 			ok = false
 			actions[i].Status = "failed"
 			actions[i].Error = err.Error()
@@ -347,6 +397,7 @@ func (t *installSourceTool) executeUninstall(req request) string {
 		}
 		actions[i].Status = "done"
 		anySucceeded = true
+		warnings = append(warnings, actions[i].Warnings...)
 	}
 	status := "done"
 	if !ok {
@@ -356,18 +407,117 @@ func (t *installSourceTool) executeUninstall(req request) string {
 		}
 	}
 	return marshalJSON(response{
-		OK:      ok,
-		Status:  status,
-		Op:      req.Op,
-		Applied: true,
-		Source:  req.Source,
-		Name:    req.Name,
-		Kind:    summarizeKind(actions),
-		Kinds:   kindCounts(actions),
-		Scope:   scope,
-		Actions: publicActions(actions),
-		Next:    "Removed.",
-	})
+		OK:       ok,
+		Status:   status,
+		Op:       req.Op,
+		Applied:  true,
+		Source:   req.Source,
+		Name:     req.Name,
+		Kind:     summarizeKind(actions),
+		Kinds:    kindCounts(actions),
+		Scope:    scope,
+		PlanID:   planID,
+		Actions:  publicActions(actions),
+		Warnings: warnings,
+		Next:     "Removed.",
+	}), nil
+}
+
+func (t *installSourceTool) executeRollback(ctx context.Context, req request) (string, error) {
+	installed, ok, err := pluginpkg.FindInstalled(t.reamesAgentHome, req.Name)
+	if err != nil {
+		return marshalJSON(response{
+			OK: false, Status: "failed", Op: req.Op, Applied: false, Name: req.Name,
+			Kind: "plugin", Scope: "global", Next: "Plugin state could not be read: " + err.Error(),
+		}), nil
+	}
+	if !ok || installed.Previous == nil {
+		return marshalJSON(response{
+			OK: false, Status: "blocked", Op: req.Op, Applied: false, Name: req.Name,
+			Kind: "plugin", Scope: "global", Next: "The plugin is not installed or has no verified rollback generation.",
+		}), nil
+	}
+	previous := installed.Previous
+	added, removed := permissionDiff(installed.Permissions, previous.Permissions)
+	act := action{
+		Kind:               "plugin",
+		Action:             "rollback_plugin_package",
+		Status:             "planned",
+		RiskLevel:          RiskMedium,
+		RiskReasons:        []string{"atomically switches the active plugin to its previous verified generation"},
+		Name:               installed.Name,
+		Target:             pluginpkg.ResolveRoot(t.reamesAgentHome, previous.Root),
+		Scope:              "global",
+		ConfigPath:         pluginpkg.StatePath(t.reamesAgentHome),
+		ManifestKind:       previous.ManifestKind,
+		Version:            previous.Version,
+		CurrentVersion:     installed.Version,
+		Digest:             previous.Digest,
+		CurrentDigest:      installed.Digest,
+		CurrentStateToken:  pluginpkg.InstalledStateToken(installed),
+		Permissions:        append([]string(nil), previous.Permissions...),
+		AddedPermissions:   added,
+		RemovedPermissions: removed,
+		SourceKind:         previous.SourceKind,
+		SourceRevision:     previous.SourceRevision,
+		TrustStatus:        previous.TrustStatus,
+		WillEnable:         previous.Enabled && permissionSetCovers(previous.GrantedPermissions, previous.Permissions),
+		RollbackAvailable:  true,
+	}
+	if len(added) > 0 {
+		act.RiskLevel = RiskHigh
+		act.RiskReasons = append(act.RiskReasons, "restored generation requests permissions not used by the current generation: "+strings.Join(added, ", "))
+	}
+	planID := computePlanID(req, []action{act})
+	if !req.Apply {
+		return marshalJSON(response{
+			OK: true, Status: "planned", Op: req.Op, Applied: false, Name: req.Name,
+			Kind: "plugin", Kinds: kindTally{Plugin: 1}, Scope: "global", PlanID: planID,
+			Actions: []action{act}, Next: "Review the rollback target and permission differences, then call again with apply=true and the same planId.",
+		}), nil
+	}
+	if req.PlanID == "" {
+		return "", newErr(ErrApprovalDenied, "plugin rollback requires the planId returned by a prior preview")
+	}
+	if req.PlanID != planID {
+		return "", newErr(ErrApprovalDenied, "planId mismatch (got %s, expected %s); re-plan and re-approve", req.PlanID, planID)
+	}
+	if t.approval != nil {
+		if err := t.approval([]ApprovalAction{act}); err != nil {
+			act.Status = "denied"
+			return marshalJSON(response{
+				OK: false, Status: "denied", Op: req.Op, Applied: false, Name: req.Name,
+				Kind: "plugin", Kinds: kindTally{Plugin: 1}, Scope: "global", PlanID: planID,
+				Actions: []action{act}, Warnings: []string{"host approval was denied: " + err.Error()},
+				Next: "Keep the current generation active or review a different rollback plan.",
+			}), nil
+		}
+	}
+	if err := t.apply(ctx, req, &act); err != nil {
+		act.Status = "failed"
+		act.Error = err.Error()
+		act.Next = "Inspect the rollback verification error; the current generation remains active."
+		return marshalJSON(response{
+			OK: false, Status: "failed", Op: req.Op, Applied: false, Name: req.Name,
+			Kind: "plugin", Kinds: kindTally{Plugin: 1}, Scope: "global", PlanID: planID,
+			Actions: []action{act}, Warnings: act.Warnings, Next: act.Next,
+		}), nil
+	}
+	act.Status = "done"
+	return marshalJSON(response{
+		OK: true, Status: "done", Op: req.Op, Applied: true, Name: req.Name,
+		Kind: "plugin", Kinds: kindTally{Plugin: 1}, Scope: "global", PlanID: planID,
+		Actions: []action{act}, Warnings: act.Warnings, Next: "Rolled back to the previous verified plugin generation.",
+	}), nil
+}
+
+func containsPluginAction(actions []action) bool {
+	for _, act := range actions {
+		if act.Kind == "plugin" {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *installSourceTool) uninstallSearchScopes(req request) []string {
@@ -381,47 +531,51 @@ func (t *installSourceTool) uninstallSearchScopes(req request) []string {
 	return append(scopes, "global")
 }
 
-func (t *installSourceTool) uninstallActionsForScope(name, scope string) []action {
+func (t *installSourceTool) uninstallActionsForScope(name, scope, kind string) []action {
 	var actions []action
 	cfgPath := t.configPath(scope)
 	cfg := config.LoadForEdit(cfgPath)
 
 	// Skills: try the flat file, then the directory layout, in the chosen
-	// scope. We don't require a kind — "name" disambiguates.
-	if path, ok := t.resolveSkillPath(name, scope); ok {
-		actions = append(actions, action{
-			Kind:       "skill",
-			Action:     "remove_skill",
-			Name:       name,
-			Target:     path,
-			Scope:      scope,
-			ConfigPath: cfgPath,
-			RiskLevel:  RiskLow,
-		})
-	} else if rootAction, ok := t.resolveRegisteredSkillRoot(name, scope, cfgPath, cfg); ok {
-		actions = append(actions, rootAction)
+	// scope. We don't require a kind - "name" disambiguates.
+	if kind == "auto" || kind == "skill" {
+		if path, ok := t.resolveSkillPath(name, scope); ok {
+			actions = append(actions, action{
+				Kind:       "skill",
+				Action:     "remove_skill",
+				Name:       name,
+				Target:     path,
+				Scope:      scope,
+				ConfigPath: cfgPath,
+				RiskLevel:  RiskLow,
+			})
+		} else if rootAction, ok := t.resolveRegisteredSkillRoot(name, scope, cfgPath, cfg); ok {
+			actions = append(actions, rootAction)
+		}
 	}
 
 	// MCP: scan the chosen config for the named plugin.
-	for _, p := range cfg.Plugins {
-		if p.Name == name {
-			actions = append(actions, action{
-				Kind:       "mcp",
-				Action:     "remove_mcp_server",
-				Name:       p.Name,
-				Target:     p.URL,
-				Scope:      scope,
-				Transport:  pluginTransport(p),
-				ConfigPath: cfgPath,
-				RiskLevel:  RiskMedium,
-				RiskReasons: []string{
-					"disconnects a running server and drops its tools from the active session",
-				},
-			})
-			break
+	if kind == "auto" || kind == "mcp" {
+		for _, p := range cfg.Plugins {
+			if p.Name == name {
+				actions = append(actions, action{
+					Kind:       "mcp",
+					Action:     "remove_mcp_server",
+					Name:       p.Name,
+					Target:     p.URL,
+					Scope:      scope,
+					Transport:  pluginTransport(p),
+					ConfigPath: cfgPath,
+					RiskLevel:  RiskMedium,
+					RiskReasons: []string{
+						"disconnects a running server and drops its tools from the active session",
+					},
+				})
+				break
+			}
 		}
 	}
-	if scope == "global" || scope == "" {
+	if (kind == "auto" || kind == "plugin") && (scope == "global" || scope == "") {
 		if st, err := pluginpkg.LoadState(t.reamesAgentHome); err == nil {
 			for _, p := range st.Plugins {
 				if p.Name != name {
@@ -429,15 +583,18 @@ func (t *installSourceTool) uninstallActionsForScope(name, scope string) []actio
 				}
 				root := pluginpkg.ResolveRoot(t.reamesAgentHome, p.Root)
 				actions = append(actions, action{
-					Kind:         "plugin",
-					Action:       "remove_plugin_package",
-					Name:         p.Name,
-					Target:       root,
-					Scope:        "global",
-					ConfigPath:   pluginpkg.StatePath(t.reamesAgentHome),
-					ManifestKind: p.ManifestKind,
-					Version:      p.Version,
-					RiskLevel:    RiskMedium,
+					Kind:              "plugin",
+					Action:            "remove_plugin_package",
+					Name:              p.Name,
+					Target:            root,
+					Scope:             "global",
+					ConfigPath:        pluginpkg.StatePath(t.reamesAgentHome),
+					ManifestKind:      p.ManifestKind,
+					Version:           p.Version,
+					Digest:            p.Digest,
+					Permissions:       append([]string(nil), p.Permissions...),
+					CurrentStateToken: pluginpkg.InstalledStateToken(p),
+					RiskLevel:         RiskMedium,
 					RiskReasons: []string{
 						"removes a plugin package and disables its skills, hooks, and MCP servers",
 					},

@@ -2,6 +2,7 @@ package installsource
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,65 +13,57 @@ import (
 	"reames-agent/internal/pluginpkg"
 )
 
+type preparedPluginSource struct {
+	Root     string
+	Kind     string
+	Revision string
+	Trust    string
+}
+
 func (t *installSourceTool) localPluginPackageAction(req request, root string) (action, []string, error) {
-	pkg, warnings, err := pluginpkg.ParseDir(root)
+	pkg, warnings, digest, err := pluginpkg.InspectDir(root)
 	if err != nil {
 		return action{}, warnings, newErr(ErrManifestMissing, "%v", err)
 	}
-	return t.pluginPackageAction(req, pkg, root), warnings, nil
+	trust := pluginpkg.TrustLocalSnapshot
+	if modeForPlugin(req.Mode) == pluginpkg.InstallModeLink {
+		trust = pluginpkg.TrustMutableLink
+	}
+	act, err := t.pluginPackageAction(req, pkg, root, preparedPluginSource{
+		Root:  root,
+		Kind:  pluginpkg.SourceKindLocal,
+		Trust: trust,
+	}, digest)
+	return act, warnings, err
 }
 
 func (t *installSourceTool) planGitHubPluginPackage(ctx context.Context, req request) ([]action, []string, error) {
-	src, ok := parseGitHubRepoSource(req.Source)
-	if !ok {
-		return nil, nil, newErr(ErrUnsupportedKind, "plugin URL %q is not a GitHub repository", req.Source)
+	if modeForPlugin(req.Mode) == pluginpkg.InstallModeLink {
+		return nil, nil, newErr(ErrUnsafeLinkTarget, "remote plugin sources cannot use link mode")
 	}
-	var warnings []string
-	for _, branch := range src.branches() {
-		for _, manifestPath := range pluginpkg.ManifestPaths() {
-			rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", src.Owner, src.Repo, branch, joinURLPath(src.Path, manifestPath))
-			body, err := t.fetchText(ctx, rawURL)
-			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("%s: %s", rawURL, err.Error()))
-				continue
-			}
-			tmp, err := os.MkdirTemp("", "reamesAgent-plugin-plan-*")
-			if err != nil {
-				return nil, warnings, err
-			}
-			defer os.RemoveAll(tmp)
-			if err := os.MkdirAll(filepath.Dir(filepath.Join(tmp, manifestPath)), 0o755); err != nil {
-				return nil, warnings, err
-			}
-			if err := os.WriteFile(filepath.Join(tmp, manifestPath), []byte(body), 0o644); err != nil {
-				return nil, warnings, err
-			}
-			if strings.EqualFold(manifestPath, pluginpkg.CodexManifest) {
-				if hookBody, err := t.fetchText(ctx, fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", src.Owner, src.Repo, branch, joinURLPath(src.Path, "hooks/session-start-codex"))); err == nil {
-					hookPath := filepath.Join(tmp, "hooks", "session-start-codex")
-					if mkErr := os.MkdirAll(filepath.Dir(hookPath), 0o755); mkErr == nil {
-						_ = os.WriteFile(hookPath, []byte(hookBody), 0o755)
-					}
-				}
-			}
-			pkg, pkgWarnings, err := pluginpkg.ParseDir(tmp)
-			warnings = append(warnings, pkgWarnings...)
-			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("%s: %s", rawURL, err.Error()))
-				continue
-			}
-			act := t.pluginPackageAction(req, pkg, req.Source)
-			act.Source = req.Source
-			return []action{act}, warnings, nil
-		}
+	prepared, cleanup, err := t.preparePluginSource(ctx, req.Source, pluginpkg.InstallModeCopy)
+	if err != nil {
+		return nil, nil, err
 	}
-	return nil, warnings, newErr(ErrManifestMissing, "no plugin manifest found in GitHub repository %s/%s", src.Owner, src.Repo)
+	defer cleanup()
+	pkg, warnings, digest, err := pluginpkg.InspectDir(prepared.Root)
+	if err != nil {
+		return nil, warnings, newErr(ErrManifestMissing, "%v", err)
+	}
+	act, err := t.pluginPackageAction(req, pkg, req.Source, prepared, digest)
+	if err != nil {
+		return nil, warnings, err
+	}
+	return []action{act}, warnings, nil
 }
 
-func (t *installSourceTool) pluginPackageAction(req request, pkg pluginpkg.Package, source string) action {
+func (t *installSourceTool) pluginPackageAction(req request, pkg pluginpkg.Package, source string, prepared preparedPluginSource, digest string) (action, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = pkg.Manifest.Name
+	}
+	if !pluginpkg.IsValidName(name) {
+		return action{}, newErr(ErrInvalidManifest, "invalid plugin name %q", name)
 	}
 	root := ""
 	if t.reamesAgentHome != "" {
@@ -78,41 +71,106 @@ func (t *installSourceTool) pluginPackageAction(req request, pkg pluginpkg.Packa
 	}
 	skills, hooks, mcp := pkg.CapabilityCounts()
 	a := action{
-		Kind:         "plugin",
-		Action:       "install_plugin_package",
-		Name:         name,
-		Source:       source,
-		Target:       root,
-		Scope:        "global",
-		Mode:         modeForPlugin(req.Mode),
-		ConfigPath:   pluginpkg.StatePath(t.reamesAgentHome),
-		Skills:       pkg.Manifest.Skills,
-		SkillCount:   skills,
-		HookCount:    hooks,
-		ToolCount:    mcp,
-		ManifestKind: pkg.ManifestKind,
-		Version:      pkg.Manifest.Version,
-		RiskLevel:    RiskMedium,
-		RiskReasons:  []string{"installs a plugin package that can add skills, hooks, and MCP servers"},
+		Kind:             "plugin",
+		Action:           "install_plugin_package",
+		Name:             name,
+		Source:           source,
+		Target:           root,
+		Scope:            "global",
+		Mode:             modeForPlugin(req.Mode),
+		ConfigPath:       pluginpkg.StatePath(t.reamesAgentHome),
+		Skills:           append([]string(nil), pkg.Manifest.Skills...),
+		SkillCount:       skills,
+		HookCount:        hooks,
+		ToolCount:        mcp,
+		ManifestKind:     pkg.ManifestKind,
+		Version:          pkg.Manifest.Version,
+		Digest:           digest,
+		Permissions:      append([]string(nil), pkg.Manifest.Permissions...),
+		PermissionSource: pkg.Manifest.PermissionSource,
+		SourceKind:       prepared.Kind,
+		SourceRevision:   prepared.Revision,
+		TrustStatus:      prepared.Trust,
+		RiskLevel:        RiskMedium,
+		RiskReasons:      []string{"installs a plugin package disabled until its permissions are explicitly granted"},
 	}
-	if a.Mode == "link" {
-		a.RiskReasons = append(a.RiskReasons, "links a plugin package from a mutable local directory")
+	if a.Mode == pluginpkg.InstallModeLink {
+		a.RiskLevel = RiskHigh
+		a.RiskReasons = append(a.RiskReasons, "links a mutable local directory; content changes require re-enabling before they load")
 	}
 	if hooks > 0 {
-		a.RiskReasons = append(a.RiskReasons, "registers shell hooks that execute during Reames Agent sessions")
+		a.RiskLevel = RiskHigh
+		a.RiskReasons = append(a.RiskReasons, "declares hooks that can inject context or execute commands during sessions")
 	}
 	if mcp > 0 {
-		a.RiskReasons = append(a.RiskReasons, "adds MCP servers that can change provider-visible tool schemas")
+		a.RiskLevel = RiskHigh
+		a.RiskReasons = append(a.RiskReasons, "declares MCP servers that can spawn processes or connect to remote endpoints")
+	}
+	if len(a.Permissions) > 0 {
+		a.RiskReasons = append(a.RiskReasons, "requests permissions: "+strings.Join(a.Permissions, ", "))
+	}
+	if prepared.Trust == pluginpkg.TrustGitHubUnsigned {
+		a.RiskReasons = append(a.RiskReasons, "GitHub HTTPS transport is recorded but the package has no Reames signature verification")
+	}
+	if installed, ok, err := pluginpkg.FindInstalled(t.reamesAgentHome, name); err != nil {
+		return action{}, err
+	} else if ok {
+		a.Action = "update_plugin_package"
+		a.CurrentVersion = installed.Version
+		a.CurrentDigest = installed.Digest
+		a.CurrentStateToken = pluginpkg.InstalledStateToken(installed)
+		a.AddedPermissions, a.RemovedPermissions = permissionDiff(installed.Permissions, a.Permissions)
+		a.WillEnable = installed.Enabled && permissionSetCovers(installed.GrantedPermissions, a.Permissions)
+		a.RollbackAvailable = installed.Previous != nil || (installed.InstallMode == pluginpkg.InstallModeCopy && installed.Digest != digest)
+		if len(a.AddedPermissions) > 0 {
+			a.RiskLevel = RiskHigh
+			a.RiskReasons = append(a.RiskReasons, "adds permissions: "+strings.Join(a.AddedPermissions, ", "))
+		}
 	}
 	sort.Strings(a.Skills)
-	return a
+	return a, nil
 }
 
 func modeForPlugin(mode string) string {
-	if mode == "link" {
-		return "link"
+	if mode == pluginpkg.InstallModeLink {
+		return pluginpkg.InstallModeLink
 	}
-	return "copy"
+	return pluginpkg.InstallModeCopy
+}
+
+func permissionDiff(current, next []string) (added, removed []string) {
+	currentSet := map[string]bool{}
+	nextSet := map[string]bool{}
+	for _, permission := range current {
+		currentSet[permission] = true
+	}
+	for _, permission := range next {
+		nextSet[permission] = true
+		if !currentSet[permission] {
+			added = append(added, permission)
+		}
+	}
+	for _, permission := range current {
+		if !nextSet[permission] {
+			removed = append(removed, permission)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(removed)
+	return added, removed
+}
+
+func permissionSetCovers(granted, required []string) bool {
+	set := map[string]bool{}
+	for _, permission := range granted {
+		set[permission] = true
+	}
+	for _, permission := range required {
+		if !set[permission] {
+			return false
+		}
+	}
+	return true
 }
 
 func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req request, act *action) error {
@@ -122,13 +180,26 @@ func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req r
 	if !pluginpkg.IsValidName(act.Name) {
 		return newErr(ErrInvalidManifest, "invalid plugin name %q", act.Name)
 	}
-	target := pluginpkg.InstallRoot(t.reamesAgentHome, act.Name)
-	sourceRoot, cleanup, err := t.preparePluginSource(ctx, act.Source, act.Mode)
+	var previousMCPServers []string
+	if act.CurrentStateToken != "" {
+		previous, ok, err := pluginpkg.FindInstalled(t.reamesAgentHome, act.Name)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return newErr(ErrApprovalDenied, "plugin state changed after planning: %q is no longer installed", act.Name)
+		}
+		previousMCPServers, err = pluginMCPServerNames(t.reamesAgentHome, previous)
+		if err != nil {
+			return err
+		}
+	}
+	prepared, cleanup, err := t.preparePluginSource(ctx, act.Source, act.Mode)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-	pkg, warnings, err := pluginpkg.ParseDir(sourceRoot)
+	pkg, warnings, digest, err := pluginpkg.InspectDir(prepared.Root)
 	if err != nil {
 		return newErr(ErrInvalidManifest, "%v", err)
 	}
@@ -136,53 +207,79 @@ func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req r
 	if pkg.Manifest.Name != act.Name && strings.TrimSpace(req.Name) == "" {
 		return newErr(ErrInvalidManifest, "planned plugin name %q but source now reports %q", act.Name, pkg.Manifest.Name)
 	}
-	if act.Mode == "link" {
-		if !isLinkTargetSafe(sourceRoot, t.home, t.root) {
-			return newErr(ErrUnsafeLinkTarget, "plugin source %s is outside %s and %s", sourceRoot, t.root, t.home)
-		}
-		if err := replaceSymlink(target, sourceRoot, req.Replace); err != nil {
-			return err
-		}
-	} else {
-		if err := replaceCopiedPlugin(sourceRoot, target, req.Replace); err != nil {
-			return err
-		}
+	if act.Digest != "" && digest != act.Digest {
+		return newErr(ErrApprovalDenied, "plugin content changed after planning: got %s, want %s", digest, act.Digest)
 	}
-	installed := pluginpkg.InstalledPlugin{
-		Name:         act.Name,
-		Source:       act.Source,
-		Root:         pluginpkg.RelativeRoot(t.reamesAgentHome, target),
-		Version:      pkg.Manifest.Version,
-		Description:  pkg.Manifest.Description,
-		ManifestKind: pkg.ManifestKind,
-		Enabled:      true,
+	if act.SourceRevision != "" && prepared.Revision != act.SourceRevision {
+		return newErr(ErrApprovalDenied, "plugin source revision changed after planning: got %s, want %s", prepared.Revision, act.SourceRevision)
 	}
-	if act.Mode == "link" {
-		installed.Root = sourceRoot
+	if act.Mode == pluginpkg.InstallModeLink && !isLinkTargetSafe(prepared.Root, t.home, t.root) {
+		return newErr(ErrUnsafeLinkTarget, "plugin source %s is outside %s and %s", prepared.Root, t.root, t.home)
 	}
-	if err := pluginpkg.Upsert(t.reamesAgentHome, installed); err != nil {
+	result, err := pluginpkg.Install(t.reamesAgentHome, pluginpkg.InstallRequest{
+		Name:                 act.Name,
+		Source:               act.Source,
+		SourceRoot:           prepared.Root,
+		SourceKind:           prepared.Kind,
+		SourceRevision:       prepared.Revision,
+		TrustStatus:          prepared.Trust,
+		Mode:                 act.Mode,
+		ExpectedDigest:       digest,
+		ExpectedCurrentState: act.CurrentStateToken,
+		BindCurrentState:     true,
+		Replace:              req.Replace,
+		AllowNameOverride:    strings.TrimSpace(req.Name) != "",
+	})
+	if err != nil {
+		if errors.Is(err, pluginpkg.ErrAlreadyInstalled) {
+			return newErr(ErrAlreadyExists, "%v; retry with replace=true to update it", err)
+		}
 		return err
 	}
-	act.Target = target
-	act.ManifestKind = pkg.ManifestKind
-	act.Version = pkg.Manifest.Version
+	installed := result.Installed
+	act.Warnings = append(act.Warnings, result.Warnings...)
+	act.Target = pluginpkg.ResolveRoot(t.reamesAgentHome, installed.Root)
+	act.ManifestKind = installed.ManifestKind
+	act.Version = installed.Version
+	act.Digest = installed.Digest
+	act.Permissions = append([]string(nil), installed.Permissions...)
+	act.SourceKind = installed.SourceKind
+	act.SourceRevision = installed.SourceRevision
+	act.TrustStatus = installed.TrustStatus
+	act.WillEnable = installed.Enabled
+	act.RollbackAvailable = installed.Previous != nil
 	act.SkillCount, act.HookCount, act.ToolCount = pkg.CapabilityCounts()
+	if act.CurrentStateToken != "" {
+		act.Warnings = append(act.Warnings, t.revokePluginRuntime(act.Name)...)
+	}
+	if removed := t.revokePluginMCPServers(act.Name, previousMCPServers); removed > 0 {
+		act.Warnings = append(act.Warnings, fmt.Sprintf("disconnected %d MCP server(s) from the previous plugin generation; open a new session to load the verified replacement", removed))
+	}
 	return nil
 }
 
-func (t *installSourceTool) preparePluginSource(ctx context.Context, source, mode string) (string, func(), error) {
+func (t *installSourceTool) preparePluginSource(ctx context.Context, source, mode string) (preparedPluginSource, func(), error) {
 	source = strings.TrimSpace(source)
 	if strings.HasPrefix(source, "git:github.com/") {
 		source = "https://github.com/" + strings.TrimPrefix(source, "git:github.com/")
 	}
 	if isURL(source) {
+		if mode == pluginpkg.InstallModeLink {
+			return preparedPluginSource{}, func() {}, newErr(ErrUnsafeLinkTarget, "remote plugin sources cannot use link mode")
+		}
 		src, ok := parseGitHubRepoSource(source)
 		if !ok {
-			return "", func() {}, newErr(ErrUnsupportedKind, "plugin URL %q is not a GitHub repository", source)
+			return preparedPluginSource{}, func() {}, newErr(ErrUnsupportedKind, "plugin URL %q is not a GitHub repository", source)
 		}
-		tmp, err := os.MkdirTemp("", "reamesAgent-plugin-*")
+		if src.Path != "" {
+			clean := filepath.Clean(filepath.FromSlash(src.Path))
+			if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+				return preparedPluginSource{}, func() {}, newErr(ErrInvalidManifest, "plugin repository subpath %q escapes the repository", src.Path)
+			}
+		}
+		tmp, err := os.MkdirTemp("", "reames-agent-plugin-*")
 		if err != nil {
-			return "", func() {}, err
+			return preparedPluginSource{}, func() {}, err
 		}
 		cloneURL := fmt.Sprintf("https://github.com/%s/%s.git", src.Owner, src.Repo)
 		args := []string{"clone", "--depth=1"}
@@ -193,74 +290,129 @@ func (t *installSourceTool) preparePluginSource(ctx context.Context, source, mod
 		cmd := exec.CommandContext(ctx, "git", args...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			_ = os.RemoveAll(tmp)
-			return "", func() {}, newErr(ErrSourceUnreadable, "git clone failed: %v: %s", err, strings.TrimSpace(string(out)))
+			return preparedPluginSource{}, func() {}, newErr(ErrSourceUnreadable, "git clone failed: %v: %s", err, strings.TrimSpace(string(out)))
+		}
+		revisionOut, err := exec.CommandContext(ctx, "git", "-C", tmp, "rev-parse", "HEAD").CombinedOutput()
+		if err != nil {
+			_ = os.RemoveAll(tmp)
+			return preparedPluginSource{}, func() {}, newErr(ErrSourceUnreadable, "resolve cloned plugin revision: %v: %s", err, strings.TrimSpace(string(revisionOut)))
 		}
 		root := tmp
 		if src.Path != "" {
 			root = filepath.Join(tmp, filepath.FromSlash(src.Path))
 		}
-		return root, func() { _ = os.RemoveAll(tmp) }, nil
+		return preparedPluginSource{
+			Root:     root,
+			Kind:     pluginpkg.SourceKindGitHub,
+			Revision: strings.TrimSpace(string(revisionOut)),
+			Trust:    pluginpkg.TrustGitHubUnsigned,
+		}, func() { _ = os.RemoveAll(tmp) }, nil
 	}
 	path := t.resolvePath(source)
-	if mode == "link" {
-		return path, func() {}, nil
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return preparedPluginSource{}, func() {}, err
 	}
-	return path, func() {}, nil
-}
-
-func replaceCopiedPlugin(sourceRoot, target string, replace bool) error {
-	if _, err := os.Lstat(target); err == nil {
-		if !replace {
-			return newErr(ErrAlreadyExists, "plugin package already exists at %s; retry with replace=true to update it", target)
-		}
-		if err := os.RemoveAll(target); err != nil {
-			return err
-		}
+	trust := pluginpkg.TrustLocalSnapshot
+	if mode == pluginpkg.InstallModeLink {
+		trust = pluginpkg.TrustMutableLink
 	}
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return err
-	}
-	return copyDir(sourceRoot, target)
-}
-
-func replaceSymlink(target, sourceRoot string, replace bool) error {
-	if _, err := os.Lstat(target); err == nil {
-		if !replace {
-			return newErr(ErrAlreadyExists, "plugin package already exists at %s; retry with replace=true to update it", target)
-		}
-		if err := os.RemoveAll(target); err != nil {
-			return err
-		}
-	}
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return err
-	}
-	return os.Symlink(sourceRoot, target)
+	return preparedPluginSource{Root: abs, Kind: pluginpkg.SourceKindLocal, Trust: trust}, func() {}, nil
 }
 
 func (t *installSourceTool) applyRemovePluginPackage(_ request, act *action) error {
-	installed, ok, err := pluginpkg.Remove(t.reamesAgentHome, act.Name)
+	installed, ok, err := pluginpkg.FindInstalled(t.reamesAgentHome, act.Name)
 	if err != nil || !ok {
 		return err
 	}
-	root := pluginpkg.ResolveRoot(t.reamesAgentHome, installed.Root)
-	if t.onDisconnect != nil {
-		if pkg, _, err := pluginpkg.ParseDir(root); err == nil {
-			names := make([]string, 0, len(pkg.Manifest.MCPServers))
-			for name := range pkg.Manifest.MCPServers {
-				names = append(names, name)
-			}
-			sort.Strings(names)
-			for _, name := range names {
-				t.onDisconnect(name)
-			}
-		}
+	serverNames, err := pluginMCPServerNames(t.reamesAgentHome, installed)
+	if err != nil {
+		return err
 	}
-	pluginsDir := pluginpkg.PluginsDir(t.reamesAgentHome)
-	if rel, err := filepath.Rel(pluginsDir, root); err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
-		if err := os.RemoveAll(root); err != nil {
-			return err
-		}
+	_, warnings, found, err := pluginpkg.UninstallApproved(t.reamesAgentHome, pluginpkg.UninstallRequest{
+		Name: act.Name, ExpectedCurrentState: act.CurrentStateToken, BindCurrentState: true,
+	})
+	act.Warnings = append(act.Warnings, warnings...)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return newErr(ErrApprovalDenied, "plugin state changed after planning: %q is no longer installed", act.Name)
+	}
+	act.Warnings = append(act.Warnings, t.revokePluginRuntime(act.Name)...)
+	if removed := t.revokePluginMCPServers(act.Name, serverNames); removed > 0 {
+		act.Warnings = append(act.Warnings, fmt.Sprintf("disconnected %d MCP server(s) owned by the removed plugin", removed))
 	}
 	return nil
+}
+
+func (t *installSourceTool) applyRollbackPluginPackage(act *action) error {
+	current, ok, err := pluginpkg.FindInstalled(t.reamesAgentHome, act.Name)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("plugin %q is not installed", act.Name)
+	}
+	serverNames, err := pluginMCPServerNames(t.reamesAgentHome, current)
+	if err != nil {
+		return err
+	}
+	restored, warnings, err := pluginpkg.RollbackApproved(t.reamesAgentHome, pluginpkg.RollbackRequest{
+		Name: act.Name, ExpectedCurrentState: act.CurrentStateToken, BindCurrentState: true,
+	})
+	act.Warnings = append(act.Warnings, warnings...)
+	if err != nil {
+		return err
+	}
+	act.Target = pluginpkg.ResolveRoot(t.reamesAgentHome, restored.Root)
+	act.Version = restored.Version
+	act.Digest = restored.Digest
+	act.Permissions = append([]string(nil), restored.Permissions...)
+	act.SourceKind = restored.SourceKind
+	act.SourceRevision = restored.SourceRevision
+	act.TrustStatus = restored.TrustStatus
+	act.WillEnable = restored.Enabled
+	act.RollbackAvailable = restored.Previous != nil
+	act.Warnings = append(act.Warnings, t.revokePluginRuntime(act.Name)...)
+	if removed := t.revokePluginMCPServers(act.Name, serverNames); removed > 0 {
+		act.Warnings = append(act.Warnings, fmt.Sprintf("disconnected %d MCP server(s) from the replaced plugin generation; open a new session to load the verified rollback", removed))
+	}
+	return nil
+}
+
+func pluginMCPServerNames(reamesAgentHome string, installed pluginpkg.InstalledPlugin) ([]string, error) {
+	if installed.MCPServerNamesBound {
+		return append([]string(nil), installed.MCPServerNames...), nil
+	}
+	verified, err := pluginpkg.VerifyInstalled(reamesAgentHome, installed.Name)
+	if err != nil {
+		return nil, fmt.Errorf("verify plugin MCP ownership before lifecycle mutation: %w", err)
+	}
+	names := make([]string, 0, len(verified.Package.Manifest.MCPServers))
+	for name := range verified.Package.Manifest.MCPServers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func (t *installSourceTool) revokePluginMCPServers(pluginName string, serverNames []string) int {
+	if t.onPluginDisconnect == nil {
+		return 0
+	}
+	removed := 0
+	for _, serverName := range serverNames {
+		if t.onPluginDisconnect(pluginName, serverName) {
+			removed++
+		}
+	}
+	return removed
+}
+
+func (t *installSourceTool) revokePluginRuntime(pluginName string) []string {
+	if t.onPluginRuntimeChange == nil {
+		return nil
+	}
+	return t.onPluginRuntimeChange(pluginName)
 }

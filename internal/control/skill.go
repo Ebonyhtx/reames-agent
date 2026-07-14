@@ -1,6 +1,10 @@
 package control
 
-import "reames-agent/internal/skill"
+import (
+	"sync/atomic"
+
+	"reames-agent/internal/skill"
+)
 
 // skillSet owns the session's discovered skills: the enabled subset surfaced to
 // the model, the full set (including config-disabled ones) for management
@@ -16,6 +20,7 @@ type skillSet struct {
 	all      []skill.Skill // every discoverable skill, including config-disabled ones
 	store    *skill.Store  // reloadable enabled-skill store; nil falls back to enabled
 	allStore *skill.Store  // reloadable all-skill store; nil falls back to all/enabled
+	disabled atomic.Bool   // fail-closed after an installed plugin generation changes
 }
 
 func newSkillSet(enabled, all []skill.Skill, store, allStore *skill.Store) skillSet {
@@ -24,6 +29,9 @@ func newSkillSet(enabled, all []skill.Skill, store, allStore *skill.Store) skill
 
 // list returns the enabled skills, preferring the live store.
 func (s *skillSet) list() []skill.Skill {
+	if s.disabled.Load() {
+		return nil
+	}
 	if s.store != nil {
 		return s.store.List()
 	}
@@ -33,6 +41,9 @@ func (s *skillSet) list() []skill.Skill {
 // listAll returns every discoverable skill (including disabled), preferring the
 // live store, for management surfaces that re-enable a hidden skill.
 func (s *skillSet) listAll() []skill.Skill {
+	if s.disabled.Load() {
+		return nil
+	}
 	if s.allStore != nil {
 		return s.allStore.List()
 	}
@@ -44,6 +55,9 @@ func (s *skillSet) listAll() []skill.Skill {
 
 // byName resolves an enabled skill by name, preferring the live store.
 func (s *skillSet) byName(name string) (skill.Skill, bool) {
+	if s.disabled.Load() {
+		return skill.Skill{}, false
+	}
 	if s.store != nil {
 		return s.store.Read(name)
 	}
@@ -58,5 +72,12 @@ func (s *skillSet) byName(name string) (skill.Skill, bool) {
 // discovered returns the construction-time enabled snapshot (not the live store),
 // for the /skills listing which reflects what was discovered at boot.
 func (s *skillSet) discovered() []skill.Skill {
+	if s.disabled.Load() {
+		return nil
+	}
 	return s.enabled
+}
+
+func (s *skillSet) disable() bool {
+	return s.disabled.CompareAndSwap(false, true)
 }

@@ -70,6 +70,13 @@ type TurnControl interface {
 	ToolResult(toolID string) *ToolResultData
 }
 
+// RuntimeMutationGuard reserves an idle controller while a host changes
+// runtime-wide capability state. The reservation rejects new foreground work
+// and session rotations until its release function is called.
+type RuntimeMutationGuard interface {
+	BeginRuntimeMutation() (release func(), err error)
+}
+
 // Approvals covers tool-approval and ask prompts plus the runtime approval
 // posture (ask/auto/yolo). It mirrors the approvalManager surface.
 type Approvals interface {
@@ -227,17 +234,18 @@ type SessionAPI interface {
 // the full port, so frontend migrations to the interfaces are mechanical and can
 // never silently drift from the implementation.
 var (
-	_ Lifecycle          = (*Controller)(nil)
-	_ TurnControl        = (*Controller)(nil)
-	_ Approvals          = (*Controller)(nil)
-	_ Goals              = (*Controller)(nil)
-	_ SessionHistory     = (*Controller)(nil)
-	_ MemoryControl      = (*Controller)(nil)
-	_ Capabilities       = (*Controller)(nil)
-	_ Status             = (*Controller)(nil)
-	_ SessionPersistence = (*Controller)(nil)
-	_ Input              = (*Controller)(nil)
-	_ Settings           = (*Controller)(nil)
-	_ CommandControl     = (*Controller)(nil)
-	_ SessionAPI         = (*Controller)(nil)
+	_ Lifecycle            = (*Controller)(nil)
+	_ TurnControl          = (*Controller)(nil)
+	_ Approvals            = (*Controller)(nil)
+	_ Goals                = (*Controller)(nil)
+	_ SessionHistory       = (*Controller)(nil)
+	_ MemoryControl        = (*Controller)(nil)
+	_ Capabilities         = (*Controller)(nil)
+	_ Status               = (*Controller)(nil)
+	_ SessionPersistence   = (*Controller)(nil)
+	_ Input                = (*Controller)(nil)
+	_ Settings             = (*Controller)(nil)
+	_ CommandControl       = (*Controller)(nil)
+	_ RuntimeMutationGuard = (*Controller)(nil)
+	_ SessionAPI           = (*Controller)(nil)
 )

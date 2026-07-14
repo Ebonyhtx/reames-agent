@@ -55,3 +55,9 @@ func TestByCategory(t *testing.T) {
 		t.Fatalf("expected 1 other plugin, got %d", len(m["other"]))
 	}
 }
+
+func TestFetchRegistryRequiresExplicitURL(t *testing.T) {
+	if _, err := FetchRegistry("  ", nil); err == nil {
+		t.Fatal("FetchRegistry without an explicit URL should fail")
+	}
+}

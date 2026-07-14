@@ -44,18 +44,14 @@ func TestPluginLifecycle_Disable(t *testing.T) {
 	}
 }
 
-func TestPluginLifecycle_ReEnable(t *testing.T) {
+func TestPluginLifecycle_LegacyReEnableRequiresBoundApproval(t *testing.T) {
 	home := t.TempDir()
 	mustUpsertPlugin(t, home, InstalledPlugin{Name: "test-plugin", Version: "1.0", Root: "p/test", Enabled: true})
 	if err := SetEnabled(home, "test-plugin", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetEnabled(home, "test-plugin", true); err != nil {
-		t.Fatal(err)
-	}
-	st, _ := LoadState(home)
-	if !st.Plugins[0].Enabled {
-		t.Fatal("should be re-enabled")
+	if err := SetEnabled(home, "test-plugin", true); err == nil {
+		t.Fatal("legacy metadata must not be re-enabled without a digest and grants")
 	}
 }
 

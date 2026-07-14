@@ -62,6 +62,25 @@ func TestRegistryRemovePrefix(t *testing.T) {
 	}
 }
 
+func TestRegistryRemoveMatchesExactName(t *testing.T) {
+	r := NewRegistry()
+	r.Add(stubTool{name: "run_skill"})
+	r.Add(stubTool{name: "run_skill_helper"})
+
+	if !r.Remove("run_skill") {
+		t.Fatal("Remove should report the exact tool was removed")
+	}
+	if _, ok := r.Get("run_skill"); ok {
+		t.Fatal("run_skill should be gone")
+	}
+	if _, ok := r.Get("run_skill_helper"); !ok {
+		t.Fatal("exact removal must preserve prefix-sharing tools")
+	}
+	if r.Remove("run_skill") {
+		t.Fatal("second Remove should report no change")
+	}
+}
+
 func TestRegistrySuspendPrefixBlocksLateAddsUntilResume(t *testing.T) {
 	r := NewRegistry()
 	r.Add(stubTool{name: "bash"})

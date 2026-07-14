@@ -41,15 +41,16 @@ func mergeInstalledPluginPackages(cfg *Config, root string) []string {
 				continue
 			}
 			entry := PluginEntry{
-				Name:      name,
-				Type:      srv.Type,
-				Command:   pluginPackageCommand(pkg.Root, srv.Command),
-				Args:      append([]string(nil), srv.Args...),
-				Env:       pluginPackageEnv(item.Installed, pkg.Root, srv.Env),
-				URL:       strings.TrimSpace(srv.URL),
-				Headers:   cloneStringMap(srv.Headers),
-				AutoStart: srv.AutoStart,
-				Tier:      srv.Tier,
+				Name:         name,
+				Type:         srv.Type,
+				Command:      pluginPackageCommand(pkg.Root, srv.Command),
+				Args:         append([]string(nil), srv.Args...),
+				Env:          pluginPackageEnv(item.Installed, pkg.Root, srv.Env),
+				URL:          strings.TrimSpace(srv.URL),
+				Headers:      cloneStringMap(srv.Headers),
+				AutoStart:    srv.AutoStart,
+				Tier:         srv.Tier,
+				packageOwner: item.Installed.Name,
 			}
 			cfg.Plugins = append(cfg.Plugins, entry)
 		}

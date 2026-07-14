@@ -1128,12 +1128,14 @@ func (a *App) ensureActiveTabRebuildAllowed(setting string) error {
 func (a *App) ensureLiveControllersRuntimeMutationAllowed(setting string) error {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	for _, tab := range a.tabs {
-		if tab == nil {
-			continue
-		}
-		if controllerHasActiveRuntimeWork(tab.Ctrl) {
-			return rebuildControllerActiveWorkError(setting)
+	for _, tabs := range []map[string]*WorkspaceTab{a.tabs, a.detachedSessions} {
+		for _, tab := range tabs {
+			if tab == nil {
+				continue
+			}
+			if controllerHasActiveRuntimeWork(tab.Ctrl) {
+				return rebuildControllerActiveWorkError(setting)
+			}
 		}
 	}
 	return nil

@@ -58,6 +58,11 @@ import (
 // while one is already active in the same Controller.
 var ErrTurnRunning = errors.New("turn already running")
 
+// ErrRuntimeMutationBusy reports that a caller could not reserve an idle
+// controller for a runtime-wide mutation because foreground, prompt, rotation,
+// or background work is still active.
+var ErrRuntimeMutationBusy = errors.New("controller has active runtime work")
+
 // errTurnRunningRotation and errRotationInProgress are returned by the
 // session-rotation gate (beginRotation) when a rotation cannot proceed: a turn
 // is in flight, or another rotation already holds the gate.
@@ -152,7 +157,10 @@ type Controller struct {
 	// hot-added stdio server binds its subprocess to — behind its own lock, off
 	// c.mu. The Controller keeps the config-facing orchestration (persisting
 	// reames-agent.toml on add/remove, building specs from entries). See mcp.go.
-	mcp mcpManager
+	mcp               mcpManager
+	mcpMutationMu     sync.Mutex
+	pluginMCPOwnersMu sync.RWMutex
+	pluginMCPOwners   map[string]string
 
 	// goals owns the active goal's FSM (status, intercepts, idle/turn counters)
 	// and its persistence, behind its own mutex so a per-turn goal save never
@@ -379,6 +387,10 @@ type Options struct {
 	// context; both are needed for hot-adding MCP servers via AddMCPServer.
 	Registry  *tool.Registry
 	PluginCtx context.Context
+	// PluginMCPOwners binds each package-contributed MCP server to the plugin
+	// generation loaded by this controller. It is an in-memory runtime contract,
+	// never user-authored configuration.
+	PluginMCPOwners map[string]string
 	// WorkspaceRoot is the project root checkpoint restores are confined to ("" =
 	// no confinement). Frontends pass the cwd they launched the session in.
 	WorkspaceRoot          string
@@ -476,6 +488,7 @@ func New(opts Options) *Controller {
 		jobs:                              opts.Jobs,
 		subagents:                         opts.SubagentStore,
 		mcp:                               newMcpManager(opts.Host, opts.Registry, pluginCtx),
+		pluginMCPOwners:                   clonePluginMCPOwners(opts.PluginMCPOwners),
 		workspaceRoot:                     opts.WorkspaceRoot,
 		externalFolderToolRefs:            opts.ExternalFolderToolRefs,
 		approval:                          newApprovalManager(opts.Policy, ToolApprovalAsk, opts.ApprovalTimeout),
@@ -1468,6 +1481,42 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 		CancelRequested: canceling,
 		Cancellable:     running || pending,
 	}
+}
+
+// BeginRuntimeMutation atomically reserves an idle controller for a host-level
+// capability mutation. commandMu closes the gap between ExecuteCommand's idle
+// check and its synchronous dispatch; rotating then blocks every direct turn,
+// shell, compact, and session-rotation entry point until release.
+func (c *Controller) BeginRuntimeMutation() (func(), error) {
+	c.commandMu.Lock()
+	c.mu.Lock()
+	if c.running || c.rotating {
+		c.mu.Unlock()
+		c.commandMu.Unlock()
+		return nil, ErrRuntimeMutationBusy
+	}
+	c.rotating = true
+	c.mu.Unlock()
+	c.commandMu.Unlock()
+
+	// Pending prompts and detached background jobs are runtime work even when
+	// no foreground turn currently owns c.running. No new instance can start
+	// after rotating is set, so this second-stage check is stable.
+	if c.approval.hasPending() || len(c.Jobs()) > 0 {
+		c.mu.Lock()
+		c.rotating = false
+		c.mu.Unlock()
+		return nil, ErrRuntimeMutationBusy
+	}
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			c.mu.Lock()
+			c.rotating = false
+			c.mu.Unlock()
+		})
+	}, nil
 }
 
 // Turn returns the current turn number (0 before the first submit).
@@ -4139,6 +4188,111 @@ func (c *Controller) SetSkillEnabled(name string, enabled bool) error {
 // so a frontend can list the active hooks via `/hooks`.
 func (c *Controller) HookRunner() *hook.Runner { return c.hooks }
 
+// RevokePluginRuntime fail-closes the current controller after an installed
+// plugin generation changes. Controller-bound MCP servers and plugin hooks are
+// removed by owner, and skill invocation is paused because the cache-stable
+// skill index and shared stores cannot safely swap generations mid-turn. A
+// frontend rebuild or a new session restores the verified current generation.
+func (c *Controller) RevokePluginRuntime(pluginName string) []string {
+	pluginName = strings.TrimSpace(pluginName)
+	if pluginName == "" {
+		return nil
+	}
+
+	mcpRemoved := c.disconnectPluginMCPServers(pluginName)
+	hooksRemoved := c.hooks.DisablePlugin(pluginName)
+	skillsPaused := c.skills.disable()
+	toolsRemoved := 0
+	if skillsPaused {
+		if reg := c.mcp.registry(); reg != nil {
+			for _, name := range []string{"run_skill", "read_only_skill", "read_skill", "explore", "research", "review", "security_review"} {
+				if reg.Remove(name) {
+					toolsRemoved++
+				}
+			}
+		}
+		// Keep user-authored slash commands available while rebuilding the slash
+		// tool without the now-paused skill entries.
+		_ = c.ReloadCommands(context.Background())
+	}
+	if mcpRemoved == 0 && hooksRemoved == 0 && !skillsPaused && toolsRemoved == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf(
+		"revoked the previous runtime for plugin %s in this session (%d MCP server(s), %d hook(s), %d skill tool(s)); start a new session or rebuild the controller to load the verified generation",
+		pluginName, mcpRemoved, hooksRemoved, toolsRemoved,
+	)}
+}
+
+// DisconnectPluginMCP disconnects serverName only when this controller loaded
+// it from pluginName. User-authored same-name servers are never inferred from
+// current disk state and therefore cannot be removed by a package mutation.
+func (c *Controller) DisconnectPluginMCP(pluginName, serverName string) bool {
+	pluginName = strings.TrimSpace(pluginName)
+	serverName = strings.TrimSpace(serverName)
+	if pluginName == "" || serverName == "" {
+		return false
+	}
+	c.mcpMutationMu.Lock()
+	defer c.mcpMutationMu.Unlock()
+	if c.pluginMCPServerOwner(serverName) != pluginName {
+		return false
+	}
+	removed := c.disconnectMCPServer(serverName)
+	c.pluginMCPOwnersMu.Lock()
+	delete(c.pluginMCPOwners, serverName)
+	c.pluginMCPOwnersMu.Unlock()
+	return removed
+}
+
+func (c *Controller) disconnectPluginMCPServers(pluginName string) int {
+	c.mcpMutationMu.Lock()
+	defer c.mcpMutationMu.Unlock()
+	names := c.pluginMCPServerNames(pluginName)
+	removed := 0
+	for _, serverName := range names {
+		if c.disconnectMCPServer(serverName) {
+			removed++
+		}
+		c.pluginMCPOwnersMu.Lock()
+		delete(c.pluginMCPOwners, serverName)
+		c.pluginMCPOwnersMu.Unlock()
+	}
+	return removed
+}
+
+func (c *Controller) pluginMCPServerOwner(serverName string) string {
+	c.pluginMCPOwnersMu.RLock()
+	defer c.pluginMCPOwnersMu.RUnlock()
+	return c.pluginMCPOwners[serverName]
+}
+
+func (c *Controller) pluginMCPServerNames(pluginName string) []string {
+	c.pluginMCPOwnersMu.RLock()
+	defer c.pluginMCPOwnersMu.RUnlock()
+	var names []string
+	for serverName, owner := range c.pluginMCPOwners {
+		if owner == pluginName {
+			names = append(names, serverName)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func clonePluginMCPOwners(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for serverName, pluginName := range in {
+		if serverName = strings.TrimSpace(serverName); serverName != "" {
+			out[serverName] = strings.TrimSpace(pluginName)
+		}
+	}
+	return out
+}
+
 // AddMCPServer connects an MCP server live and persists it to the config file. Its
 // tools are registered immediately and become available on the next turn (the
 // agent reads the registry per turn). The raw entry — ${VARS} intact — is what's
@@ -4173,8 +4327,10 @@ func (c *Controller) ConnectMCPServer(e config.PluginEntry) (int, error) {
 // connectMCPServer expands an entry's ${VARS}, applies the known-server
 // overrides scoped to the workspace, and connects it live via the mcp manager.
 func (c *Controller) connectMCPServer(e config.PluginEntry) (int, error) {
+	c.mcpMutationMu.Lock()
+	defer c.mcpMutationMu.Unlock()
 	exp := e.ExpandedPlugin()
-	return c.mcp.connectSpec(plugin.ApplyKnownOverrides(plugin.Spec{
+	n, err := c.mcp.connectSpec(plugin.ApplyKnownOverrides(plugin.Spec{
 		Name:              exp.Name,
 		Type:              exp.Type,
 		Command:           exp.Command,
@@ -4184,6 +4340,20 @@ func (c *Controller) connectMCPServer(e config.PluginEntry) (int, error) {
 		Headers:           exp.Headers,
 		ReadOnlyToolNames: trustedReadOnlyToolNames(exp.TrustedReadOnlyTools),
 	}, c.WorkspaceRoot()))
+	if err != nil {
+		return 0, err
+	}
+	c.pluginMCPOwnersMu.Lock()
+	if owner := e.PluginPackageOwner(); owner != "" {
+		if c.pluginMCPOwners == nil {
+			c.pluginMCPOwners = make(map[string]string)
+		}
+		c.pluginMCPOwners[exp.Name] = owner
+	} else {
+		delete(c.pluginMCPOwners, exp.Name)
+	}
+	c.pluginMCPOwnersMu.Unlock()
+	return n, nil
 }
 
 func trustedReadOnlyToolNames(names []string) map[string]bool {
@@ -4292,7 +4462,12 @@ func (c *Controller) ConnectConfiguredMCPServer(name string) (int, error) {
 // the config save fails). A server declared in .mcp.json disconnects for this
 // session but returns on the next start, since that file isn't ours to edit.
 func (c *Controller) RemoveMCPServer(name string) (disconnected bool, err error) {
+	c.mcpMutationMu.Lock()
+	defer c.mcpMutationMu.Unlock()
+	c.pluginMCPOwnersMu.Lock()
 	disconnected = c.mcp.disconnect(name)
+	delete(c.pluginMCPOwners, strings.TrimSpace(name))
+	c.pluginMCPOwnersMu.Unlock()
 	cfg, lerr := config.Load()
 	if lerr != nil {
 		return disconnected, lerr
@@ -4317,6 +4492,16 @@ func (c *Controller) RemoveMCPServer(name string) (disconnected bool, err error)
 // on the next session start, or now via ConnectConfiguredMCPServer (the "on").
 // Reports whether a live server was actually disconnected.
 func (c *Controller) DisconnectMCPServer(name string) bool {
+	c.mcpMutationMu.Lock()
+	defer c.mcpMutationMu.Unlock()
+	c.pluginMCPOwnersMu.Lock()
+	defer c.pluginMCPOwnersMu.Unlock()
+	disconnected := c.disconnectMCPServer(name)
+	delete(c.pluginMCPOwners, strings.TrimSpace(name))
+	return disconnected
+}
+
+func (c *Controller) disconnectMCPServer(name string) bool {
 	disconnected := c.mcp.disconnect(name)
 	removedPlaceholder := 0
 	if !disconnected {

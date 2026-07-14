@@ -6,7 +6,7 @@ import { MCPServersSettingsPage, PluginsSettingsPage } from "../components/Capab
 import type { AppBindings } from "../lib/bridge";
 import { LocaleProvider } from "../lib/i18n";
 import { mcpServerLifecycleActions, mcpServerRetryableFromAvailableList } from "../lib/mcpServerLifecycle";
-import type { Meta, PluginInstallOptions, PluginView, ServerView, TabMeta } from "../lib/types";
+import type { Meta, PluginInstallOptions, PluginOperationView, PluginView, ServerView, TabMeta } from "../lib/types";
 
 function ok(value: unknown, message: string) {
   if (!value) throw new Error(message);
@@ -245,6 +245,106 @@ console.log("capabilities panel MCP actions");
   dom.window.close();
 }
 
+console.log("capabilities panel plugin result classification");
+
+{
+  const dom = installDom();
+  const rootEl = document.getElementById("root");
+  if (!rootEl) throw new Error("missing root");
+  const root = createRoot(rootEl);
+  let blocked = false;
+  const operation = (status: "planned" | "partial" | "blocked"): PluginOperationView => ({
+    ok: status === "planned",
+    status,
+    op: "install",
+    applied: status === "partial",
+    source: "git:github.com/example/plugin",
+    kind: "plugin",
+    planId: status === "blocked" ? undefined : "classification-plan",
+    actions: status === "blocked" ? [] : [{
+      kind: "plugin",
+      action: "install_plugin_package",
+      name: "classification",
+      status: status === "planned" ? "planned" : "failed",
+      error: status === "partial" ? "hook registration failed" : undefined,
+    }],
+    next: status === "partial" ? "Some actions succeeded; review failed actions." : status === "blocked" ? "Source is blocked." : undefined,
+  });
+  window.go = {
+    main: {
+      App: {
+        Meta: async () => ({ label: "classification", ready: true, eventChannel: "plugin-classification", cwd: "/tmp/plugin-classification", workspaceRoot: "/tmp/plugin-classification" }),
+        ListTabs: async (): Promise<TabMeta[]> => [{
+          id: "plugin-classification",
+          scope: "project",
+          workspaceRoot: "/tmp/plugin-classification",
+          workspaceName: "plugin-classification",
+          topicId: "plugin-classification-topic",
+          topicTitle: "Plugin classification",
+          label: "Plugin classification",
+          cwd: "/tmp/plugin-classification",
+          ready: true,
+          running: false,
+          mode: "normal",
+          toolApprovalMode: "auto",
+          active: true,
+        }],
+        Plugins: async () => [],
+        PlanPluginInstall: async () => operation(blocked ? "blocked" : "planned"),
+        InstallPlugin: async (_source: string, options: PluginInstallOptions) => {
+          ok(options.planId === "classification-plan", "partial apply uses the preview planId");
+          return operation("partial");
+        },
+        PickPluginFolder: async () => "",
+      } as Partial<AppBindings> as AppBindings,
+    },
+  };
+
+  await act(async () => {
+    root.render(React.createElement(LocaleProvider, null, React.createElement(PluginsSettingsPage)));
+    await flush();
+  });
+  await waitFor("classification page", () => Boolean(findButton("Git repository")));
+  await act(async () => {
+    findButton("Git repository")?.click();
+    await flush();
+  });
+  const source = document.querySelector<HTMLInputElement>('input[aria-label="Git repository URL"]');
+  if (!source) throw new Error("missing classification source input");
+  await act(async () => {
+    setInputValue(source, "git:github.com/example/plugin");
+    await flush();
+  });
+  await act(async () => {
+    findButton("Preview")?.click();
+    await flush();
+  });
+  await waitFor("classification apply enabled", () => findButton("Install plugin")?.disabled === false);
+  await act(async () => {
+    findButton("Install plugin")?.click();
+    await flush();
+  });
+  await waitFor("partial warning", () => document.querySelector(".banner--warning")?.textContent?.includes("Some actions succeeded") ?? false);
+  ok(!document.querySelector(".banner--success"), "partial plugin operations never render as success");
+
+  blocked = true;
+  await act(async () => {
+    setInputValue(source, "git:github.com/example/blocked");
+    await flush();
+  });
+  await act(async () => {
+    findButton("Preview")?.click();
+    await flush();
+  });
+  await waitFor("blocked error", () => document.querySelector(".banner--error")?.textContent?.includes("Source is blocked") ?? false);
+  ok(findButton("Install plugin")?.disabled === true, "blocked plugin plans cannot be applied");
+
+  await act(async () => {
+    root.unmount();
+  });
+  dom.window.close();
+}
+
 console.log("capabilities panel plugin actions");
 
 {
@@ -271,12 +371,42 @@ console.log("capabilities panel plugin actions");
   let planCalls = 0;
   let installCalls = 0;
   let toggleCalls = 0;
+  let updatePlanCalls = 0;
   let updateCalls = 0;
+  let rollbackPlanCalls = 0;
+  let rollbackCalls = 0;
   let doctorCalls = 0;
+  let removePlanCalls = 0;
   let removeCalls = 0;
   let pickFolderCalls = 0;
+  let latestInstallPlanId = "";
+  let enabledBinding: { digest: string; permissions: string[] } | null = null;
   const plannedSources: string[] = [];
   const installedSources: string[] = [];
+  const pluginOperation = (status: string, planId: string, action: string, overrides: Partial<PluginOperationView> = {}): PluginOperationView => ({
+    ok: status === "planned" || status === "done",
+    status,
+    op: action === "rollback_plugin_package" ? "rollback" : action === "uninstall_plugin_package" ? "uninstall" : "install",
+    applied: status === "done" || status === "partial",
+    planId,
+    kind: "plugin",
+    actions: [{
+      kind: "plugin",
+      action,
+      name: "superpowers",
+      status,
+      riskLevel: action === "install_plugin_package" ? "medium" : "high",
+      riskReasons: action === "install_plugin_package" ? ["unsigned source"] : ["changes active plugin generation"],
+      version: "0.1.1",
+      currentVersion: "0.1.0",
+      permissions: ["skills.load"],
+      addedPermissions: ["skills.load"],
+      trustStatus: "github-https-unsigned",
+      willEnable: false,
+      rollbackAvailable: action !== "install_plugin_package",
+    }],
+    ...overrides,
+  });
   let plugins: PluginView[] = [{
     name: "superpowers",
     version: "0.1.0",
@@ -284,6 +414,15 @@ console.log("capabilities panel plugin actions");
     source: "git:github.com/obra/superpowers",
     root: "~/.reames-agent/plugins/superpowers",
     manifestKind: "reames-agent",
+    manifestSchema: 1,
+    installMode: "copy",
+    sourceKind: "github",
+    sourceRevision: "abc123",
+    trustStatus: "github-https-unsigned",
+    digest: "sha256:superpowers-v1",
+    permissions: ["skills.load"],
+    grantedPermissions: ["skills.load"],
+    lifecycleSecurity: 1,
     enabled: true,
     skills: 2,
     hooks: 1,
@@ -299,16 +438,13 @@ console.log("capabilities panel plugin actions");
           planCalls += 1;
           plannedSources.push(source);
           ok(options.dryRun === true, "plugin preview asks for dry-run planning");
-          return JSON.stringify({
-            ok: true,
-            status: "planned",
-            name: "superpowers",
-            actions: [{ kind: "plugin", action: "install_plugin_package", name: "superpowers", source, status: "planned" }],
-          });
+          latestInstallPlanId = `install-plan-${planCalls}`;
+          return pluginOperation("planned", latestInstallPlanId, "install_plugin_package", { source, name: "superpowers" });
         },
-        InstallPlugin: async (source: string, _options: PluginInstallOptions) => {
+        InstallPlugin: async (source: string, options: PluginInstallOptions) => {
           installCalls += 1;
           installedSources.push(source);
+          ok(options.planId === latestInstallPlanId, "plugin apply echoes the exact preview planId");
           const next: PluginView = {
             name: "superpowers",
             version: "0.1.1",
@@ -316,7 +452,24 @@ console.log("capabilities panel plugin actions");
             source,
             root: "~/.reames-agent/plugins/superpowers",
             manifestKind: "reames-agent",
-            enabled: true,
+            manifestSchema: 1,
+            installMode: "copy",
+            sourceKind: "github",
+            sourceRevision: "def456",
+            trustStatus: "github-https-unsigned",
+            digest: "sha256:superpowers-v2",
+            permissions: ["skills.load", "hooks.execute"],
+            grantedPermissions: [],
+            lifecycleSecurity: 1,
+            rollback: {
+              version: "0.1.0",
+              digest: "sha256:superpowers-v1",
+              trustStatus: "github-https-unsigned",
+              permissions: ["skills.load"],
+              grantedPermissions: ["skills.load"],
+              enabled: true,
+            },
+            enabled: false,
             skills: 3,
             hooks: 1,
             mcpServers: 1,
@@ -325,24 +478,46 @@ console.log("capabilities panel plugin actions");
             mcpServerDetails: [{ name: "context", transport: "stdio", command: "node server.js" }],
           };
           plugins = plugins.filter((plugin) => plugin.name !== next.name).concat(next);
-          return JSON.stringify({ ok: true, status: "done", actions: [{ action: "install_plugin_package", name: next.name, status: "done" }] });
+          return pluginOperation("done", latestInstallPlanId, "install_plugin_package", { source, name: next.name });
         },
-        SetPluginEnabled: async (name: string, enabled: boolean) => {
+        SetPluginEnabled: async (name: string, enabled: boolean, digest: string, permissions: string[]) => {
           toggleCalls += 1;
+          enabledBinding = { digest, permissions: [...permissions] };
           plugins = plugins.map((plugin) => plugin.name === name ? { ...plugin, enabled } : plugin);
         },
-        UpdatePlugin: async (name: string) => {
+        PlanPluginUpdate: async (name: string) => {
+          updatePlanCalls += 1;
+          return pluginOperation("planned", "update-plan", "update_plugin_package", { name });
+        },
+        UpdatePlugin: async (name: string, planId: string) => {
           updateCalls += 1;
+          ok(planId === "update-plan", "plugin update echoes the exact preview planId");
           plugins = plugins.map((plugin) => plugin.name === name ? { ...plugin, version: "0.1.2" } : plugin);
-          return JSON.stringify({ ok: true, status: "done", name });
+          return pluginOperation("done", planId, "update_plugin_package", { name });
+        },
+        PlanPluginRollback: async (name: string) => {
+          rollbackPlanCalls += 1;
+          return pluginOperation("planned", "rollback-plan", "rollback_plugin_package", { name });
+        },
+        RollbackPlugin: async (name: string, planId: string) => {
+          rollbackCalls += 1;
+          ok(planId === "rollback-plan", "plugin rollback echoes the exact preview planId");
+          plugins = plugins.map((plugin) => plugin.name === name ? { ...plugin, version: plugin.rollback?.version || plugin.version } : plugin);
+          return pluginOperation("done", planId, "rollback_plugin_package", { name });
         },
         PluginDoctor: async (name: string) => {
           doctorCalls += 1;
           return { ...(plugins.find((plugin) => plugin.name === name) ?? plugins[0]), warnings: ["manifest exports no MCP auth metadata"] };
         },
-        RemovePlugin: async (name: string) => {
+        PlanPluginRemove: async (name: string) => {
+          removePlanCalls += 1;
+          return pluginOperation("planned", "remove-plan", "uninstall_plugin_package", { name });
+        },
+        RemovePlugin: async (name: string, planId: string) => {
           removeCalls += 1;
+          ok(planId === "remove-plan", "plugin removal echoes the exact preview planId");
           plugins = plugins.filter((plugin) => plugin.name !== name);
+          return pluginOperation("done", planId, "uninstall_plugin_package", { name });
         },
         PickPluginFolder: async () => {
           pickFolderCalls += 1;
@@ -371,6 +546,20 @@ console.log("capabilities panel plugin actions");
   });
   await waitFor("picked plugin folder source", () => document.body.textContent?.includes("/tmp/superpowers-plugin") ?? false);
   ok(pickFolderCalls === 1, "clicking Choose folder invokes the plugin folder picker once");
+  const localPreview = findButton("Preview");
+  const localInstall = findButton("Install plugin");
+  const localOptions = document.querySelectorAll<HTMLInputElement>('.cap-plugin-installer__options input[type="checkbox"]');
+  if (!localPreview || !localInstall || !localOptions[1]) throw new Error("missing local plugin plan controls");
+  await act(async () => {
+    localPreview.click();
+    await flush();
+  });
+  await waitFor("local plugin plan", () => planCalls === 1 && localInstall.disabled === false);
+  await act(async () => {
+    localOptions[1]?.click();
+    await flush();
+  });
+  await waitFor("link invalidates plan", () => findButton("Install plugin")?.disabled === true);
 
   const gitMode = findButton("Git repository");
   if (!gitMode) throw new Error("missing Git repository install mode");
@@ -386,6 +575,15 @@ console.log("capabilities panel plugin actions");
     await flush();
   });
   await waitFor("plugin preview enabled", () => findButton("Preview")?.disabled === false);
+  const install = findButton("Install plugin");
+  if (!install) throw new Error("missing plugin install button");
+  ok(install.disabled, "plugin apply is disabled before a preview plan exists");
+  const nameInput = document.querySelector<HTMLInputElement>('input[aria-label="Install name (optional)"]');
+  if (!nameInput) throw new Error("missing plugin install name input");
+  await act(async () => {
+    setInputValue(nameInput, "superpowers");
+    await flush();
+  });
 
   const preview = findButton("Preview");
   if (!preview) throw new Error("missing plugin preview button");
@@ -394,11 +592,53 @@ console.log("capabilities panel plugin actions");
     await flush();
   });
   await waitFor("plugin install plan", () => document.body.textContent?.includes("install_plugin_package") ?? false);
-  ok(planCalls === 1, "clicking Preview invokes plugin install planning once");
-  ok(plannedSources[0] === "git:github.com/obra/superpowers", "plugin preview receives the entered Git source");
+  ok(planCalls === 2, "clicking Preview invokes plugin install planning once for the Git source");
+  ok(plannedSources[1] === "git:github.com/obra/superpowers", "plugin preview receives the entered Git source");
+  ok(findButton("Install plugin")?.disabled === false, "a planned response with planId enables plugin apply");
+  ok(document.body.textContent?.includes("Risk: medium") ?? false, "plugin plan displays risk metadata");
+  ok(document.body.textContent?.includes("github-https-unsigned") ?? false, "plugin plan displays trust metadata");
+  ok(document.body.textContent?.includes("Added permissions") ?? false, "plugin plan displays permission expansion");
 
-  const install = findButton("Install plugin");
-  if (!install) throw new Error("missing plugin install button");
+  await act(async () => {
+    setInputValue(nameInput, "renamed-plugin");
+    await flush();
+  });
+  await waitFor("name invalidates plan", () => findButton("Install plugin")?.disabled === true);
+  await act(async () => {
+    setInputValue(nameInput, "superpowers");
+    await flush();
+  });
+  await act(async () => {
+    findButton("Preview")?.click();
+    await flush();
+  });
+  await waitFor("replanned after name change", () => planCalls === 3 && findButton("Install plugin")?.disabled === false);
+  const replaceInput = document.querySelector<HTMLInputElement>('.cap-plugin-installer__options input[type="checkbox"]');
+  if (!replaceInput) throw new Error("missing replace option");
+  await act(async () => {
+    replaceInput.click();
+    await flush();
+  });
+  await waitFor("replace invalidates plan", () => findButton("Install plugin")?.disabled === true);
+  await act(async () => {
+    preview.click();
+    await flush();
+  });
+  await waitFor("replanned after replace change", () => planCalls === 4 && findButton("Install plugin")?.disabled === false);
+  await act(async () => {
+    setInputValue(sourceInput, "git:github.com/obra/superpowers-next");
+    await flush();
+  });
+  await waitFor("source invalidates plan", () => findButton("Install plugin")?.disabled === true);
+  await act(async () => {
+    setInputValue(sourceInput, "git:github.com/obra/superpowers");
+    await flush();
+  });
+  await act(async () => {
+    findButton("Preview")?.click();
+    await flush();
+  });
+  await waitFor("replanned after source change", () => planCalls === 5 && findButton("Install plugin")?.disabled === false);
   await act(async () => {
     install.click();
     await flush();
@@ -417,6 +657,9 @@ console.log("capabilities panel plugin actions");
   ok(document.body.textContent?.includes("/plan") ?? false, "expanded plugin details list exported skill invocations");
   ok(document.body.textContent?.includes("SessionStart") ?? false, "expanded plugin details list exported hooks");
   ok(document.body.textContent?.includes("context") ?? false, "expanded plugin details list exported MCP servers");
+  ok(document.body.textContent?.includes("sha256:superpowers-v2") ?? false, "expanded plugin details display the verified digest");
+  ok(document.body.textContent?.includes("Required permissions") ?? false, "expanded plugin details display required permissions");
+  ok(document.body.textContent?.includes("Rollback target") ?? false, "expanded plugin details display the rollback generation");
 
   const update = findButton("Update");
   if (!update) throw new Error("missing plugin update button");
@@ -424,7 +667,29 @@ console.log("capabilities panel plugin actions");
     update.click();
     await flush();
   });
+  await waitFor("plugin update plan", () => updatePlanCalls === 1 && updateCalls === 0 && Boolean(findButton("Apply update")));
+  const applyUpdate = findButton("Apply update");
+  if (!applyUpdate) throw new Error("missing plugin apply update button");
+  await act(async () => {
+    applyUpdate.click();
+    await flush();
+  });
   await waitFor("plugin update call", () => updateCalls === 1 && plugins[0]?.version === "0.1.2");
+
+  const rollback = findButton("Rollback");
+  if (!rollback) throw new Error("missing plugin rollback button");
+  await act(async () => {
+    rollback.click();
+    await flush();
+  });
+  await waitFor("plugin rollback plan", () => rollbackPlanCalls === 1 && rollbackCalls === 0 && Boolean(findButton("Apply rollback")));
+  const applyRollback = findButton("Apply rollback");
+  if (!applyRollback) throw new Error("missing plugin apply rollback button");
+  await act(async () => {
+    applyRollback.click();
+    await flush();
+  });
+  await waitFor("plugin rollback call", () => rollbackCalls === 1 && plugins[0]?.version === "0.1.0");
 
   const doctor = findButton("Doctor");
   if (!doctor) throw new Error("missing plugin doctor button");
@@ -441,7 +706,20 @@ console.log("capabilities panel plugin actions");
     toggle.click();
     await flush();
   });
-  await waitFor("plugin disabled", () => toggleCalls === 1 && plugins[0]?.enabled === false);
+  await waitFor("plugin enable review", () => Boolean(findButton("Grant permissions and enable")));
+  ok(toggleCalls === 0 && plugins[0]?.enabled === false, "plugin toggle does not grant permissions before explicit review");
+  ok(document.body.textContent?.includes("sha256:superpowers-v2") ?? false, "plugin authorization review displays the bound digest");
+  ok(document.body.textContent?.includes("skills.load, hooks.execute") ?? false, "plugin authorization review displays the exact permission set");
+  const approveEnable = findButton("Grant permissions and enable");
+  if (!approveEnable) throw new Error("missing plugin enable approval button");
+  await act(async () => {
+    approveEnable.click();
+    await flush();
+  });
+  await waitFor("plugin enabled", () => toggleCalls === 1 && plugins[0]?.enabled === true);
+  const approvedBinding = enabledBinding as unknown as { digest: string; permissions: string[] };
+  ok(approvedBinding.digest === "sha256:superpowers-v2", "plugin enable binds the displayed digest");
+  ok(JSON.stringify(approvedBinding.permissions) === JSON.stringify(["skills.load", "hooks.execute"]), "plugin enable binds the exact displayed permission set");
 
   const remove = findButton("Remove plugin");
   if (!remove) throw new Error("missing plugin remove button");
@@ -453,6 +731,13 @@ console.log("capabilities panel plugin actions");
   if (!confirmRemove) throw new Error("missing plugin confirm remove button");
   await act(async () => {
     confirmRemove.click();
+    await flush();
+  });
+  await waitFor("plugin remove plan", () => removePlanCalls === 1 && removeCalls === 0 && Boolean(findButton("Apply removal")));
+  const applyRemove = findButton("Apply removal");
+  if (!applyRemove) throw new Error("missing apply removal button");
+  await act(async () => {
+    applyRemove.click();
     await flush();
   });
   await waitFor("plugin removed", () => removeCalls === 1 && plugins.length === 0);

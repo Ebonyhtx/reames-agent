@@ -29,25 +29,29 @@ reames-agent plugin install git:github.com/obra/superpowers --dry-run
 Install a plugin after reviewing the plan:
 
 ```bash
-reames-agent plugin install git:github.com/obra/superpowers --yes
+reames-agent plugin install git:github.com/obra/superpowers --yes --plan-id sha256:<id-from-preview>
 ```
 
 Install with an explicit name or replace an installed plugin with the same name:
 
 ```bash
-reames-agent plugin install git:github.com/obra/superpowers --name superpowers --replace --yes
+reames-agent plugin install git:github.com/obra/superpowers --name superpowers --replace --dry-run
+reames-agent plugin install git:github.com/obra/superpowers --name superpowers --replace --yes --plan-id sha256:<id-from-preview>
 ```
 
 Use a local directory in developer mode:
 
 ```bash
-reames-agent plugin install /path/to/plugin --link --replace --yes
+reames-agent plugin install /path/to/plugin --link --replace --dry-run
+reames-agent plugin install /path/to/plugin --link --replace --yes --plan-id sha256:<id-from-preview>
 ```
 
 CLI install flags:
 
 - `--dry-run` plans and validates the install without writing files.
 - `--yes` is required for any install that writes files.
+- `--plan-id <id>` binds an apply to the digest, revision, permissions, and
+  actions returned by the preview. Plugin apply refuses a missing or stale ID.
 - `--replace` allows the source to replace an installed plugin with the same
   name.
 - `--name <name>` or `--name=<name>` overrides the name from the plugin
@@ -64,8 +68,14 @@ Installed plugin state is stored in:
 
 ```text
 ~/.reames-agent/plugin-packages.json
-~/.reames-agent/plugins/<name>/
+~/.reames-agent/plugins/<name>/versions/<sha256-tree-v1-id>/
 ```
+
+Copy installs publish immutable, content-addressed generations. The state file
+atomically selects the active generation and retains one verified predecessor
+for rollback. New installs are disabled until their exact digest and requested
+permissions are approved. A GitHub revision is recorded, but GitHub packages
+are currently `github-https-unsigned`; HTTPS transport is not a Reames signature.
 
 ### Manage From CLI
 
@@ -87,7 +97,8 @@ reames-agent plugin show superpowers
 - **hooks** list lifecycle events, matchers, and commands or context files.
 - **mcpServers** list server names, transports, and launch targets.
 
-Check that the manifest and skill roots are readable:
+Verify the managed root, manifest, content digest, permission contract, and
+skill roots:
 
 ```bash
 reames-agent plugin doctor superpowers
@@ -98,17 +109,41 @@ Enable or disable a plugin without uninstalling it:
 ```bash
 reames-agent plugin disable superpowers
 reames-agent plugin enable superpowers
+reames-agent plugin enable superpowers --yes
+```
+
+The first enable command prints the trust status, approved digest, and exact
+permissions without enabling. Re-run with `--yes` to bind that approval. Linked
+plugins must be re-planned if their bytes or permissions change.
+
+Preview and apply an update:
+
+```bash
+reames-agent plugin update superpowers --dry-run
+reames-agent plugin update superpowers --yes --plan-id sha256:<id-from-preview>
+```
+
+Permission expansion disables the updated generation until it receives a new
+explicit grant. An update with permissions already covered by the previous
+grant may remain enabled.
+
+Preview and roll back to the previous verified generation:
+
+```bash
+reames-agent plugin rollback superpowers --dry-run
+reames-agent plugin rollback superpowers --yes --plan-id sha256:<id-from-preview>
 ```
 
 Remove a plugin:
 
 ```bash
-reames-agent plugin remove superpowers --yes
+reames-agent plugin remove superpowers --dry-run
+reames-agent plugin remove superpowers --yes --plan-id sha256:<id-from-preview>
 ```
 
-`remove` also accepts `uninstall` as an alias. It requires `--yes` because it
-writes state and removes copied plugin content. For linked local plugins, the
-external source directory is left in place.
+`remove` also accepts `uninstall` as an alias. Update, rollback, and remove use
+the same preview/planId/apply contract. For linked local plugins, the external
+source directory is left in place.
 
 ### Use Installed Plugins From CLI
 
@@ -161,7 +196,9 @@ Installer options:
   storage. Use it while developing or debugging a plugin. Moving or deleting the
   selected directory will break the linked plugin.
 
-Preview is the safest first step for a new Git source or local plugin directory.
+Preview is required before Desktop can apply an install. The apply action is
+bound to the displayed `planId`; changing the source, name, link mode, or
+replace option invalidates the preview and requires a new one.
 
 ### Manage Installed Plugins
 
@@ -172,11 +209,28 @@ changing config outside the app.
 Expand a plugin row to manage it:
 
 - Enable or disable the plugin.
+- Review source trust, digest, requested/granted permissions, and rollback
+  availability before enabling or changing generations.
 - Read **How to use** for the plugin's exported skills, hooks, and MCP servers.
 - **Update** pulls or refreshes an installed plugin when an update source is
-  available.
+  available. Update, rollback, and removal first display a version, permission,
+  trust, digest, and risk summary; the confirmation applies only its `planId`.
+- **Rollback** restores the previous verified generation when one is available.
 - **Doctor** checks the plugin manifest and reports warnings or diagnostics.
 - **Remove plugin** uninstalls the package after confirmation.
+
+After update, rollback, removal, or disable, Desktop disconnects MCP servers
+whose controller-bound package owner matches the changed plugin and removes
+that plugin's hooks from every live or detached controller. A controller runtime
+reservation and Desktop work-start gate prevent a new turn, shell, or session
+rotation from starting after the idle check. Synchronous rebuilds are serialized
+with the mutation, and startup builds that began with the old state are cancelled
+before they can publish. Skill entry points in old
+controllers fail closed until the controller is rebuilt or a new session is
+opened, because the shared skill stores cannot safely swap a plugin generation
+in place. MCP connection and ownership changes are serialized; disconnecting a
+package MCP clears its ownership, so a later same-name user-authored server is
+not disconnected by plugin lifecycle work.
 
 ### Use Installed Plugins From Desktop
 
@@ -199,10 +253,11 @@ Reames Agent plugins can declare `reames-agent-plugin.json` at the plugin root:
 
 ```json
 {
+  "schemaVersion": 1,
   "name": "example",
   "version": "1.0.0",
   "description": "Example plugin",
-  "skills": "skills",
+  "skills": ["skills"],
   "hooks": {
     "SessionStart": [
       {
@@ -215,12 +270,20 @@ Reames Agent plugins can declare `reames-agent-plugin.json` at the plugin root:
     "helper": {
       "command": "bin/helper"
     }
-  }
+  },
+  "permissions": ["hooks.execute", "mcp.stdio", "skills.load"]
 }
 ```
 
 Relative paths are resolved inside the plugin root. Reames Agent does not run
-third-party install scripts during plugin installation.
+third-party install scripts during plugin installation. Native schema v1
+requires a semantic version and an exact permission set derived from the
+declared capabilities. Supported permissions are `skills.load`,
+`hooks.context`, `hooks.execute`, `mcp.stdio`, and `mcp.remote`. A native
+manifest without `schemaVersion` remains readable as legacy compatibility, but
+emits a warning and cannot be silently promoted from metadata-only state.
+The historical filename `reamesAgent-plugin.json` is also read with a
+deprecation warning; new packages must use `reames-agent-plugin.json`.
 
 ## Codex & Claude Compatibility
 
@@ -247,6 +310,10 @@ Unsupported Claude hook item types are skipped with a warning. Reames Agent does
 run third-party install scripts or implement marketplace-specific install
 protocols.
 
+Reames Agent currently has no operated default plugin registry. Registry URLs
+must be configured explicitly; do not treat an arbitrary registry index or an
+unsigned GitHub repository as a trusted publisher.
+
 Plugin hooks receive these environment variables:
 
 - `REAMES_AGENT_PLUGIN_ROOT`
@@ -263,7 +330,11 @@ Desktop exposes plugin package operations through Wails methods:
 - `Plugins`
 - `PlanPluginInstall`
 - `InstallPlugin`
+- `PlanPluginUpdate`
+- `UpdatePlugin`
+- `PlanPluginRollback`
+- `RollbackPlugin`
+- `PlanPluginRemove`
 - `RemovePlugin`
 - `SetPluginEnabled`
-- `UpdatePlugin`
 - `PluginDoctor`

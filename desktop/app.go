@@ -148,6 +148,12 @@ type App struct {
 	// would replace the winner's and leak it without Close.
 	runtimeRebuildMu sync.Mutex
 
+	// pluginRuntimeGate prevents a new Desktop turn, shell, or session mutation
+	// from starting while plugin package state and every controller capability
+	// surface are being changed. Readers hold it only until the controller has
+	// synchronously claimed its own run/rotation gate, never for the full turn.
+	pluginRuntimeGate sync.RWMutex
+
 	// deferredRebuild tracks tabs whose settings were saved but whose runtime
 	// could not refresh because the session lease was held by another process.
 	deferredRebuild deferredRebuildState
@@ -825,6 +831,8 @@ func (a *App) Submit(input string) error {
 }
 
 func (a *App) SubmitToTab(tabID, input string) error {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	tab, ctrl := a.tabAndCtrlByID(tabID)
 	if a.tabIsReadOnly(tab) {
 		return readOnlyChannelErr()
@@ -850,6 +858,8 @@ func (a *App) SubmitToTab(tabID, input string) error {
 }
 
 func (a *App) submitUserTurnToTab(tabID, input string) bool {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	if a.tabReadOnly(tabID) {
 		return false
 	}
@@ -873,6 +883,8 @@ func (a *App) RunShell(command string) error {
 }
 
 func (a *App) RunShellForTab(tabID, command string) error {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	tab, ctrl := a.tabAndCtrlByID(tabID)
 	if a.tabIsReadOnly(tab) {
 		return readOnlyChannelErr()
@@ -899,6 +911,8 @@ func (a *App) SubmitDisplay(display, input string) error {
 }
 
 func (a *App) SubmitDisplayToTab(tabID, display, input string) error {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	tab, ctrl := a.tabAndCtrlByID(tabID)
 	if a.tabIsReadOnly(tab) {
 		return readOnlyChannelErr()
@@ -919,6 +933,8 @@ func (a *App) SubmitDisplayToTab(tabID, display, input string) error {
 }
 
 func (a *App) SubmitEditedDisplayToTab(tabID, display, input, original string) error {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	tab, ctrl := a.tabAndCtrlByID(tabID)
 	if a.tabIsReadOnly(tab) {
 		return readOnlyChannelErr()
@@ -1479,6 +1495,8 @@ func (a *App) AnswerQuestionForTab(tabID, id string, answers []QuestionAnswer) {
 // Compact runs a plain compaction pass (the "compact now" button). Focus-guided
 // compaction goes through Submit("/compact <focus>") instead.
 func (a *App) Compact() error {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	a.mu.RLock()
 	tab := a.activeTabLocked()
 	ctrl := a.activeCtrlLocked()
@@ -1532,6 +1550,8 @@ func (a *App) tabIsReadOnly(tab *WorkspaceTab) bool {
 
 // NewSession snapshots the current conversation and rotates to a fresh one.
 func (a *App) NewSession() error {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	a.mu.RLock()
 	tab := a.activeTabLocked()
 	ctrl := a.activeCtrlLocked()
@@ -1643,6 +1663,8 @@ func messagesHaveConversationContent(messages []control.TranscriptMessage) bool 
 
 // ClearSession discards the current conversation and rotates to a fresh unsaved one.
 func (a *App) ClearSession() error {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	a.mu.RLock()
 	tab := a.activeTabLocked()
 	ctrl := a.activeCtrlLocked()
@@ -1969,6 +1991,8 @@ func (a *App) ToolResultForTab(tabID, toolID string) *control.ToolResultData {
 // "conversation", or "both" (anything else is treated as "both"). The frontend
 // re-reads History after this resolves.
 func (a *App) Rewind(turn int, scope string) error {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	a.mu.RLock()
 	tab := a.activeTabLocked()
 	ctrl := a.activeCtrlLocked()
@@ -1992,6 +2016,8 @@ func (a *App) Rewind(turn int, scope string) error {
 // Fork branches the conversation at the start of turn into a new session tab
 // (preserving the current tab), keeping code intact, and switches to the new tab.
 func (a *App) Fork(turn int) (TabMeta, error) {
+	a.pluginRuntimeGate.RLock()
+	defer a.pluginRuntimeGate.RUnlock()
 	a.mu.RLock()
 	sourceTab := a.activeTabLocked()
 	ctrl := a.activeCtrlLocked()

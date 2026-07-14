@@ -27,25 +27,29 @@ reames-agent plugin install git:github.com/obra/superpowers --dry-run
 确认计划后安装：
 
 ```bash
-reames-agent plugin install git:github.com/obra/superpowers --yes
+reames-agent plugin install git:github.com/obra/superpowers --yes --plan-id sha256:<预检返回的ID>
 ```
 
 指定安装名称，或覆盖已安装的同名插件：
 
 ```bash
-reames-agent plugin install git:github.com/obra/superpowers --name superpowers --replace --yes
+reames-agent plugin install git:github.com/obra/superpowers --name superpowers --replace --dry-run
+reames-agent plugin install git:github.com/obra/superpowers --name superpowers --replace --yes --plan-id sha256:<预检返回的ID>
 ```
 
 以开发模式使用本地目录：
 
 ```bash
-reames-agent plugin install /path/to/plugin --link --replace --yes
+reames-agent plugin install /path/to/plugin --link --replace --dry-run
+reames-agent plugin install /path/to/plugin --link --replace --yes --plan-id sha256:<预检返回的ID>
 ```
 
 CLI 安装参数：
 
 - `--dry-run` 只规划和校验安装，不写文件。
 - `--yes` 用于确认执行会写文件的安装。
+- `--plan-id <id>` 将执行绑定到预检返回的摘要、来源 revision、权限和动作；
+  插件执行会拒绝缺失或过期的 ID。
 - `--replace` 允许当前来源替换已安装的同名插件。
 - `--name <name>` 或 `--name=<name>` 覆盖插件 manifest 里的名称，
   作为本次安装名称。
@@ -60,8 +64,13 @@ CLI 安装参数：
 
 ```text
 ~/.reames-agent/plugin-packages.json
-~/.reames-agent/plugins/<name>/
+~/.reames-agent/plugins/<name>/versions/<sha256-tree-v1-id>/
 ```
+
+复制安装会发布不可变、内容寻址的 generation。状态文件原子选择 active generation，
+并保留一个已验证的前代用于回滚。新安装默认禁用，只有精确摘要和请求权限得到授权后
+才会加载。GitHub 来源会记录 commit revision，但当前信任状态仍是
+`github-https-unsigned`；HTTPS 传输不等于 Reames 签名。
 
 ### 通过 CLI 管理
 
@@ -83,7 +92,7 @@ reames-agent plugin show superpowers
 - **hooks** 会展示生命周期事件、matcher、命令或上下文文件。
 - **mcpServers** 会展示服务器名称、传输方式和启动目标。
 
-检查 manifest 和 skill roots 是否可读：
+验证受管根目录、manifest、内容摘要、权限合同和 skill roots：
 
 ```bash
 reames-agent plugin doctor superpowers
@@ -94,17 +103,38 @@ reames-agent plugin doctor superpowers
 ```bash
 reames-agent plugin disable superpowers
 reames-agent plugin enable superpowers
+reames-agent plugin enable superpowers --yes
+```
+
+第一次 enable 只展示信任状态、摘要和精确权限，不会启用；确认后再带 `--yes` 执行。
+链接插件的字节或权限变化后必须重新预检。
+
+预检并执行更新：
+
+```bash
+reames-agent plugin update superpowers --dry-run
+reames-agent plugin update superpowers --yes --plan-id sha256:<预检返回的ID>
+```
+
+权限扩张会让新 generation 保持禁用，直到重新授权；若旧授权已完整覆盖新权限，
+更新后可以继续保持启用。
+
+预检并回滚到前一个已验证 generation：
+
+```bash
+reames-agent plugin rollback superpowers --dry-run
+reames-agent plugin rollback superpowers --yes --plan-id sha256:<预检返回的ID>
 ```
 
 移除插件：
 
 ```bash
-reames-agent plugin remove superpowers --yes
+reames-agent plugin remove superpowers --dry-run
+reames-agent plugin remove superpowers --yes --plan-id sha256:<预检返回的ID>
 ```
 
-`remove` 也可以写成 `uninstall`。它需要 `--yes`，
-因为会写入状态并删除复制安装的插件内容。如果是链接模式安装的本地插件，
-外部源目录会保留。
+`remove` 也可以写成 `uninstall`。更新、回滚和移除共用 preview/planId/apply
+合同。如果是链接模式安装的本地插件，外部源目录会保留。
 
 ### 在 CLI 中使用已安装插件
 
@@ -149,7 +179,8 @@ reames-agent plugin remove superpowers --yes
 - **开发模式：链接源目录** 只在 **本地目录** 模式出现。它不会复制插件，
   而是直接链接所选目录；适合开发或调试插件。移动或删除该目录会导致这个链接插件失效。
 
-对新的 Git 来源或本地插件目录，建议先点 **预检**。
+桌面端必须先完成 **预检** 才能执行安装。执行会绑定到已展示的 `planId`；来源、
+名称、链接模式或覆盖选项变化都会使旧预检失效，必须重新预检。
 
 ### 管理已安装插件
 
@@ -159,10 +190,22 @@ reames-agent plugin remove superpowers --yes
 展开插件行后可以：
 
 - 启用或禁用插件。
+- 在启用或切换 generation 前查看来源信任、摘要、请求/已授权权限和回滚状态。
 - 查看 **使用方法**，了解该插件导出的 skills、hooks 和 MCP servers。
-- 使用 **更新** 拉取或刷新具备更新来源的插件。
+- 使用 **更新** 拉取或刷新具备更新来源的插件。更新、回滚和移除都会先展示版本、
+  权限、信任、摘要和风险差异，确认动作只执行对应的 `planId`。
+- 在存在前一个已验证 generation 时使用 **回滚**。
 - 使用 **诊断** 检查插件 manifest，并查看警告或诊断信息。
 - 使用 **移除插件**，确认后卸载该插件包。
+
+更新、回滚、移除或禁用后，Desktop 会在所有 live/detached controller 中断开
+controller 加载时绑定且精确匹配该插件的 MCP server，并移除该插件 Hook。同步 rebuild
+与 mutation 串行；controller runtime reservation 和 Desktop work-start gate 会阻止空闲
+检查后新 turn、Shell 或会话旋转起跑，按旧状态启动但尚未发布的 startup build 会先被
+取消。旧 controller 的 Skill 入口会 fail closed，直到 controller 重建或开启新会话，
+因为共享 Skill store 不能在原地安全切换 generation。MCP connection 与 owner 更新保持
+串行；断开插件 MCP 会清除其 owner，因此之后接管同名的用户 MCP 不会被插件生命周期
+操作断开。
 
 ### 在桌面端使用已安装插件
 
@@ -182,10 +225,11 @@ Reames Agent 原生插件在根目录声明 `reames-agent-plugin.json`：
 
 ```json
 {
+  "schemaVersion": 1,
   "name": "example",
   "version": "1.0.0",
   "description": "Example plugin",
-  "skills": "skills",
+  "skills": ["skills"],
   "hooks": {
     "SessionStart": [
       {
@@ -198,11 +242,18 @@ Reames Agent 原生插件在根目录声明 `reames-agent-plugin.json`：
     "helper": {
       "command": "bin/helper"
     }
-  }
+  },
+  "permissions": ["hooks.execute", "mcp.stdio", "skills.load"]
 }
 ```
 
 相对路径都按插件根目录解析。Reames Agent 安装插件时不会执行第三方安装脚本。
+原生 schema v1 要求合法语义版本，且声明权限必须与实际能力推导出的集合完全一致。
+支持 `skills.load`、`hooks.context`、`hooks.execute`、`mcp.stdio` 和
+`mcp.remote`。没有 `schemaVersion` 的原生 manifest 仍可按 legacy 兼容读取，
+但会警告，metadata-only 旧状态不会被静默提升为安全安装。
+历史文件名 `reamesAgent-plugin.json` 仍可兼容读取，但会产生弃用警告；新插件必须使用
+`reames-agent-plugin.json`。
 
 ## Codex 与 Claude 兼容
 
@@ -224,6 +275,9 @@ Reames Agent 尚未映射的 Claude 插件能力（`commands/`、`agents/`、`ho
 不支持的 Claude hook item type 会跳过并产生 warning。Reames Agent 不会执行第三方安装脚本，
 也不会实现 marketplace 专用安装协议。
 
+Reames Agent 当前没有已运营的默认插件 registry。Registry URL 必须显式配置；
+任意 registry index 或 unsigned GitHub 仓库都不能被当作可信发布者。
+
 插件 hook 会收到这些环境变量：
 
 - `REAMES_AGENT_PLUGIN_ROOT`
@@ -240,7 +294,11 @@ Desktop 通过 Wails 方法暴露插件包操作：
 - `Plugins`
 - `PlanPluginInstall`
 - `InstallPlugin`
+- `PlanPluginUpdate`
+- `UpdatePlugin`
+- `PlanPluginRollback`
+- `RollbackPlugin`
+- `PlanPluginRemove`
 - `RemovePlugin`
 - `SetPluginEnabled`
-- `UpdatePlugin`
 - `PluginDoctor`
