@@ -104,10 +104,9 @@ func TestReplaceFileTransientFailureNeverTruncatesDest(t *testing.T) {
 	}
 }
 
-func TestReplaceFileCrossDeviceCopiesImmediately(t *testing.T) {
-	// The cross-device class (Windows encryption filter drivers, #2696) fails
-	// identically on every retry, so ReplaceFile must take the copy fallback
-	// straight away instead of sleeping through the retry ladder.
+func TestReplaceFileCrossDeviceFailsClosedImmediately(t *testing.T) {
+	// A sibling rename that reports cross-device cannot be atomic. Fail closed
+	// without retrying or truncating the existing destination.
 	oldBase, oldMax, oldRename := replaceRetryBase, maxReplaceRetries, renameFile
 	// Any retry sleep would trip the elapsed-time check below.
 	replaceRetryBase, maxReplaceRetries = 10*time.Second, 8
@@ -128,8 +127,8 @@ func TestReplaceFileCrossDeviceCopiesImmediately(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := time.Now()
-	if err := ReplaceFile(tmp, dest); err != nil {
-		t.Fatalf("ReplaceFile should succeed via the copy fallback: %v", err)
+	if err := ReplaceFile(tmp, dest); err == nil {
+		t.Fatal("ReplaceFile should surface a cross-device rename failure")
 	}
 	if renameCalls != 1 {
 		t.Errorf("rename attempts = %d, want 1 — a structurally impossible rename must not be retried", renameCalls)
@@ -137,15 +136,15 @@ func TestReplaceFileCrossDeviceCopiesImmediately(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("cross-device fallback took %v — it slept through the retry ladder", elapsed)
 	}
-	if b, _ := os.ReadFile(dest); string(b) != "new" {
-		t.Errorf("dest = %q, want the new content from the copy fallback", b)
+	if b, _ := os.ReadFile(dest); string(b) != "old" {
+		t.Errorf("dest = %q, want old content intact", b)
 	}
-	if fileExists(tmp) {
-		t.Error("tmp should be consumed by the copy fallback")
+	if !fileExists(tmp) {
+		t.Error("tmp should survive so the caller can report or retry safely")
 	}
 }
 
-func TestCopyOntoOverwritesAndPreservesMode(t *testing.T) {
+func TestReplaceFilePreservesMode(t *testing.T) {
 	dir := t.TempDir()
 	tmp := filepath.Join(dir, "x.tmp")
 	dest := filepath.Join(dir, "x.txt")
@@ -155,14 +154,14 @@ func TestCopyOntoOverwritesAndPreservesMode(t *testing.T) {
 	if err := os.WriteFile(dest, []byte("old-and-longer"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := copyOnto(tmp, dest); err != nil {
+	if err := ReplaceFile(tmp, dest); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(dest); string(b) != "new" {
 		t.Errorf("dest = %q, want new (fully overwritten)", b)
 	}
 	if _, err := os.Stat(tmp); !os.IsNotExist(err) {
-		t.Error("tmp should be removed after copyOnto")
+		t.Error("tmp should be removed after ReplaceFile")
 	}
 	// Mode preservation is meaningful on Unix; Windows only tracks the read-only bit.
 	if info, err := os.Stat(dest); err == nil && info.Mode().Perm() != 0o600 {

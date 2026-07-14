@@ -48,6 +48,7 @@ type Checkpoint struct {
 	Time             time.Time       `json:"time"`
 	Prompt           string          `json:"prompt"`
 	MsgIndex         int             `json:"msgIndex"`
+	Synthetic        bool            `json:"synthetic,omitempty"`
 	TranscriptDigest string          `json:"transcriptDigest,omitempty"`
 	Runtime          json.RawMessage `json:"runtime,omitempty"`
 	Files            []FileSnap      `json:"files"`
@@ -199,6 +200,13 @@ func (s *Store) Begin(turn int, prompt string, msgIndex int, runtime ...json.Raw
 // Conversation rewind and fork require this anchor to detect same-length
 // rewrites that an integer boundary alone cannot distinguish.
 func (s *Store) BeginAnchored(turn int, prompt string, msgIndex int, transcriptDigest string, runtime json.RawMessage) error {
+	return s.BeginAnchoredTurn(turn, prompt, msgIndex, transcriptDigest, runtime, false)
+}
+
+// BeginAnchoredTurn records one orchestrated turn. Synthetic turns are durable
+// workspace/runtime recovery boundaries but stay out of user-facing rewind
+// pickers and conversation-boundary maps.
+func (s *Store) BeginAnchoredTurn(turn int, prompt string, msgIndex int, transcriptDigest string, runtime json.RawMessage, synthetic bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if turn < 0 || msgIndex < 0 || turn != s.nextTurn {
@@ -232,6 +240,7 @@ func (s *Store) BeginAnchored(turn int, prompt string, msgIndex int, transcriptD
 	s.stateCorrupt = false
 	candidate := &Checkpoint{
 		Turn: turn, Time: time.Now(), Prompt: prompt, MsgIndex: msgIndex,
+		Synthetic:        synthetic,
 		TranscriptDigest: transcriptDigest, Runtime: append(json.RawMessage(nil), runtime...),
 	}
 	if err := s.persist(candidate); err != nil {
@@ -255,6 +264,20 @@ func (s *Store) Runtime(turn int) (json.RawMessage, bool) {
 		return append(json.RawMessage(nil), s.cur.Runtime...), true
 	}
 	return nil, false
+}
+
+// Has reports whether turn is still live in the checkpoint store. Recovery
+// uses it to fail closed if a prepared combined rewind lost the workspace
+// snapshots it still needs.
+func (s *Store) Has(turn int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.done {
+		if c.Turn == turn {
+			return true
+		}
+	}
+	return s.cur != nil && s.cur.Turn == turn
 }
 
 // TranscriptDigest returns the persisted digest for a checkpoint's message
@@ -282,9 +305,12 @@ func (s *Store) Bounds() map[int]int {
 	defer s.mu.Unlock()
 	m := make(map[int]int, len(s.done)+1)
 	for _, c := range s.done {
+		if c.Synthetic {
+			continue
+		}
 		m[c.Turn] = c.MsgIndex
 	}
-	if s.cur != nil {
+	if s.cur != nil && !s.cur.Synthetic {
 		m[s.cur.Turn] = s.cur.MsgIndex
 	}
 	return m
@@ -435,6 +461,9 @@ func (s *Store) List() []Meta {
 	defer s.mu.Unlock()
 	out := make([]Meta, 0, len(s.done)+1)
 	for _, c := range s.all() {
+		if c.Synthetic {
+			continue
+		}
 		paths := make([]string, len(c.Files))
 		for i, f := range c.Files {
 			paths[i] = f.Path

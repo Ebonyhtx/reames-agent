@@ -350,6 +350,11 @@ func appendSessionEvent(sessionPath string, rec sessionEventRecord, sync bool) e
 		return fmt.Errorf("encode session event: %w", err)
 	}
 	buf = append(buf, '\n')
+	_, statErr := os.Stat(path)
+	created := os.IsNotExist(statErr)
+	if statErr != nil && !created {
+		return fmt.Errorf("inspect session event log: %w", statErr)
+	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return fmt.Errorf("open session event log: %w", err)
@@ -364,7 +369,15 @@ func appendSessionEvent(sessionPath string, rec sessionEventRecord, sync bool) e
 			return err
 		}
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if sync && created {
+		if err := fileutil.SyncParentDir(path); err != nil {
+			return fmt.Errorf("sync session event log directory: %w", err)
+		}
+	}
+	return nil
 }
 
 func appendSessionReplaceEvent(sessionPath string, msgs []provider.Message, digest [sha256.Size]byte, baseRevision int64, reason string) error {
@@ -392,7 +405,7 @@ func appendSessionAppendEvent(sessionPath string, messageIndex int, msgs []provi
 		MessageIndex:  messageIndex,
 		Messages:      append([]provider.Message(nil), msgs...),
 		ContentDigest: digestString(digest),
-	}, false)
+	}, true)
 }
 
 // compactSessionEventLog rewrites the log as a single replace event via an

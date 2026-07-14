@@ -3,6 +3,8 @@ package control
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
 
 	"reames-agent/internal/agent"
@@ -70,8 +72,11 @@ func (o *turnOrchestrator) runComposedSyntheticTurn(ctx context.Context, text st
 	return c.runner.Run(agent.WithMemoryCompilerSkip(ctx), c.ComposeSynthetic(text))
 }
 
-func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchestratedTurn) error {
+func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchestratedTurn) (runErr error) {
 	c := o.c
+	if err := c.recoverPendingSessionTransactions(c.SessionPath()); err != nil {
+		return fmt.Errorf("recover session before new turn: %w", err)
+	}
 	c.maybeSessionStart(ctx)
 	if !turn.synthetic && !turn.headless {
 		c.maybeAutoPlan(ctx, turn.raw)
@@ -91,26 +96,51 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 	}
 	input := c.compose(turn.input, turn.raw, !turn.synthetic)
 	startMessages := c.messageCount()
-	// Persist the complete runtime projection at every turn boundary. Goal FSM
-	// transitions persist again after advanceGoalAfterTurn; ordinary and
-	// plan-execution turns still need their latest canonical Todo state durable.
+	turnMarked := false
 	defer func() {
-		if c.executor != nil {
-			c.goals.persistRuntime(c.goalRuntimeProjection())
+		if !turnMarked {
+			if runErr == nil {
+				c.snapshotActivityIfChanged(startMessages)
+				if c.executor != nil {
+					if err := c.goals.persistRuntime(c.goalRuntimeProjection()); err != nil {
+						slog.Warn("controller: persist unarmed turn runtime", "err", err)
+					}
+				}
+			} else if errors.Is(runErr, context.Canceled) && c.CancelRequested() {
+				var err error
+				if turn.synthetic || IsSyntheticUserMessage(turn.raw) {
+					err = c.stripTurnMessagesAfter(startMessages)
+				} else {
+					err = c.stripCancelledVisibleTurnMessagesAfter(startMessages)
+				}
+				if err != nil {
+					runErr = errors.Join(runErr, err)
+				}
+			}
+			return
+		}
+		if runErr == nil {
+			if err := c.commitInFlightTurn(startMessages); err != nil {
+				runErr = err
+				if recoverErr := c.recoverInterruptedTurnState(c.SessionPath()); recoverErr != nil {
+					runErr = errors.Join(runErr, fmt.Errorf("recover failed turn commit: %w", recoverErr))
+				}
+			}
+			return
+		}
+		if err := c.recoverInterruptedTurnState(c.SessionPath()); err != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("rollback interrupted turn: %w", err))
 		}
 	}()
-	defer c.snapshotActivityIfChanged(startMessages)
 	defer c.recordDisplayForNewUser(startMessages, turn.display)
 	if turn.editedOriginal != "" {
 		defer c.markEditedForNewUser(startMessages, turn.editedOriginal)
 	}
-	// Open a checkpoint only for visible user turns before the user message is
-	// appended, so the recorded message boundary precedes it and pre-edit
-	// snapshots land here. Synthetic continuations stay attached to the visible
-	// turn that spawned them; otherwise hidden user-role messages would advance
-	// backend checkpoint turns without a matching frontend turn.
-	if !turn.synthetic {
-		c.beginCheckpoint(input)
+	// Every orchestrated turn gets a recovery boundary before its user message
+	// is appended. Synthetic continuations use hidden checkpoints: they can roll
+	// back only their own workspace effects without appearing in user pickers.
+	if err := c.beginCheckpoint(input, turn.synthetic); err != nil {
+		return fmt.Errorf("begin turn recovery checkpoint: %w", err)
 	}
 	if c.guardianSess != nil {
 		c.guardianSess.ResetTurn()
@@ -128,7 +158,15 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 		}
 		defer func() { c.hooks.Stop(context.Background(), lastAssistantText(c.History()), turn) }()
 	}
-	c.markInFlightTurn(startMessages, !turn.synthetic && !IsSyntheticUserMessage(turn.raw))
+	if err := c.markInFlightTurn(startMessages, !turn.synthetic && !IsSyntheticUserMessage(turn.raw)); err != nil {
+		if checkpointTurn, ok := c.checkpoints.currentTurn(); ok {
+			if cleanupErr := c.checkpoints.truncateFrom(checkpointTurn); cleanupErr != nil {
+				return errors.Join(err, fmt.Errorf("retire unarmed checkpoint turn %d: %w", checkpointTurn, cleanupErr))
+			}
+		}
+		return err
+	}
+	turnMarked = true
 	autoResearchTaskID := c.goals.currentAutoResearchTaskID()
 	autoResearchAcceptedBefore := c.autoResearchAcceptedEvidenceIDs(autoResearchTaskID)
 	c.appendAutoResearchHeartbeat(autoResearchTaskID, autoresearch.HeartbeatStartingTurn, "")
@@ -141,7 +179,6 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 		c.recordAutoResearchEvidenceFromAssistant(autoResearchTaskID, lastAssistantText(c.History()))
 		c.recordAutoResearchTurnProgress(autoResearchTaskID, autoResearchAcceptedBefore)
 		c.appendAutoResearchHeartbeat(autoResearchTaskID, autoresearch.HeartbeatTurnDone, "")
-		c.clearInFlightTurn()
 	} else {
 		c.appendAutoResearchHeartbeat(autoResearchTaskID, autoresearch.HeartbeatWarning, err.Error())
 		// When the user explicitly cancels (Ctrl+C), the incomplete turn's
@@ -150,14 +187,6 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 		// in-progress todo items and partial tool calls and may re-execute
 		// the interrupted work. Keep the real user prompt for visible turns so
 		// follow-up questions and resumes do not lose the user's context (#5499).
-		if errors.Is(err, context.Canceled) && c.CancelRequested() {
-			if turn.synthetic || IsSyntheticUserMessage(turn.raw) {
-				c.stripTurnMessagesAfter(startMessages)
-			} else {
-				c.stripCancelledVisibleTurnMessagesAfter(startMessages)
-			}
-		}
-		c.clearInFlightTurn()
 		return err
 	}
 	// Headless callers have no plan-approval responder. They still use the
@@ -194,14 +223,9 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 	c.approval.setPlanAutoApprove(true)
 	defer c.approval.setPlanAutoApprove(false)
 	err = func() error {
-		c.markInFlightTurn(execStart, false)
-		defer c.clearInFlightTurn()
 		return o.runComposedSyntheticTurn(ctx, planApprovedMessage)
 	}()
 	if err != nil {
-		if errors.Is(err, context.Canceled) && c.CancelRequested() {
-			c.stripTurnMessagesAfter(execStart)
-		}
 		return err
 	}
 	if todoArgs != "" && !c.hasTodoUpdateSince(execStart) {

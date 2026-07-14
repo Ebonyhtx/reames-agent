@@ -5770,8 +5770,11 @@ func TestTrashTopicWithStuckJobReturnsAfterSingleGrace(t *testing.T) {
 	}
 	sessionPath := writeTopicSession(t, dir, "stuck-topic.jsonl", topicID, "Stuck trash", projectRoot)
 
-	grace := 500 * time.Millisecond
-	slack := 300 * time.Millisecond
+	// Match the delete-session timing contract: the threshold stays below two
+	// teardown windows while allowing for loaded Windows runners to resume the
+	// test goroutine after the teardown timer has fired.
+	grace := time.Second
+	slack := 750 * time.Millisecond
 	jm := jobs.NewManager(event.Discard, jobs.WithTeardownGrace(grace))
 	ctrl := control.New(control.Options{SessionDir: dir, SessionPath: sessionPath, Label: "test", Jobs: jm, WorkspaceRoot: projectRoot})
 	releaseJob := startNonCooperativeSessionJob(t, jm, sessionPath)

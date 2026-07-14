@@ -197,16 +197,16 @@ func TestApprovalRealWriteFilePreviewDiskAndRewindEndToEnd(t *testing.T) {
 
 func TestPreviewableWriterFailsClosedOnRecoveryPersistenceFailures(t *testing.T) {
 	tests := []struct {
-		name   string
-		inject func(*Controller, string) error
-		want   string
+		name        string
+		inject      func(*Controller, string) error
+		wantTurnErr string
 	}{
 		{
 			name: "checkpoint",
 			inject: func(_ *Controller, sessionPath string) error {
 				return os.WriteFile(ckptDir(sessionPath), []byte("not a directory"), 0o644)
 			},
-			want: "checkpoint snapshot",
+			wantTurnErr: "begin turn recovery checkpoint",
 		},
 		{
 			name: "runtime sidecar",
@@ -216,7 +216,7 @@ func TestPreviewableWriterFailsClosedOnRecoveryPersistenceFailures(t *testing.T)
 				}
 				return nil
 			},
-			want: "runtime sidecar",
+			wantTurnErr: "runtime",
 		},
 		{
 			name: "in-flight marker",
@@ -231,7 +231,7 @@ func TestPreviewableWriterFailsClosedOnRecoveryPersistenceFailures(t *testing.T)
 				}
 				return nil
 			},
-			want: "in-flight turn marker",
+			wantTurnErr: "mark in-flight turn",
 		},
 	}
 
@@ -260,20 +260,12 @@ func TestPreviewableWriterFailsClosedOnRecoveryPersistenceFailures(t *testing.T)
 				t.Fatal(err)
 			}
 
-			if err := c.runTurnWithRaw(context.Background(), "write the file", "write the file"); err != nil {
-				t.Fatalf("runTurnWithRaw: %v", err)
+			turnErr := c.runTurnWithRaw(context.Background(), "write the file", "write the file")
+			if turnErr == nil || !strings.Contains(turnErr.Error(), tt.wantTurnErr) {
+				t.Fatalf("runTurnWithRaw error = %v, want %q", turnErr, tt.wantTurnErr)
 			}
 			if _, err := os.Stat(target); !os.IsNotExist(err) {
 				t.Fatalf("writer touched disk despite %s failure: %v", tt.name, err)
-			}
-			var toolResult string
-			for _, msg := range c.History() {
-				if msg.Role == provider.RoleTool && msg.ToolCallID == "w-blocked" {
-					toolResult = msg.Content
-				}
-			}
-			if !strings.Contains(toolResult, tt.want) {
-				t.Fatalf("tool result = %q, want %q persistence context", toolResult, tt.want)
 			}
 		})
 	}

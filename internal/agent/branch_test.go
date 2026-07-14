@@ -110,7 +110,8 @@ func TestSessionInFlightTurnMetaRoundTrip(t *testing.T) {
 	}
 	updatedAt := before.UpdatedAt
 
-	if err := MarkSessionInFlightTurn(path, 1, true); err != nil {
+	checkpointTurn := 0
+	if err := MarkSessionInFlightTurnAtCheckpoint(path, 1, true, &checkpointTurn); err != nil {
 		t.Fatal(err)
 	}
 	marked, ok, err := LoadBranchMeta(path)
@@ -122,6 +123,9 @@ func TestSessionInFlightTurnMetaRoundTrip(t *testing.T) {
 	}
 	if marked.InFlightTurn.StartMessageIndex != 1 || !marked.InFlightTurn.PreserveUser {
 		t.Fatalf("in-flight marker = %+v, want index=1 preserveUser=true", marked.InFlightTurn)
+	}
+	if marked.InFlightTurn.CheckpointTurn == nil || *marked.InFlightTurn.CheckpointTurn != checkpointTurn {
+		t.Fatalf("in-flight checkpoint = %+v, want %d", marked.InFlightTurn.CheckpointTurn, checkpointTurn)
 	}
 	if marked.InFlightTurn.StartedAt.IsZero() || time.Since(marked.InFlightTurn.StartedAt) > time.Minute {
 		t.Fatalf("unexpected marker timestamp: %v", marked.InFlightTurn.StartedAt)
@@ -143,6 +147,20 @@ func TestSessionInFlightTurnMetaRoundTrip(t *testing.T) {
 	if refreshed.InFlightTurn.StartMessageIndex != 1 || !refreshed.InFlightTurn.PreserveUser {
 		t.Fatalf("refreshed in-flight marker = %+v, want index=1 preserveUser=true", refreshed.InFlightTurn)
 	}
+	if refreshed.InFlightTurn.CheckpointTurn == nil || *refreshed.InFlightTurn.CheckpointTurn != checkpointTurn {
+		t.Fatalf("refreshed checkpoint = %+v, want %d", refreshed.InFlightTurn.CheckpointTurn, checkpointTurn)
+	}
+	expected := *refreshed.InFlightTurn
+	if err := CommitSessionInFlightTurn(path, expected, 2, "digest-final"); err != nil {
+		t.Fatal(err)
+	}
+	committed, ok, err := LoadBranchMeta(path)
+	if err != nil || !ok || committed.InFlightTurn == nil {
+		t.Fatalf("LoadBranchMeta committed ok=%v err=%v meta=%+v", ok, err, committed.InFlightTurn)
+	}
+	if committed.InFlightTurn.CommitMessageCount != 2 || committed.InFlightTurn.CommitTranscriptDigest != "digest-final" {
+		t.Fatalf("commit anchor = %+v, want count=2 digest-final", committed.InFlightTurn)
+	}
 	updatedAt = refreshed.UpdatedAt
 
 	if err := ClearSessionInFlightTurn(path); err != nil {
@@ -157,6 +175,63 @@ func TestSessionInFlightTurnMetaRoundTrip(t *testing.T) {
 	}
 	if !cleared.UpdatedAt.Equal(updatedAt) {
 		t.Fatalf("ClearSessionInFlightTurn updated activity time: got %v want %v", cleared.UpdatedAt, updatedAt)
+	}
+}
+
+func TestSessionRewindTransactionRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rewind.jsonl")
+	sess := NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "work"})
+	if err := sess.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := TouchBranchMeta(path); err != nil {
+		t.Fatal(err)
+	}
+	before, _, err := LoadBranchMeta(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transaction := RewindTransactionMeta{
+		Turn: 3, Boundary: 1, TranscriptDigest: "target-digest",
+		Runtime: []byte(`{"version":2}`), IncludeCode: true,
+		Phase: RewindTransactionPrepared, StartedAt: time.Now().UTC(),
+	}
+	if err := MarkSessionRewindTransaction(path, transaction); err != nil {
+		t.Fatal(err)
+	}
+	marked, ok, err := LoadBranchMeta(path)
+	if err != nil || !ok || marked.Rewind == nil {
+		t.Fatalf("LoadBranchMeta marked ok=%v err=%v rewind=%+v", ok, err, marked.Rewind)
+	}
+	if marked.Rewind.Phase != RewindTransactionPrepared || marked.Rewind.Turn != 3 || !marked.Rewind.IncludeCode {
+		t.Fatalf("prepared rewind = %+v", marked.Rewind)
+	}
+	if marked.Rewind.StartedAt.IsZero() || !marked.UpdatedAt.Equal(before.UpdatedAt) {
+		t.Fatalf("rewind timestamp/activity = started:%v before:%v after:%v", marked.Rewind.StartedAt, before.UpdatedAt, marked.UpdatedAt)
+	}
+	if err := UpdateSessionMeta(path, "model-a", "preview", 1, false); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, _, err := LoadBranchMeta(path)
+	if err != nil || refreshed.Rewind == nil {
+		t.Fatalf("listing refresh dropped rewind marker: err=%v meta=%+v", err, refreshed)
+	}
+	expected := *refreshed.Rewind
+	if err := AdvanceSessionRewindTransaction(path, expected); err != nil {
+		t.Fatal(err)
+	}
+	committed, _, err := LoadBranchMeta(path)
+	if err != nil || committed.Rewind == nil || committed.Rewind.Phase != RewindTransactionResourcesApplied {
+		t.Fatalf("committed rewind = %+v err=%v", committed.Rewind, err)
+	}
+	if err := ClearSessionRewindTransaction(path, *committed.Rewind); err != nil {
+		t.Fatal(err)
+	}
+	cleared, _, err := LoadBranchMeta(path)
+	if err != nil || cleared.Rewind != nil {
+		t.Fatalf("cleared rewind = %+v err=%v", cleared.Rewind, err)
 	}
 }
 

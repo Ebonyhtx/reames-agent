@@ -62,6 +62,14 @@ func (m *checkpointManager) enabled() bool {
 // begin opens a checkpoint for the turn about to run, recording msgIndex as the
 // conversation-rewind boundary. No-op when checkpoints are disabled.
 func (m *checkpointManager) begin(input string, msgIndex int, transcriptDigest string, runtime json.RawMessage) error {
+	return m.beginTurn(input, msgIndex, transcriptDigest, runtime, false)
+}
+
+func (m *checkpointManager) beginSynthetic(input string, msgIndex int, transcriptDigest string, runtime json.RawMessage) error {
+	return m.beginTurn(input, msgIndex, transcriptDigest, runtime, true)
+}
+
+func (m *checkpointManager) beginTurn(input string, msgIndex int, transcriptDigest string, runtime json.RawMessage, synthetic bool) error {
 	m.mu.Lock()
 	store := m.store
 	if store == nil {
@@ -70,12 +78,12 @@ func (m *checkpointManager) begin(input string, msgIndex int, transcriptDigest s
 	}
 	turn := m.turn
 	m.mu.Unlock()
-	err := store.BeginAnchored(turn, input, msgIndex, transcriptDigest, runtime)
+	err := store.BeginAnchoredTurn(turn, input, msgIndex, transcriptDigest, runtime, synthetic)
 	next := store.NextTurn()
 	m.mu.Lock()
 	if m.store == store {
 		m.turn = next
-		if err == nil {
+		if err == nil && !synthetic {
 			m.bound[turn] = msgIndex
 		} else {
 			delete(m.bound, turn)
@@ -83,6 +91,16 @@ func (m *checkpointManager) begin(input string, msgIndex int, transcriptDigest s
 	}
 	m.mu.Unlock()
 	return err
+}
+
+func (m *checkpointManager) currentTurn() (int, bool) {
+	m.mu.Lock()
+	store := m.store
+	m.mu.Unlock()
+	if store == nil {
+		return 0, false
+	}
+	return store.CurrentTurn()
 }
 
 func (m *checkpointManager) runtime(turn int) (json.RawMessage, bool) {
@@ -93,6 +111,13 @@ func (m *checkpointManager) runtime(turn int) (json.RawMessage, bool) {
 		return nil, false
 	}
 	return store.Runtime(turn)
+}
+
+func (m *checkpointManager) has(turn int) bool {
+	m.mu.Lock()
+	store := m.store
+	m.mu.Unlock()
+	return store != nil && store.Has(turn)
 }
 
 func (m *checkpointManager) transcriptDigest(turn int) (string, bool) {

@@ -96,27 +96,29 @@ workers/          # Cloudflare Workers（accounts, crash-report, forum）
 
 ## 五、会话运行态与恢复
 
-动态 Goal/Plan/Todo 不进入稳定 system prompt，但必须和 transcript 一起恢复。`control.Controller` 为每个 session 维护 v2 runtime sidecar：Goal FSM、continuation/blocker/intercept/idle/self-check 计数、PlanMode、canonical Todo、transcript message count、忽略可刷新 leading system prompt 的 transcript digest、monotonic revision、最新 writer epoch 的 root project-check 引用和已确认 child effect journal cursor。Sidecar 与 checkpoint JSON 使用 `fileutil.AtomicWriteFile`；同一进程内相同 sidecar 路径的 revision 检查与替换处于同一临界区，跨进程写入依赖 transport 持有的 session lease。该 helper 在 Windows cross-device/filter-driver rename 失败时会降级为原地复制，因此不能无条件外推为断电 crash-safe。
+动态 Goal/Plan/Todo 不进入稳定 system prompt，但必须和 transcript 一起恢复。`control.Controller` 为每个 session 维护 v2 runtime sidecar：Goal FSM、continuation/blocker/intercept/idle/self-check 计数、PlanMode、canonical Todo、transcript message count、忽略可刷新 leading system prompt 的 transcript digest、monotonic revision、最新 writer epoch 的 root project-check 引用和已确认 child effect journal cursor。Sidecar 与 checkpoint JSON 使用 `fileutil.AtomicWriteFile`；同一进程内相同 sidecar 路径的 revision 检查与替换处于同一临界区，跨进程写入依赖 transport 持有的 session lease。该 helper 通过同目录临时文件、文件 fsync、原子替换和目录项持久化发布；Windows 使用 `MoveFileEx(REPLACE_EXISTING|WRITE_THROUGH)`，Unix rename 后 fsync 父目录，cross-device/filter-driver rename 直接 fail closed，不再原地复制。
 
 ```text
-visible user turn start
+orchestrated turn start (visible or hidden synthetic)
   ├─ checkpoint: transcript boundary + runtime projection + later file snapshots
+  ├─ branch meta: in-flight marker + exact checkpoint turn
   ├─ Agent/Coordinator turn
   │    └─ previewable writer gate: checkpoint + runtime sidecar + in-flight marker
-  ├─ turn-boundary runtime sidecar refresh
-  └─ Goal advance: evidence gate + counters + second runtime refresh
+  ├─ persist transcript append/replace and runtime projection
+  ├─ publish transcript/runtime commit anchor
+  └─ clear in-flight marker
 ```
 
 恢复采用整体替换而不是字段叠加：Resume/Switch 先让 Agent 从目标 transcript 重建 Todo；带 digest 的 v2 sidecar 在 transcript 锚点完全相等时直接恢复 Todo，append-only extension 以 sidecar Todo 为基础重放后缀 `todo_write`/`complete_step`，rewrite/divergence 则保留 transcript 重建结果，避免 compaction 后较大的旧 message count 冒充新状态。旧 v2 sidecar 才使用 message count 兼容回退。Branch/Fork 复制对应 tip/turn-start runtime；conversation rewind 同时截断 transcript 并恢复 checkpoint runtime。目标没有 sidecar 时，旧 Goal 和 PlanMode 必须清空。
 
-`checkpoint.Store` 只有在 allocation manifest 与 turn/runtime record 均成功后才开放当前 turn；pre-edit record 失败会回滚内存 `seen/Files`，避免重试误判。Agent 的 previewable writer hook 可返回错误，root writer 还会在同一 session handoff 临界区刷新 runtime sidecar，并复验 in-flight marker 来自当前 turn 且匹配 session/message boundary/`preserveUser`，再进入工具执行；child 的祖先 callback 失败同样阻断 writer。持久快照可在新进程加载后恢复 writer 的部分落盘，但这不是 transcript/runtime/workspace 的单一断电事务，`bash` 等无静态目标工具也没有逐文件 checkpoint。
+`checkpoint.Store` 只有在 allocation manifest 与 turn/runtime record 均成功后才开放当前 turn；pre-edit record 失败会回滚内存 `seen/Files`，避免重试误判。Agent 的 previewable writer hook 可返回错误，root writer 还会在同一 session handoff 临界区刷新 runtime sidecar，并复验 in-flight marker 来自当前 turn 且匹配 session/message boundary/`preserveUser`，再进入工具执行；child 的祖先 callback 失败同样阻断 writer。每个 visible 或 synthetic turn 都分配 checkpoint，synthetic checkpoint 不进入 rewind picker/boundary map。成功结束先持久化 transcript 和 runtime，再在 branch meta 写两者的 commit anchor，最后清 marker；冷启动只有在 transcript 与 runtime sidecar 同时匹配 anchor 时保留 workspace，否则按 marker 的 checkpoint 恢复 workspace/runtime，并截断 partial transcript。失败和 cancel 在当前进程也走同一回滚；若自动恢复本身失败，Resume、新模型 turn 和所有保留 session 内容的 rotation 操作都会保留 marker 并阻断后续变更。无 session path 的内存 Controller 保持非持久兼容语义。
 
 Previewable built-in writer 先把用户路径绑定为持有中的 `os.Root` 与 root-relative path；read/stat/temp-write/fsync/chmod/rename/remove 都通过该 handle 完成，组件替换成 symlink/reparse point 时不会把操作重定向到 workspace 外。`move_file` 跨 root 时以 rooted copy + source remove 执行，`apply_patch` 在完整 preflight 后逐文件原子替换，并在后续文件失败时按预检 bytes/mode 回滚。Agent 的 `MultiPreviewer` 会在任一写入前快照所有目标。
 
-`checkpoint.Store.RestoreCode` 先构造并验证全部操作，再打开单一 workspace `os.Root` 执行预检、删除、写入和反向回滚；路径别名按规范化 identity 合并，Windows 大小写折叠，现存硬链接使用 `os.SameFile` 共享 earliest bytes。Conversation rewind/Fork/Summarize 必须验证 turn-start transcript prefix digest，Rewind/Fork 对非空无效 runtime 在修改前失败；truncate manifest 让物理 checkpoint 删除失败后也不会在重启时复活，turn ID 保持单调。该 handle-relative 声明覆盖 previewable built-in writer/checkpoint restore，不覆盖 `bash`、MCP、外部 API、ACL/xattr 或硬链接身份；transcript/runtime/checkpoint/workspace 也不构成单一断电事务。
+`checkpoint.Store.RestoreCode` 先构造并验证全部操作，再打开单一 workspace `os.Root` 执行预检、删除、写入和反向回滚；路径别名按规范化 identity 合并，Windows 大小写折叠，现存硬链接使用 `os.SameFile` 共享 earliest bytes。Conversation rewind/Fork/Summarize 必须验证 turn-start transcript prefix digest，Rewind/Fork 对非空无效 runtime 在修改前失败；truncate manifest 让物理 checkpoint 删除失败后也不会在重启时复活，turn ID 保持单调。Conversation/RewindBoth 先在 branch meta 写 `prepared` intent（含 turn、prefix anchor、runtime 与 code scope），再发布 transcript/runtime/workspace，写 `resources_applied` barrier 后才退休 checkpoint 并清 journal。启动恢复和新 turn 前都会重放未完成 phase；即使 checkpoint 已退休但 clear 前断电，journal 中的 transcript/runtime 和 barrier 也足以收敛。该协议提供跨资源 crash recovery，但不声称底层多个文件在同一瞬间原子变化。
 
 持久 subagent 通过 `Agent.Options.SessionSync` 在初始 user message、steer/retry/nudge、assistant tool-call envelope（工具执行前）、tool results、final 和 compaction rewrite 后保存 transcript；writer-capable `run_skill` 与 `task` 使用同一同步边界。`SubagentStore` 先发布 running metadata 再写 transcript，完成态只在 transcript 保存成功后发布；启动清理把遗留 running ref 转为可显式 `continue_from` 的 interrupted ref。`jobs.Manager.StartRecoverableForSession` 只有在 job log 与 running metadata 成功落盘后才启动 goroutine；冷加载 running job 时生成 interrupted tombstone、保留部分 log 并提示续跑，不自动重放工具。
 
 顶层持久 subagent ref 另有 `*.effects.json`：0600、schema v1、最多 256 个 retained event/1 MiB，超限时把被压缩前缀折叠为保守 mutation summary。Previewable child writer 在工具执行前写入 intent；结果 receipt 在祖先 ledger 发布前落盘。Sidecar 只含结构化 read/write/command metadata、parent session/tool-call、workspace、depth 与 sequence，不含 child model text、tool output、args、Todo/step；command 使用 `trust.RedactSecrets`。Runtime sidecar 保存 `{ref,journalID,sequence}` cursor；未确认事件恢复时必须匹配 parent `task`/`run_skill` transcript anchor，已确认事件可在 parent compaction 移除旧调用后幂等跳过。Child mutation 使旧 root verification refs 失效，child-only bash 不会恢复成 root proof。损坏或身份不匹配时每进程首次保守失效并提示 root 重验。
 
-当前完整 evidence ledger、委派预算和实时 effects bridge 仍是 turn/process-scoped；durable 部分覆盖 root 项目检查引用、subagent transcript/job tombstone 和 child effect mutation boundary，不把完整 child receipt 账本升级为父 proof。`bash`、MCP 与外部 API 等 arbitrary side effect 没有 exactly-once 语义，journal/transcript/runtime/checkpoint/workspace 也不是单一跨资源断电事务。
+当前完整 evidence ledger、委派预算和实时 effects bridge 仍是 turn/process-scoped；durable 部分覆盖 root 项目检查引用、subagent transcript/job tombstone 和 child effect mutation boundary，不把完整 child receipt 账本升级为父 proof。上述 turn/rewind 事务只覆盖 previewable built-in writer 与会话本地资源；`bash`、MCP、外部 API 和后台 opaque side effect 没有 exactly-once 语义，ACL/xattr/硬链接身份也不恢复。

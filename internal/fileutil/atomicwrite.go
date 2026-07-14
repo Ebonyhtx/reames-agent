@@ -11,17 +11,15 @@ var (
 	maxReplaceRetries = 12
 	replaceRetryBase  = 20 * time.Millisecond
 
-	// renameFile is a test seam: the two rename failure classes ReplaceFile
-	// distinguishes (transient lock vs cross-device) cannot be provoked
-	// portably on a real filesystem.
-	renameFile = os.Rename
+	// renameFile is a test seam: transient lock and cross-device failures
+	// cannot be provoked portably on a real filesystem.
+	renameFile = renameAtomic
 )
 
-// AtomicWriteFile writes data to path crash-safely: it writes to a sibling tmp
-// file, fsyncs it so the bytes reach disk (guarding against power loss, not just
-// process crash — see #4615), then atomically renames it onto path via
-// ReplaceFile. A crash or power cut at any point leaves either the old file or
-// the complete new file, never a truncated one. perm applies to the final file.
+// AtomicWriteFile writes data to a sibling temporary file, fsyncs it, applies
+// the requested mode, and atomically replaces path. A successful call leaves
+// either the complete old file or the complete new file across a crash or power
+// loss; it never degrades to an in-place copy.
 func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	dirPerm := os.FileMode(0o755)
@@ -46,10 +44,8 @@ func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		os.Remove(tmpPath)
 		return fmt.Errorf("fsync tmp for %s: %w", path, err)
 	}
-	// Chmod the still-open handle, before Close, so there is no window between
-	// close and a path-based chmod for another process (Windows AV / search
-	// indexer) to grab or move the tmp and make the chmod fail with "file not
-	// found". CreateTemp makes a 0600 file, so this only widens when perm asks.
+	// Chmod the open handle before Close so another process cannot move the
+	// temporary file between those operations.
 	if err := tmp.Chmod(perm); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
@@ -66,27 +62,9 @@ func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// ReplaceFile renames tmp onto dest, publishing the new content atomically: a
-// reader concurrent with the replace sees either the old file or the complete
-// new one. The rename can fail in two ways, and they are handled differently:
-//
-//   - A transient lock on dest (antivirus, the search indexer, a concurrent
-//     reader without delete sharing) fails the rename for a few hundred ms.
-//     The rename is retried with backoff, and the last error is returned if
-//     the lock never clears. The failure is loud on purpose: falling back to
-//     an in-place copy here would truncate dest first, letting a racing
-//     reader observe an empty or half-written file — exactly the torn state
-//     AtomicWriteFile promises its callers (session leases, credentials,
-//     plugin state) can never happen.
-//   - Windows encryption-software filter drivers report a cross-device link
-//     (ERROR_NOT_SAME_DEVICE / EXDEV) even for a same-dir rename (#2696), and
-//     every retry fails identically. Only this class falls back to the
-//     non-atomic copy, and immediately — retrying a structurally impossible
-//     rename would only delay it. Torn reads remain possible in that degraded
-//     mode; it is the only way to write at all on such hosts, and
-//     rename-capable filesystems never take it.
-//
-// A missing tmp means the write itself failed and no retry can help.
+// ReplaceFile atomically renames tmp onto dest. Transient sharing locks are
+// retried. A cross-device error, including ERROR_NOT_SAME_DEVICE from a Windows
+// filter driver, fails closed immediately because no atomic fallback exists.
 func ReplaceFile(tmp, dest string) error {
 	var err error
 	for attempt := 0; ; attempt++ {
@@ -94,9 +72,6 @@ func ReplaceFile(tmp, dest string) error {
 			return nil
 		}
 		if renameCrossesDevice(err) {
-			if copyOnto(tmp, dest) == nil {
-				return nil
-			}
 			return err
 		}
 		if attempt >= maxReplaceRetries || !fileExists(tmp) {
@@ -111,25 +86,8 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// copyOnto is the non-atomic last resort for hosts whose filesystem cannot
-// rename tmp onto dest at all (see ReplaceFile). It truncates dest in place,
-// so a concurrent reader can observe an empty or half-written file — it must
-// never run for failures a retry could clear.
-func copyOnto(tmp, dest string) error {
-	info, err := os.Stat(tmp)
-	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(tmp)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(dest, data, info.Mode().Perm()); err != nil {
-		return err
-	}
-	// WriteFile keeps an existing dest's mode, so re-apply tmp's mode to match
-	// what the rename would have done (a 0600 config tmp must not widen to 0644).
-	_ = os.Chmod(dest, info.Mode().Perm())
-	_ = os.Remove(tmp)
-	return nil
+// SyncParentDir persists a newly created or renamed directory entry where the
+// platform exposes that guarantee.
+func SyncParentDir(path string) error {
+	return syncDirectoryPath(filepath.Dir(path))
 }

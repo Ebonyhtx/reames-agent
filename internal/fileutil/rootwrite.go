@@ -12,8 +12,8 @@ import (
 // the operation through an ambient absolute path. The temporary file is opened
 // in the target directory through the same root handle, so path-component
 // replacement cannot redirect either the write or the final rename outside the
-// root. Unlike AtomicWriteFile, this helper fails closed when rename is not
-// available; it never falls back to an in-place copy.
+// root. Like AtomicWriteFile, it fails closed when rename is unavailable and
+// never falls back to an in-place copy.
 func AtomicWriteRootFile(root *os.Root, name string, data []byte, perm os.FileMode) error {
 	if root == nil {
 		return fmt.Errorf("atomic root write: root is nil")
@@ -62,6 +62,9 @@ func AtomicWriteRootFile(root *os.Root, name string, data []byte, perm os.FileMo
 	if err := root.Rename(tmpName, name); err != nil {
 		_ = root.Remove(tmpName)
 		return fmt.Errorf("replace root file %s: %w", name, err)
+	}
+	if err := syncRootDir(root, dir); err != nil {
+		return fmt.Errorf("sync root dir for %s: %w", name, err)
 	}
 	return nil
 }

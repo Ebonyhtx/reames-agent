@@ -54,6 +54,8 @@ monotonic revision
 - compaction、manual summarize、rewind、cancel/interrupted-turn cleanup 等 history rewrite 成功落盘后会刷新 runtime 锚点，因此同一压缩边界仍能从 sidecar 恢复 canonical Todo。没有 digest 的旧 v2 sidecar继续使用 message count 兼容回退。
 - Resume、Switch、Branch、Fork 和 conversation rewind 使用 replace-style 恢复，目标会话没有 sidecar 时清空旧 Goal/Plan，不把来源分支状态叠加过去。
 - Checkpoint 在可见 user turn 开始前记录 transcript 边界、prefix digest 和完整 runtime projection；conversation rewind/Fork 对缺少 digest 的 legacy checkpoint、同长度 divergence、负边界以及非空无效/future runtime 均在修改前失败。
+- 每个 synthetic Goal/Plan continuation 也分配独立但不在 UI 暴露的 checkpoint。In-flight marker 绑定精确 checkpoint turn；成功时 transcript/runtime 落盘后写 commit anchor 再清 marker，重启只有在两者同时匹配时保留 workspace，否则恢复 workspace/runtime 并截断 partial transcript。
+- Conversation/RewindBoth 通过 branch sidecar 的 `prepared -> resources_applied -> checkpoint retirement -> clear` 日志 roll-forward；启动恢复、新 turn 和保留内容的 session rotation 前都会完成遗留阶段，checkpoint 不会在 prepared 恢复仍需文件快照时提前退休。
 - strict Goal 只有实际执行宿主发起的 self-check turn 后才能完成。崩溃恢复出的“待自检”状态不能被普通 completion 跳过。
 - durable evidence 不使用 Todo 的 append-only 恢复规则：只有 transcript anchor 完全相等才读取；append、rewrite、divergence、引用丢失或最新检查失败均清空/拒绝引用并要求重新验证。
 
@@ -61,13 +63,13 @@ monotonic revision
 
 ## Checkpoint 文件恢复
 
-代码回退在写入前预检全部目标：拒绝工作区逃逸、symlink/reparse 路径和非普通文件，保存当前 bytes 与 mode；路径别名、Windows 大小写和现存硬链接共享 earliest snapshot bytes。预检、删除、写入与失败回滚复用单一 workspace `os.Root`，previewable built-in writer 同样以 rooted target 执行 read/stat/temp-write/fsync/chmod/rename/remove，组件被替换成 symlink/reparse point 时不会把写入重定向到 root 外。任何中途失败都会按反序恢复已应用文件和可能部分写入的当前失败文件。Checkpoint JSON 与 truncate manifest 使用 `AtomicWriteFile`，物理删除失败后 tombstone 仍阻止未来 checkpoint 在重启时复活，turn ID 不复用。该 helper 的 Windows cross-device fallback 仍可能原地复制；`RewindBoth` 的 transcript/runtime/checkpoint/workspace 跨资源更新也没有 durable 事务日志。
+代码回退在写入前预检全部目标：拒绝工作区逃逸、symlink/reparse 路径和非普通文件，保存当前 bytes 与 mode；路径别名、Windows 大小写和现存硬链接共享 earliest snapshot bytes。预检、删除、写入与失败回滚复用单一 workspace `os.Root`，previewable built-in writer 同样以 rooted target 执行 read/stat/temp-write/fsync/chmod/rename/remove，组件被替换成 symlink/reparse point 时不会把写入重定向到 root 外。任何中途失败都会按反序恢复已应用文件和可能部分写入的当前失败文件。Checkpoint JSON 与 truncate manifest 使用 `AtomicWriteFile`，物理删除失败后 tombstone 仍阻止未来 checkpoint 在重启时复活，turn ID 不复用。`AtomicWriteFile` 现以 sibling temp + fsync + atomic replace + directory/write-through flush 发布，cross-device/filter-driver rename 直接 fail closed，不再原地复制；Rewind 日志负责跨 transcript/runtime/checkpoint/workspace 的崩溃收敛。
 
 Checkpoint 只覆盖可预览 writer tool 的文件变化，不承诺追踪任意 shell 副作用。Checkpoint/runtime/in-flight marker 持久化失败已经向可预览写工具 fail-closed 传播；`bash` 等 opaque side effect 仍没有逐文件或 exactly-once 保证。
 
 ## Plan 与子任务
 
-PlanMode 是 runtime projection 的一部分；批准计划后只在当前执行 turn 临时自动批准对应 writer，后续 turn 恢复常规审批。`task`、`parallel_tasks` 与 subagent skill 已共享整棵树的 concurrency/token/time/step/cancellation 账本；writable child 的结构化 read/write/command receipt、父 tool-call provenance 和可预览 pre-edit checkpoint 也会归并到发起 turn，partial failure/cancel 保留 mutation boundary。Evidence generation 与 turn-scoped checkpoint callback 会拒绝迟到后台效果污染新 turn。顶层持久 `task` 与 writer-capable `run_skill` 另写有界版本化 effects sidecar；previewable child writer 在执行前必须持久化 mutation intent，恢复只接纳匹配 parent session/workspace/delegation call/journal cursor 的新事件，重复事件不会再次清空后续 root checks。Child-only bash 仍只满足当前 turn，跨 continuation 必须由 root 重跑项目检查。持久后台 Task/skill 在 Provider/tool/compaction 边界保存 transcript，冷启动显式恢复且不自动重放副作用；剩余 M4 核心门槛是跨资源断电一致性。
+PlanMode 是 runtime projection 的一部分；批准计划后只在当前执行 turn 临时自动批准对应 writer，后续 turn 恢复常规审批。`task`、`parallel_tasks` 与 subagent skill 已共享整棵树的 concurrency/token/time/step/cancellation 账本；writable child 的结构化 read/write/command receipt、父 tool-call provenance 和可预览 pre-edit checkpoint 也会归并到发起 turn，partial failure/cancel 保留 mutation boundary。Evidence generation 与 turn-scoped checkpoint callback 会拒绝迟到后台效果污染新 turn。顶层持久 `task` 与 writer-capable `run_skill` 另写有界版本化 effects sidecar；previewable child writer 在执行前必须持久化 mutation intent，恢复只接纳匹配 parent session/workspace/delegation call/journal cursor 的新事件，重复事件不会再次清空后续 root checks。Child-only bash 仍只满足当前 turn，跨 continuation 必须由 root 重跑项目检查。持久后台 Task/skill 在 Provider/tool/compaction 边界保存 transcript，冷启动显式恢复且不自动重放副作用。M4 已在这些明确边界内关闭；opaque side effect 仍要求读取真实状态，不得自动重放或声称 exactly-once。
 
 ## 相关实现
 

@@ -2,7 +2,7 @@
 
 Updated: 2026-07-14.
 
-Status: **Phase 1 + 2 and the rooted M4 recovery hardening batches are implemented**.
+Status: **Phase 1 + 2 and the M4 crash-recovery hardening are implemented**.
 The shared controller supports code/conversation/both rewind, fork-from-here and
 summarize from/up to here for CLI and Desktop. Conversation rewrites now require
 a transcript-prefix digest and a valid turn-start runtime projection; checkpoint
@@ -43,10 +43,11 @@ for the implemented snapshot phases.
 
 ## Anchors & capture
 
-- **One checkpoint per visible user turn.** A checkpoint opens through the
-  shared turn orchestrator before the user message is appended. Interactive
-  sends and headless `Controller.Run` use the same lifecycle; synthetic Goal or
-  approved-plan continuations remain attached to that visible checkpoint.
+- **One checkpoint per orchestrated turn.** A checkpoint opens through the
+  shared turn orchestrator before its user-role message is appended. Visible
+  user turns appear in rewind pickers; synthetic Goal/Plan continuations use
+  hidden checkpoints so crash recovery only undoes that continuation's effects
+  and never crosses the preceding committed visible turn.
 - **Pre-edit snapshot.** In `agent.(*Agent).executeOne`, before running a tool
   whose `ReadOnly()` is false and which implements `tool.Previewer` or
   `tool.MultiPreviewer`, collect every `diff.Change{Path, Kind, OldText}` and
@@ -75,6 +76,7 @@ type Checkpoint struct {
     Time             time.Time       `json:"time"`
     Prompt           string          `json:"prompt"`
     MsgIndex         int             `json:"msgIndex"` // exact transcript boundary
+    Synthetic        bool            `json:"synthetic,omitempty"`
     TranscriptDigest string          `json:"transcriptDigest,omitempty"`
     Runtime          json.RawMessage `json:"runtime,omitempty"` // Goal/Plan/Todo projection at turn start
     Files            []FileSnap      `json:"files"`
@@ -96,6 +98,17 @@ type Checkpoint struct {
   a durable monotonic watermark and are never reused after rewind. An existing
   but corrupt manifest fails closed: no old checkpoint is loaded, and the next
   turn retires the full prior ID range before healing the manifest.
+- **Durable turn commit** — branch metadata binds an in-flight turn to its exact
+  checkpoint. A successful turn persists transcript and runtime, writes their
+  commit anchor, then clears the marker. Resume preserves workspace changes only
+  when both resources match; otherwise it restores checkpoint workspace/runtime
+  and removes the partial transcript tail.
+- **Durable rewind journal** — conversation/both rewind records `prepared`,
+  publishes transcript/runtime/workspace, advances to `resources_applied`, then
+  retires checkpoints and clears the journal. Resume and the next turn replay an
+  unfinished phase; Compact/New/Fork/Branch/Switch/Summarize/Rewind and other
+  content-preserving rotations use the same preflight. Checkpoints cannot be
+  retired while prepared recovery still needs their file snapshots.
 - **Retention**: prune with the session (default ~30 days, configurable), to bound
   disk from full-content snapshots.
 
@@ -120,13 +133,16 @@ func (c *Controller) Rewind(turn int, scope RewindScope) error
   so a component replaced after validation cannot redirect writes outside the
   root. A failed operation rolls back earlier writes and the possibly partially
   written failing target from captured bytes/mode.
-- **Conversation**: truncate `Session.Messages` to just before turn `turn`'s user
+- **Conversation**: write durable rewind intent, truncate `Session.Messages` to
+  just before turn `turn`'s user
   message only when the live prefix matches `TranscriptDigest`. Non-empty invalid
   or future-version checkpoint runtime fails before transcript mutation; valid
   runtime replaces Goal/Plan/Todo, while a truly missing legacy runtime clears
   future Goal/Plan state. The rewritten transcript/runtime is persisted before a
   success event.
-- **Both**: code + conversation.
+- **Both**: code + conversation under the same durable rewind journal. This is a
+  recoverable cross-resource protocol, not a claim that all files change in one
+  filesystem transaction.
 
 A `Rewound` event (or reuse of a history-replace event) lets every frontend
 re-render uniformly.
@@ -158,13 +174,14 @@ re-render uniformly.
   `bash rm` is not.
 - **Large files**: full snapshots — retention cleanup bounds disk; revisit dedup
   (content-addressed snapshots) if it becomes a problem.
-- **Known atomicity limits**: sidecars use `fileutil.AtomicWriteFile`, whose
-  Windows cross-device/filter-driver fallback performs an in-place copy and can
-  tear on process or power loss. Transcript/runtime/workspace are separate
-  resources and do not form one crash transaction. Previewable built-in writers
-  and restore use handle-relative resolve-beneath I/O, but `bash`, MCP and
-  external APIs remain opaque. ACLs, xattrs and hard-link identity are not
-  restored.
+- **Known recovery limits**: `AtomicWriteFile` uses a sibling temp file, fsync,
+  atomic replace and parent-directory/write-through persistence; cross-device or
+  filter-driver rename failures now fail closed and never fall back to in-place
+  copy. The turn and rewind journals provide logical recovery across separate
+  transcript/runtime/checkpoint/workspace resources. Previewable built-in
+  writers and restore use handle-relative resolve-beneath I/O, but `bash`, MCP,
+  external APIs and background opaque side effects remain untracked and are not
+  exactly-once. ACLs, xattrs and hard-link identity are not restored.
 
 ## Phasing
 
@@ -177,4 +194,3 @@ re-render uniformly.
 
 - Default retention window and whether to expose it in `[checkpoints]` config.
 - Content-addressed dedup vs one-file-per-snapshot.
-- Durable multi-resource rewind journal across transcript/runtime/checkpoint/workspace.

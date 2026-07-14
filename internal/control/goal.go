@@ -753,11 +753,15 @@ func (c *Controller) restoreCheckpointRuntime(data []byte) bool {
 }
 
 func (c *Controller) restoreCheckpointState(state goalState) {
+	c.applyCheckpointState(state)
+	c.goals.persistRuntime(c.goalRuntimeProjection())
+}
+
+func (c *Controller) applyCheckpointState(state goalState) {
 	c.goals.applyCheckpointState(state)
 	c.restoreRuntimeTodos(state)
 	c.restoreRuntimeEvidence(state)
 	c.setPlanMode(state.PlanMode, false)
-	c.goals.persistRuntime(c.goalRuntimeProjection())
 }
 
 func (c *Controller) restoreRuntimeTodos(state goalState) {

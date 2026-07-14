@@ -109,13 +109,14 @@
 | [M6 clean-node 运维预检审计](audits/2026-07-13-m6-clean-node-operations-preflight.md) | schema v2 credential-free 实际二进制预检、全 home 敏感值扫描与真实外部证据非声明 |
 | [M6 Linux systemd user lifecycle audit](audits/2026-07-13-m6-linux-systemd-lifecycle.md) | WSL2 真实 user-service 安装、同名重装、restart/stop/start/uninstall、webhook readiness 与升级资产合同证据 |
 | [M6 Gateway、备份与升级恢复事务审计](audits/2026-07-14-m6-recovery-transactions.md) | Linux user install fail-closed 回滚、敏感 home/state backup/restore 与 CLI updater previous/rollback 的本地证据和限制 |
-| [M4 会话运行态与 Checkpoint 恢复审计](audits/2026-07-14-m4-session-runtime-recovery.md) | Goal completion 门控、v2 Goal/Plan/Todo 恢复、分支/回退一致性、事务式文件恢复及剩余 M4 边界 |
+| [M4 会话运行态与 Checkpoint 恢复审计](audits/2026-07-14-m4-session-runtime-recovery.md) | Goal completion 门控、v2 Goal/Plan/Todo 恢复、分支/回退一致性、事务式文件恢复及首批边界 |
 | [M4 子代理共享委派预算审计](audits/2026-07-14-m4-delegation-budget.md) | 整棵委派树共享并发、step、token、duration 与 cancellation 预算，覆盖嵌套、后台任务和 compaction |
 | [M4 可写子代理 Effects 归并审计](audits/2026-07-14-m4-writable-subagent-effects.md) | child read/write/command receipt、父 checkpoint、mutation boundary 与跨 turn 防污染证据 |
 | [M4 跨 continuation 最小证据审计](audits/2026-07-14-m4-durable-evidence.md) | writer epoch、项目检查哈希/tool-call 引用、exact-anchor crash-resume 与失效语义 |
 | [M4 Writer 持久化门禁审计](audits/2026-07-14-m4-writer-persistence-gate.md) | checkpoint/runtime/in-flight 写失败阻断、stale marker 拒绝、重试回滚、session handoff 串行与进程中断恢复边界 |
 | [M4 后台 Task、Compaction 与记忆统一恢复审计](audits/2026-07-14-m4-task-compaction-memory-recovery.md) | subagent 安全边界持久化、interrupted/continue_from、compacted transcript 续接与稳定前缀记忆检索证据 |
 | [M4 Rooted Writer 与 Durable Child Effects 审计](audits/2026-07-14-m4-rooted-writers-child-effects.md) | `os.Root` built-in writer/checkpoint restore、multi-file rollback、child mutation intent、journal cursor 与 crash/replay/branch 边界 |
+| [M4 跨资源恢复事务收官审计](audits/2026-07-14-m4-cross-resource-recovery-transaction.md) | visible/synthetic turn commit anchor、Rewind 两阶段 journal、断电重放、原子替换 fail-closed 与 M4 完成边界 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 

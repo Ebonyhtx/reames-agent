@@ -61,9 +61,10 @@ type BranchMeta struct {
 	// in-memory conversation, so ListSessions stays O(1) per session instead of
 	// O(file size). Gated by SchemaVersion (above), not Turns == 0, so a
 	// genuinely-empty session is recorded once and never re-decoded.
-	Turns        int               `json:"turns,omitempty"`
-	Preview      string            `json:"preview,omitempty"`
-	InFlightTurn *InFlightTurnMeta `json:"in_flight_turn,omitempty"`
+	Turns        int                    `json:"turns,omitempty"`
+	Preview      string                 `json:"preview,omitempty"`
+	InFlightTurn *InFlightTurnMeta      `json:"in_flight_turn,omitempty"`
+	Rewind       *RewindTransactionMeta `json:"rewind_transaction,omitempty"`
 }
 
 // BranchMetaCountsVersion is stamped into BranchMeta.SchemaVersion whenever a
@@ -76,9 +77,35 @@ const BranchMetaCountsVersion = 1
 // has started but not yet reached TurnDone. If the process exits mid-turn, a
 // later resume can strip the partial assistant/tool tail without guessing.
 type InFlightTurnMeta struct {
-	StartMessageIndex int       `json:"start_message_index"`
-	PreserveUser      bool      `json:"preserve_user"`
-	StartedAt         time.Time `json:"started_at"`
+	StartMessageIndex      int       `json:"start_message_index"`
+	PreserveUser           bool      `json:"preserve_user"`
+	StartedAt              time.Time `json:"started_at"`
+	CheckpointTurn         *int      `json:"checkpoint_turn,omitempty"`
+	CommitMessageCount     int       `json:"commit_message_count,omitempty"`
+	CommitTranscriptDigest string    `json:"commit_transcript_digest,omitempty"`
+}
+
+// RewindTransactionPhase records which durable resources a conversation
+// rewind has published. Checkpoints are retired only after ResourcesApplied is
+// durable, so recovery never needs deleted workspace snapshots.
+type RewindTransactionPhase string
+
+const (
+	RewindTransactionPrepared         RewindTransactionPhase = "prepared"
+	RewindTransactionResourcesApplied RewindTransactionPhase = "resources_applied"
+)
+
+// RewindTransactionMeta is the durable intent for a conversation or combined
+// rewind. Runtime duplicates the target checkpoint projection so conversation
+// recovery does not depend on checkpoint retention after resources are applied.
+type RewindTransactionMeta struct {
+	Turn             int                    `json:"turn"`
+	Boundary         int                    `json:"boundary"`
+	TranscriptDigest string                 `json:"transcript_digest"`
+	Runtime          json.RawMessage        `json:"runtime,omitempty"`
+	IncludeCode      bool                   `json:"include_code,omitempty"`
+	Phase            RewindTransactionPhase `json:"phase"`
+	StartedAt        time.Time              `json:"started_at"`
 }
 
 func (m BranchMeta) DefaultScope() string {
@@ -137,11 +164,9 @@ func LoadBranchMeta(sessionPath string) (BranchMeta, bool, error) {
 	return m, true, nil
 }
 
-// branchMetaReadBackoffs paces the re-reads of a branch-meta sidecar that
-// failed to load. On Windows fileutil.ReplaceFile can fall back to a
-// non-atomic in-place copy, so a concurrent reader may catch the sidecar
-// half-written (an open/read error or truncated JSON). Those tears heal in
-// milliseconds; a few short retries separate them from real corruption.
+// branchMetaReadBackoffs paces re-reads after transient sharing/I/O failures
+// and remains compatible with sidecars written by older releases that used a
+// degraded in-place fallback on some Windows filter drivers.
 var branchMetaReadBackoffs = []time.Duration{20 * time.Millisecond, 50 * time.Millisecond, 100 * time.Millisecond}
 
 // loadBranchMetaRetry reads the branch-meta sidecar like LoadBranchMeta but
@@ -203,6 +228,11 @@ func saveBranchMeta(sessionPath string, m BranchMeta, touchUpdated bool) error {
 	}
 	tmpPath := tmp.Name()
 	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
 		return err
@@ -269,6 +299,13 @@ func TouchBranchMeta(sessionPath string) error {
 }
 
 func MarkSessionInFlightTurn(sessionPath string, startMessageIndex int, preserveUser bool) error {
+	return MarkSessionInFlightTurnAtCheckpoint(sessionPath, startMessageIndex, preserveUser, nil)
+}
+
+// MarkSessionInFlightTurnAtCheckpoint opens a recoverable foreground turn.
+// checkpointTurn identifies the exact workspace/runtime boundary to restore if
+// the process exits before the final transcript and runtime projection commit.
+func MarkSessionInFlightTurnAtCheckpoint(sessionPath string, startMessageIndex int, preserveUser bool, checkpointTurn *int) error {
 	if startMessageIndex < 0 {
 		startMessageIndex = 0
 	}
@@ -285,8 +322,67 @@ func MarkSessionInFlightTurn(sessionPath string, startMessageIndex int, preserve
 		StartMessageIndex: startMessageIndex,
 		PreserveUser:      preserveUser,
 		StartedAt:         time.Now().UTC(),
+		CheckpointTurn:    cloneIntPointer(checkpointTurn),
 	}
 	return SaveBranchMetaPreserveUpdated(sessionPath, m)
+}
+
+// ReplaceSessionInFlightTurn writes a previously established marker to a new
+// session path during snapshot-conflict recovery without changing its identity
+// or commit state.
+func ReplaceSessionInFlightTurn(sessionPath string, marker InFlightTurnMeta) error {
+	if marker.StartMessageIndex < 0 {
+		return fmt.Errorf("invalid in-flight turn message index %d", marker.StartMessageIndex)
+	}
+	unlock := lockSessionSavePath(sessionPath)
+	defer unlock()
+	m, err := EnsureBranchMeta(sessionPath)
+	if err != nil {
+		return err
+	}
+	copy := marker
+	copy.CheckpointTurn = cloneIntPointer(marker.CheckpointTurn)
+	m.InFlightTurn = &copy
+	return SaveBranchMetaPreserveUpdated(sessionPath, m)
+}
+
+// CommitSessionInFlightTurn publishes the final transcript anchor only after
+// transcript and runtime persistence have both succeeded. Recovery treats a
+// marker as committed only when both resources still match this anchor.
+func CommitSessionInFlightTurn(sessionPath string, expected InFlightTurnMeta, messageCount int, transcriptDigest string) error {
+	if messageCount < 0 || strings.TrimSpace(transcriptDigest) == "" {
+		return fmt.Errorf("invalid in-flight turn commit anchor")
+	}
+	unlock := lockSessionSavePath(sessionPath)
+	defer unlock()
+	m, ok, err := LoadBranchMeta(sessionPath)
+	if err != nil {
+		return err
+	}
+	if !ok || m.InFlightTurn == nil || !sameInFlightTurnIdentity(m.InFlightTurn, &expected) {
+		return fmt.Errorf("in-flight turn marker changed before commit")
+	}
+	m.InFlightTurn.CommitMessageCount = messageCount
+	m.InFlightTurn.CommitTranscriptDigest = strings.TrimSpace(transcriptDigest)
+	return SaveBranchMetaPreserveUpdated(sessionPath, m)
+}
+
+func sameInFlightTurnIdentity(a, b *InFlightTurnMeta) bool {
+	if a == nil || b == nil || a.StartMessageIndex != b.StartMessageIndex || a.PreserveUser != b.PreserveUser {
+		return false
+	}
+	if (a.CheckpointTurn == nil) != (b.CheckpointTurn == nil) {
+		return false
+	}
+	return a.CheckpointTurn == nil || *a.CheckpointTurn == *b.CheckpointTurn
+}
+
+func cloneIntPointer(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
 
 func ClearSessionInFlightTurn(sessionPath string) error {
@@ -301,6 +397,99 @@ func ClearSessionInFlightTurn(sessionPath string) error {
 	}
 	m.InFlightTurn = nil
 	return SaveBranchMetaPreserveUpdated(sessionPath, m)
+}
+
+// MarkSessionRewindTransaction records rewind intent before transcript,
+// runtime, or workspace state changes. A session cannot begin a rewind while a
+// foreground turn or another rewind is unresolved.
+func MarkSessionRewindTransaction(sessionPath string, transaction RewindTransactionMeta) error {
+	if err := validateRewindTransaction(transaction); err != nil {
+		return err
+	}
+	if transaction.Phase != RewindTransactionPrepared {
+		return fmt.Errorf("new rewind transaction must be prepared")
+	}
+	unlock := lockSessionSavePath(sessionPath)
+	defer unlock()
+	m, err := EnsureBranchMeta(sessionPath)
+	if err != nil {
+		return err
+	}
+	if m.InFlightTurn != nil {
+		return fmt.Errorf("cannot rewind while an in-flight turn marker exists")
+	}
+	if m.Rewind != nil {
+		return fmt.Errorf("session already has a pending rewind transaction")
+	}
+	copy := cloneRewindTransaction(transaction)
+	m.Rewind = &copy
+	return SaveBranchMetaPreserveUpdated(sessionPath, m)
+}
+
+// AdvanceSessionRewindTransaction publishes the resources-applied barrier.
+// Recovery may retire checkpoints only after this sidecar update succeeds.
+func AdvanceSessionRewindTransaction(sessionPath string, expected RewindTransactionMeta) error {
+	unlock := lockSessionSavePath(sessionPath)
+	defer unlock()
+	m, ok, err := LoadBranchMeta(sessionPath)
+	if err != nil {
+		return err
+	}
+	if !ok || m.Rewind == nil || !sameRewindTransactionIdentity(m.Rewind, &expected) {
+		return fmt.Errorf("rewind transaction changed before resources commit")
+	}
+	if m.Rewind.Phase == RewindTransactionResourcesApplied {
+		return nil
+	}
+	if m.Rewind.Phase != RewindTransactionPrepared {
+		return fmt.Errorf("invalid rewind transaction phase %q", m.Rewind.Phase)
+	}
+	m.Rewind.Phase = RewindTransactionResourcesApplied
+	return SaveBranchMetaPreserveUpdated(sessionPath, m)
+}
+
+// ClearSessionRewindTransaction removes a completed transaction without
+// changing the session activity timestamp.
+func ClearSessionRewindTransaction(sessionPath string, expected RewindTransactionMeta) error {
+	unlock := lockSessionSavePath(sessionPath)
+	defer unlock()
+	m, ok, err := LoadBranchMeta(sessionPath)
+	if err != nil || !ok {
+		return err
+	}
+	if m.Rewind == nil {
+		return nil
+	}
+	if !sameRewindTransactionIdentity(m.Rewind, &expected) {
+		return fmt.Errorf("rewind transaction changed before clear")
+	}
+	m.Rewind = nil
+	return SaveBranchMetaPreserveUpdated(sessionPath, m)
+}
+
+func validateRewindTransaction(transaction RewindTransactionMeta) error {
+	if transaction.Turn < 0 || transaction.Boundary < 0 || strings.TrimSpace(transaction.TranscriptDigest) == "" || transaction.StartedAt.IsZero() {
+		return fmt.Errorf("invalid rewind transaction anchor")
+	}
+	switch transaction.Phase {
+	case RewindTransactionPrepared, RewindTransactionResourcesApplied:
+		return nil
+	default:
+		return fmt.Errorf("invalid rewind transaction phase %q", transaction.Phase)
+	}
+}
+
+func sameRewindTransactionIdentity(a, b *RewindTransactionMeta) bool {
+	return a != nil && b != nil &&
+		a.Turn == b.Turn && a.Boundary == b.Boundary &&
+		a.TranscriptDigest == b.TranscriptDigest && a.IncludeCode == b.IncludeCode &&
+		a.StartedAt.Equal(b.StartedAt)
+}
+
+func cloneRewindTransaction(transaction RewindTransactionMeta) RewindTransactionMeta {
+	copy := transaction
+	copy.Runtime = append(json.RawMessage(nil), transaction.Runtime...)
+	return copy
 }
 
 func ListBranches(dir string) ([]BranchInfo, error) {

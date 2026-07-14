@@ -118,10 +118,16 @@ type Controller struct {
 	// branchMetaSave is a fault-injection seam for post-transcript branch cleanup tests.
 	branchMetaSave func(string, agent.BranchMeta) error
 	// inFlightMark is a fault-injection seam for writer crash-window tests.
-	inFlightMark func(string, int, bool) error
-	inFlightMu   sync.Mutex
-	inFlightPath string
-	inFlightTurn *agent.InFlightTurnMeta
+	inFlightMark   func(string, int, bool) error
+	inFlightCommit func(string, agent.InFlightTurnMeta, int, string) error
+	inFlightClear  func(string) error
+	inFlightMu     sync.Mutex
+	inFlightPath   string
+	inFlightTurn   *agent.InFlightTurnMeta
+	// rewind* hooks are fault-injection seams for the durable rewind journal.
+	rewindMark    func(string, agent.RewindTransactionMeta) error
+	rewindAdvance func(string, agent.RewindTransactionMeta) error
+	rewindClear   func(string, agent.RewindTransactionMeta) error
 
 	// balanceURL/balanceKey target the active provider's optional wallet-balance
 	// endpoint (empty when the provider declares none). Captured at build so a
@@ -580,14 +586,19 @@ func (c *Controller) rebindCheckpoints(sessionPath string) {
 // beginCheckpoint opens a checkpoint for the turn about to run, recording the
 // current message count as the conversation-rewind boundary. Called at the top of
 // runTurn, before the user message is appended.
-func (c *Controller) beginCheckpoint(input string) {
+func (c *Controller) beginCheckpoint(input string, synthetic bool) error {
 	if c.executor == nil {
-		return
+		return nil
 	}
 	messageCount, transcriptDigest := c.executor.Session().TranscriptAnchor()
-	if err := c.checkpoints.begin(input, messageCount, transcriptDigest, c.goals.snapshotData(c.goalRuntimeProjection())); err != nil {
-		slog.Warn("controller: begin checkpoint", "err", err)
+	runtime := c.goals.snapshotData(c.goalRuntimeProjection())
+	var err error
+	if synthetic {
+		err = c.checkpoints.beginSynthetic(input, messageCount, transcriptDigest, runtime)
+	} else {
+		err = c.checkpoints.begin(input, messageCount, transcriptDigest, runtime)
 	}
+	return err
 }
 
 // --- commands (frontend → controller) ---
@@ -2085,6 +2096,9 @@ func (c *Controller) Compact(ctx context.Context, instructions string) error {
 		return err
 	}
 	defer c.endRotation()
+	if err := c.recoverPendingSessionTransactions(c.SessionPath()); err != nil {
+		return fmt.Errorf("recover session before compact: %w", err)
+	}
 	return c.executor.CompactNow(ctx, instructions)
 }
 
@@ -2119,6 +2133,9 @@ func (c *Controller) NewSession() error {
 		return err
 	}
 	defer c.endRotation()
+	if err := c.recoverPendingSessionTransactions(c.SessionPath()); err != nil {
+		return fmt.Errorf("recover session before new: %w", err)
+	}
 	if err := c.Snapshot(); err != nil {
 		return err
 	}
@@ -2351,15 +2368,15 @@ func (c *Controller) Rewind(turn int, scope RewindScope) error {
 		return c.rewindFail(err)
 	}
 	defer c.endRotation()
+	path := c.SessionPath()
+	if err := c.recoverPendingSessionTransactions(path); err != nil {
+		return c.rewindFail(fmt.Errorf("recover session before rewind: %w", err))
+	}
 	boundary, hasBound := c.checkpoints.boundary(turn)
 	conversation := scope == RewindConversation || scope == RewindBoth
 	code := scope == RewindCode || scope == RewindBoth
-	var originalMessages []provider.Message
-	var originalRuntime json.RawMessage
-	var session *agent.Session
 	var runtimeData json.RawMessage
-	var checkpointRuntime goalState
-	var hasCheckpointRuntime bool
+	var checkpointDigest string
 
 	// Preflight every conversation condition before publishing either half of a
 	// RewindBoth. A compacted/stale boundary must leave the workspace untouched.
@@ -2370,86 +2387,188 @@ func (c *Controller) Rewind(turn int, scope RewindScope) error {
 		if boundary < 0 {
 			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: invalid negative boundary", turn))
 		}
-		session = c.executor.Session()
-		originalMessages = session.Snapshot()
-		if boundary > len(originalMessages) {
+		messages := c.executor.Session().Snapshot()
+		if boundary > len(messages) {
 			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: the conversation was compacted past this point", turn))
 		}
-		checkpointDigest, hasDigest := c.checkpoints.transcriptDigest(turn)
+		var hasDigest bool
+		checkpointDigest, hasDigest = c.checkpoints.transcriptDigest(turn)
 		if !hasDigest {
 			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: legacy checkpoint lacks a transcript digest", turn))
 		}
-		if equal, extends := session.CompareTranscriptAnchor(boundary, checkpointDigest); !equal && !extends {
+		if equal, extends := c.executor.Session().CompareTranscriptAnchor(boundary, checkpointDigest); !equal && !extends {
 			return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: transcript diverged from the checkpoint prefix", turn))
 		}
-		originalRuntime = c.goals.snapshotData(c.goalRuntimeProjection())
 		runtimeData, _ = c.checkpoints.runtime(turn)
 		if len(runtimeData) > 0 {
-			var err error
-			checkpointRuntime, err = c.goals.decodeCheckpointState(runtimeData)
-			if err != nil {
+			if _, err := c.goals.decodeCheckpointState(runtimeData); err != nil {
 				return c.rewindFail(fmt.Errorf("conversation rewind unavailable for turn %d: invalid checkpoint runtime: %w", turn, err))
 			}
-			hasCheckpointRuntime = true
 		}
 	}
 
-	rollbackConversation := func() error {
-		if !conversation {
-			return nil
-		}
-		session.Replace(originalMessages)
-		c.executor.RebuildTodoState()
-		if len(originalRuntime) > 0 {
-			c.restoreCheckpointRuntime(originalRuntime)
-		}
-		return c.SnapshotRewrite()
-	}
-
-	if conversation {
-		session.Replace(append([]provider.Message(nil), originalMessages[:boundary]...))
-		c.executor.RebuildTodoState()
-		if hasCheckpointRuntime {
-			c.restoreCheckpointState(checkpointRuntime)
-		} else {
-			// Legacy checkpoints do not know historical Goal/Plan state. Clear
-			// those fields rather than retaining future state over old messages.
-			c.setPlanMode(false, false)
-			path, data, revision, ok := c.goals.set("", GoalResearchAuto, "", c.goalRuntimeProjection())
-			c.persistGoalState(path, data, revision, ok)
-		}
-		if err := c.SnapshotRewrite(); err != nil {
-			if rollbackErr := rollbackConversation(); rollbackErr != nil {
-				return c.rewindFail(fmt.Errorf("rewind conversation: %w (rollback failed: %v)", err, rollbackErr))
-			}
-			return c.rewindFail(fmt.Errorf("rewind conversation: %w", err))
-		}
-	}
-
-	var written, deleted []string
-	if code {
-		var err error
-		written, deleted, err = c.checkpoints.restoreCode(turn)
+	if !conversation {
+		written, deleted, err := c.checkpoints.restoreCode(turn)
 		if err != nil {
-			if rollbackErr := rollbackConversation(); rollbackErr != nil {
-				return c.rewindFail(fmt.Errorf("rewind code: %w (conversation rollback failed: %v)", err, rollbackErr))
-			}
 			return c.rewindFail(fmt.Errorf("rewind code: %w", err))
 		}
+		c.emitCodeRewindNotice(turn, written, deleted)
+		return nil
 	}
-	if scope == RewindConversation || scope == RewindBoth {
-		if err := c.checkpoints.truncateFrom(turn); err != nil {
-			if rollbackErr := rollbackConversation(); rollbackErr != nil {
-				return c.rewindFail(fmt.Errorf("truncate checkpoints: %w (conversation rollback failed: %v)", err, rollbackErr))
-			}
-			return c.rewindFail(fmt.Errorf("truncate checkpoints: %w", err))
+	if path == "" {
+		return c.rewindFail(fmt.Errorf("conversation rewind requires session persistence"))
+	}
+	transaction := agent.RewindTransactionMeta{
+		Turn: turn, Boundary: boundary, TranscriptDigest: checkpointDigest,
+		Runtime: append(json.RawMessage(nil), runtimeData...), IncludeCode: code,
+		Phase: agent.RewindTransactionPrepared, StartedAt: time.Now().UTC(),
+	}
+	mark := c.rewindMark
+	if mark == nil {
+		mark = agent.MarkSessionRewindTransaction
+	}
+	if err := mark(path, transaction); err != nil {
+		return c.rewindFail(fmt.Errorf("prepare rewind transaction: %w", err))
+	}
+	written, deleted, err := c.finishRewindTransaction(path, transaction)
+	if err != nil {
+		return c.rewindFail(fmt.Errorf("rewind transaction remains pending for recovery: %w", err))
+	}
+	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
+		Text: fmt.Sprintf("rewound conversation to turn %d", turn)})
+	c.emitCodeRewindNotice(turn, written, deleted)
+	return nil
+}
+
+func (c *Controller) emitCodeRewindNotice(turn int, written, deleted []string) {
+	if len(written) == 0 && len(deleted) == 0 {
+		return
+	}
+	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
+		Text: fmt.Sprintf("rewound code to turn %d - %d file(s) restored, %d removed", turn, len(written), len(deleted))})
+}
+
+// finishRewindTransaction is a roll-forward transaction. Prepared means the
+// checkpoint records are still authoritative and every resource is reapplied.
+// ResourcesApplied is the durable barrier that permits checkpoint retirement.
+func (c *Controller) finishRewindTransaction(path string, transaction agent.RewindTransactionMeta) (written, deleted []string, err error) {
+	if transaction.Phase == agent.RewindTransactionPrepared {
+		if transaction.IncludeCode && !c.checkpoints.has(transaction.Turn) {
+			return nil, nil, fmt.Errorf("checkpoint turn %d is missing before workspace recovery", transaction.Turn)
 		}
-		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
-			Text: fmt.Sprintf("rewound conversation to turn %d", turn)})
+		written, deleted, err = c.applyRewindResources(path, transaction)
+		if err != nil {
+			return nil, nil, err
+		}
+		advance := c.rewindAdvance
+		if advance == nil {
+			advance = agent.AdvanceSessionRewindTransaction
+		}
+		if err := advance(path, transaction); err != nil {
+			return nil, nil, fmt.Errorf("commit rewind resources: %w", err)
+		}
+		transaction.Phase = agent.RewindTransactionResourcesApplied
+	} else if transaction.Phase == agent.RewindTransactionResourcesApplied {
+		// Transcript and runtime remain recoverable from the journal after
+		// checkpoint retirement. Reapply workspace state only while the
+		// checkpoint records are still live.
+		includeCode := transaction.IncludeCode
+		transaction.IncludeCode = includeCode && c.checkpoints.has(transaction.Turn)
+		written, deleted, err = c.applyRewindResources(path, transaction)
+		transaction.IncludeCode = includeCode
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		return nil, nil, fmt.Errorf("invalid rewind transaction phase %q", transaction.Phase)
 	}
-	if len(written) > 0 || len(deleted) > 0 {
-		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
-			Text: fmt.Sprintf("rewound code to turn %d — %d file(s) restored, %d removed", turn, len(written), len(deleted))})
+	if err := c.checkpoints.truncateFrom(transaction.Turn); err != nil {
+		return nil, nil, fmt.Errorf("retire rewind checkpoints: %w", err)
+	}
+	clear := c.rewindClear
+	if clear == nil {
+		clear = agent.ClearSessionRewindTransaction
+	}
+	if err := clear(path, transaction); err != nil {
+		return nil, nil, fmt.Errorf("clear rewind transaction: %w", err)
+	}
+	return written, deleted, nil
+}
+
+func (c *Controller) applyRewindResources(path string, transaction agent.RewindTransactionMeta) (written, deleted []string, err error) {
+	if err := c.persistRewindConversation(path, transaction); err != nil {
+		return nil, nil, fmt.Errorf("publish rewind conversation: %w", err)
+	}
+	if transaction.IncludeCode {
+		written, deleted, err = c.checkpoints.restoreCode(transaction.Turn)
+		if err != nil {
+			return nil, nil, fmt.Errorf("restore rewind workspace: %w", err)
+		}
+	}
+	return written, deleted, nil
+}
+
+func (c *Controller) persistRewindConversation(path string, transaction agent.RewindTransactionMeta) error {
+	c.snapshotMu.Lock()
+	defer c.snapshotMu.Unlock()
+	c.mu.Lock()
+	currentPath, modelRef := c.sessionPath, c.modelRef
+	c.mu.Unlock()
+	if currentPath != path {
+		return fmt.Errorf("session path changed from %q to %q", agent.BranchID(path), agent.BranchID(currentPath))
+	}
+	session := c.executor.Session()
+	messages := session.Snapshot()
+	if transaction.Boundary > len(messages) {
+		return fmt.Errorf("conversation was compacted past rewind boundary %d", transaction.Boundary)
+	}
+	if equal, extends := session.CompareTranscriptAnchor(transaction.Boundary, transaction.TranscriptDigest); !equal && !extends {
+		return fmt.Errorf("conversation diverged from rewind anchor")
+	}
+	session.Replace(append([]provider.Message(nil), messages[:transaction.Boundary]...))
+	c.executor.RebuildTodoState()
+	if len(transaction.Runtime) > 0 {
+		state, err := c.goals.decodeCheckpointState(transaction.Runtime)
+		if err != nil {
+			return fmt.Errorf("decode rewind runtime: %w", err)
+		}
+		c.applyCheckpointState(state)
+	} else {
+		c.setPlanMode(false, false)
+		c.goals.set("", GoalResearchAuto, "", c.goalRuntimeProjection())
+	}
+	if err := session.SaveRewrite(path); err != nil {
+		return err
+	}
+	preview, turns := agent.SessionPreviewFromMessages(session.Snapshot())
+	if err := agent.UpdateSessionMeta(path, modelRef, preview, turns, false); err != nil {
+		return err
+	}
+	if err := c.goals.persistRuntime(c.goalRuntimeProjection()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Controller) recoverPendingRewindState(path string) (written, deleted []string, err error) {
+	if strings.TrimSpace(path) == "" || c.executor == nil {
+		return nil, nil, nil
+	}
+	meta, ok, err := agent.LoadBranchMeta(path)
+	if err != nil || !ok || meta.Rewind == nil {
+		return nil, nil, err
+	}
+	transaction := *meta.Rewind
+	transaction.Runtime = append(json.RawMessage(nil), meta.Rewind.Runtime...)
+	return c.finishRewindTransaction(path, transaction)
+}
+
+func (c *Controller) recoverPendingSessionTransactions(path string) error {
+	if err := c.recoverInterruptedTurnState(path); err != nil {
+		return fmt.Errorf("interrupted turn: %w", err)
+	}
+	if _, _, err := c.recoverPendingRewindState(path); err != nil {
+		return fmt.Errorf("rewind: %w", err)
 	}
 	return nil
 }
@@ -2491,6 +2610,9 @@ func (c *Controller) forkNamed(turn int, name string, switchToFork bool) (string
 		return "", c.rewindFail(err)
 	}
 	defer c.endRotation()
+	if err := c.recoverPendingSessionTransactions(c.SessionPath()); err != nil {
+		return "", c.rewindFail(fmt.Errorf("recover session before fork: %w", err))
+	}
 	boundary, hasBound := c.checkpoints.boundary(turn)
 	if !hasBound {
 		return "", c.rewindFail(fmt.Errorf("fork unavailable for turn %d: checkpoint has no conversation anchor", turn))
@@ -2599,6 +2721,9 @@ func (c *Controller) Branch(name string) (string, error) {
 		return "", c.rewindFail(err)
 	}
 	defer c.endRotation()
+	if err := c.recoverPendingSessionTransactions(c.SessionPath()); err != nil {
+		return "", c.rewindFail(fmt.Errorf("recover session before branch: %w", err))
+	}
 	if !c.executor.Session().HasContent() {
 		return "", c.rewindFail(fmt.Errorf("nothing to branch yet"))
 	}
@@ -2684,6 +2809,9 @@ func (c *Controller) SwitchBranch(ref string) (agent.BranchInfo, error) {
 		return agent.BranchInfo{}, c.rewindFail(err)
 	}
 	defer c.endRotation()
+	if err := c.recoverPendingSessionTransactions(c.SessionPath()); err != nil {
+		return agent.BranchInfo{}, c.rewindFail(fmt.Errorf("recover current session before switch: %w", err))
+	}
 	branches, err := c.Branches()
 	if err != nil {
 		return agent.BranchInfo{}, c.rewindFail(err)
@@ -2714,6 +2842,9 @@ func (c *Controller) SwitchBranch(ref string) (agent.BranchInfo, error) {
 	c.restoreSessionRuntime(match.Path)
 	c.loadGuardianSession()
 	c.snapshotMu.Unlock()
+	if err := c.recoverPendingSessionTransactions(match.Path); err != nil {
+		return agent.BranchInfo{}, c.rewindFail(fmt.Errorf("recover switched session: %w", err))
+	}
 	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
 		Text: fmt.Sprintf("switched to branch %s", branchDisplayName(match))})
 	return match, nil
@@ -2791,6 +2922,9 @@ func (c *Controller) summarizeAt(ctx context.Context, turn int, from bool) error
 		return c.rewindFail(err)
 	}
 	defer c.endRotation()
+	if err := c.recoverPendingSessionTransactions(c.SessionPath()); err != nil {
+		return c.rewindFail(fmt.Errorf("recover session before summarize: %w", err))
+	}
 	boundary, hasBound := c.checkpoints.boundary(turn)
 	if !hasBound {
 		return c.rewindFail(fmt.Errorf("summarize unavailable for turn %d: checkpoint has no conversation anchor", turn))
@@ -2829,7 +2963,7 @@ func (c *Controller) summarizeAt(ctx context.Context, turn int, from bool) error
 func (c *Controller) Resume(s *agent.Session, path string) {
 	c.approval.sessionID = path
 	// See snapshotMu: the swap must not interleave with an in-flight save.
-	// recoverInterruptedTurn and maybeColdResumePrune snapshot on their own,
+	// interrupted-turn/rewind recovery and maybeColdResumePrune snapshot on their own,
 	// so they stay outside the locked section (snapshotMu is not reentrant).
 	c.snapshotMu.Lock()
 	if c.executor != nil {
@@ -2845,7 +2979,12 @@ func (c *Controller) Resume(s *agent.Session, path string) {
 	c.restoreSessionRuntime(path)
 	c.loadGuardianSession()
 	c.snapshotMu.Unlock()
-	c.recoverInterruptedTurn(path)
+	if err := c.recoverPendingSessionTransactions(path); err != nil {
+		slog.Warn("controller: recover pending session transaction", "path", path, "err", err)
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn,
+			Text: "an interrupted session transaction could not be recovered automatically; its recovery marker was preserved"})
+		return
+	}
 	c.maybeColdResumePrune(path)
 }
 
@@ -2937,7 +3076,9 @@ func (c *Controller) SnapshotRewrite() error {
 		return err
 	}
 	if c.executor != nil {
-		c.goals.persistRuntime(c.goalRuntimeProjection())
+		if err := c.goals.persistRuntime(c.goalRuntimeProjection()); err != nil {
+			return fmt.Errorf("persist rewritten runtime: %w", err)
+		}
 	}
 	return nil
 }
@@ -3283,30 +3424,40 @@ func (c *Controller) messageCount() int {
 	return c.executor.Session().Len()
 }
 
-func (c *Controller) markInFlightTurn(startMessageIndex int, preserveUser bool) {
+func (c *Controller) markInFlightTurn(startMessageIndex int, preserveUser bool) error {
 	path := c.SessionPath()
+	var checkpointTurn *int
+	if turn, ok := c.checkpoints.currentTurn(); ok {
+		checkpointTurn = &turn
+	}
 	c.inFlightMu.Lock()
 	c.inFlightPath = ""
-	c.inFlightTurn = nil
-	c.inFlightMu.Unlock()
-	if path == "" {
-		return
-	}
-	mark := c.inFlightMark
-	if mark == nil {
-		mark = agent.MarkSessionInFlightTurn
-	}
-	if err := mark(path, startMessageIndex, preserveUser); err != nil {
-		slog.Warn("controller: mark in-flight turn", "err", err)
-		return
-	}
-	c.inFlightMu.Lock()
-	c.inFlightPath = path
 	c.inFlightTurn = &agent.InFlightTurnMeta{
 		StartMessageIndex: startMessageIndex,
 		PreserveUser:      preserveUser,
+		CheckpointTurn:    checkpointTurn,
 	}
 	c.inFlightMu.Unlock()
+	if path == "" {
+		return nil
+	}
+	mark := c.inFlightMark
+	var err error
+	if mark != nil {
+		err = mark(path, startMessageIndex, preserveUser)
+	} else {
+		err = agent.MarkSessionInFlightTurnAtCheckpoint(path, startMessageIndex, preserveUser, checkpointTurn)
+	}
+	if err != nil {
+		c.inFlightMu.Lock()
+		c.inFlightTurn = nil
+		c.inFlightMu.Unlock()
+		return fmt.Errorf("mark in-flight turn: %w", err)
+	}
+	c.inFlightMu.Lock()
+	c.inFlightPath = path
+	c.inFlightMu.Unlock()
+	return nil
 }
 
 func (c *Controller) ensureInFlightTurnPersisted() error {
@@ -3338,21 +3489,73 @@ func (c *Controller) ensureInFlightTurnPersisted() error {
 			agent.BranchID(path),
 		)
 	}
+	if (meta.InFlightTurn.CheckpointTurn == nil) != (expected.CheckpointTurn == nil) ||
+		(meta.InFlightTurn.CheckpointTurn != nil && *meta.InFlightTurn.CheckpointTurn != *expected.CheckpointTurn) {
+		return fmt.Errorf("session %q in-flight turn checkpoint does not match current turn", agent.BranchID(path))
+	}
 	return nil
 }
 
-func (c *Controller) clearInFlightTurn() {
+func (c *Controller) clearInFlightTurn() error {
 	path := c.SessionPath()
+	if path == "" {
+		c.inFlightMu.Lock()
+		c.inFlightPath = ""
+		c.inFlightTurn = nil
+		c.inFlightMu.Unlock()
+		return nil
+	}
+	clear := c.inFlightClear
+	if clear == nil {
+		clear = agent.ClearSessionInFlightTurn
+	}
+	if err := clear(path); err != nil {
+		return fmt.Errorf("clear in-flight turn: %w", err)
+	}
 	c.inFlightMu.Lock()
 	c.inFlightPath = ""
 	c.inFlightTurn = nil
 	c.inFlightMu.Unlock()
+	return nil
+}
+
+func (c *Controller) commitInFlightTurn(startMessages int) error {
+	path := c.SessionPath()
+	if path != "" && c.messageCount() > startMessages {
+		if err := c.SnapshotActivity(); err != nil {
+			return fmt.Errorf("persist turn transcript: %w", err)
+		}
+	}
+	projection := c.goalRuntimeProjection()
+	if err := c.goals.persistRuntime(projection); err != nil {
+		return fmt.Errorf("persist turn runtime: %w", err)
+	}
 	if path == "" {
-		return
+		return c.clearInFlightTurn()
 	}
-	if err := agent.ClearSessionInFlightTurn(path); err != nil {
-		slog.Warn("controller: clear in-flight turn", "err", err)
+	c.inFlightMu.Lock()
+	markerPath := c.inFlightPath
+	var marker *agent.InFlightTurnMeta
+	if c.inFlightTurn != nil {
+		copy := *c.inFlightTurn
+		if c.inFlightTurn.CheckpointTurn != nil {
+			turn := *c.inFlightTurn.CheckpointTurn
+			copy.CheckpointTurn = &turn
+		}
+		marker = &copy
 	}
+	c.inFlightMu.Unlock()
+	if marker == nil || markerPath != path {
+		return fmt.Errorf("session %q has no current in-flight turn to commit", agent.BranchID(path))
+	}
+	commit := c.inFlightCommit
+	if commit == nil {
+		commit = agent.CommitSessionInFlightTurn
+	}
+	if err := commit(path, *marker, projection.messageCount, projection.transcriptDigest); err != nil {
+		return fmt.Errorf("commit in-flight turn: %w", err)
+	}
+	return c.clearInFlightTurn()
 }
 
 // transplantInFlightTurnMarker moves a pending in-flight-turn marker from the
@@ -3373,7 +3576,7 @@ func (c *Controller) transplantInFlightTurnMarker(fromPath, toPath string) {
 		return
 	}
 	marker := meta.InFlightTurn
-	if err := agent.MarkSessionInFlightTurn(toPath, marker.StartMessageIndex, marker.PreserveUser); err != nil {
+	if err := agent.ReplaceSessionInFlightTurn(toPath, *marker); err != nil {
 		// Keep the original marker: a turn boundary on the wrong branch beats
 		// no boundary anywhere if the runtime dies before the turn completes.
 		slog.Warn("controller: transplant in-flight turn marker", "path", toPath, "err", err)
@@ -3382,47 +3585,122 @@ func (c *Controller) transplantInFlightTurnMarker(fromPath, toPath string) {
 	if err := agent.ClearSessionInFlightTurn(fromPath); err != nil {
 		slog.Warn("controller: clear in-flight turn marker on forked-from branch", "path", fromPath, "err", err)
 	}
+	c.inFlightMu.Lock()
+	if c.inFlightPath == fromPath && c.inFlightTurn != nil {
+		copy := *marker
+		if marker.CheckpointTurn != nil {
+			turn := *marker.CheckpointTurn
+			copy.CheckpointTurn = &turn
+		}
+		c.inFlightPath = toPath
+		c.inFlightTurn = &copy
+	}
+	c.inFlightMu.Unlock()
 }
 
 func (c *Controller) recoverInterruptedTurn(path string) {
-	if c.executor == nil || path == "" {
-		return
+	if err := c.recoverInterruptedTurnState(path); err != nil {
+		slog.Warn("controller: recover interrupted turn", "path", path, "err", err)
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn,
+			Text: "an interrupted turn could not be recovered automatically; its recovery marker was preserved"})
 	}
-	meta, ok, err := agent.LoadBranchMeta(path)
-	if err != nil || !ok || meta.InFlightTurn == nil {
-		if err != nil {
-			slog.Warn("controller: load in-flight turn marker", "err", err)
+}
+
+func (c *Controller) recoverInterruptedTurnState(path string) error {
+	if c.executor == nil {
+		return nil
+	}
+	var marker *agent.InFlightTurnMeta
+	if path == "" {
+		c.inFlightMu.Lock()
+		if c.inFlightTurn != nil {
+			copy := *c.inFlightTurn
+			if c.inFlightTurn.CheckpointTurn != nil {
+				turn := *c.inFlightTurn.CheckpointTurn
+				copy.CheckpointTurn = &turn
+			}
+			marker = &copy
 		}
-		return
+		c.inFlightMu.Unlock()
+	} else {
+		meta, ok, err := agent.LoadBranchMeta(path)
+		if err != nil || !ok || meta.InFlightTurn == nil {
+			return err
+		}
+		marker = meta.InFlightTurn
 	}
-	marker := meta.InFlightTurn
-	if interruptedTurnContinuedOnRecoveryBranch(path, marker) {
+	if marker == nil {
+		return nil
+	}
+	if path != "" && interruptedTurnContinuedOnRecoveryBranch(path, marker) {
 		// The "interrupted" turn did not die with a runtime: a recovery branch
 		// forked off this session after the marker was set, so the turn kept
 		// running (and completing) there. Runtimes predating the marker
 		// transplant in recoverSnapshotConflict left the marker behind on the
 		// forked-from branch; stripping now would truncate a transcript the
 		// completed turn already superseded. Clear the stale marker instead.
-		if err := agent.ClearSessionInFlightTurn(path); err != nil {
-			slog.Warn("controller: clear fork-orphaned in-flight turn", "err", err)
+		return agent.ClearSessionInFlightTurn(path)
+	}
+	if path != "" && c.inFlightCommitMatches(path, marker) {
+		return agent.ClearSessionInFlightTurn(path)
+	}
+	if marker.CheckpointTurn != nil {
+		runtimeData, ok := c.checkpoints.runtime(*marker.CheckpointTurn)
+		if !ok {
+			return fmt.Errorf("checkpoint turn %d has no runtime projection", *marker.CheckpointTurn)
 		}
-		return
+		state, err := c.goals.decodeCheckpointState(runtimeData)
+		if err != nil {
+			return fmt.Errorf("decode checkpoint turn %d runtime: %w", *marker.CheckpointTurn, err)
+		}
+		if _, _, err := c.checkpoints.restoreCode(*marker.CheckpointTurn); err != nil {
+			return fmt.Errorf("restore checkpoint turn %d workspace: %w", *marker.CheckpointTurn, err)
+		}
+		c.applyCheckpointState(state)
 	}
 	msgs := c.executor.Session().Snapshot()
 	changed := marker.StartMessageIndex >= 0 && len(msgs) > marker.StartMessageIndex
 	if changed {
+		var stripErr error
 		if marker.PreserveUser {
-			c.stripCancelledVisibleTurnMessagesAfter(marker.StartMessageIndex)
+			stripErr = c.stripCancelledVisibleTurnMessagesAfter(marker.StartMessageIndex)
 		} else {
-			c.stripTurnMessagesAfter(marker.StartMessageIndex)
+			stripErr = c.stripTurnMessagesAfter(marker.StartMessageIndex)
 		}
-		if err := c.SnapshotRewrite(); err != nil {
-			slog.Warn("controller: post-interrupted-turn snapshot", "err", err)
+		if stripErr != nil {
+			return stripErr
+		}
+	} else if err := c.goals.persistRuntime(c.goalRuntimeProjection()); err != nil {
+		return fmt.Errorf("persist recovered runtime: %w", err)
+	}
+	clearPath := c.SessionPath()
+	if clearPath == "" && path != "" {
+		clearPath = path
+	}
+	if clearPath != "" {
+		if err := agent.ClearSessionInFlightTurn(clearPath); err != nil {
+			return err
 		}
 	}
-	if err := agent.ClearSessionInFlightTurn(path); err != nil {
-		slog.Warn("controller: clear stale in-flight turn", "err", err)
+	c.inFlightMu.Lock()
+	if c.inFlightPath == path || c.inFlightPath == clearPath {
+		c.inFlightPath = ""
+		c.inFlightTurn = nil
 	}
+	c.inFlightMu.Unlock()
+	return nil
+}
+
+func (c *Controller) inFlightCommitMatches(path string, marker *agent.InFlightTurnMeta) bool {
+	if marker == nil || marker.CommitMessageCount <= 0 || strings.TrimSpace(marker.CommitTranscriptDigest) == "" {
+		return false
+	}
+	equal, _ := c.executor.Session().CompareTranscriptAnchor(marker.CommitMessageCount, marker.CommitTranscriptDigest)
+	if !equal {
+		return false
+	}
+	state, ok := c.goals.readSessionState(path)
+	return ok && state.MessageCount == marker.CommitMessageCount && state.TranscriptDigest == marker.CommitTranscriptDigest
 }
 
 // interruptedTurnContinuedOnRecoveryBranch reports whether a recovery branch
@@ -3453,26 +3731,26 @@ func interruptedTurnContinuedOnRecoveryBranch(path string, marker *agent.InFligh
 // stripTurnMessagesAfter truncates the executor's session to keep only messages
 // before the given index, discarding an incomplete synthetic turn (the synthetic
 // user prompt plus every assistant/tool message that followed).
-func (c *Controller) stripTurnMessagesAfter(idx int) {
+func (c *Controller) stripTurnMessagesAfter(idx int) error {
 	if c.executor == nil {
-		return
+		return nil
 	}
 	msgs := c.executor.Session().Snapshot()
 	if len(msgs) <= idx {
-		return
+		return nil
 	}
-	c.replaceSessionAfterCancel(msgs[:idx])
+	return c.replaceSessionAfterCancel(msgs[:idx])
 }
 
 // stripCancelledVisibleTurnMessagesAfter removes assistant/tool remnants from a
 // cancelled visible turn while preserving the real user prompt that started it.
-func (c *Controller) stripCancelledVisibleTurnMessagesAfter(idx int) {
+func (c *Controller) stripCancelledVisibleTurnMessagesAfter(idx int) error {
 	if c.executor == nil {
-		return
+		return nil
 	}
 	msgs := c.executor.Session().Snapshot()
 	if len(msgs) <= idx {
-		return
+		return nil
 	}
 	next := append([]provider.Message{}, msgs[:idx]...)
 	for _, m := range msgs[idx:] {
@@ -3488,10 +3766,10 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfter(idx int) {
 		next = append(next, m)
 		break
 	}
-	c.replaceSessionAfterCancel(next)
+	return c.replaceSessionAfterCancel(next)
 }
 
-func (c *Controller) replaceSessionAfterCancel(msgs []provider.Message) {
+func (c *Controller) replaceSessionAfterCancel(msgs []provider.Message) error {
 	// The whole cleanup is a save/recovery handoff like snapshot's: hold
 	// snapshotMu from the in-memory truncation onward. Truncating outside the
 	// lock would let an in-flight save capture the shortened transcript, read
@@ -3519,17 +3797,19 @@ func (c *Controller) replaceSessionAfterCancel(msgs []provider.Message) {
 		if err := c.executor.Session().SaveRewrite(path); err != nil {
 			if errors.Is(err, agent.ErrSessionSnapshotConflict) {
 				if _, outcome, recoverErr := c.recoverSnapshotConflict(path, err, true); recoverErr != nil {
-					slog.Warn("controller: post-cancel transcript recovery", "err", recoverErr)
+					return fmt.Errorf("recover cleaned transcript: %w", recoverErr)
 				} else if outcome == conflictDropped {
-					slog.Warn("controller: post-cancel transcript dropped after conflict", "path", path)
+					return fmt.Errorf("cleaned transcript conflicted and could not be persisted")
 				}
 			} else {
-				slog.Warn("controller: post-cancel transcript flush", "err", err)
+				return fmt.Errorf("persist cleaned transcript: %w", err)
 			}
-		} else {
-			c.goals.persistRuntime(c.goalRuntimeProjection())
+		}
+		if err := c.goals.persistRuntime(c.goalRuntimeProjection()); err != nil {
+			return fmt.Errorf("persist cleaned runtime: %w", err)
 		}
 	}
+	return nil
 }
 
 func (c *Controller) snapshotActivityIfChanged(startMessages int) {
