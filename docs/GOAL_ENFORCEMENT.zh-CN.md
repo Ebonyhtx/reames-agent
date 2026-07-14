@@ -62,11 +62,11 @@ monotonic revision
 
 代码回退在写入前预检全部目标：拒绝工作区逃逸、symlink/reparse 路径和非普通文件，保存当前 bytes 与 mode；路径别名、Windows 大小写和现存硬链接共享 earliest snapshot bytes。任何中途失败都会按反序恢复已应用文件和可能部分写入的当前失败文件，相对路径权限按 workspace root 捕获。Checkpoint JSON 与 truncate manifest 使用 `AtomicWriteFile`，物理删除失败后 tombstone 仍阻止未来 checkpoint 在重启时复活，turn ID 不复用。该 helper 的 Windows cross-device fallback 可能原地复制；路径复查后仍按路径写入也存在 TOCTOU，不能声明无条件 crash-safe。`RewindBoth` 的 transcript/runtime/workspace 跨资源更新同样没有 durable 事务日志。
 
-Checkpoint 只覆盖可预览 writer tool 的文件变化，不承诺追踪任意 shell 副作用。Checkpoint 持久化失败向写工具 fail-closed 传播仍是 M4 后续项。
+Checkpoint 只覆盖可预览 writer tool 的文件变化，不承诺追踪任意 shell 副作用。Checkpoint/runtime/in-flight marker 持久化失败已经向可预览写工具 fail-closed 传播；`bash` 等 opaque side effect 仍没有逐文件或 exactly-once 保证。
 
 ## Plan 与子任务
 
-PlanMode 是 runtime projection 的一部分；批准计划后只在当前执行 turn 临时自动批准对应 writer，后续 turn 恢复常规审批。`task`、`parallel_tasks` 与 subagent skill 已共享整棵树的 concurrency/token/time/step/cancellation 账本；writable child 的结构化 read/write/command receipt、父 tool-call provenance 和可预览 pre-edit checkpoint 也会归并到发起 turn，partial failure/cancel 保留 mutation boundary。Evidence generation 与 turn-scoped checkpoint callback 会拒绝迟到后台效果污染新 turn。Child writer 会使 parent 的旧 durable refs 失效，但 child-only bash 没有 parent transcript 引用，只能满足当前 turn；跨 continuation 必须由 root 重新运行项目检查。Writer persistence fail-closed 和后台 Task crash-resume 尚未达到 M4 完成门槛。
+PlanMode 是 runtime projection 的一部分；批准计划后只在当前执行 turn 临时自动批准对应 writer，后续 turn 恢复常规审批。`task`、`parallel_tasks` 与 subagent skill 已共享整棵树的 concurrency/token/time/step/cancellation 账本；writable child 的结构化 read/write/command receipt、父 tool-call provenance 和可预览 pre-edit checkpoint 也会归并到发起 turn，partial failure/cancel 保留 mutation boundary。Evidence generation 与 turn-scoped checkpoint callback 会拒绝迟到后台效果污染新 turn。Child writer 会使 parent 的旧 durable refs 失效，但 child-only bash 没有 parent transcript 引用，只能满足当前 turn；跨 continuation 必须由 root 重新运行项目检查。持久后台 Task 在 Provider/tool/compaction 安全边界保存 transcript，冷启动以 `interrupted` + `continue_from` 显式恢复且不自动重放副作用；剩余 M4 门槛是 durable child effect journal、handle-relative 路径安全与跨资源断电一致性。
 
 ## 相关实现
 

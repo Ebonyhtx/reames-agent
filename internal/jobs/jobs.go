@@ -37,6 +37,9 @@ const (
 	Done    Status = "done"
 	Failed  Status = "failed"
 	Killed  Status = "killed"
+	// Interrupted is a durable tombstone loaded after a process stopped while a
+	// recoverable task was running. Such tasks are never replayed automatically.
+	Interrupted Status = "interrupted"
 )
 
 // DefaultTeardownGrace bounds Close and destroy waits for non-cooperative jobs.
@@ -128,6 +131,7 @@ type Job struct {
 	artifactComplete bool
 	artifactErr      string
 	tombstone        bool
+	recoveryRef      string
 }
 
 // Manager is the session's background-job table. It is safe for concurrent use.
@@ -240,6 +244,22 @@ func (m *Manager) Start(kind, label string, run func(ctx context.Context, out io
 // StartForSession launches a job owned by parentSession. Session-scoped readers
 // only see jobs whose owner matches the active session.
 func (m *Manager) StartForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	j, _ := m.startForSession(parentSession, kind, label, "", false, run)
+	return j
+}
+
+// StartRecoverableForSession launches a task only after its running metadata is
+// durable. recoveryRef is surfaced after a process crash so callers can resume
+// the separately persisted transcript explicitly without replaying side effects.
+func (m *Manager) StartRecoverableForSession(parentSession, kind, label, recoveryRef string, run func(ctx context.Context, out io.Writer) (string, error)) (*Job, error) {
+	recoveryRef = strings.TrimSpace(recoveryRef)
+	if recoveryRef == "" {
+		return nil, fmt.Errorf("recoverable job requires a continuation reference")
+	}
+	return m.startForSession(parentSession, kind, label, recoveryRef, true, run)
+}
+
+func (m *Manager) startForSession(parentSession, kind, label, recoveryRef string, strictArtifact bool, run func(ctx context.Context, out io.Writer) (string, error)) (*Job, error) {
 	parentSession = strings.TrimSpace(parentSession)
 	m.mu.Lock()
 	m.seq++
@@ -262,6 +282,28 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 		artifactFile:     file,
 		artifactComplete: artifactErr == "",
 		artifactErr:      artifactErr,
+		recoveryRef:      strings.TrimSpace(recoveryRef),
+	}
+	if strictArtifact && artifactErr != "" {
+		cancel()
+		if file != nil {
+			_ = file.Close()
+		}
+		m.mu.Unlock()
+		return nil, fmt.Errorf("persist recoverable job artifact: %s", artifactErr)
+	}
+	if strictArtifact {
+		if err := m.writeJobMetaLocked(j, Running); err != nil {
+			cancel()
+			if file != nil {
+				_ = file.Close()
+			}
+			if logPath != "" {
+				_ = os.Remove(logPath)
+			}
+			m.mu.Unlock()
+			return nil, fmt.Errorf("persist recoverable job metadata: %w", err)
+		}
 	}
 	key := jobKey(parentSession, id)
 	m.jobs[key] = j
@@ -348,7 +390,7 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 		j.mu.Unlock()
 		close(j.done)
 	}()
-	return j
+	return j, nil
 }
 
 func runRecovered(ctx context.Context, out io.Writer, run func(context.Context, io.Writer) (string, error)) (result string, err error) {
@@ -405,9 +447,10 @@ func (m *Manager) writeJobMetaLocked(j *Job, st Status) error {
 		Status:           st,
 		StartedAt:        j.startedAt,
 		FinishedAt:       j.finishedAt,
-		ArtifactComplete: j.artifactComplete && j.artifactErr == "",
+		ArtifactComplete: st != Running && j.artifactComplete && j.artifactErr == "",
 		ArtifactError:    j.artifactErr,
 		LogPath:          filepath.Base(j.artifactPath),
+		RecoveryRef:      j.recoveryRef,
 	})
 }
 
@@ -518,6 +561,8 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 		level, text = event.LevelWarn, fmt.Sprintf("background %s failed: %s — %v", kind, id, err)
 	case Killed:
 		text = fmt.Sprintf("background %s killed: %s", kind, id)
+	case Interrupted:
+		level, text = event.LevelWarn, fmt.Sprintf("background %s interrupted by a previous shutdown or crash: %s", kind, id)
 	}
 	if shouldEmit {
 		m.sink.Emit(event.Event{Kind: event.Notice, Level: level, Text: text})
@@ -597,7 +642,13 @@ func (m *Manager) OutputForSession(parentSession, id string) (text string, statu
 	// A task job streams nothing to the buffer — its answer lands in result. Once
 	// it is terminal with no buffered output, surface that result once so a task's
 	// answer is visible here too (bash_output's description promises task support).
-	if text == "" && j.status != Running && j.result != "" && !j.resultRead {
+	if j.status == Interrupted && j.result != "" && !j.resultRead {
+		if text != "" && !strings.HasSuffix(text, "\n") {
+			text += "\n"
+		}
+		text += j.result
+		j.resultRead = true
+	} else if text == "" && j.status != Running && j.result != "" && !j.resultRead {
 		text = j.result
 		j.resultRead = true
 	}
@@ -761,7 +812,15 @@ func (m *Manager) results(targets []*Job) []Result {
 	for _, j := range targets {
 		j.mu.Lock()
 		text := j.result
-		if text == "" && j.artifactPath != "" {
+		if j.status == Interrupted && j.artifactPath != "" {
+			partial := j.readArtifactAllLocked()
+			if partial != "" {
+				if !strings.HasSuffix(partial, "\n") && text != "" {
+					partial += "\n"
+				}
+				text = partial + text
+			}
+		} else if text == "" && j.artifactPath != "" {
 			text = j.readArtifactAllLocked()
 		}
 		if text == "" {
@@ -1158,6 +1217,22 @@ func (m *Manager) loadSessionArtifacts(parentSession, dir string) {
 			continue
 		}
 		id := strings.TrimSpace(meta.ID)
+		status := meta.Status
+		result := ""
+		if status == Running {
+			status = Interrupted
+			meta.Status = Interrupted
+			meta.FinishedAt = nowMs()
+			meta.ArtifactComplete = meta.ArtifactError == ""
+			result = interruptedJobResult(meta.RecoveryRef)
+			if err := writeMeta(filepath.Join(dir, entry.Name()), meta); err != nil {
+				if meta.ArtifactError != "" {
+					meta.ArtifactError += "; "
+				}
+				meta.ArtifactError += "interrupt metadata: " + err.Error()
+				meta.ArtifactComplete = false
+			}
+		}
 		if seq := maxJobSeq(id); seq > maxSeq {
 			maxSeq = seq
 		}
@@ -1172,7 +1247,8 @@ func (m *Manager) loadSessionArtifacts(parentSession, dir string) {
 			Kind:             meta.Kind,
 			Label:            meta.Label,
 			SessionID:        parentSession,
-			status:           meta.Status,
+			status:           status,
+			result:           result,
 			startedAt:        meta.StartedAt,
 			finishedAt:       meta.FinishedAt,
 			activityAt:       meta.FinishedAt,
@@ -1182,6 +1258,7 @@ func (m *Manager) loadSessionArtifacts(parentSession, dir string) {
 			artifactComplete: meta.ArtifactComplete,
 			artifactErr:      meta.ArtifactError,
 			tombstone:        true,
+			recoveryRef:      meta.RecoveryRef,
 		})
 	}
 	m.mu.Lock()
@@ -1193,11 +1270,27 @@ func (m *Manager) loadSessionArtifacts(parentSession, dir string) {
 		}
 		m.jobs[key] = j
 		m.order = append(m.order, key)
+		if j.status == Interrupted {
+			tag := j.ID
+			if j.Label != "" {
+				tag = fmt.Sprintf("%s (%s)", j.ID, j.Label)
+			}
+			m.completed = append(m.completed, completion{sessionID: parentSession, text: tag + " - interrupted"})
+		}
 	}
 	if maxSeq > m.seq {
 		m.seq = maxSeq
 	}
 	m.loaded[parentSession] = true
+}
+
+func interruptedJobResult(recoveryRef string) string {
+	const prefix = "Background task was interrupted by a previous process shutdown or crash. It was not replayed because prior tool calls may have side effects."
+	recoveryRef = strings.TrimSpace(recoveryRef)
+	if recoveryRef == "" {
+		return prefix + " Re-run the task explicitly after checking current workspace state."
+	}
+	return fmt.Sprintf("%s Continue the durable subagent transcript with task continue_from %q after checking current workspace state.", prefix, recoveryRef)
 }
 
 // BeginDestroySession marks a parent session as being removed from active use

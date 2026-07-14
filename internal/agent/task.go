@@ -279,10 +279,10 @@ func (t *TaskTool) Schema() json.RawMessage {
   "description":{"type":"string","description":"Short label for the sub-task (3-7 words). Surfaced in the dispatch line so the user sees what's running."},
   "tools":{"type":"array","items":{"type":"string"},"description":"Optional tool whitelist. ` + subagentToolBoundarySummary + `"},
   "max_steps":{"type":"integer","description":"Optional cap on tool-call rounds. Defaults to half the parent's cap (min 5).","minimum":1},
-  "run_in_background":{"type":"boolean","description":"Run the sub-agent asynchronously: returns a job id immediately and keeps working across turns. Collect its final answer with wait, and you'll be notified when it finishes. Use for long, independent sub-tasks you don't need to block on right now."},
+  "run_in_background":{"type":"boolean","description":"Run the sub-agent asynchronously: returns a job id immediately and keeps working across turns in the current process. Collect its final answer with wait. After a process crash, a persisted task is exposed as interrupted and must be resumed explicitly instead of replaying side effects automatically."},
   "model":{"type":"string","description":"Optional model override for the sub-agent (a configured provider/model name)."},
   "effort":{"type":"string","description":"Optional reasoning effort for the sub-agent (e.g. high, max)."},
-  "continue_from":{"type":"string","description":"Continue a prior compatible subagent transcript in the current conversation context. Pass only the 'sa_...' value from the prior result's 'Subagent reference: ...' line. If the ref belongs to an ancestor conversation, the framework continues a current-conversation copy."}
+  "continue_from":{"type":"string","description":"Continue a prior compatible completed or interrupted subagent transcript in the current conversation context. Pass only the 'sa_...' value from the prior result. Interrupted continuations are told to verify current workspace state before repeating side effects. If the ref belongs to an ancestor conversation, the framework continues a current-conversation copy."}
 },
 "required":["prompt"]
 }`)
@@ -395,7 +395,7 @@ func (r *ReadOnlyTaskTool) Execute(ctx context.Context, args json.RawMessage) (s
 	if err != nil {
 		return "", fmt.Errorf("read-only sub-agent profile: %w", err)
 	}
-	return r.task.runSubSession(ctx, p.Prompt, subReg, subSink(ctx), maxSteps, prov, pricing, ctxWin, NewSession(DefaultReadOnlyTaskSystemPrompt), childDepth)
+	return r.task.runSubSession(ctx, p.Prompt, subReg, subSink(ctx), maxSteps, prov, pricing, ctxWin, NewSession(DefaultReadOnlyTaskSystemPrompt), childDepth, nil)
 }
 
 func (t *TaskTool) effectiveProfile(model, effort string) (string, string) {
@@ -460,6 +460,17 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		run.Release()
 		return "", fmt.Errorf("sub-agent profile: %w", err)
 	}
+	if t.transcripts != nil && run != nil && run.Ref != "" {
+		if err := t.transcripts.MarkRunning(run); err != nil {
+			run.Release()
+			return "", fmt.Errorf("persist subagent start %q: %w", run.Ref, err)
+		}
+	}
+	sessionSync := t.sessionSync(run)
+	subPrompt := p.Prompt
+	if run != nil && run.ResumedFromInterrupted {
+		subPrompt = interruptedSubagentResumeContext + "\n\n" + subPrompt
+	}
 
 	// Background: register a job that runs the sub-agent under the manager's
 	// session context (so it survives this turn) and return immediately. The
@@ -479,13 +490,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		if label == "" {
 			label = "task"
 		}
-		if t.transcripts != nil && run != nil && run.Ref != "" {
-			if err := t.transcripts.MarkRunning(run); err != nil {
-				run.Release()
-				return "", err
-			}
-		}
-		job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
+		runJob := func(jobCtx context.Context, _ io.Writer) (result string, err error) {
 			jobCtx = WithSubagentEffects(jobCtx, effects)
 			defer run.Release()
 			defer func() {
@@ -495,7 +500,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 					err = errors.Join(panicErr, t.transcripts.SaveFailed(run))
 				}
 			}()
-			answer, err := t.runSubSession(jobCtx, p.Prompt, subReg, nested, maxSteps, prov, pricing, ctxWin, run.Session, childDepth)
+			answer, err := t.runSubSession(jobCtx, subPrompt, subReg, nested, maxSteps, prov, pricing, ctxWin, run.Session, childDepth, sessionSync)
 			if err != nil {
 				return FormatSubagentRunResult(err.Error(), run, true), errors.Join(err, t.transcripts.SaveFailed(run))
 			}
@@ -503,7 +508,19 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 				return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
 			}
 			return FormatSubagentRunResult(answer, run, false), nil
-		})
+		}
+		var job *jobs.Job
+		if run != nil && run.Ref != "" {
+			job, err = jm.StartRecoverableForSession(jobs.SessionFromContext(ctx), "task", label, run.Ref, runJob)
+			if err != nil {
+				persistErr := t.transcripts.SaveInterrupted(run)
+				ref := run.Ref
+				run.Release()
+				return "", errors.Join(fmt.Errorf("start recoverable background task for subagent %q: %w; retry with continue_from %q", ref, err, ref), persistErr)
+			}
+		} else {
+			job = jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, runJob)
+		}
 		if run != nil && run.Ref != "" {
 			return fmt.Sprintf("Started background task %q (%s).\n%s\nIt runs across turns; collect its final answer with wait (or wait will return it once done), and you'll be notified when it finishes.", job.ID, label, FormatSubagentReference(run)), nil
 		}
@@ -512,7 +529,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 
 	// Foreground: run synchronously, nesting events under this call.
 	defer run.Release()
-	answer, err := t.runSubSession(ctx, p.Prompt, subReg, subSink(ctx), maxSteps, prov, pricing, ctxWin, run.Session, childDepth)
+	answer, err := t.runSubSession(ctx, subPrompt, subReg, subSink(ctx), maxSteps, prov, pricing, ctxWin, run.Session, childDepth, sessionSync)
 	if err != nil {
 		return "", errors.Join(err, t.transcripts.SaveFailed(run))
 	}
@@ -757,7 +774,7 @@ func (t *TaskTool) resolveSubSessionRuntime(modelRef, effort string) (provider.P
 	return prov, pricing, ctxWin, nil
 }
 
-func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session, childDepth int) (string, error) {
+func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session, childDepth int, sessionSync SessionSync) (string, error) {
 	ctx, ledger, cleanup := EnsureDelegationLedger(ctx, t.delegationLimits)
 	defer cleanup()
 	effects, _ := SubagentEffectsFromContext(ctx)
@@ -782,8 +799,26 @@ func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *too
 		MaxSubagentDepth:    t.maxDepth(),
 		DelegationLedger:    ledger,
 		SubagentEffects:     effects,
+		SessionSync:         sessionSync,
 	}, sink)
 }
+
+func (t *TaskTool) sessionSync(run *SubagentRun) SessionSync {
+	if t == nil || t.transcripts == nil || run == nil || run.Ref == "" {
+		return nil
+	}
+	return func(current *Session) error {
+		if current != run.Session {
+			return fmt.Errorf("subagent %q recovery session changed unexpectedly", run.Ref)
+		}
+		return t.transcripts.SaveRunning(run)
+	}
+}
+
+const interruptedSubagentResumeContext = `<recovery-context event="InterruptedSubagentResume">
+The previous process stopped after a durable transcript boundary. A pending tool call may have completed, partially completed, or not started.
+Do not replay side-effecting work from the transcript blindly. Re-read the current workspace and verify external state before deciding what remains.
+</recovery-context>`
 
 func (t *TaskTool) withWorkspaceContext(prompt string) string {
 	if t == nil {

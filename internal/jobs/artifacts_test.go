@@ -78,6 +78,116 @@ func TestRestoreSessionArtifactsAndAdvanceSequence(t *testing.T) {
 	}
 }
 
+func TestRecoverableJobPersistsRunningMetadataBeforeLaunch(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	m := NewManager(event.Discard)
+	defer m.Close()
+	m.SetActiveSessionPath("session", sessionPath)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	j, err := m.StartRecoverableForSession("session", "task", "recoverable", "sa_durable", func(context.Context, io.Writer) (string, error) {
+		close(started)
+		<-release
+		return "answer", nil
+	})
+	if err != nil {
+		t.Fatalf("StartRecoverableForSession: %v", err)
+	}
+	<-started
+	metaPath := filepath.Join(ArtifactDir(sessionPath), j.ID+jobMetaExt)
+	meta, err := readMeta(metaPath)
+	if err != nil {
+		t.Fatalf("read running metadata: %v", err)
+	}
+	if meta.Status != Running || meta.RecoveryRef != "sa_durable" {
+		t.Fatalf("running metadata = %+v, want running with recovery ref", meta)
+	}
+
+	close(release)
+	<-j.done
+	meta, err = readMeta(metaPath)
+	if err != nil {
+		t.Fatalf("read terminal metadata: %v", err)
+	}
+	if meta.Status != Done || meta.RecoveryRef != "sa_durable" {
+		t.Fatalf("terminal metadata = %+v, want done with recovery ref", meta)
+	}
+}
+
+func TestRecoverableJobDoesNotLaunchWhenArtifactPersistenceFails(t *testing.T) {
+	root := t.TempDir()
+	sessionPath := filepath.Join(root, "session.jsonl")
+	if err := os.WriteFile(ArtifactDir(sessionPath), []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(event.Discard)
+	defer m.Close()
+	m.SetActiveSessionPath("session", sessionPath)
+
+	ran := false
+	j, err := m.StartRecoverableForSession("session", "task", "blocked", "sa_durable", func(context.Context, io.Writer) (string, error) {
+		ran = true
+		return "", nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "persist recoverable job artifact") {
+		t.Fatalf("StartRecoverableForSession error = %v, want persistence failure", err)
+	}
+	if j != nil || ran {
+		t.Fatalf("failed recoverable start job/ran = %v/%v, want nil/false", j, ran)
+	}
+}
+
+func TestRestoreRunningRecoverableJobAsInterrupted(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.jsonl")
+	dir := ArtifactDir(sessionPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "task-7"+jobLogExt), []byte("partial output\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	metaPath := filepath.Join(dir, "task-7"+jobMetaExt)
+	if err := writeMeta(metaPath, artifactMeta{
+		ID:          "task-7",
+		Kind:        "task",
+		Label:       "recover me",
+		SessionID:   "session",
+		Status:      Running,
+		StartedAt:   nowMs(),
+		LogPath:     "task-7" + jobLogExt,
+		RecoveryRef: "sa_interrupted",
+	}); err != nil {
+		t.Fatalf("write running metadata: %v", err)
+	}
+
+	m := NewManager(event.Discard)
+	defer m.Close()
+	m.SetActiveSessionPath("session", sessionPath)
+	res := m.WaitForSession(context.Background(), "session", []string{"task-7"}, 1)
+	if len(res) != 1 || res[0].Status != Interrupted {
+		t.Fatalf("restored result = %+v, want interrupted", res)
+	}
+	for _, want := range []string{"partial output", "was not replayed", "continue_from", "sa_interrupted"} {
+		if !strings.Contains(res[0].Output, want) {
+			t.Fatalf("restored output = %q, want %q", res[0].Output, want)
+		}
+	}
+	meta, err := readMeta(metaPath)
+	if err != nil {
+		t.Fatalf("read interrupted metadata: %v", err)
+	}
+	if meta.Status != Interrupted || meta.FinishedAt == 0 {
+		t.Fatalf("restored metadata = %+v, want durable interrupted terminal state", meta)
+	}
+	if got := m.RunningForSession("session"); len(got) != 0 {
+		t.Fatalf("restored running jobs = %+v, want none", got)
+	}
+	if note := m.DrainCompletedNoteForSession("session"); !strings.Contains(note, "task-7 (recover me) - interrupted") {
+		t.Fatalf("completion note = %q, want interrupted tombstone", note)
+	}
+}
+
 func TestFinishDestroySessionPurgesOwnedJobs(t *testing.T) {
 	m := NewManager(event.Discard)
 	defer m.Close()

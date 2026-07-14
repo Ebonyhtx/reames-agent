@@ -226,6 +226,9 @@ func TestStatusConstants(t *testing.T) {
 	if Killed != "killed" {
 		t.Errorf("Killed = %q", Killed)
 	}
+	if Interrupted != "interrupted" {
+		t.Errorf("Interrupted = %q", Interrupted)
+	}
 }
 
 // --- nowMs ---

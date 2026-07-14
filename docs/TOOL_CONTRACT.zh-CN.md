@@ -7,7 +7,7 @@
 | 工具 | Read-only | 说明 |
 | --- | --- | --- |
 | `bash` | false | 执行 shell 命令并返回 stdout/stderr。构建、测试、git、包管理器等使用它；读写查找文件优先使用专用工具。 |
-| `bash_output` | true | 读取后台 `bash` 或 `task` job 自上次读取后的新增输出和状态。 |
+| `bash_output` | true | 读取后台 `bash` 或 `task` job 自上次读取后的新增输出和状态；`interrupted` 表示进程重启后未自动重放的可恢复任务。 |
 | `code_index` | true | 轻量内置代码符号索引；优先使用 `lsp_*` 或代码图 MCP，缺失时用它兜底。 |
 | `complete_step` | true | 用证据记录已批准计划中一个步骤的完成情况。 |
 | `delete_range` | false | 用精确 start/end 文本锚点删除文件中的连续范围。 |

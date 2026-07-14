@@ -32,7 +32,7 @@ type bashOutput struct{}
 func (bashOutput) Name() string { return "bash_output" }
 
 func (bashOutput) Description() string {
-	return "Read new output from a background job started with bash(run_in_background=true) or task(run_in_background=true). Returns the output produced since the last bash_output call for that job, plus its status (running/done/failed/killed). Does not block."
+	return "Read new output from a background job started with bash(run_in_background=true) or task(run_in_background=true). Returns the output produced since the last bash_output call for that job, plus its status (running/done/failed/killed/interrupted). Interrupted means a recoverable task stopped with the prior process and was not replayed automatically. Does not block."
 }
 
 func (bashOutput) Schema() json.RawMessage {

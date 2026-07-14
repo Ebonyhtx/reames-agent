@@ -10,7 +10,7 @@
 
 ## 用户目标与工作节奏
 
-持续大步骤推进到高可信可交付状态。参考 DeepSeek Reasonix、`F:\code-reference` 与 `F:\Reames-Lite` 时只吸收适用机制；每批同步代码、测试、文档和证据，充分本地验证后集中 commit/push，避免碎片 push 重复消耗 CI。
+持续大步推进到高可信可交付状态。参考 DeepSeek Reasonix、`F:\code-reference` 和 `F:\Reames-Lite` 时只吸收适用机制；每批同步代码、测试、文档和证据，充分本地验证后集中 commit/push，避免碎片 push 重复消耗 CI。
 
 单元/合同测试、localhost fixture、原生 Desktop、远端 candidate、真实 Provider/IM/云节点证据必须分层表述，不能互相冒充。
 
@@ -28,67 +28,74 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 ## 已交付基线
 
-- 本批起点 HEAD：`7757602 feat: persist goal verification references`；该提交与本批 writer persistence 在本审计时均未 push。最近远端基线 `73c155f` 的 CI run `29289973158` 8/8、CodeQL run `29289973160` 3/3 全绿。
-- M0、M1、M2、M3 已按路线图关闭。最近安装器级 M3 证据：commit `68218d6`，CI `29262192635` 8/8、CodeQL `29262193090` 3/3；candidate `29262541971` 的 Linux/macOS installed 与 Windows native/interaction/accessibility 通过。
-- M6 的 Gateway setup、credential-free preflight、WSL systemd 登录会话生命周期、备份/恢复和 updater rollback 已有确定性本地证据；真实 linger logout/reboot、干净云节点、真实飞书和公开签名 release 仍是 `external-blocked`。
-- M4 进行中。会话运行态恢复、共享委派预算、writable effects 已在远端交付；durable evidence 已本地提交，当前未提交批次关闭 previewable writer persistence 门禁。两批均不等于整个 M4 完成。
+- 当前 HEAD 与 `origin/main` 均为 `cb6c980 feat: fail closed on writer persistence errors`。
+- 该远端基线的 CI run `29293474205` 为 8/8，CodeQL run `29293474123` 为 3/3。
+- M0、M1、M2、M3 已按路线图关闭。M6 已有本地 Gateway、备份/恢复和 updater rollback 确定性证据；真实 linger logout/reboot、干净云节点、真实飞书和公开签名 release 仍是 `external-blocked`。
+- M4 进行中。会话运行态恢复、共享委派预算、writable effects、durable evidence 与 writer persistence 已远端交付；当前未提交批次关闭后台 Task、compaction 与 memory 统一恢复子项，但不等于整个 M4 完成。
 
 ## 当前未提交 M4 批次
 
 核心变化：
 
-- Checkpoint `Begin/Snapshot` 现在返回错误；allocation/record 失败不开放 active turn，Snapshot 失败回滚内存 `seen/Files`，可在存储恢复后真正重试。
-- Agent pre-edit 与 ancestor effects callback 改为可失败门禁；Preview、checkpoint 或祖先 callback 失败均返回 blocked tool result，writer 不执行。
-- Root previewable writer 还要求 runtime sidecar 与当前 session in-flight marker 成功；marker 必须由当前 turn 成功写入并匹配 session、message boundary 与 `preserveUser`，旧 marker 不能误放行。整个门禁和 autosave recovery/session rebind 共用 `snapshotMu`，避免资源落到不同 branch。
-- 真实 builtin `write_file` 已覆盖 checkpoint 目录异常、runtime sidecar 故障和 in-flight marker 故障；marker 故障还预置了旧 turn marker，三类场景目标文件均未产生。
-- 持久 checkpoint 在模拟 writer 部分写入、进程消失后由新 Store 恢复原字节。该证据不等于自动恢复或 transcript/runtime/workspace 断电原子性。
-- `bash`/opaque writer 的静态目标未知，后台 Task durable journal、handle-relative 路径安全与跨资源事务仍未关闭。
+- `Agent.Options.SessionSync` 在初始 user、steer/retry/nudge、assistant tool-call envelope、tool result、final 与 compaction rewrite 边界持久化 isolated subagent transcript；同步失败会在进入下一 Provider/tool round 前停止。
+- tool-call envelope 必须在工具执行前落盘，恢复框架不自动重放可能有副作用的调用。
+- `SubagentStore.SaveRunning` 先发布 running metadata 再保存 transcript；completed 只在 transcript 成功保存后发布。元数据使用 `AtomicWriteFile` fsync 临时文件并原子替换。
+- `continue_from` 只接受 compatible completed/interrupted transcript；running、failed 和未知状态均拒绝。interrupted 续跑注入恢复上下文，要求先重验 workspace/外部状态。
+- `jobs.Manager.StartRecoverableForSession` 只有 running job metadata 成功落盘后才启动 goroutine；冷启动把遗留 running job 转为 `interrupted` tombstone，保留 partial log、subagent ref、completion note 和继续指引。
+- compaction digest 可跨 running → interrupted → continue 恢复；memory 统一测试覆盖 BM25 `score/path/snippet`、空 store 禁用、归档删除后不命中和动态结果不污染稳定 system prefix。
 
-审计：`docs/audits/2026-07-14-m4-writer-persistence-gate.md`。
-
-主要修改文件：
+主要文件：
 
 ```text
-internal/agent/{agent.go,subagent_effects.go,subagent_effects_test.go}
-internal/checkpoint/{checkpoint.go,checkpoint_test.go}
-internal/control/{approval_e2e_test.go,checkpoint.go,checkpoint_test.go,controller.go,goal.go}
-docs/ARCHITECTURE.md
-docs/PROJECT.md
-docs/DEVELOPMENT_PLAN.md
-docs/THREAT_MODEL.md
-docs/GUIDE.md
-docs/GUIDE.zh-CN.md
-docs/SPEC.md
-docs/DOCS_INDEX.md
-docs/NEXT_MODEL_HANDOFF.zh-CN.md
-docs/audits/2026-07-14-m4-writer-persistence-gate.md
+internal/agent/agent.go
+internal/agent/task.go
+internal/agent/parallel_tasks.go
+internal/agent/subagent_store.go
+internal/agent/subagent_store_test.go
+internal/agent/session_sync_test.go
+internal/agent/task_recovery_test.go
+internal/agent/memory_recovery_test.go
+internal/jobs/jobs.go
+internal/jobs/artifacts.go
+internal/jobs/artifacts_test.go
+internal/jobs/jobs_extra_test.go
+internal/tool/builtin/bgjobs.go
 ```
+
+审计：`docs/audits/2026-07-14-m4-task-compaction-memory-recovery.md`。
 
 ## 当前本地证据
 
-当前未提交 writer persistence 批次已通过完整本地门禁：
+以下门禁已通过：
 
 ```text
-go build ./... && go vet ./...
+go build ./...
+go vet ./...
 go test ./internal/... -count=1 -timeout 600s
-go test -race ./internal/agent ./internal/evidence ./internal/checkpoint ./internal/control ./internal/board -count=1 -timeout 900s
+go test -race ./internal/agent ./internal/jobs ./internal/memory ./internal/tool/builtin -count=1 -timeout 900s
 Desktop go vet/test
-前端 corepack pnpm test:all/build
-111 个 Python 测试（2 skipped）、Node/工具/docs/public/deploy/release 合同
-六目标 CGO_ENABLED=0 交叉编译（系统 TEMP）
-scripts/verify-baseline.ps1 -SkipDesktop -SkipFrontendHint（系统 TEMP 报告）
-Go 品牌残留计数 0
+Frontend corepack pnpm test:all/build
+111 个 Python 测试通过（2 skipped），Node/工具/docs/public/deploy/release 合同通过
+scripts/verify-baseline.ps1 -SkipDesktop -SkipFrontendHint
+六目标 CGO_ENABLED=0 交叉编译全部 exit 0
 git diff --check
 ```
 
-stale-marker 修正后已重跑 root build/vet/internal/race，并在提交前复验受影响的 Desktop、交叉编译和综合 baseline；前端与 Python/Node 合同对应目录在修正后无代码变化。两批当前远端 CI/CodeQL 均待集中 push 后验证。
+六目标为 linux/amd64、linux/arm64、darwin/amd64、darwin/arm64、windows/amd64、windows/arm64；产物位于系统临时目录。代码最后补强了 job/subagent metadata 的 fsync 写入并保持原 `0600` 权限，随后聚焦测试、root build/vet、文档合同和 diff 检查再次通过；完整 root internal/race、综合 baseline 与六目标构建也在本批最终实现上通过。远端 CI/CodeQL 尚待集中 push 后验证。
+
+## 未关闭边界
+
+- arbitrary shell、MCP 和外部 API 没有 exactly-once 语义；pending tool call 可能未执行、部分执行或已完成，续跑必须核验真实状态。
+- subagent transcript metadata 与 job metadata 是两个原子文件，不是单一跨文件事务；极端断电仍可能留下 orphan interrupted ref。
+- child effects/evidence/budget 仍含进程内桥接，恢复 transcript 不等于恢复 parent evidence；跨 continuation 的 root 项目检查必须重跑。
+- `AtomicWriteFile` 的 Windows cross-device fallback、handle-relative no-reparse 写入、transcript/runtime/workspace 跨资源断电事务仍未关闭。
+- 本批冷启动证据是 persisted fixture + 新 Manager/Store，不是 OS 强杀、真实断电或真实外部服务演练。
 
 ## 下一执行顺序
 
-1. 显式暂存并提交 writer persistence 批次，不纳入 `.agents/`、`artifacts/` 或参考 gap map。
-2. 将 `7757602` 与 writer persistence 两个实质提交集中 push，一次性守候并修复 CI/CodeQL。
-3. 完成后台 Task crash-resume、compaction 与记忆检索统一恢复。
-4. 继续处理 handle-relative 路径安全与跨资源断电事务，不把进程内回滚描述为 crash-safe。
-5. 外部环境可用时并行关闭干净云节点、真实飞书和签名 release；不可用时保持 `external-blocked`，不要停止本地 M4。
+1. 全面检查 diff 与受保护路径，显式暂存本批文件并形成一个大提交。
+2. 集中 push 一次，守候并修复 CI/CodeQL；不要为了单独回填 run ID 立即制造碎片 push。
+3. 转入 M4 剩余高风险项：handle-relative no-reparse/resolve-beneath 路径安全、durable child effect journal、transcript/runtime/workspace 跨资源断电恢复。
+4. 外部环境可用时并行关闭干净云节点、真实飞书和公开签名 release；不可用时保持 `external-blocked`，继续本地 M4。
 
-长期 GOAL 尚未完成。本批全绿只允许声明 previewable writer persistence 子项验收完成，不能声明 M4 或整个项目完成。
+长期 GOAL 尚未完成。本批全绿只允许声明后台 Task/compaction/memory 统一恢复子项验收完成，不能声明整个 M4 或项目完成。

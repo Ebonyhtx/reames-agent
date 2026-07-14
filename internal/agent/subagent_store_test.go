@@ -623,6 +623,9 @@ func TestSubagentStoreCleanupStaleRunningMarksInterrupted(t *testing.T) {
 	}
 	ref := run.Ref
 	run.Release()
+	if _, err := store.PrepareContinue(ref, spec); err == nil || !strings.Contains(err.Error(), "still in progress") {
+		t.Fatalf("PrepareContinue running error = %v, want in-progress rejection", err)
+	}
 
 	cleaned, err := store.CleanupStaleRunning()
 	if err != nil {
@@ -638,11 +641,42 @@ func TestSubagentStoreCleanupStaleRunningMarksInterrupted(t *testing.T) {
 	if meta.Status != SubagentInterrupted {
 		t.Fatalf("status = %q, want interrupted", meta.Status)
 	}
-	if _, err := store.PrepareContinue(ref, spec); err == nil || !strings.Contains(err.Error(), "interrupted by a previous shutdown or crash") {
-		t.Fatalf("PrepareContinue error = %v, want interrupted rejection", err)
+	continued, err := store.PrepareContinue(ref, spec)
+	if err != nil {
+		t.Fatalf("PrepareContinue interrupted: %v", err)
 	}
-	if _, err := store.prepareFork(ref, spec); err == nil || !strings.Contains(err.Error(), "cannot be continued or forked") {
-		t.Fatalf("PrepareFork error = %v, want interrupted fork rejection", err)
+	if !continued.ResumedFromInterrupted {
+		t.Fatal("continued run did not retain interrupted recovery identity")
+	}
+	if got := continued.Session.Snapshot(); len(got) != 2 || got[1].Content != "interrupted prompt" {
+		t.Fatalf("continued transcript = %+v, want durable interrupted boundary", got)
+	}
+	continued.Release()
+	if _, err := store.PrepareLegacyForkFrom(ref, spec); err == nil || !strings.Contains(err.Error(), "continue it explicitly with continue_from") {
+		t.Fatalf("PrepareLegacyForkFrom error = %v, want explicit continuation guidance", err)
+	}
+}
+
+func TestSubagentStoreRejectsUnknownPersistedStatus(t *testing.T) {
+	store := NewSubagentStore(t.TempDir())
+	spec := testSubagentSpec(t, "review")
+	run, err := store.PrepareFresh(spec)
+	if err != nil {
+		t.Fatalf("PrepareFresh: %v", err)
+	}
+	if err := store.MarkRunning(run); err != nil {
+		t.Fatalf("MarkRunning: %v", err)
+	}
+	ref := run.Ref
+	meta := run.Meta
+	meta.Status = SubagentStatus("unknown")
+	if err := store.saveMeta(meta); err != nil {
+		t.Fatalf("saveMeta: %v", err)
+	}
+	run.Release()
+
+	if _, err := store.PrepareContinue(ref, spec); err == nil || !strings.Contains(err.Error(), "unsupported status") {
+		t.Fatalf("PrepareContinue error = %v, want unsupported status rejection", err)
 	}
 }
 

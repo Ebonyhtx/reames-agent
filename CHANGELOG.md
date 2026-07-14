@@ -8,6 +8,7 @@
 - Added a versioned session runtime projection for recoverable Goal/Plan/Todo state, continuation budgets, strict self-checks, transcript-digest freshness, and per-path monotonic revisions across resume, branch, fork, switch, and rewind.
 - Hardened checkpoint rewind with transcript-prefix digests, runtime preflight, durable truncate tombstones, workspace/symlink confinement, path-alias handling, transactional file rollback including a partially written failing target, and relative-path mode restoration. Checkpoint writes use `AtomicWriteFile`; its Windows cross-device fallback and the remaining path/dual-resource crash windows are documented rather than described as unconditionally crash-safe.
 - Corrected idle-loop detection, required strict completion to follow an actual host self-check turn, and exposed current-turn evidence to Board without treating it as durable proof.
+- Added fail-closed background task recovery: persisted subagents save every provider/tool/compaction boundary, recoverable jobs publish running metadata before launch, stale running work reloads as an explicit `interrupted`/`continue_from` tombstone, and side-effecting tools are never replayed automatically. Unified tests cover compacted transcript continuation and explainable, disableable, deletable memory recall without dynamic system-prefix pollution.
 
 ### Security / Governance
 

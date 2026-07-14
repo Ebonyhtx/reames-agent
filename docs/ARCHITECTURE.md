@@ -113,4 +113,6 @@ visible user turn start
 
 `checkpoint.Store.RestoreCode` 先构造并验证全部操作，再执行写入；路径必须留在已解析 workspace 内，不能穿过 symlink/reparse point，且只能覆盖普通文件。路径别名按规范化 identity 合并，Windows 大小写折叠，现存硬链接使用 `os.SameFile` 共享 earliest bytes。失败时以预检保存的 bytes/mode 反向回滚已成功操作和可能部分写入的当前失败目标；相对路径的 mode 也按 workspace root 捕获。Conversation rewind/Fork/Summarize 必须验证 turn-start transcript prefix digest，Rewind/Fork 对非空无效 runtime 在修改前失败；truncate manifest 让物理 checkpoint 删除失败后也不会在重启时复活，turn ID 保持单调。路径预检到按路径写入之间仍有 TOCTOU，完整关闭需要 handle-relative no-reparse/resolve-beneath 写入；transcript/runtime/workspace 也不构成单一断电事务。
 
-当前 evidence ledger 是 turn-scoped 内存状态，只用于 `complete_step`、Goal readiness 和 Board 投影，不是跨进程证明。Durable evidence、共享子代理预算和 writable 子代理归并仍属于 M4 后续边界。
+持久 subagent 通过 `Agent.Options.SessionSync` 在初始 user message、steer/retry/nudge、assistant tool-call envelope（工具执行前）、tool results、final 和 compaction rewrite 后保存 transcript。`SubagentStore` 先发布 running metadata 再写 transcript，完成态只在 transcript 保存成功后发布；启动清理把遗留 running ref 转为可显式 `continue_from` 的 interrupted ref。`jobs.Manager.StartRecoverableForSession` 只有在 job log 与 running metadata 成功落盘后才启动 goroutine；冷加载 running job 时生成 interrupted tombstone、保留部分 log 并提示续跑，不自动重放工具。该协议恢复的是最后 durable transcript boundary，不判断崩溃中的工具究竟未执行、部分执行或已完成，因此续跑 prompt 强制先重读 workspace/外部状态。
+
+当前完整 evidence ledger、委派预算和 effects bridge 仍是 turn/process-scoped；durable 部分只覆盖配置的 root 项目检查引用和 subagent transcript/job tombstone。Child-only receipt 没有跨进程 journal，arbitrary shell side effect 没有 exactly-once 语义。

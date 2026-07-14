@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
+	"reames-agent/internal/fileutil"
 	"reames-agent/internal/store"
 )
 
@@ -42,34 +42,18 @@ type artifactMeta struct {
 	ArtifactComplete bool   `json:"artifactComplete"`
 	ArtifactError    string `json:"artifactError,omitempty"`
 	LogPath          string `json:"logPath,omitempty"`
+	RecoveryRef      string `json:"continueFrom,omitempty"`
 }
 
 func writeMeta(path string, meta artifactMeta) error {
 	if path == "" {
 		return fmt.Errorf("empty metadata path")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".job-meta-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return fileutil.AtomicWriteFile(path, b, 0o600)
 }
 
 func readMeta(path string) (artifactMeta, error) {

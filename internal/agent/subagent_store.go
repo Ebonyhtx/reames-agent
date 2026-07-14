@@ -63,10 +63,11 @@ type SubagentSpec struct {
 
 // SubagentRun is a prepared transcript run. Call Release exactly once.
 type SubagentRun struct {
-	Ref        string
-	Session    *Session
-	Meta       SubagentMeta
-	ForkedFrom string
+	Ref                    string
+	Session                *Session
+	Meta                   SubagentMeta
+	ForkedFrom             string
+	ResumedFromInterrupted bool
 
 	store   *SubagentStore
 	release func()
@@ -286,10 +287,11 @@ func (s *SubagentStore) PrepareContinue(ref string, spec SubagentSpec) (*Subagen
 		release()
 		return nil, err
 	}
-	if err := validateMeta(meta, spec); err != nil {
+	if err := validateMeta(meta, spec, true); err != nil {
 		release()
 		return nil, err
 	}
+	interrupted := meta.Status == SubagentInterrupted
 	sess, err := LoadSession(s.sessionPath(ref))
 	if err != nil {
 		release()
@@ -297,7 +299,14 @@ func (s *SubagentStore) PrepareContinue(ref string, spec SubagentSpec) (*Subagen
 	}
 	meta.ParentSession = spec.ParentSession
 	meta.ParentToolCallID = spec.ParentToolCallID
-	return &SubagentRun{Ref: ref, Session: sess, Meta: meta, store: s, release: release}, nil
+	return &SubagentRun{
+		Ref:                    ref,
+		Session:                sess,
+		Meta:                   meta,
+		ResumedFromInterrupted: interrupted,
+		store:                  s,
+		release:                release,
+	}, nil
 }
 
 func (s *SubagentStore) PrepareLegacyForkFrom(ref string, spec SubagentSpec) (*SubagentRun, error) {
@@ -328,7 +337,7 @@ func (s *SubagentStore) PrepareLegacyForkFrom(ref string, spec SubagentSpec) (*S
 	}
 	if owner == current {
 		release()
-		if err := validateMeta(meta, spec); err != nil {
+		if err := validateMeta(meta, spec, false); err != nil {
 			return nil, err
 		}
 		return nil, fmt.Errorf("fork_from cannot be safely converted for subagent reference %q in the current conversation; use continue_from to continue it in place or start a fresh subagent for independent work", ref)
@@ -381,7 +390,7 @@ func (s *SubagentStore) nearestLineageSource(requestedRef string, spec SubagentS
 			return "", fmt.Errorf("subagent reference %q has multiple candidate transcripts in ancestor parent session %q", requestedRef, ancestor)
 		}
 		if len(candidates) == 1 {
-			if err := validateMeta(candidates[0].Meta, spec); err != nil {
+			if err := validateMeta(candidates[0].Meta, spec, true); err != nil {
 				return "", err
 			}
 			return candidates[0].Ref, nil
@@ -453,7 +462,7 @@ func (s *SubagentStore) compatibleCopiesFromSource(sourceRef string, spec Subage
 		if strings.TrimSpace(artifact.Meta.ForkedFrom) != sourceRef {
 			continue
 		}
-		if err := validateMeta(artifact.Meta, spec); err != nil {
+		if err := validateMeta(artifact.Meta, spec, true); err != nil {
 			return nil, err
 		}
 		copies = append(copies, artifact)
@@ -485,7 +494,7 @@ func (s *SubagentStore) prepareFork(ref string, spec SubagentSpec) (*SubagentRun
 		sourceRelease()
 		return nil, fmt.Errorf("subagent reference %q has no parent session; run a fresh subagent instead", sourceRef)
 	}
-	if err := validateMeta(meta, spec); err != nil {
+	if err := validateMeta(meta, spec, true); err != nil {
 		sourceRelease()
 		return nil, err
 	}
@@ -510,20 +519,45 @@ func (s *SubagentStore) prepareFork(ref string, spec SubagentSpec) (*SubagentRun
 	now := time.Now().UTC()
 	newMeta := metaFromSpec(newRef, SubagentRunning, now, now, spec)
 	newMeta.ForkedFrom = sourceRef
-	return &SubagentRun{Ref: newRef, Session: sess, Meta: newMeta, ForkedFrom: sourceRef, store: s, release: newRelease}, nil
+	return &SubagentRun{
+		Ref:                    newRef,
+		Session:                sess,
+		Meta:                   newMeta,
+		ForkedFrom:             sourceRef,
+		ResumedFromInterrupted: meta.Status == SubagentInterrupted,
+		store:                  s,
+		release:                newRelease,
+	}, nil
 }
 
-func (s *SubagentStore) MarkRunning(run *SubagentRun) error {
+// SaveRunning publishes a recoverable in-progress boundary. Metadata is moved
+// to running before the transcript write, so any crash or write failure remains
+// conservative: startup will expose an interrupted ref rather than a stale
+// completed ref with newer in-memory work.
+func (s *SubagentStore) SaveRunning(run *SubagentRun) error {
 	if s == nil || run == nil || run.Ref == "" {
 		return nil
 	}
 	if s.parentDestroyed(run) {
 		return nil
 	}
+	if run.Session == nil {
+		return fmt.Errorf("save running subagent %q: session is nil", run.Ref)
+	}
 	meta := run.Meta
 	meta.Status = SubagentRunning
 	meta.UpdatedAt = time.Now().UTC()
-	return s.saveMeta(meta)
+	if err := s.saveMeta(meta); err != nil {
+		return err
+	}
+	run.Meta = meta
+	return run.Session.Save(s.sessionPath(run.Ref))
+}
+
+// MarkRunning is retained for callers that only need to establish the initial
+// boundary. It now persists both metadata and transcript via SaveRunning.
+func (s *SubagentStore) MarkRunning(run *SubagentRun) error {
+	return s.SaveRunning(run)
 }
 
 func (s *SubagentStore) SaveCompleted(run *SubagentRun) error {
@@ -556,6 +590,26 @@ func (s *SubagentStore) SaveFailed(run *SubagentRun) error {
 	}
 	meta := run.Meta
 	meta.Status = SubagentFailed
+	meta.UpdatedAt = time.Now().UTC()
+	run.Meta = meta
+	return errors.Join(sessionErr, s.saveMeta(meta))
+}
+
+// SaveInterrupted persists the latest safe transcript and publishes an
+// explicitly resumable tombstone without pretending the prior run completed.
+func (s *SubagentStore) SaveInterrupted(run *SubagentRun) error {
+	if s == nil || run == nil || run.Ref == "" {
+		return nil
+	}
+	if s.parentDestroyed(run) {
+		return nil
+	}
+	var sessionErr error
+	if run.Session != nil {
+		sessionErr = run.Session.Save(s.sessionPath(run.Ref))
+	}
+	meta := run.Meta
+	meta.Status = SubagentInterrupted
 	meta.UpdatedAt = time.Now().UTC()
 	run.Meta = meta
 	return errors.Join(sessionErr, s.saveMeta(meta))
@@ -596,15 +650,20 @@ func metaFromSpec(ref string, status SubagentStatus, created, updated time.Time,
 	}
 }
 
-func validateMeta(meta SubagentMeta, spec SubagentSpec) error {
-	if meta.Status == SubagentRunning {
+func validateMeta(meta SubagentMeta, spec SubagentSpec, allowInterrupted bool) error {
+	switch meta.Status {
+	case SubagentRunning:
 		return fmt.Errorf("subagent reference %q is still in progress", meta.Ref)
-	}
-	if meta.Status == SubagentFailed {
+	case SubagentFailed:
 		return fmt.Errorf("subagent reference %q failed and cannot be continued", meta.Ref)
-	}
-	if meta.Status == SubagentInterrupted {
-		return fmt.Errorf("subagent reference %q was interrupted by a previous shutdown or crash and cannot be continued or forked; run a fresh subagent instead", meta.Ref)
+	case SubagentInterrupted:
+		if !allowInterrupted {
+			return fmt.Errorf("subagent reference %q was interrupted by a previous shutdown or crash; continue it explicitly with continue_from after re-checking workspace state", meta.Ref)
+		}
+	case SubagentCompleted:
+		// Compatible terminal transcripts can be continued.
+	default:
+		return fmt.Errorf("subagent reference %q has unsupported status %q", meta.Ref, meta.Status)
 	}
 	want := metaFromSpec(meta.Ref, meta.Status, meta.CreatedAt, meta.UpdatedAt, spec)
 	switch {
@@ -725,29 +784,12 @@ func (s *SubagentStore) sessionPath(ref string) string { return filepath.Join(s.
 func (s *SubagentStore) metaPath(ref string) string    { return filepath.Join(s.dir, ref+".meta.json") }
 
 func (s *SubagentStore) saveMeta(meta SubagentMeta) error {
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
-		return err
-	}
 	data, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return err
 	}
 	data = append(data, '\n')
-	tmp, err := os.CreateTemp(s.dir, ".subagent-meta.*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	return fileutil.ReplaceFile(tmpPath, s.metaPath(meta.Ref))
+	return fileutil.AtomicWriteFile(s.metaPath(meta.Ref), data, 0o600)
 }
 
 func (s *SubagentStore) parentDestroyed(run *SubagentRun) bool {

@@ -303,6 +303,10 @@ type Agent struct {
 	// reach it. nil leaves those tools to degrade gracefully.
 	jobs *jobs.Manager
 
+	// sessionSync persists a crash-recovery point for isolated sub-agent
+	// transcripts. Root sessions use Controller autosave and leave it nil.
+	sessionSync SessionSync
+
 	// steerQueue holds mid-turn user messages queued while the agent is
 	// running. Each is consumed once per loop iteration, persisted to the
 	// session for history replay, and sent to the model as guidance (not a
@@ -448,6 +452,11 @@ type Agent struct {
 // PreEditHook must durably capture the recovery state required before a
 // previewable writer may execute. Returning an error blocks the writer.
 type PreEditHook func(diff.Change) error
+
+// SessionSync persists the current transcript at a safe execution boundary.
+// Returning an error stops the agent before it advances to another provider or
+// tool round with recovery state that exists only in memory.
+type SessionSync func(*Session) error
 
 // KeepPolicy is a bitmask controlling which messages are preserved beyond the
 // recent tail during compaction.
@@ -855,7 +864,10 @@ func (a *Agent) CompactRatio() float64 { return a.compactRatio }
 // TUI's `/compact` command so the user can reset the prefix before it
 // naturally fills up.
 func (a *Agent) CompactNow(ctx context.Context, instructions string) error {
-	return a.compact(ctx, "manual", instructions, true)
+	if err := a.compact(ctx, "manual", instructions, true); err != nil {
+		return err
+	}
+	return a.syncSession()
 }
 
 // Options configures an Agent.
@@ -902,6 +914,11 @@ type Options struct {
 
 	// Jobs is the session's background-job manager (nil disables background tools).
 	Jobs *jobs.Manager
+
+	// SessionSync persists isolated/sub-agent transcripts at safe round and
+	// compaction boundaries. Root sessions normally leave it nil because the
+	// Controller owns their autosave lifecycle.
+	SessionSync SessionSync
 
 	// ProjectChecks are host-observable structured checks extracted during boot.
 	ProjectChecks []instruction.VerifyCheck
@@ -1020,6 +1037,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 		sandboxEscapeApprover:    sandboxEscapeApprover,
 		hooks:                    hooks,
 		jobs:                     opts.Jobs,
+		sessionSync:              opts.SessionSync,
 		evidence:                 evidence.NewLedger(),
 		projectChecks:            append([]instruction.VerifyCheck(nil), opts.ProjectChecks...),
 		contextWindow:            opts.ContextWindow,
@@ -1049,6 +1067,16 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 	a.SetResponseLanguage(opts.ResponseLanguage)
 	a.SetReasoningLanguage(opts.ReasoningLanguage)
 	return a
+}
+
+func (a *Agent) syncSession() error {
+	if a == nil || a.sessionSync == nil {
+		return nil
+	}
+	if err := a.sessionSync(a.session); err != nil {
+		return fmt.Errorf("persist session recovery point: %w", err)
+	}
+	return nil
 }
 
 func usageSourceOrDefault(source, fallback string) string {
@@ -1143,6 +1171,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 		}
 	}
 	a.session.Add(provider.Message{Role: provider.RoleUser, Content: input, Images: userImages(ctx)})
+	if err := a.syncSession(); err != nil {
+		return err
+	}
 
 	finalReadinessBlocks := 0
 	emptyFinalBlocks := 0
@@ -1159,6 +1190,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 		if text, ok := a.consumeSteer(); ok {
 			a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(midTurnSteerMessage(text))})
 			a.sink.Emit(event.Event{Kind: event.Steer, Text: text})
+			if err := a.syncSession(); err != nil {
+				return err
+			}
 		}
 		schemas := a.tools.Schemas()
 		prefixShape := a.capturePrefixShape(schemas)
@@ -1205,6 +1239,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 					Role:    provider.RoleUser,
 					Content: a.withTurnPreferences(streamRecoveryMessage(hasVisibleFinalAnswer(text), partialToolStarted)),
 				})
+				if err := a.syncSession(); err != nil {
+					return err
+				}
 				a.sink.Emit(event.Event{Kind: event.Retrying, RetryAttempt: streamRecoveries, RetryMax: maxStreamRecoveries})
 				step-- // recovery retries do not consume the tool-round maxSteps budget
 				continue
@@ -1250,11 +1287,20 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 			ToolCalls:          calls,
 			MemoryCitations:    a.memoryCitations(),
 		})
+		// Persist the assistant tool-call envelope before executing it. A crash
+		// during a tool then reloads as an interrupted call instead of silently
+		// replaying an unrecorded request.
+		if err := a.syncSession(); err != nil {
+			return err
+		}
 		if delegationBudgetErr != nil {
 			if len(calls) > 0 {
 				results := a.executeBatch(ctx, calls)
 				for i, call := range calls {
 					a.session.Add(provider.Message{Role: provider.RoleTool, Content: results[i], ToolCallID: call.ID, Name: call.Name})
+				}
+				if err := a.syncSession(); err != nil {
+					return err
 				}
 			}
 			return a.delegation.budgetError(delegationBudgetErr)
@@ -1274,6 +1320,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 				a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "final-answer readiness blocked: " + readiness.reason})
 				a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(finalReadinessRetryMessage(readiness.reason))})
 				a.maybeCompact(ctx, usage)
+				if err := a.syncSession(); err != nil {
+					return err
+				}
 				continue
 			}
 			if !hasVisibleFinalAnswer(text) {
@@ -1284,6 +1333,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 				a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: emptyFinalNotice(a.prov.Name(), usage, len(reasoning))})
 				a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage())})
 				a.maybeCompact(ctx, usage)
+				if err := a.syncSession(); err != nil {
+					return err
+				}
 				continue
 			}
 			if executorHandoff && !usedAnyTool && handoffNudges < maxExecutorHandoffNudges && shouldNudgeExecutorHandoff(input, text) {
@@ -1291,6 +1343,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 				a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "executor answered without taking any action; nudging it to use its tools"})
 				a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(executorHandoffRetryMessage())})
 				a.maybeCompact(ctx, usage)
+				if err := a.syncSession(); err != nil {
+					return err
+				}
 				continue
 			}
 			if readiness.applies {
@@ -1303,6 +1358,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 			// carries into the next turn un-folded and can overflow the model window.
 			// No-op below the trigger, so normal turns keep their warm cache.
 			a.maybeCompact(ctx, usage)
+			if err := a.syncSession(); err != nil {
+				return err
+			}
 			return nil // model gave a final answer
 		}
 		emptyFinalBlocks = 0
@@ -1323,6 +1381,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 				Name:       call.Name,
 			})
 		}
+		if err := a.syncSession(); err != nil {
+			return err
+		}
 		// If the context was cancelled during tool execution, return after storing
 		// the batch results so the session keeps paired tool-call history.
 		if ctx.Err() != nil {
@@ -1332,6 +1393,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 		// The prompt only grows from here; compact before the next turn so it
 		// stays within the model's window.
 		a.maybeCompact(ctx, usage)
+		if err := a.syncSession(); err != nil {
+			return err
+		}
 
 		// When the tool-call budget runs out this round, give the model
 		// one grace round to produce a final answer from completed work.
@@ -1339,6 +1403,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 			graceRound = true
 			nudge := fmt.Sprintf("Do not call any more tools — your tool-call round limit (%s) has been reached. Instead, synthesize a final answer from all the work already completed: summarize what was accomplished, what remains to be done, and any decisions the user should make. The user can increase %s or continue in the next turn if more work is needed.", a.maxStepsKey, a.maxStepsKey)
 			a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(nudge)})
+			if err := a.syncSession(); err != nil {
+				return err
+			}
 			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf("budget (%s=%d) exhausted: one grace round to finalize", a.maxStepsKey, a.maxSteps)})
 		}
 	}
