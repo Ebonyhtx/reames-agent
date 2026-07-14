@@ -3,23 +3,40 @@ package builtin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
+	"reames-agent/internal/diff"
+	fileenc "reames-agent/internal/fileutil/encoding"
 	"reames-agent/internal/tool"
 )
 
 func init() { tool.RegisterBuiltin(applyPatch{}) }
 
-type applyPatch struct{}
+const (
+	maxPatchBytes = 2 * 1024 * 1024
+	maxPatchFiles = 100
+)
 
-func (applyPatch) Name() string        { return "apply_patch" }
-func (applyPatch) ReadOnly() bool      { return false }
+var unifiedHunkHeader = regexp.MustCompile(`^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@(?: .*)?$`)
+
+type applyPatch struct {
+	roots     []string
+	guard     SessionDataGuard
+	workDir   string
+	writePlan func(*patchPlan) error
+}
+
+func (applyPatch) Name() string   { return "apply_patch" }
+func (applyPatch) ReadOnly() bool { return false }
 
 func (applyPatch) Description() string {
-	return "Apply a unified diff patch to one or more files in the workspace. Returns a summary of files changed, hunks applied, and any failures."
+	return "Apply a unified diff patch to one or more files in the workspace as one validated transaction. Supports create, update, delete, dry-run preview, checkpointing, and rollback when a later file fails."
 }
 
 func (applyPatch) Schema() json.RawMessage {
@@ -27,7 +44,7 @@ func (applyPatch) Schema() json.RawMessage {
 "type":"object",
 "properties":{
   "patch":{"type":"string","description":"Unified diff content to apply"},
-  "dry_run":{"type":"boolean","description":"If true, preview changes without writing files"}
+  "dry_run":{"type":"boolean","description":"If true, validate and preview changes without writing files"}
 },
 "required":["patch"]
 }`)
@@ -37,180 +54,499 @@ func (applyPatch) SnipHint() tool.SnipHint {
 	return tool.SnipHint{Head: 20, Tail: 5, HeadChars: 2000, TailChars: 500}
 }
 
-func (applyPatch) Execute(ctx context.Context, args json.RawMessage) (string, error) {
-	var p struct {
-		Patch  string `json:"patch"`
-		DryRun bool   `json:"dry_run"`
-	}
-	if err := json.Unmarshal(args, &p); err != nil {
-		return "", fmt.Errorf("apply_patch: %w", err)
-	}
-	if p.Patch == "" {
-		return "", fmt.Errorf("apply_patch: patch is required")
-	}
-
-	// Parse hunks from unified diff
-	files, err := parseUnifiedDiff(p.Patch)
-	if err != nil {
-		return "", fmt.Errorf("apply_patch: %w", err)
-	}
-
-	var report strings.Builder
-	totalHunks := 0
-	failedHunks := 0
-
-	for _, f := range files {
-		totalHunks += len(f.Hunks)
-		if p.DryRun {
-			fmt.Fprintf(&report, "## %s (+%d -%d, %d hunks)\n",
-				f.Path, f.Added, f.Removed, len(f.Hunks))
-			for _, h := range f.Hunks {
-				fmt.Fprintf(&report, "  @@ -%d,%d +%d,%d @@\n",
-					h.OldStart, h.OldCount, h.NewStart, h.NewCount)
-			}
-			report.WriteString("\n")
-			continue
-		}
-
-		if err := f.apply(); err != nil {
-			fmt.Fprintf(&report, "## %s FAILED: %v\n", f.Path, err)
-			failedHunks += len(f.Hunks)
-			continue
-		}
-		fmt.Fprintf(&report, "✓ %s (+%d -%d, %d hunks)\n",
-			f.Path, f.Added, f.Removed, len(f.Hunks))
-	}
-	report.WriteString("\n")
-
-	if p.DryRun {
-		fmt.Fprintf(&report, "Dry run: %d files, %d hunks would be applied.\n", len(files), totalHunks)
-	} else {
-		fmt.Fprintf(&report, "Applied: %d files, %d/%d hunks succeeded.\n",
-			len(files), totalHunks-failedHunks, totalHunks)
-	}
-
-	return strings.TrimSpace(report.String()), nil
+type applyPatchArgs struct {
+	Patch  string `json:"patch"`
+	DryRun bool   `json:"dry_run"`
 }
 
-// parsedFile represents one file's patch from a unified diff.
+func parseApplyPatchArgs(args json.RawMessage) (applyPatchArgs, error) {
+	var p applyPatchArgs
+	if err := json.Unmarshal(args, &p); err != nil {
+		return p, fmt.Errorf("apply_patch: invalid args: %w", err)
+	}
+	if strings.TrimSpace(p.Patch) == "" {
+		return p, fmt.Errorf("apply_patch: patch is required")
+	}
+	if len([]byte(p.Patch)) > maxPatchBytes {
+		return p, fmt.Errorf("apply_patch: patch exceeds %d bytes", maxPatchBytes)
+	}
+	return p, nil
+}
+
+func (a applyPatch) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+	p, err := parseApplyPatchArgs(args)
+	if err != nil {
+		return "", err
+	}
+	plans, err := a.buildPlans(p.Patch)
+	if err != nil {
+		return "", err
+	}
+	defer closePatchPlans(plans)
+	if p.DryRun {
+		return patchSummary(plans, true), nil
+	}
+
+	applied := make([]*patchPlan, 0, len(plans))
+	for _, plan := range plans {
+		writePlan := a.writePlan
+		if writePlan == nil {
+			writePlan = writePatchPlan
+		}
+		applyErr := writePlan(plan)
+		if applyErr != nil {
+			rollbackErr := rollbackPatchPlans(applied)
+			if rollbackErr != nil {
+				applyErr = errors.Join(applyErr, fmt.Errorf("rollback: %w", rollbackErr))
+			}
+			return "", fmt.Errorf("apply_patch: write failed for %s; rolled back: %w", plan.patch.Path, applyErr)
+		}
+		applied = append(applied, plan)
+	}
+	return patchSummary(plans, false), nil
+}
+
+func writePatchPlan(plan *patchPlan) error {
+	if plan.newContent == nil {
+		return plan.target.Remove()
+	}
+	return plan.target.replaceBytes(fileenc.Encode(*plan.newContent, plan.encoding), plan.mode)
+}
+
+// PreviewChanges implements tool.MultiPreviewer. Every affected file is
+// returned so the agent persists all pre-edit snapshots before Execute starts.
+func (a applyPatch) PreviewChanges(args json.RawMessage) ([]diff.Change, error) {
+	p, err := parseApplyPatchArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	if p.DryRun {
+		return nil, nil
+	}
+	plans, err := a.buildPlans(p.Patch)
+	if err != nil {
+		return nil, err
+	}
+	defer closePatchPlans(plans)
+	changes := make([]diff.Change, len(plans))
+	for i, plan := range plans {
+		changes[i] = plan.change
+	}
+	return changes, nil
+}
+
+type patchLine struct {
+	Kind      byte
+	Text      string
+	NoNewline bool
+}
+
+type parsedHunk struct {
+	OldStart, OldCount int
+	NewStart, NewCount int
+	Lines              []patchLine
+}
+
+// parsedFile represents one file's patch from a unified diff. Path is the
+// mutation target (the old path for deletes, new path otherwise).
 type parsedFile struct {
+	OldPath string
+	NewPath string
 	Path    string
 	Added   int
 	Removed int
 	Hunks   []parsedHunk
 }
 
-type parsedHunk struct {
-	OldStart, OldCount int
-	NewStart, NewCount int
-	Lines              []string
+func (f parsedFile) action() string {
+	switch {
+	case f.OldPath == "/dev/null":
+		return "create"
+	case f.NewPath == "/dev/null":
+		return "delete"
+	default:
+		return "update"
+	}
 }
 
-// parseUnifiedDiff extracts file-level patches from unified diff text.
-func parseUnifiedDiff(diff string) ([]parsedFile, error) {
-	lines := strings.Split(diff, "\n")
-	var files []parsedFile
-	var cur *parsedFile
-	var curHunk *parsedHunk
-
-	for _, line := range lines {
-		line = strings.TrimRight(line, "\r")
-		if strings.HasPrefix(line, "--- ") || strings.HasPrefix(line, "+++ ") {
-			if strings.HasPrefix(line, "+++ ") {
-				path := strings.TrimSpace(line[4:])
-				// Strip "b/" prefix common in git diffs
-				path = strings.TrimPrefix(path, "b/")
-				if cur == nil || cur.Path != path {
-					cur = &parsedFile{Path: path}
-					files = append(files, *cur)
-					cur = &files[len(files)-1]
-				}
-			}
+func parseUnifiedDiff(patch string) ([]parsedFile, error) {
+	patch = strings.ReplaceAll(patch, "\r\n", "\n")
+	lines := strings.Split(patch, "\n")
+	files := make([]parsedFile, 0)
+	for i := 0; i < len(lines); {
+		if !strings.HasPrefix(lines[i], "--- ") {
+			i++
 			continue
 		}
-		if strings.HasPrefix(line, "@@") {
-			if cur == nil {
-				return nil, fmt.Errorf("hunk before file header")
-			}
-			var oldStart, oldCount, newStart, newCount int
-			n, err := fmt.Sscanf(line, "@@ -%d,%d +%d,%d", &oldStart, &oldCount, &newStart, &newCount)
-			if err != nil || n < 2 {
-				n, err = fmt.Sscanf(line, "@@ -%d +%d,%d", &oldStart, &newStart, &newCount)
-				if err == nil && n >= 2 {
-					oldCount = 1
-				}
-			}
-			if n >= 2 {
-				h := parsedHunk{OldStart: oldStart, OldCount: oldCount, NewStart: newStart, NewCount: newCount}
-				cur.Hunks = append(cur.Hunks, h)
-				curHunk = &cur.Hunks[len(cur.Hunks)-1]
-			}
-			continue
+		oldPath, err := normalizePatchPath(strings.TrimPrefix(lines[i], "--- "))
+		if err != nil {
+			return nil, err
 		}
-		if curHunk != nil && cur != nil {
-			if strings.HasPrefix(line, "+") {
-				curHunk.Lines = append(curHunk.Lines, line)
-				cur.Added++
-			} else if strings.HasPrefix(line, "-") {
-				curHunk.Lines = append(curHunk.Lines, line)
-				cur.Removed++
-			} else if strings.HasPrefix(line, " ") || line == "" {
-				curHunk.Lines = append(curHunk.Lines, line)
+		i++
+		if i >= len(lines) || !strings.HasPrefix(lines[i], "+++ ") {
+			return nil, fmt.Errorf("expected +++ header after --- %s", oldPath)
+		}
+		newPath, err := normalizePatchPath(strings.TrimPrefix(lines[i], "+++ "))
+		if err != nil {
+			return nil, err
+		}
+		i++
+		if oldPath == "/dev/null" && newPath == "/dev/null" {
+			return nil, fmt.Errorf("invalid /dev/null to /dev/null patch")
+		}
+		if oldPath != "/dev/null" && newPath != "/dev/null" && filepath.Clean(oldPath) != filepath.Clean(newPath) {
+			return nil, fmt.Errorf("rename patch from %s to %s is not supported; use move_file, then patch the destination", oldPath, newPath)
+		}
+		targetPath := newPath
+		if newPath == "/dev/null" {
+			targetPath = oldPath
+		}
+		file := parsedFile{OldPath: oldPath, NewPath: newPath, Path: targetPath}
+		for i < len(lines) && !strings.HasPrefix(lines[i], "--- ") {
+			if strings.TrimSpace(lines[i]) == "" {
+				i++
+				continue
 			}
+			match := unifiedHunkHeader.FindStringSubmatch(lines[i])
+			if match == nil {
+				return nil, fmt.Errorf("invalid hunk header for %s: %q", targetPath, lines[i])
+			}
+			hunk, err := parsedHunkFromHeader(match)
+			if err != nil {
+				return nil, fmt.Errorf("invalid hunk header for %s: %w", targetPath, err)
+			}
+			i++
+			for i < len(lines) && !strings.HasPrefix(lines[i], "@@ ") && !strings.HasPrefix(lines[i], "--- ") {
+				line := lines[i]
+				if line == `\ No newline at end of file` {
+					if len(hunk.Lines) == 0 {
+						return nil, fmt.Errorf("newline marker before content in %s", targetPath)
+					}
+					hunk.Lines[len(hunk.Lines)-1].NoNewline = true
+					i++
+					continue
+				}
+				if line == "" {
+					if i == len(lines)-1 {
+						i++
+						break
+					}
+					return nil, fmt.Errorf("malformed empty hunk line for %s", targetPath)
+				}
+				kind := line[0]
+				if kind != ' ' && kind != '+' && kind != '-' {
+					return nil, fmt.Errorf("invalid hunk line prefix %q for %s", kind, targetPath)
+				}
+				hunk.Lines = append(hunk.Lines, patchLine{Kind: kind, Text: line[1:]})
+				switch kind {
+				case '+':
+					file.Added++
+				case '-':
+					file.Removed++
+				}
+				i++
+			}
+			if err := validateHunkCounts(hunk); err != nil {
+				return nil, fmt.Errorf("invalid hunk for %s: %w", targetPath, err)
+			}
+			file.Hunks = append(file.Hunks, hunk)
+		}
+		if len(file.Hunks) == 0 {
+			return nil, fmt.Errorf("no hunks for %s", targetPath)
+		}
+		files = append(files, file)
+		if len(files) > maxPatchFiles {
+			return nil, fmt.Errorf("too many files (max %d)", maxPatchFiles)
 		}
 	}
-
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no files found in patch")
+		return nil, fmt.Errorf("no unified diff file headers found")
 	}
 	return files, nil
 }
 
-// apply applies this file's patch hunks.
-func (f *parsedFile) apply() error {
-	original, err := os.ReadFile(f.Path)
-	if err != nil {
-		return fmt.Errorf("cannot read %s: %w", f.Path, err)
+func normalizePatchPath(raw string) (string, error) {
+	path := strings.TrimSpace(raw)
+	if tab := strings.IndexByte(path, '\t'); tab >= 0 {
+		path = path[:tab]
 	}
-	origLines := strings.Split(string(original), "\n")
-
-	var result []string
-	origIdx := 0
-
-	for _, hunk := range f.Hunks {
-		// Copy lines before this hunk
-		for origIdx < hunk.OldStart-1 && origIdx < len(origLines) {
-			result = append(result, origLines[origIdx])
-			origIdx++
+	if strings.HasPrefix(path, `"`) {
+		unquoted, err := strconv.Unquote(path)
+		if err != nil {
+			return "", fmt.Errorf("invalid quoted patch path %q: %w", path, err)
 		}
+		path = unquoted
+	}
+	if path == "/dev/null" {
+		return path, nil
+	}
+	path = strings.TrimPrefix(strings.TrimPrefix(path, "a/"), "b/")
+	path = filepath.FromSlash(path)
+	if strings.TrimSpace(path) == "" || path == "." {
+		return "", fmt.Errorf("invalid empty patch path")
+	}
+	return path, nil
+}
 
-		// Skip old context lines, add new lines
-		oldLineIdx := hunk.OldStart - 1
-		for _, l := range hunk.Lines {
-			if strings.HasPrefix(l, "-") {
-				oldLineIdx++
-			} else if strings.HasPrefix(l, "+") {
-				result = append(result, l[1:])
-			} else {
-				// Context line — both old and new
-				if oldLineIdx < len(origLines) {
-					result = append(result, origLines[oldLineIdx])
-				}
-				oldLineIdx++
+func parsedHunkFromHeader(match []string) (parsedHunk, error) {
+	values := make([]int, 4)
+	for i, raw := range match[1:] {
+		if raw == "" {
+			values[i] = 1
+			continue
+		}
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			return parsedHunk{}, err
+		}
+		values[i] = value
+	}
+	return parsedHunk{OldStart: values[0], OldCount: values[1], NewStart: values[2], NewCount: values[3]}, nil
+}
+
+func validateHunkCounts(h parsedHunk) error {
+	oldCount, newCount := 0, 0
+	for _, line := range h.Lines {
+		if line.Kind != '+' {
+			oldCount++
+		}
+		if line.Kind != '-' {
+			newCount++
+		}
+	}
+	if oldCount != h.OldCount || newCount != h.NewCount {
+		return fmt.Errorf("header counts old=%d new=%d do not match body old=%d new=%d", h.OldCount, h.NewCount, oldCount, newCount)
+	}
+	return nil
+}
+
+type patchPlan struct {
+	patch          parsedFile
+	target         *rootedTarget
+	originalExists bool
+	originalBytes  []byte
+	originalText   string
+	newContent     *string
+	encoding       fileenc.Kind
+	mode           os.FileMode
+	change         diff.Change
+}
+
+func (a applyPatch) buildPlans(patch string) ([]*patchPlan, error) {
+	files, err := parseUnifiedDiff(patch)
+	if err != nil {
+		return nil, fmt.Errorf("apply_patch: %w", err)
+	}
+	roots := a.roots
+	if len(roots) == 0 {
+		base := a.workDir
+		if base == "" {
+			base, err = os.Getwd()
+			if err != nil {
+				return nil, fmt.Errorf("apply_patch: resolve workspace: %w", err)
 			}
 		}
-		origIdx = oldLineIdx
+		roots = realRoots([]string{base})
 	}
-
-	// Copy remaining lines
-	result = append(result, origLines[origIdx:]...)
-
-	// Ensure directory exists
-	dir := filepath.Dir(f.Path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+	plans := make([]*patchPlan, 0, len(files))
+	seen := map[string]bool{}
+	fail := func(err error) ([]*patchPlan, error) {
+		closePatchPlans(plans)
+		return nil, err
 	}
+	for _, file := range files {
+		target, openErr := openRootedWriteTarget(roots, a.guard, resolveIn(a.workDir, file.Path))
+		if openErr != nil {
+			return fail(fmt.Errorf("apply_patch: %w", openErr))
+		}
+		identityPath := target.resolved
+		if identityPath == "" {
+			identityPath = target.path
+		}
+		identity := canonicalWritableIdentity(identityPath)
+		if seen[identity] {
+			target.Close()
+			return fail(fmt.Errorf("apply_patch: duplicate file patch for %s", file.Path))
+		}
+		seen[identity] = true
+		plan := &patchPlan{patch: file, target: target, encoding: fileenc.UTF8, mode: 0o644}
+		info, statErr := target.Stat()
+		switch {
+		case statErr == nil:
+			if !info.Mode().IsRegular() {
+				target.Close()
+				return fail(fmt.Errorf("apply_patch: refusing to patch non-regular file %s", file.Path))
+			}
+			plan.originalExists = true
+			plan.mode = info.Mode().Perm()
+			plan.originalBytes, err = target.ReadFile()
+			if err != nil {
+				target.Close()
+				return fail(fmt.Errorf("apply_patch: read %s: %w", file.Path, err))
+			}
+			plan.encoding, _ = fileenc.Detect(plan.originalBytes)
+			plan.originalText = string(fileenc.Decode(plan.originalBytes, plan.encoding))
+		case os.IsNotExist(statErr):
+		default:
+			target.Close()
+			return fail(fmt.Errorf("apply_patch: stat %s: %w", file.Path, statErr))
+		}
+		switch file.action() {
+		case "create":
+			if plan.originalExists {
+				target.Close()
+				return fail(fmt.Errorf("apply_patch: refusing to create existing file %s", file.Path))
+			}
+		case "update", "delete":
+			if !plan.originalExists {
+				target.Close()
+				return fail(fmt.Errorf("apply_patch: file not found %s", file.Path))
+			}
+		}
+		updated, applyErr := applyPatchToText(plan.originalText, file)
+		if applyErr != nil {
+			target.Close()
+			return fail(fmt.Errorf("apply_patch: %w", applyErr))
+		}
+		kind := diff.Modify
+		if file.action() == "create" {
+			kind = diff.Create
+		}
+		if file.action() == "delete" {
+			if updated != "" {
+				target.Close()
+				return fail(fmt.Errorf("apply_patch: delete patch for %s does not remove the complete file", file.Path))
+			}
+			kind = diff.Delete
+			plan.newContent = nil
+			plan.change = diff.Build(target.path, plan.originalText, "", kind)
+		} else {
+			plan.newContent = &updated
+			plan.change = diff.Build(target.path, plan.originalText, updated, kind)
+		}
+		plans = append(plans, plan)
+	}
+	return plans, nil
+}
 
-	newContent := strings.Join(result, "\n")
-	return os.WriteFile(f.Path, []byte(newContent), 0o644)
+func canonicalWritableIdentity(path string) string {
+	path = filepath.Clean(path)
+	if foldPaths {
+		path = strings.ToLower(path)
+	}
+	return path
+}
+
+func applyPatchToText(original string, file parsedFile) (string, error) {
+	lineSep := "\n"
+	if strings.Contains(original, "\r\n") {
+		lineSep = "\r\n"
+	}
+	normalized := strings.ReplaceAll(original, "\r\n", "\n")
+	originalEndsNewline := strings.HasSuffix(normalized, "\n")
+	if originalEndsNewline {
+		normalized = strings.TrimSuffix(normalized, "\n")
+	}
+	var originalLines []string
+	if normalized != "" {
+		originalLines = strings.Split(normalized, "\n")
+	}
+	result := make([]string, 0, len(originalLines)+file.Added-file.Removed)
+	cursor := 0
+	newEndsNewline := originalEndsNewline
+	for _, hunk := range file.Hunks {
+		start := hunk.OldStart - 1
+		if hunk.OldStart == 0 {
+			start = 0
+		}
+		if start < cursor {
+			return "", fmt.Errorf("overlapping hunk for %s", file.Path)
+		}
+		if start > len(originalLines) {
+			return "", fmt.Errorf("hunk starts beyond end of %s", file.Path)
+		}
+		result = append(result, originalLines[cursor:start]...)
+		cursor = start
+		for _, line := range hunk.Lines {
+			switch line.Kind {
+			case ' ':
+				if cursor >= len(originalLines) || originalLines[cursor] != line.Text {
+					return "", fmt.Errorf("context mismatch in %s at line %d", file.Path, cursor+1)
+				}
+				result = append(result, originalLines[cursor])
+				cursor++
+			case '-':
+				if cursor >= len(originalLines) || originalLines[cursor] != line.Text {
+					return "", fmt.Errorf("removal mismatch in %s at line %d", file.Path, cursor+1)
+				}
+				cursor++
+			case '+':
+				result = append(result, line.Text)
+			}
+		}
+		if cursor == len(originalLines) {
+			newEndsNewline = true
+			for i := len(hunk.Lines) - 1; i >= 0; i-- {
+				if hunk.Lines[i].Kind != '-' {
+					newEndsNewline = !hunk.Lines[i].NoNewline
+					break
+				}
+			}
+		}
+	}
+	result = append(result, originalLines[cursor:]...)
+	if len(result) == 0 {
+		return "", nil
+	}
+	updated := strings.Join(result, lineSep)
+	if newEndsNewline {
+		updated += lineSep
+	}
+	return updated, nil
+}
+
+func closePatchPlans(plans []*patchPlan) {
+	for _, plan := range plans {
+		if plan != nil && plan.target != nil {
+			_ = plan.target.Close()
+		}
+	}
+}
+
+func rollbackPatchPlans(plans []*patchPlan) error {
+	var rollbackErr error
+	for i := len(plans) - 1; i >= 0; i-- {
+		plan := plans[i]
+		if plan.originalExists {
+			if err := plan.target.replaceBytes(plan.originalBytes, plan.mode); err != nil {
+				rollbackErr = errors.Join(rollbackErr, fmt.Errorf("restore %s: %w", plan.patch.Path, err))
+			}
+			continue
+		}
+		if err := plan.target.Remove(); err != nil && !os.IsNotExist(err) {
+			rollbackErr = errors.Join(rollbackErr, fmt.Errorf("remove %s: %w", plan.patch.Path, err))
+		}
+	}
+	return rollbackErr
+}
+
+func patchSummary(plans []*patchPlan, preview bool) string {
+	mode := "applied"
+	if preview {
+		mode = "preview"
+	}
+	hunks := 0
+	for _, plan := range plans {
+		hunks += len(plan.patch.Hunks)
+	}
+	var report strings.Builder
+	fmt.Fprintf(&report, "[apply_patch] %s: %d file(s), %d hunk(s)", mode, len(plans), hunks)
+	for _, plan := range plans {
+		before, after := len(plan.originalBytes), 0
+		if plan.newContent != nil {
+			after = len(fileenc.Encode(*plan.newContent, plan.encoding))
+		}
+		fmt.Fprintf(&report, "\n  %s: %s (%d -> %d bytes)", plan.patch.action(), plan.patch.Path, before, after)
+	}
+	return report.String()
 }

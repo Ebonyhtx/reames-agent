@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 
+	fileenc "reames-agent/internal/fileutil/encoding"
 	"reames-agent/internal/tool"
 )
 
@@ -47,23 +47,27 @@ func (w writeFile) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", fmt.Errorf("path is required")
 	}
 	p.Path = resolveIn(w.workDir, p.Path)
-	if err := confineWrite(w.roots, w.guard, p.Path); err != nil {
+	target, err := openRootedWriteTarget(w.roots, w.guard, p.Path)
+	if err != nil {
 		return "", err
 	}
+	defer target.Close()
+	p.Path = target.path
 	// Preserve the existing file's encoding (GBK/UTF-16/BOM) on overwrite instead
 	// of always writing UTF-8, which would silently corrupt a non-UTF-8 file.
 	// readFileEncoded returns enc=UTF8 for a missing file — the right default for
 	// a newly created one.
-	existing, enc, rerr := readFileEncoded(p.Path)
+	existing, enc, rerr := target.readEncoded()
 	if rerr == nil && existing == p.Content {
 		return fmt.Sprintf("%s already contains the exact content; no changes made", p.Path), nil
 	}
-	if dir := filepath.Dir(p.Path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return "", fmt.Errorf("mkdir %s: %w", dir, err)
-		}
+	if rerr != nil && !os.IsNotExist(rerr) {
+		return "", fmt.Errorf("read %s: %w", p.Path, rerr)
 	}
-	if err := writeFileEncoded(p.Path, p.Content, enc); err != nil {
+	if os.IsNotExist(rerr) {
+		enc = fileenc.UTF8
+	}
+	if err := target.writeEncoded(p.Content, enc, 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", p.Path, err)
 	}
 	return fmt.Sprintf("wrote %d bytes to %s", len(p.Content), p.Path), nil

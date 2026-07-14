@@ -11,6 +11,7 @@
 package checkpoint
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -79,10 +80,14 @@ type Store struct {
 	stateCorrupt bool // existing manifest was unreadable; old records fail closed
 	// restoreWrite is a fault-injection seam for transaction tests.
 	restoreWrite func(string, []byte, os.FileMode) error
+	// restoreBeforeApply is a test seam for path-component replacement races.
+	restoreBeforeApply func()
 	// stateWrite is a fault-injection seam for durable truncate tests.
 	stateWrite func(string, []byte, os.FileMode) error
 	// recordWrite is a fault-injection seam for turn/runtime snapshot tests.
 	recordWrite func(string, []byte, os.FileMode) error
+	// recordRemove is a fault-injection seam for truncate garbage collection.
+	recordRemove func(string) error
 }
 
 type seenFile struct {
@@ -177,7 +182,7 @@ func checkpointTurnFromFilename(name string) (int, bool) {
 	}
 	value := strings.TrimSuffix(strings.TrimPrefix(name, "turn-"), ".json")
 	turn, err := strconv.Atoi(value)
-	return turn, err == nil && turn >= 0
+	return turn, err == nil && turn >= 0 && name == fmt.Sprintf("turn-%d.json", turn)
 }
 
 // Begin opens a checkpoint for a new user turn, finalizing the previous one. The
@@ -196,7 +201,7 @@ func (s *Store) Begin(turn int, prompt string, msgIndex int, runtime ...json.Raw
 func (s *Store) BeginAnchored(turn int, prompt string, msgIndex int, transcriptDigest string, runtime json.RawMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if turn < 0 || msgIndex < 0 || turn < s.nextTurn {
+	if turn < 0 || msgIndex < 0 || turn != s.nextTurn {
 		return fmt.Errorf("invalid checkpoint boundary turn=%d message_index=%d next_turn=%d", turn, msgIndex, s.nextTurn)
 	}
 	if s.cur != nil {
@@ -313,13 +318,12 @@ func (s *Store) snapshot(ch diff.Change, expectedTurn *int) error {
 	if ch.Path == "" {
 		return fmt.Errorf("checkpoint snapshot path is empty")
 	}
-	abs, pathErr := safePath(s.root, ch.Path)
+	abs, rel, pathErr := workspaceRelativePath(s.root, ch.Path)
 	if pathErr != nil {
 		return fmt.Errorf("checkpoint snapshot path %q: %w", ch.Path, pathErr)
 	}
-	identity := canonicalPathIdentity(ch.Path)
+	identity := canonicalPathIdentity(rel)
 	var identityInfo os.FileInfo
-	identity = canonicalPathIdentity(abs)
 	identityInfo, _ = os.Stat(abs)
 	var enc *fileenc.Kind
 	var mode *uint32
@@ -347,13 +351,13 @@ func (s *Store) snapshot(ch diff.Change, expectedTurn *int) error {
 		old := ch.OldText
 		content = &old
 	}
-	snap := FileSnap{Path: ch.Path, Content: content, Encoding: enc, Mode: mode}
+	snap := FileSnap{Path: rel, Content: content, Encoding: enc, Mode: mode}
 	if existing, ok := sameSeenFile(identityInfo, s.seenFiles); ok {
 		// A second hard-link name denotes the same pre-edit inode. Preserve the
 		// earliest bytes for every alias so later snapshots cannot restore an
 		// intermediate state through another name.
 		snap = existing.snap
-		snap.Path = ch.Path
+		snap.Path = rel
 	}
 	s.seen[identity] = true
 	s.seenFiles = append(s.seenFiles, seenFile{identity: identity, info: identityInfo, snap: snap})
@@ -392,7 +396,7 @@ func (s *Store) persist(c *Checkpoint) error {
 	if writeFile == nil {
 		writeFile = fileutil.AtomicWriteFile
 	}
-	if err := writeFile(filepath.Join(s.dir, fmt.Sprintf("turn-%d.json", c.Turn)), b, 0o644); err != nil {
+	if err := writeFile(filepath.Join(s.dir, fmt.Sprintf("turn-%d.json", c.Turn)), b, 0o600); err != nil {
 		return fmt.Errorf("persist checkpoint turn %d: %w", c.Turn, err)
 	}
 	return nil
@@ -413,7 +417,7 @@ func (s *Store) persistStateLocked() error {
 	if writeFile == nil {
 		writeFile = fileutil.AtomicWriteFile
 	}
-	return writeFile(filepath.Join(s.dir, checkpointStateFilename), b, 0o644)
+	return writeFile(filepath.Join(s.dir, checkpointStateFilename), b, 0o600)
 }
 
 // NextTurn returns the turn number a new checkpoint should take: one past the
@@ -514,8 +518,12 @@ func (s *Store) TruncateFrom(fromTurn int) error {
 	if dir == "" || len(deleteTurns) == 0 {
 		return nil
 	}
+	removeRecord := s.recordRemove
+	if removeRecord == nil {
+		removeRecord = os.Remove
+	}
 	for turn := range deleteTurns {
-		if err := os.Remove(filepath.Join(dir, fmt.Sprintf("turn-%d.json", turn))); err != nil && !os.IsNotExist(err) {
+		if err := removeRecord(filepath.Join(dir, fmt.Sprintf("turn-%d.json", turn))); err != nil && !os.IsNotExist(err) {
 			slog.Warn("checkpoint: truncate failed", "turn", turn, "err", err)
 		}
 	}
@@ -527,6 +535,9 @@ func (s *Store) TruncateFrom(fromTurn int) error {
 // earliest recorded content (or deletes it when the earliest snapshot was nil).
 // Returns the paths written and deleted.
 func (s *Store) RestoreCode(fromTurn int) (written, deleted []string, err error) {
+	if fromTurn < 0 {
+		return nil, nil, fmt.Errorf("checkpoint restore turn must be non-negative")
+	}
 	s.mu.Lock()
 	// earliest snapshot per path across checkpoints >= fromTurn (turn order → first wins).
 	type earliestSnap struct {
@@ -540,11 +551,11 @@ func (s *Store) RestoreCode(fromTurn int) (written, deleted []string, err error)
 			continue
 		}
 		for _, f := range c.Files {
-			abs, pathErr := safePath(s.root, f.Path)
+			abs, rel, pathErr := workspaceRelativePath(s.root, f.Path)
 			identity := canonicalPathIdentity(f.Path)
 			var info os.FileInfo
 			if pathErr == nil {
-				identity = canonicalPathIdentity(abs)
+				identity = canonicalPathIdentity(rel)
 				info, _ = os.Stat(abs)
 			}
 			var hardlinkBase *FileSnap
@@ -571,87 +582,239 @@ func (s *Store) RestoreCode(fromTurn int) (written, deleted []string, err error)
 	}
 	root := s.root
 	writeFile := s.restoreWrite
+	beforeApply := s.restoreBeforeApply
 	s.mu.Unlock()
 	sort.Slice(earliest, func(i, j int) bool { return earliest[i].snap.Path < earliest[j].snap.Path })
-	if writeFile == nil {
-		writeFile = fileutil.AtomicWriteFile
+	rootHandle, openErr := os.OpenRoot(root)
+	if openErr != nil {
+		return nil, nil, fmt.Errorf("open checkpoint workspace root %q: %w", root, openErr)
+	}
+	defer rootHandle.Close()
+	rootInfo, statRootErr := os.Stat(root)
+	if statRootErr != nil {
+		return nil, nil, fmt.Errorf("inspect checkpoint workspace root %q: %w", root, statRootErr)
+	}
+	if !rootInfo.IsDir() {
+		return nil, nil, fmt.Errorf("checkpoint workspace root %q is not a directory", root)
 	}
 
 	type diskState struct {
 		exists bool
 		data   []byte
 		mode   os.FileMode
+		info   os.FileInfo
 	}
 	type restoreOp struct {
-		path   string
-		abs    string
-		snap   FileSnap
-		before diskState
+		path        string
+		abs         string
+		rel         string
+		parentRel   string
+		base        string
+		parent      *os.Root
+		parentInfo  os.FileInfo
+		closeParent bool
+		snap        FileSnap
+		before      diskState
 	}
 	ops := make([]restoreOp, 0, len(earliest))
+	defer func() {
+		for i := range ops {
+			if ops[i].closeParent && ops[i].parent != nil {
+				_ = ops[i].parent.Close()
+			}
+		}
+	}()
 	for _, entry := range earliest {
 		p := entry.snap.Path
-		abs, pathErr := safeRestorePath(root, p)
+		abs, rel, pathErr := restoreRelativePath(root, p)
 		if pathErr != nil {
 			return nil, nil, pathErr
 		}
+		parentRel, base := filepath.Dir(rel), filepath.Base(rel)
+		parent := rootHandle
+		parentInfo := rootInfo
+		closeParent := false
+		if parentRel != "." {
+			parent, pathErr = rootHandle.OpenRoot(parentRel)
+			if pathErr != nil && !os.IsNotExist(pathErr) {
+				return nil, nil, fmt.Errorf("checkpoint parent %q cannot be pinned: %w", parentRel, pathErr)
+			}
+			if pathErr == nil {
+				closeParent = true
+				parentInfo, pathErr = parent.Stat(".")
+				if pathErr != nil {
+					_ = parent.Close()
+					return nil, nil, fmt.Errorf("checkpoint parent %q cannot be inspected: %w", parentRel, pathErr)
+				}
+			} else {
+				parent = nil
+				parentInfo = nil
+			}
+		}
+		closePinnedParent := func() {
+			if closeParent && parent != nil {
+				_ = parent.Close()
+			}
+		}
 		before := diskState{}
-		info, statErr := os.Lstat(abs)
+		var info os.FileInfo
+		var statErr error
+		if parent != nil {
+			info, statErr = parent.Lstat(base)
+		} else {
+			info, statErr = rootHandle.Lstat(rel)
+		}
 		switch {
 		case statErr == nil:
 			if !info.Mode().IsRegular() {
+				closePinnedParent()
 				return nil, nil, fmt.Errorf("checkpoint path %q is not a regular file", p)
+			}
+			if parent == nil {
+				return nil, nil, fmt.Errorf("checkpoint parent %q appeared during preflight", parentRel)
 			}
 			before.exists = true
 			before.mode = info.Mode().Perm()
-			before.data, statErr = os.ReadFile(abs)
+			before.info = info
+			before.data, statErr = parent.ReadFile(base)
 			if statErr != nil {
+				closePinnedParent()
 				return nil, nil, fmt.Errorf("checkpoint preflight read %q: %w", p, statErr)
 			}
 		case os.IsNotExist(statErr):
 		default:
+			closePinnedParent()
 			return nil, nil, fmt.Errorf("checkpoint preflight stat %q: %w", p, statErr)
 		}
-		ops = append(ops, restoreOp{path: p, abs: abs, snap: entry.snap, before: before})
+		ops = append(ops, restoreOp{
+			path: p, abs: abs, rel: rel, parentRel: parentRel, base: base,
+			parent: parent, parentInfo: parentInfo, closeParent: closeParent,
+			snap: entry.snap, before: before,
+		})
+	}
+	writeRestore := func(op *restoreOp, data []byte, mode os.FileMode) error {
+		if writeFile != nil {
+			return writeFile(op.abs, data, mode)
+		}
+		return fileutil.AtomicWriteRootFile(op.parent, op.base, data, mode)
 	}
 
-	rollback := func(applied []restoreOp) error {
+	parentStillMapped := func(op *restoreOp) error {
+		var current os.FileInfo
+		var err error
+		if op.parentRel == "." {
+			current, err = os.Stat(root)
+		} else {
+			current, err = rootHandle.Stat(op.parentRel)
+		}
+		if err != nil || current == nil || op.parentInfo == nil || !os.SameFile(current, op.parentInfo) {
+			if err == nil {
+				err = fmt.Errorf("directory identity changed")
+			}
+			return fmt.Errorf("checkpoint parent %q changed during restore: %w", op.parentRel, err)
+		}
+		return nil
+	}
+
+	ensureParent := func(op *restoreOp) error {
+		if op.parent != nil {
+			return parentStillMapped(op)
+		}
+		if err := rootHandle.MkdirAll(op.parentRel, 0o755); err != nil {
+			return fmt.Errorf("create checkpoint parent %q: %w", op.parentRel, err)
+		}
+		parent, err := rootHandle.OpenRoot(op.parentRel)
+		if err != nil {
+			return fmt.Errorf("pin checkpoint parent %q: %w", op.parentRel, err)
+		}
+		info, err := parent.Stat(".")
+		if err != nil {
+			_ = parent.Close()
+			return fmt.Errorf("inspect checkpoint parent %q: %w", op.parentRel, err)
+		}
+		op.parent, op.parentInfo, op.closeParent = parent, info, true
+		return parentStillMapped(op)
+	}
+
+	validateTarget := func(op *restoreOp) error {
+		if op.parent == nil {
+			if _, err := rootHandle.Lstat(op.rel); err == nil {
+				return fmt.Errorf("checkpoint path %q appeared during restore", op.path)
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("checkpoint path %q cannot be revalidated: %w", op.path, err)
+			}
+			return nil
+		}
+		if err := parentStillMapped(op); err != nil {
+			return err
+		}
+		info, err := op.parent.Lstat(op.base)
+		if !op.before.exists {
+			if err == nil {
+				return fmt.Errorf("checkpoint path %q appeared during restore", op.path)
+			}
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("checkpoint path %q cannot be revalidated: %w", op.path, err)
+			}
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("checkpoint path %q disappeared during restore: %w", op.path, err)
+		}
+		if !info.Mode().IsRegular() || !os.SameFile(info, op.before.info) {
+			return fmt.Errorf("checkpoint path %q changed identity during restore", op.path)
+		}
+		data, err := op.parent.ReadFile(op.base)
+		if err != nil {
+			return fmt.Errorf("checkpoint path %q cannot be re-read: %w", op.path, err)
+		}
+		if !bytes.Equal(data, op.before.data) || info.Mode().Perm() != op.before.mode {
+			return fmt.Errorf("checkpoint path %q changed content or mode during restore", op.path)
+		}
+		return nil
+	}
+
+	rollback := func(applied []*restoreOp) error {
 		var rollbackErr error
 		for i := len(applied) - 1; i >= 0; i-- {
 			op := applied[i]
 			if op.before.exists {
-				if e := fileutil.AtomicWriteFile(op.abs, op.before.data, op.before.mode); e != nil {
+				if e := fileutil.AtomicWriteRootFile(op.parent, op.base, op.before.data, op.before.mode); e != nil {
 					rollbackErr = errors.Join(rollbackErr, fmt.Errorf("restore %q: %w", op.path, e))
 				}
 				continue
 			}
-			if e := os.Remove(op.abs); e != nil && !os.IsNotExist(e) {
+			if e := op.parent.Remove(op.base); e != nil && !os.IsNotExist(e) {
 				rollbackErr = errors.Join(rollbackErr, fmt.Errorf("remove %q: %w", op.path, e))
 			}
 		}
 		return rollbackErr
 	}
 
-	applied := make([]restoreOp, 0, len(ops))
-	for _, op := range ops {
-		// Recheck immediately before applying to catch a path component swapped
-		// for a symlink after preflight.
-		abs, pathErr := safeRestorePath(root, op.path)
-		if pathErr != nil || abs != op.abs {
-			if pathErr == nil {
-				pathErr = fmt.Errorf("checkpoint path %q changed during restore", op.path)
-			}
-			if rbErr := rollback(applied); rbErr != nil {
-				pathErr = errors.Join(pathErr, fmt.Errorf("rollback: %w", rbErr))
-			}
-			return nil, nil, pathErr
+	if beforeApply != nil {
+		beforeApply()
+	}
+	for i := range ops {
+		if err := validateTarget(&ops[i]); err != nil {
+			return nil, nil, err
 		}
+	}
+	applied := make([]*restoreOp, 0, len(ops))
+	for i := range ops {
+		op := &ops[i]
 		var applyErr error
+		touched := false
 		if op.snap.Content == nil {
 			if op.before.exists {
-				applyErr = os.Remove(op.abs)
+				if applyErr = validateTarget(op); applyErr == nil {
+					touched = true
+					applyErr = op.parent.Remove(op.base)
+				}
 			}
 		} else {
+			if applyErr = ensureParent(op); applyErr == nil {
+				applyErr = validateTarget(op)
+			}
 			enc := fileenc.UTF8
 			if op.snap.Encoding != nil {
 				enc = *op.snap.Encoding
@@ -667,18 +830,30 @@ func (s *Store) RestoreCode(fromTurn int) (written, deleted []string, err error)
 					mode = 0o644
 				}
 			}
-			applyErr = writeFile(op.abs, fileenc.Encode(*op.snap.Content, enc), mode)
+			if applyErr == nil {
+				touched = true
+				applyErr = writeRestore(op, fileenc.Encode(*op.snap.Content, enc), mode)
+			}
+		}
+		if applyErr == nil && touched {
+			applyErr = parentStillMapped(op)
 		}
 		if applyErr != nil {
 			// A writer may report failure after touching the destination (for
 			// example a degraded cross-device copy). Restore the current op as
 			// well as every earlier one so the transaction returns to preflight.
-			if rbErr := rollback(append(applied, op)); rbErr != nil {
+			rollbackOps := applied
+			if touched {
+				rollbackOps = append(append([]*restoreOp(nil), applied...), op)
+			}
+			if rbErr := rollback(rollbackOps); rbErr != nil {
 				applyErr = errors.Join(applyErr, fmt.Errorf("rollback: %w", rbErr))
 			}
 			return nil, nil, fmt.Errorf("checkpoint restore %q: %w", op.path, applyErr)
 		}
-		applied = append(applied, op)
+		if touched {
+			applied = append(applied, op)
+		}
 		if op.snap.Content == nil {
 			if op.before.exists {
 				deleted = append(deleted, op.path)
@@ -688,6 +863,22 @@ func (s *Store) RestoreCode(fromTurn int) (written, deleted []string, err error)
 		}
 	}
 	return written, deleted, nil
+}
+
+func restoreRelativePath(root, path string) (abs, rel string, err error) {
+	return workspaceRelativePath(root, path)
+}
+
+func workspaceRelativePath(root, path string) (abs, rel string, err error) {
+	abs, err = safePath(root, path)
+	if err != nil {
+		return "", "", err
+	}
+	rel, err = filepath.Rel(filepath.Clean(root), abs)
+	if err != nil || !filepath.IsLocal(rel) || rel == "." {
+		return "", "", fmt.Errorf("checkpoint path %q escapes workspace %q", path, root)
+	}
+	return abs, filepath.Clean(rel), nil
 }
 
 func canonicalPathIdentity(path string) string {
@@ -710,15 +901,6 @@ func sameSeenFile(info os.FileInfo, existing []seenFile) (seenFile, bool) {
 	return seenFile{}, false
 }
 
-func detectCurrentEncoding(path string) *fileenc.Kind {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	enc, _ := fileenc.Detect(b)
-	return &enc
-}
-
 // safePath resolves p against root and rejects anything escaping it — restore
 // must never write outside the workspace, even if a snapshot path is hostile or
 // the project moved since it was taken.
@@ -734,63 +916,6 @@ func safePath(root, p string) (string, error) {
 		if err != nil || !filepath.IsLocal(rel) {
 			return "", fmt.Errorf("checkpoint path %q escapes workspace %q", p, root)
 		}
-	}
-	return abs, nil
-}
-
-// safeRestorePath adds filesystem-aware confinement to safePath. Existing
-// symlink components are rejected, and resolved ancestors must remain under the
-// resolved workspace root. This also catches Windows junction/reparse escapes
-// that filepath.Rel alone cannot see.
-func safeRestorePath(root, p string) (string, error) {
-	abs, err := safePath(root, p)
-	if err != nil {
-		return "", err
-	}
-	root = filepath.Clean(root)
-	rootResolved, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return "", fmt.Errorf("checkpoint workspace %q cannot be resolved: %w", root, err)
-	}
-	rel, err := filepath.Rel(root, abs)
-	if err != nil || !filepath.IsLocal(rel) {
-		return "", fmt.Errorf("checkpoint path %q escapes workspace %q", p, root)
-	}
-	cur := root
-	parts := strings.Split(rel, string(filepath.Separator))
-	for _, part := range parts {
-		cur = filepath.Join(cur, part)
-		info, statErr := os.Lstat(cur)
-		if os.IsNotExist(statErr) {
-			break
-		}
-		if statErr != nil {
-			return "", fmt.Errorf("checkpoint path %q cannot be inspected: %w", p, statErr)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("checkpoint path %q crosses symlink %q", p, cur)
-		}
-	}
-	ancestor := abs
-	for {
-		if _, statErr := os.Lstat(ancestor); statErr == nil {
-			break
-		} else if !os.IsNotExist(statErr) {
-			return "", fmt.Errorf("checkpoint path %q cannot be inspected: %w", p, statErr)
-		}
-		parent := filepath.Dir(ancestor)
-		if parent == ancestor {
-			return "", fmt.Errorf("checkpoint path %q has no existing workspace ancestor", p)
-		}
-		ancestor = parent
-	}
-	resolved, err := filepath.EvalSymlinks(ancestor)
-	if err != nil {
-		return "", fmt.Errorf("checkpoint path %q cannot be resolved: %w", p, err)
-	}
-	resolvedRel, err := filepath.Rel(rootResolved, resolved)
-	if err != nil || (!filepath.IsLocal(resolvedRel) && resolvedRel != ".") {
-		return "", fmt.Errorf("checkpoint path %q resolves outside workspace %q", p, root)
 	}
 	return abs, nil
 }

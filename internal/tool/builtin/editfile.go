@@ -48,11 +48,14 @@ func (e editFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 		return "", fmt.Errorf("old_string is required")
 	}
 	p.Path = resolveIn(e.workDir, p.Path)
-	if err := confineWrite(e.roots, e.guard, p.Path); err != nil {
+	target, err := openRootedWriteTarget(e.roots, e.guard, p.Path)
+	if err != nil {
 		return "", err
 	}
+	defer target.Close()
+	p.Path = target.path
 
-	content, enc, err := readFileEncoded(p.Path)
+	content, enc, err := target.readEncoded()
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", p.Path, err)
 	}
@@ -67,7 +70,7 @@ func (e editFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 		return "", oldStringNotUniqueError(p.Path, p.OldString, content, applied.matches, false)
 	}
 
-	if err := writeFileEncoded(p.Path, applied.updated, enc); err != nil {
+	if err := target.writeEncoded(applied.updated, enc, 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", p.Path, err)
 	}
 	if applied.fuzzy {

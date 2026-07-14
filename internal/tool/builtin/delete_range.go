@@ -45,13 +45,18 @@ func (d deleteRange) Execute(ctx context.Context, args json.RawMessage) (string,
 	if err != nil {
 		return "", err
 	}
+	target, err := openRootedWriteTarget(d.roots, d.guard, change.Path)
+	if err != nil {
+		return "", err
+	}
+	defer target.Close()
 	// Re-detect the file's encoding so the rewrite preserves it (GBK/UTF-16/BOM)
 	// rather than forcing UTF-8 and corrupting a non-UTF-8 file.
-	_, enc, err := readFileEncoded(change.Path)
+	_, enc, err := target.readEncoded()
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", change.Path, err)
 	}
-	if err := writeFileEncoded(change.Path, change.NewText, enc); err != nil {
+	if err := target.writeEncoded(change.NewText, enc, 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", change.Path, err)
 	}
 	return change.Diff, nil
@@ -87,11 +92,14 @@ func (d deleteRange) preview(args json.RawMessage) (diff.Change, error) {
 	}
 
 	p.Path = resolveIn(d.workDir, p.Path)
-	if err := confineWrite(d.roots, d.guard, p.Path); err != nil {
+	target, err := openRootedWriteTarget(d.roots, d.guard, p.Path)
+	if err != nil {
 		return diff.Change{}, err
 	}
+	defer target.Close()
+	p.Path = target.path
 
-	original, _, err := readFileEncoded(p.Path)
+	original, _, err := target.readEncoded()
 	if err != nil {
 		return diff.Change{}, fmt.Errorf("read %s: %w", p.Path, err)
 	}

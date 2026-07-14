@@ -465,6 +465,15 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			run.Release()
 			return "", fmt.Errorf("persist subagent start %q: %w", run.Ref, err)
 		}
+		if effects, ok := SubagentEffectsFromContext(ctx); ok {
+			bound, err := effects.withJournal(run)
+			if err != nil {
+				persistErr := t.transcripts.SaveFailed(run)
+				run.Release()
+				return "", errors.Join(fmt.Errorf("persist subagent effect journal %q: %w", run.Ref, err), persistErr)
+			}
+			ctx = WithSubagentEffects(ctx, bound)
+		}
 	}
 	sessionSync := t.sessionSync(run)
 	subPrompt := p.Prompt

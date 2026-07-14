@@ -7,7 +7,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -72,28 +71,30 @@ func (d deleteSymbol) Execute(ctx context.Context, args json.RawMessage) (string
 		return "", fmt.Errorf("name is required")
 	}
 	p.Path = resolveIn(d.workDir, p.Path)
-	if err := confineWrite(d.roots, d.guard, p.Path); err != nil {
+	target, err := openRootedWriteTarget(d.roots, d.guard, p.Path)
+	if err != nil {
 		return "", err
 	}
+	defer target.Close()
+	p.Path = target.path
 
 	ext := strings.ToLower(filepath.Ext(p.Path))
 	if ext != ".go" {
 		return "", fmt.Errorf("delete_symbol only supports Go files — use delete_range for %s files", ext)
 	}
 
-	m, fset, err := d.findSymbol(p.Path, p.Name, p.Kind, p.Parent)
-	if err != nil {
-		return "", err
-	}
-
-	src, err := os.ReadFile(p.Path)
+	src, err := target.ReadFile()
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", p.Path, err)
+	}
+	m, fset, err := d.findSymbol(p.Path, src, p.Name, p.Kind, p.Parent)
+	if err != nil {
+		return "", err
 	}
 	original := string(src)
 
 	newContent := deleteLines(original, fset, m)
-	if err := os.WriteFile(p.Path, []byte(newContent), 0o644); err != nil {
+	if err := target.writeBytes([]byte(newContent), 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", p.Path, err)
 	}
 
@@ -118,23 +119,25 @@ func (d deleteSymbol) Preview(args json.RawMessage) (diff.Change, error) {
 		return diff.Change{}, fmt.Errorf("name is required")
 	}
 	p.Path = resolveIn(d.workDir, p.Path)
-	if err := confineWrite(d.roots, d.guard, p.Path); err != nil {
+	target, err := openRootedWriteTarget(d.roots, d.guard, p.Path)
+	if err != nil {
 		return diff.Change{}, err
 	}
+	defer target.Close()
+	p.Path = target.path
 
 	ext := strings.ToLower(filepath.Ext(p.Path))
 	if ext != ".go" {
 		return diff.Change{}, fmt.Errorf("delete_symbol only supports Go files")
 	}
 
-	m, fset, err := d.findSymbol(p.Path, p.Name, p.Kind, p.Parent)
-	if err != nil {
-		return diff.Change{}, err
-	}
-
-	src, err := os.ReadFile(p.Path)
+	src, err := target.ReadFile()
 	if err != nil {
 		return diff.Change{}, fmt.Errorf("read %s: %w", p.Path, err)
+	}
+	m, fset, err := d.findSymbol(p.Path, src, p.Name, p.Kind, p.Parent)
+	if err != nil {
+		return diff.Change{}, err
 	}
 	original := string(src)
 
@@ -142,9 +145,9 @@ func (d deleteSymbol) Preview(args json.RawMessage) (diff.Change, error) {
 	return diff.Build(p.Path, original, newContent, diff.Modify), nil
 }
 
-func (d deleteSymbol) findSymbol(path, name, kind, parent string) (symbolMatch, *token.FileSet, error) {
+func (d deleteSymbol) findSymbol(path string, src []byte, name, kind, parent string) (symbolMatch, *token.FileSet, error) {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+	f, err := parser.ParseFile(fset, path, src, parser.ParseComments)
 	if err != nil {
 		return symbolMatch{}, nil, fmt.Errorf("parse %s: %w", path, err)
 	}

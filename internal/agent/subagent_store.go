@@ -80,6 +80,7 @@ type SubagentArtifact struct {
 	Ref         string
 	SessionPath string
 	MetaPath    string
+	EffectPath  string
 	Meta        SubagentMeta
 }
 
@@ -106,8 +107,10 @@ type SubagentStore struct {
 	dir       string
 	destroyed func(parentSession string) bool
 
-	mu     sync.Mutex
-	locked map[string]bool
+	mu          sync.Mutex
+	locked      map[string]bool
+	effectsMu   sync.Mutex
+	effectWrite func(string, []byte, os.FileMode) error
 }
 
 func NewSubagentStore(dir string) *SubagentStore {
@@ -134,7 +137,10 @@ func ListSubagentsByParent(sessionDir, parentSession string) ([]SubagentArtifact
 	if strings.TrimSpace(sessionDir) == "" || parentSession == "" {
 		return nil, nil
 	}
-	dir := filepath.Join(sessionDir, "subagents")
+	return listSubagentsInDir(filepath.Join(sessionDir, "subagents"), parentSession)
+}
+
+func listSubagentsInDir(dir, parentSession string) ([]SubagentArtifact, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -167,6 +173,7 @@ func ListSubagentsByParent(sessionDir, parentSession string) ([]SubagentArtifact
 			Ref:         ref,
 			SessionPath: filepath.Join(dir, ref+".jsonl"),
 			MetaPath:    metaPath,
+			EffectPath:  filepath.Join(dir, ref+".effects.json"),
 			Meta:        meta,
 		})
 	}
@@ -181,7 +188,7 @@ func DeleteSubagentsByParent(sessionDir, parentSession string) error {
 		return err
 	}
 	for _, artifact := range artifacts {
-		paths := []string{artifact.SessionPath, artifact.MetaPath}
+		paths := []string{artifact.SessionPath, artifact.MetaPath, artifact.EffectPath}
 		// Sub-agent saves are single-file today, but sweep transcript sidecars
 		// (event log, event index, …) so no earlier build's artifacts survive
 		// the delete.
@@ -782,6 +789,9 @@ func (s *SubagentStore) newRef() (string, error) {
 
 func (s *SubagentStore) sessionPath(ref string) string { return filepath.Join(s.dir, ref+".jsonl") }
 func (s *SubagentStore) metaPath(ref string) string    { return filepath.Join(s.dir, ref+".meta.json") }
+func (s *SubagentStore) effectPath(ref string) string {
+	return filepath.Join(s.dir, ref+".effects.json")
+}
 
 func (s *SubagentStore) saveMeta(meta SubagentMeta) error {
 	data, err := json.MarshalIndent(meta, "", "  ")

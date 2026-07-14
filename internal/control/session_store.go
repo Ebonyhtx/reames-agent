@@ -43,6 +43,7 @@ func (g *SessionRemovalGuard) RemoveSidecarsAndRelease() error {
 type SessionSubagentArtifact struct {
 	SessionPath string
 	MetaPath    string
+	EffectPath  string
 }
 
 func ListSessionSubagentArtifacts(sessionDir, sessionPath string) ([]SessionSubagentArtifact, error) {
@@ -52,7 +53,7 @@ func ListSessionSubagentArtifacts(sessionDir, sessionPath string) ([]SessionSuba
 	}
 	out := make([]SessionSubagentArtifact, len(artifacts))
 	for i, artifact := range artifacts {
-		out[i] = SessionSubagentArtifact{SessionPath: artifact.SessionPath, MetaPath: artifact.MetaPath}
+		out[i] = SessionSubagentArtifact{SessionPath: artifact.SessionPath, MetaPath: artifact.MetaPath, EffectPath: artifact.EffectPath}
 	}
 	return out, nil
 }

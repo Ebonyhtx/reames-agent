@@ -66,6 +66,7 @@ try {
             "scripts.test_check_upstreams",
             "scripts.test_verify_real_provider",
             "scripts.test_gen_upstream_issue_drafts",
+            "scripts.test_verify_baseline",
             "-v"
         )
         Invoke-Native -FilePath "node" -Arguments @("scripts/test_upstream_watch_issue.mjs")

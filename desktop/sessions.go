@@ -761,7 +761,7 @@ func trashSubagentArtifacts(dir, sessionPath, itemDir string) error {
 	}
 	trashSubagentDir := filepath.Join(itemDir, "subagents")
 	for _, artifact := range artifacts {
-		paths := []string{artifact.SessionPath, artifact.MetaPath}
+		paths := []string{artifact.SessionPath, artifact.MetaPath, artifact.EffectPath}
 		paths = append(paths, store.SessionSidecarFiles(artifact.SessionPath)...)
 		for _, src := range paths {
 			if strings.TrimSpace(src) == "" {

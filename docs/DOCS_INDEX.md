@@ -115,6 +115,7 @@
 | [M4 跨 continuation 最小证据审计](audits/2026-07-14-m4-durable-evidence.md) | writer epoch、项目检查哈希/tool-call 引用、exact-anchor crash-resume 与失效语义 |
 | [M4 Writer 持久化门禁审计](audits/2026-07-14-m4-writer-persistence-gate.md) | checkpoint/runtime/in-flight 写失败阻断、stale marker 拒绝、重试回滚、session handoff 串行与进程中断恢复边界 |
 | [M4 后台 Task、Compaction 与记忆统一恢复审计](audits/2026-07-14-m4-task-compaction-memory-recovery.md) | subagent 安全边界持久化、interrupted/continue_from、compacted transcript 续接与稳定前缀记忆检索证据 |
+| [M4 Rooted Writer 与 Durable Child Effects 审计](audits/2026-07-14-m4-rooted-writers-child-effects.md) | `os.Root` built-in writer/checkpoint restore、multi-file rollback、child mutation intent、journal cursor 与 crash/replay/branch 边界 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 
@@ -122,11 +123,16 @@
 
 ```powershell
 .\scripts\verify-baseline.ps1
+.\scripts\verify-baseline.ps1 -OutputDir "$env:TEMP\reames-agent-baseline-custom"
 python scripts/check_public_readiness.py
 python scripts/check_release_contracts.py
 go test ./internal/... -count=1 -timeout 300s
 Push-Location desktop; go test . -count=1 -timeout 300s; Pop-Location
 Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop-Location
 ```
+
+`verify-baseline.ps1` 默认把 Gateway smoke 报告写入系统临时目录
+`$env:TEMP\reames-agent-baseline`；只有需要保留或隔离证据时才传
+`-OutputDir`，不会默认改动仓库 `artifacts/`。
 
 根目录 `go test ./...` 不覆盖独立的 `desktop/` Go module。

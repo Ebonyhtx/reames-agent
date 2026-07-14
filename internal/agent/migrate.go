@@ -876,7 +876,7 @@ func copySubagentArtifacts(srcSessionDir, dstSessionDir, parentSession string) e
 	var errs []error
 	dstSubagentDir := filepath.Join(dstSessionDir, "subagents")
 	for _, artifact := range artifacts {
-		for _, src := range []string{artifact.SessionPath, artifact.MetaPath} {
+		for _, src := range []string{artifact.SessionPath, artifact.MetaPath, artifact.EffectPath} {
 			if err := copyFileIfExists(src, filepath.Join(dstSubagentDir, filepath.Base(src))); err != nil {
 				errs = append(errs, err)
 			}

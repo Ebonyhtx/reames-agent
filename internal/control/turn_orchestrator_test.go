@@ -239,6 +239,48 @@ func TestTurnOrchestratorRequeuesStrictSelfCheckWhenPromptHookBlocks(t *testing.
 	}
 }
 
+type toolEnvelopeOnlyRunner struct {
+	session *agent.Session
+	calls   int
+}
+
+func (r *toolEnvelopeOnlyRunner) Run(_ context.Context, input string) error {
+	r.calls++
+	r.session.Add(provider.Message{Role: provider.RoleUser, Content: input})
+	if r.calls == 1 {
+		r.session.Add(provider.Message{Role: provider.RoleAssistant, Content: "Finished.\n\n[goal:complete]"})
+		return nil
+	}
+	r.session.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{
+		ID: "self-check-tool", Name: "read_file", Arguments: `{}`,
+	}}})
+	r.session.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "self-check-tool", Name: "read_file", Content: "ok"})
+	return nil
+}
+
+func TestTurnOrchestratorRequiresFinalAssistantTextForStrictSelfCheck(t *testing.T) {
+	session := agent.NewSession("")
+	exec := agent.New(nil, tool.NewRegistry(), session, agent.Options{}, event.Discard)
+	runner := &toolEnvelopeOnlyRunner{session: session}
+	c := New(Options{Runner: runner, Executor: exec})
+	c.SetGoal("ship the refactor")
+	c.GoalStrict(true)
+
+	if err := newTurnOrchestrator(c).runGoalLoopWithRawDisplay(context.Background(), "start", "start", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if runner.calls != 2 {
+		t.Fatalf("runner calls = %d, want initial turn plus self-check attempt", runner.calls)
+	}
+	if got := c.GoalStatus(); got != GoalStatusRunning {
+		t.Fatalf("GoalStatus() = %q, want running until self-check has a final assistant answer", got)
+	}
+	if msg, ok := c.goals.takeIntercept(); !ok || msg != goalSelfCheckTurn {
+		t.Fatalf("requeued self-check after tool-only envelope = %q ok=%v", msg, ok)
+	}
+}
+
 func TestTurnOrchestratorApprovedPlanSharesOneStopHook(t *testing.T) {
 	prov := &scriptedTurns{turns: [][]provider.Chunk{
 		textTurn("Plan:\n1. Make the change\n2. Verify it"),

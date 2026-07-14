@@ -818,6 +818,24 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		runCtx, ledger, cleanup := agent.EnsureDelegationLedger(sctx, delegationLimits)
 		defer cleanup()
 		effects, _ := agent.SubagentEffectsFromContext(sctx)
+		var sessionSync agent.SessionSync
+		if run.Ref != "" {
+			if err := subagentStore.MarkRunning(run); err != nil {
+				return "", fmt.Errorf("persist subagent skill start %q: %w", run.Ref, err)
+			}
+			bound, err := agent.BindSubagentEffectJournal(effects, run)
+			if err != nil {
+				return "", errors.Join(fmt.Errorf("persist subagent skill effect journal %q: %w", run.Ref, err), subagentStore.SaveFailed(run))
+			}
+			effects = bound
+			runCtx = agent.WithSubagentEffects(runCtx, effects)
+			sessionSync = func(current *agent.Session) error {
+				if current != run.Session {
+					return fmt.Errorf("subagent skill %q recovery session changed unexpectedly", run.Ref)
+				}
+				return subagentStore.SaveRunning(run)
+			}
+		}
 		answer, err := agent.RunSubAgentWithSession(runCtx, prov, subReg, run.Session, task, agent.Options{
 			MaxSteps:          steps,
 			Temperature:       cfg.Agent.Temperature,
@@ -833,6 +851,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			MaxSubagentDepth:  maxSubagentDepth,
 			DelegationLedger:  ledger,
 			SubagentEffects:   effects,
+			SessionSync:       sessionSync,
 		}, agent.NestedSink(sctx, event.Discard))
 		if err != nil {
 			return "", errors.Join(err, subagentStore.SaveFailed(run))
@@ -1141,6 +1160,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		BalanceKey:             entry.APIKey(),
 		BalanceClient:          balanceClient,
 		Jobs:                   jm,
+		SubagentStore:          subagentStore,
 		Registry:               reg,
 		PluginCtx:              ctx,
 		WorkspaceRoot:          root,

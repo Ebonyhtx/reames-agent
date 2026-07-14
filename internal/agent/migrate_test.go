@@ -349,6 +349,9 @@ func TestRehomeStrandedSessionAfterDowngrade(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(projectDest, "subagents", ref+".meta.json")); err != nil {
 		t.Errorf("subagent metadata should be copied alongside: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(projectDest, "subagents", ref+".effects.json")); err != nil {
+		t.Errorf("subagent effect journal should be copied alongside: %v", err)
+	}
 	// Source is never modified.
 	if _, err := os.Stat(sessionPath); err != nil {
 		t.Errorf("source session must be left intact: %v", err)
@@ -604,6 +607,7 @@ func writeMigratedSubagentArtifact(t *testing.T, sessionDir, ref, parentSession 
 		Status:        SubagentCompleted,
 		Kind:          "task",
 		Name:          "task",
+		WorkspaceRoot: sessionDir,
 		ParentSession: parentSession,
 	}
 	data, err := json.Marshal(meta)
@@ -611,6 +615,19 @@ func writeMigratedSubagentArtifact(t *testing.T, sessionDir, ref, parentSession 
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(subagentDir, ref+".meta.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	journalData, err := json.Marshal(subagentEffectJournal{
+		Version:       subagentEffectJournalVersion,
+		Ref:           ref,
+		JournalID:     "sej_migration_test",
+		WorkspaceRoot: sessionDir,
+		ParentSession: parentSession,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subagentDir, ref+".effects.json"), journalData, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

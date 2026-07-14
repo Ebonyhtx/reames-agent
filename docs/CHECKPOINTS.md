@@ -1,6 +1,8 @@
 # Design: Checkpoints & Rewind
 
-Status: **Phase 1 + 2 and the first M4 recovery hardening batch are implemented**.
+Updated: 2026-07-14.
+
+Status: **Phase 1 + 2 and the rooted M4 recovery hardening batches are implemented**.
 The shared controller supports code/conversation/both rewind, fork-from-here and
 summarize from/up to here for CLI and Desktop. Conversation rewrites now require
 a transcript-prefix digest and a valid turn-start runtime projection; checkpoint
@@ -25,15 +27,19 @@ independent of git:
 
 - **Zero git pollution** — never commits, stages, or touches `.git/`. Works in a
   non-git directory.
-- **Tracks only previewable edit-tool changes** — `write_file` / `edit_file` / `multi_edit`.
-  File moves via `move_file` follow the same workspace permission boundary, but
-  are not yet represented in checkpoint previews.
+- **Tracks only previewable edit-tool changes** — `write_file`, `edit_file`,
+  `multi_edit`, `delete_range`, `delete_symbol`, `notebook_edit`, `move_file`, and
+  `apply_patch`. Multi-file previews are collected and snapshotted as one gate;
+  `move_file` records source deletion plus destination creation.
   `bash` side effects are **not** tracked (no way to know what a shell command
   touched), exactly as Claude Code. Risky bash is already permission-gated.
 - Full pre-edit content snapshots (simple; storage bounded by retention, below).
+- Persisted checkpoint records use `0600` and their directory uses `0700`, because
+  snapshots may contain source credentials or other workspace-private bytes.
 
-An optional **git-backed mode** (v1's `auto-git-rollback`) is a possible Phase 2
-for users who want git-level safety; it is explicitly out of scope here.
+An optional **git-backed mode** (v1's `auto-git-rollback`) is a lower-priority
+future mode for users who want git-level safety; it is explicitly out of scope
+for the implemented snapshot phases.
 
 ## Anchors & capture
 
@@ -42,10 +48,10 @@ for users who want git-level safety; it is explicitly out of scope here.
   sends and headless `Controller.Run` use the same lifecycle; synthetic Goal or
   approved-plan continuations remain attached to that visible checkpoint.
 - **Pre-edit snapshot.** In `agent.(*Agent).executeOne`, before running a tool
-  whose `ReadOnly()` is false and which implements `tool.Previewer`, call
-  `Preview(args)` → `diff.Change{Path, Kind, OldText}` and record a snapshot of
-  that file into the active checkpoint. `tool.Previewer` already exists and the
-  file-writers implement it, so this is one centralized seam — no per-tool code.
+  whose `ReadOnly()` is false and which implements `tool.Previewer` or
+  `tool.MultiPreviewer`, collect every `diff.Change{Path, Kind, OldText}` and
+  record all snapshots before the tool runs. Any preview or snapshot persistence
+  failure blocks the whole writer.
   - Dedup uses normalized workspace identities. Lexical aliases and Windows
     case aliases keep the first snapshot; existing hard-link aliases all restore
     from the same earliest bytes (hard-link identity itself is not recreated).
@@ -58,20 +64,20 @@ for users who want git-level safety; it is explicitly out of scope here.
 
 ```go
 type FileSnap struct {
-    Path     string
-    Content  *string // nil -> file did not exist at the anchor
-    Encoding *encoding.Kind
-    Mode     *uint32
+    Path     string        `json:"path"`
+    Content  *string       `json:"content"` // nil -> file did not exist at the anchor
+    Encoding *fileenc.Kind `json:"encoding,omitempty"`
+    Mode     *uint32       `json:"mode,omitempty"`
 }
 
 type Checkpoint struct {
-    Turn             int
-    Time             time.Time
-    Prompt           string
-    MsgIndex         int             // exact transcript boundary
-    TranscriptDigest string          // digest of the prefix at MsgIndex
-    Runtime          json.RawMessage // Goal/Plan/Todo projection at turn start
-    Files            []FileSnap
+    Turn             int             `json:"turn"`
+    Time             time.Time       `json:"time"`
+    Prompt           string          `json:"prompt"`
+    MsgIndex         int             `json:"msgIndex"` // exact transcript boundary
+    TranscriptDigest string          `json:"transcriptDigest,omitempty"`
+    Runtime          json.RawMessage `json:"runtime,omitempty"` // Goal/Plan/Todo projection at turn start
+    Files            []FileSnap      `json:"files"`
 }
 ```
 
@@ -110,8 +116,10 @@ func (c *Controller) Rewind(turn int, scope RewindScope) error
   `FileSnap` per normalized file identity and restore each recorded alias to that
   content (delete if `nil`). All targets are preflighted before the first write:
   workspace escape, symlink/reparse traversal and non-regular targets are
-  rejected. A failed operation rolls back earlier writes and the possibly
-  partially written failing target from captured bytes/mode.
+  rejected. Preflight, delete, write and rollback reuse one workspace `os.Root`,
+  so a component replaced after validation cannot redirect writes outside the
+  root. A failed operation rolls back earlier writes and the possibly partially
+  written failing target from captured bytes/mode.
 - **Conversation**: truncate `Session.Messages` to just before turn `turn`'s user
   message only when the live prefix matches `TranscriptDigest`. Non-empty invalid
   or future-version checkpoint runtime fails before transcript mutation; valid
@@ -153,9 +161,10 @@ re-render uniformly.
 - **Known atomicity limits**: sidecars use `fileutil.AtomicWriteFile`, whose
   Windows cross-device/filter-driver fallback performs an in-place copy and can
   tear on process or power loss. Transcript/runtime/workspace are separate
-  resources and do not form one crash transaction. Restore path checks also have
-  a check-to-use window until handle-relative no-reparse/resolve-beneath writes
-  are implemented. ACLs, xattrs and hard-link identity are not restored.
+  resources and do not form one crash transaction. Previewable built-in writers
+  and restore use handle-relative resolve-beneath I/O, but `bash`, MCP and
+  external APIs remain opaque. ACLs, xattrs and hard-link identity are not
+  restored.
 
 ## Phasing
 
@@ -168,4 +177,4 @@ re-render uniformly.
 
 - Default retention window and whether to expose it in `[checkpoints]` config.
 - Content-addressed dedup vs one-file-per-snapshot.
-- Handle-relative no-reparse restore and a durable multi-resource rewind journal.
+- Durable multi-resource rewind journal across transcript/runtime/checkpoint/workspace.

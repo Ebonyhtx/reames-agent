@@ -25,6 +25,7 @@ func TestDeleteSubagentsByParentSweepsEventLogLeftovers(t *testing.T) {
 	files := []string{
 		sessionPath,
 		filepath.Join(subDir, ref+".meta.json"),
+		filepath.Join(subDir, ref+".effects.json"),
 		// Leftovers from builds where sub-agent saves bootstrapped event logs.
 		store.SessionEventLog(sessionPath),
 		store.SessionEventIndex(sessionPath),

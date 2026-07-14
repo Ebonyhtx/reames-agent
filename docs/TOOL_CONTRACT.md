@@ -30,6 +30,20 @@ This document records the provider-visible contract for Reames Agent compile-tim
 | `apply_patch` | false | Apply a unified diff patch to one or more files in the workspace. Returns a summary of files changed, hunks applied, and any failures. Supports dry-run mode for preview. |
 | `write_file` | false | Write content to a file at the given path (overwriting existing content). Creates parent directories as needed. |
 
+## Filesystem Mutation Boundary
+
+Previewable built-in writers bind every target to an open `os.Root` plus a
+root-relative path. Reads, stats, temporary writes, fsync/chmod, rename and
+remove stay resolve-beneath that handle; replacing a validated component with a
+symlink/reparse point cannot redirect the operation outside its authorized root.
+`move_file` previews both source deletion and destination creation.
+`apply_patch` validates the complete multi-file diff before writing, uses
+per-file atomic replacement, and rolls back earlier files if a later write
+fails. All previewed changes are checkpointed before execution.
+
+This boundary does not make `bash`, MCP tools or external APIs exactly-once, and
+does not preserve ACLs, xattrs or hard-link identity.
+
 ## Schema Snapshot
 
 The exact canonical schemas are intentionally tested in code rather than copied by hand here. Run:

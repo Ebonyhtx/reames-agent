@@ -50,6 +50,7 @@ func ConfineWriters(roots []string, guard SessionDataGuard) []tool.Tool {
 		editFile{roots: rs, guard: guard},
 		multiEdit{roots: rs, guard: guard},
 		moveFile{roots: rs, guard: guard},
+		applyPatch{roots: rs, guard: guard},
 		notebookEdit{roots: rs, guard: guard},
 		deleteRange{roots: rs, guard: guard},
 		deleteSymbol{roots: rs, guard: guard},
@@ -126,17 +127,6 @@ func confine(roots []string, target string) error {
 	return fmt.Errorf("path %q is outside the writable roots (writes are confined to %s); "+
 		"write inside the workspace or a configured allow_write root, or widen [sandbox] workspace_root / allow_write in reames-agent.toml",
 		target, strings.Join(roots, ", "))
-}
-
-// confineWrite is the write-tool boundary check: workspace confinement first,
-// then the session-data guard, so a write can be inside the roots (e.g. a
-// home-directory workspace covering the state root) and still be refused when
-// it targets Reames Agent's own session stores.
-func confineWrite(roots []string, guard SessionDataGuard, target string) error {
-	if err := confine(roots, target); err != nil {
-		return err
-	}
-	return guard.Check(target)
 }
 
 // realPath resolves path to an absolute, symlink-free form. Because a write

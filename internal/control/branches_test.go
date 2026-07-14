@@ -269,10 +269,14 @@ func TestSubmitBranchHonorsNumericTurnTarget(t *testing.T) {
 	prefix.Add(provider.Message{Role: provider.RoleUser, Content: "first prompt"})
 	prefix.Add(provider.Message{Role: provider.RoleAssistant, Content: "first answer"})
 	boundary, digest := prefix.TranscriptAnchor()
-	c.checkpoints.mu.Lock()
-	c.checkpoints.turn = 1 // displayed turn 2 starts before "second prompt"
-	c.checkpoints.mu.Unlock()
-	c.checkpoints.begin("second prompt", boundary, digest, nil)
+	empty := agent.NewSession("sys")
+	firstBoundary, firstDigest := empty.TranscriptAnchor()
+	if err := c.checkpoints.begin("first prompt", firstBoundary, firstDigest, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.checkpoints.begin("second prompt", boundary, digest, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	c.Submit("/branch 2 experiment")
 	if c.SessionPath() == rootPath {

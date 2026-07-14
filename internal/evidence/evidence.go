@@ -63,16 +63,28 @@ type VerificationReference struct {
 	ToolCallID string `json:"toolCallID"`
 }
 
+// SubagentEffectCursor is the durable acknowledgement for one top-level
+// subagent effect journal. JournalID prevents a deleted/replaced sidecar from
+// being mistaken for the previously observed stream; Sequence is the highest
+// event already folded into the parent runtime state.
+type SubagentEffectCursor struct {
+	Ref       string `json:"ref"`
+	JournalID string `json:"journalID"`
+	Sequence  uint64 `json:"sequence"`
+}
+
 // DurableState carries verification references across continuation turns. A
 // writer boundary sets WritePending and clears VerifiedChecks; every configured
 // project check must then acquire a new reference before final readiness passes.
 type DurableState struct {
-	WritePending   bool                    `json:"writePending,omitempty"`
-	VerifiedChecks []VerificationReference `json:"verifiedChecks,omitempty"`
+	WritePending    bool                    `json:"writePending,omitempty"`
+	VerifiedChecks  []VerificationReference `json:"verifiedChecks,omitempty"`
+	SubagentEffects []SubagentEffectCursor  `json:"subagentEffects,omitempty"`
 }
 
 func (s DurableState) Clone() DurableState {
 	s.VerifiedChecks = append([]VerificationReference(nil), s.VerifiedChecks...)
+	s.SubagentEffects = append([]SubagentEffectCursor(nil), s.SubagentEffects...)
 	return s
 }
 
@@ -88,6 +100,7 @@ type Ledger struct {
 	mu         sync.Mutex
 	receipts   []Receipt
 	generation uint64
+	observer   func(Receipt)
 }
 
 // Snapshot is a bounded, read-only projection for status surfaces. It is
@@ -99,6 +112,31 @@ type Snapshot struct {
 }
 
 func NewLedger() *Ledger { return &Ledger{} }
+
+// SetObserver installs a prompt-invisible host callback for accepted receipts.
+// The callback runs after the ledger lock is released, so it may safely inspect
+// or project ledger-backed state. Agent uses it to maintain durable readiness in
+// execution order instead of repeatedly replaying a whole turn.
+func (l *Ledger) SetObserver(observer func(Receipt)) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	l.observer = observer
+	l.mu.Unlock()
+}
+
+// HasObserver reports whether accepted receipts are projected eagerly. It is
+// primarily a compatibility seam for low-level Agent tests and embedders that
+// construct an Agent literal instead of using agent.New.
+func (l *Ledger) HasObserver() bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.observer != nil
+}
 
 // Reset clears receipts between user turns.
 func (l *Ledger) Reset() {
@@ -161,8 +199,12 @@ func (l *Ledger) Record(r Receipt) {
 	}
 	r = normalizeReceipt(r)
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.recordLocked(r)
+	observer := l.observer
+	l.mu.Unlock()
+	if observer != nil {
+		observer(r)
+	}
 }
 
 // Generation identifies the current turn-local receipt epoch. Reset advances
@@ -184,11 +226,16 @@ func (l *Ledger) RecordAtGeneration(r Receipt, generation uint64) bool {
 	}
 	r = normalizeReceipt(r)
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	if l.generation != generation {
+		l.mu.Unlock()
 		return false
 	}
 	l.recordLocked(r)
+	observer := l.observer
+	l.mu.Unlock()
+	if observer != nil {
+		observer(r)
+	}
 	return true
 }
 
@@ -938,7 +985,7 @@ func isReadReceipt(name string, readOnly bool) bool {
 
 func isWriterTool(name string) bool {
 	switch name {
-	case "write_file", "edit_file", "multi_edit", "move_file", "notebook_edit", "delete_range", "delete_symbol":
+	case "write_file", "edit_file", "multi_edit", "move_file", "apply_patch", "notebook_edit", "delete_range", "delete_symbol":
 		return true
 	default:
 		return false

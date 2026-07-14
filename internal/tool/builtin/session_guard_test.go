@@ -167,6 +167,8 @@ func TestWriteToolsRejectSessionData(t *testing.T) {
 			m = map[string]any{"path": target, "edits": []map[string]any{{"old_string": "{}", "new_string": "[]"}}}
 		case "move_file":
 			m = map[string]any{"source_path": target, "destination_path": target + ".bak"}
+		case "apply_patch":
+			m = map[string]any{"patch": "--- /dev/null\n+++ " + filepath.ToSlash(target+".new") + "\n@@ -0,0 +1 @@\n+tampered\n"}
 		case "notebook_edit":
 			m = map[string]any{"path": target, "cell_index": 0, "mode": "delete"}
 		case "delete_range":

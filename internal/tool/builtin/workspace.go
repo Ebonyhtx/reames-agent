@@ -56,6 +56,7 @@ func (w Workspace) Tools(enabled ...string) []tool.Tool {
 		"edit_file":     editFile{workDir: w.Dir, roots: roots, guard: w.SessionGuard},
 		"multi_edit":    multiEdit{workDir: w.Dir, roots: roots, guard: w.SessionGuard},
 		"move_file":     moveFile{workDir: w.Dir, roots: roots, guard: w.SessionGuard},
+		"apply_patch":   applyPatch{workDir: w.Dir, roots: roots, guard: w.SessionGuard},
 		"notebook_edit": notebookEdit{workDir: w.Dir, roots: roots, guard: w.SessionGuard},
 		"delete_range":  deleteRange{workDir: w.Dir, roots: roots, guard: w.SessionGuard},
 		"delete_symbol": deleteSymbol{workDir: w.Dir, roots: roots, guard: w.SessionGuard},

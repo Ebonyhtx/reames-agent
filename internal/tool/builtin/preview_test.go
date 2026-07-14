@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"reames-agent/internal/diff"
@@ -14,10 +15,35 @@ import (
 // optional Previewer capability the front-end type-asserts on. A new writer
 // that forgets Preview fails here.
 func TestWritersImplementPreviewer(t *testing.T) {
-	for _, tl := range []tool.Tool{writeFile{}, editFile{}, multiEdit{}} {
+	for _, tl := range []tool.Tool{writeFile{}, editFile{}, multiEdit{}, notebookEdit{}, deleteRange{}, deleteSymbol{}} {
 		if _, ok := tl.(tool.Previewer); !ok {
 			t.Errorf("%s does not implement tool.Previewer", tl.Name())
 		}
+	}
+	for _, tl := range []tool.Tool{moveFile{}, applyPatch{}} {
+		if _, ok := tl.(tool.MultiPreviewer); !ok {
+			t.Errorf("%s does not implement tool.MultiPreviewer", tl.Name())
+		}
+	}
+}
+
+func TestMovePreviewAggregatesSourceAndDestinationDiffs(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "source.txt"), []byte("move me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mv := moveFile{workDir: dir, roots: realRoots([]string{dir})}
+	args := argsJSON(t, map[string]any{"source_path": "source.txt", "destination_path": "destination.txt"})
+	changes, ok, err := tool.PreviewFileChanges(mv, args)
+	if err != nil || !ok || len(changes) != 2 {
+		t.Fatalf("changes = %v, ok = %v, err = %v", changes, ok, err)
+	}
+	if changes[0].Kind != diff.Delete || changes[1].Kind != diff.Create {
+		t.Fatalf("move kinds = %s, %s", changes[0].Kind, changes[1].Kind)
+	}
+	aggregated, ok := tool.PreviewChange(mv, args)
+	if !ok || aggregated.Added != 1 || aggregated.Removed != 1 || !strings.Contains(aggregated.Diff, "source.txt") || !strings.Contains(aggregated.Diff, "destination.txt") {
+		t.Fatalf("aggregate = %+v, ok = %v", aggregated, ok)
 	}
 }
 

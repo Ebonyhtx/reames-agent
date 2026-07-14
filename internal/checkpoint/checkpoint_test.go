@@ -115,8 +115,8 @@ func TestSnapshotForTurnRejectsLateBackgroundEffect(t *testing.T) {
 	if len(metas[0].Paths) != 0 {
 		t.Fatalf("late effect mutated finalized turn: %+v", metas[0])
 	}
-	if len(metas[1].Paths) != 1 || metas[1].Paths[0] != current {
-		t.Fatalf("current checkpoint paths = %+v, want only %q", metas[1].Paths, current)
+	if len(metas[1].Paths) != 1 || metas[1].Paths[0] != "current.txt" {
+		t.Fatalf("current checkpoint paths = %+v, want root-relative current.txt", metas[1].Paths)
 	}
 }
 
@@ -331,6 +331,39 @@ func TestPersistenceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPersistenceKeepsSnapshotRecordsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose POSIX permission bits")
+	}
+	root := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "sess.ckpt")
+	s := New(dir, root)
+	if err := s.Begin(0, "private", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Snapshot(diff.Change{Path: filepath.Join(root, "secret.txt"), Kind: diff.Modify, OldText: "sensitive"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{
+		dir,
+		filepath.Join(dir, "turn-0.json"),
+		filepath.Join(dir, checkpointStateFilename),
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := os.FileMode(0o600)
+		if info.IsDir() {
+			want = 0o700
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Fatalf("mode %s = %o, want %o", path, got, want)
+		}
+	}
+}
+
 func TestListExposesCurrentTurnFiles(t *testing.T) {
 	root := t.TempDir()
 	a := filepath.Join(root, "a.txt")
@@ -343,8 +376,8 @@ func TestListExposesCurrentTurnFiles(t *testing.T) {
 	if len(metas) != 1 {
 		t.Fatalf("metas = %d, want 1", len(metas))
 	}
-	if len(metas[0].Paths) != 1 || metas[0].Paths[0] != a {
-		t.Fatalf("current turn paths = %#v, want [%q]", metas[0].Paths, a)
+	if len(metas[0].Paths) != 1 || metas[0].Paths[0] != "a.txt" {
+		t.Fatalf("current turn paths = %#v, want root-relative a.txt", metas[0].Paths)
 	}
 }
 
@@ -391,17 +424,17 @@ func TestTruncateTombstoneFiltersUndeletedRecordsAfterRestart(t *testing.T) {
 	s.Begin(0, "first", 0)
 	s.Begin(1, "second", 2)
 	retiredPath := filepath.Join(dir, "turn-1.json")
-	retiredBytes, err := os.ReadFile(retiredPath)
-	if err != nil {
-		t.Fatal(err)
+	s.recordRemove = func(path string) error {
+		if filepath.Base(path) == "turn-1.json" {
+			return errors.New("injected physical delete failure")
+		}
+		return os.Remove(path)
 	}
 	if err := s.TruncateFrom(1); err != nil {
 		t.Fatal(err)
 	}
-	// Model a failed physical delete or a stale directory view after the durable
-	// truncate state landed. Reload must not resurrect the retired checkpoint.
-	if err := os.WriteFile(retiredPath, retiredBytes, 0o644); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(retiredPath); err != nil {
+		t.Fatalf("injected failure should leave the retired record on disk: %v", err)
 	}
 
 	reloaded := New(dir, root)
@@ -481,10 +514,11 @@ func TestLoadRejectsInvalidCheckpointRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	records := map[string]Checkpoint{
-		"turn-0.json": {Turn: -1, MsgIndex: 0},
-		"turn-1.json": {Turn: 0, MsgIndex: 0},
-		"turn-2.json": {Turn: 2, MsgIndex: -1},
-		"turn-3.json": {Turn: 3, MsgIndex: 1, Prompt: "valid"},
+		"turn-0.json":  {Turn: -1, MsgIndex: 0},
+		"turn-1.json":  {Turn: 0, MsgIndex: 0},
+		"turn-2.json":  {Turn: 2, MsgIndex: -1},
+		"turn-03.json": {Turn: 3, MsgIndex: 1, Prompt: "non-canonical duplicate"},
+		"turn-3.json":  {Turn: 3, MsgIndex: 1, Prompt: "valid"},
 	}
 	for name, record := range records {
 		data, err := json.Marshal(record)
@@ -611,8 +645,24 @@ func TestSnapshotPersistenceFailureRollsBackAndCanRetry(t *testing.T) {
 	if err := s.Snapshot(change); err != nil {
 		t.Fatalf("Snapshot retry: %v", err)
 	}
-	if got := New(dir, root).List(); len(got) != 1 || len(got[0].Paths) != 1 || got[0].Paths[0] != path {
+	if got := New(dir, root).List(); len(got) != 1 || len(got[0].Paths) != 1 || got[0].Paths[0] != "retry.txt" {
 		t.Fatalf("retried snapshot was not durable: %+v", got)
+	}
+}
+
+func TestBeginAndRestoreRejectInvalidTurnBoundaries(t *testing.T) {
+	s := New("", t.TempDir())
+	if err := s.Begin(1, "skipped", 0); err == nil {
+		t.Fatal("Begin accepted a turn beyond the allocation watermark")
+	}
+	if err := s.Begin(0, "valid", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Begin(0, "duplicate", 0); err == nil {
+		t.Fatal("Begin accepted a duplicate allocated turn")
+	}
+	if _, _, err := s.RestoreCode(-1); err == nil {
+		t.Fatal("RestoreCode accepted a negative turn")
 	}
 }
 
@@ -656,11 +706,96 @@ func TestRestoreRejectsSymlinkEscape(t *testing.T) {
 	s.Snapshot(diff.Change{Path: target, Kind: diff.Modify, OldText: "original"})
 	write(t, outsideTarget, "edited")
 
-	if _, _, err := s.RestoreCode(0); err == nil || !strings.Contains(err.Error(), "symlink") {
+	if _, _, err := s.RestoreCode(0); err == nil || (!strings.Contains(err.Error(), "symlink") && !strings.Contains(err.Error(), "escapes from parent")) {
 		t.Fatalf("RestoreCode symlink error = %v", err)
 	}
 	if got := read(t, outsideTarget); got != "edited" {
 		t.Fatalf("outside target changed through symlink: %q", got)
+	}
+}
+
+func TestRestoreRootHandleBlocksComponentSwapAfterPreflight(t *testing.T) {
+	root := t.TempDir()
+	inside := filepath.Join(root, "inside")
+	outside := t.TempDir()
+	if err := os.Mkdir(inside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(inside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	insideTarget := filepath.Join(inside, "file.txt")
+	outsideTarget := filepath.Join(outside, "file.txt")
+	write(t, insideTarget, "before")
+	write(t, outsideTarget, "outside")
+	s := New("", root)
+	if err := s.Begin(0, "edit", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Snapshot(diff.Change{Path: filepath.Join(link, "file.txt"), Kind: diff.Modify, OldText: "before"}); err != nil {
+		t.Fatal(err)
+	}
+	write(t, insideTarget, "edited")
+	s.restoreBeforeApply = func() {
+		if err := os.Remove(link); err != nil {
+			t.Fatalf("remove link: %v", err)
+		}
+		if err := os.Symlink(outside, link); err != nil {
+			t.Fatalf("replace link: %v", err)
+		}
+	}
+	if _, _, err := s.RestoreCode(0); err == nil {
+		t.Fatal("RestoreCode succeeded after path component escaped the root")
+	}
+	if got := read(t, outsideTarget); got != "outside" {
+		t.Fatalf("outside target changed through swapped symlink: %q", got)
+	}
+}
+
+func TestRestoreRejectsComponentSwapToAnotherDirectoryInsideRoot(t *testing.T) {
+	root := t.TempDir()
+	left := filepath.Join(root, "left")
+	right := filepath.Join(root, "right")
+	if err := os.Mkdir(left, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(right, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(left, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	leftTarget := filepath.Join(left, "file.txt")
+	rightTarget := filepath.Join(right, "file.txt")
+	write(t, leftTarget, "before")
+	write(t, rightTarget, "right")
+	s := New("", root)
+	if err := s.Begin(0, "edit", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Snapshot(diff.Change{Path: filepath.Join(link, "file.txt"), Kind: diff.Modify, OldText: "before"}); err != nil {
+		t.Fatal(err)
+	}
+	write(t, leftTarget, "edited")
+	s.restoreBeforeApply = func() {
+		if err := os.Remove(link); err != nil {
+			t.Fatalf("remove link: %v", err)
+		}
+		if err := os.Symlink(right, link); err != nil {
+			t.Fatalf("replace link: %v", err)
+		}
+	}
+
+	if _, _, err := s.RestoreCode(0); err == nil || !strings.Contains(err.Error(), "parent") {
+		t.Fatalf("RestoreCode component swap error = %v", err)
+	}
+	if got := read(t, leftTarget); got != "edited" {
+		t.Fatalf("original target changed before fail-closed return: %q", got)
+	}
+	if got := read(t, rightTarget); got != "right" {
+		t.Fatalf("replacement target was overwritten: %q", got)
 	}
 }
 

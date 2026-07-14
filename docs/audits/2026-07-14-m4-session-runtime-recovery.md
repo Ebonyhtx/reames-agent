@@ -66,9 +66,9 @@ git diff --check
 
 ## 未关闭边界
 
-- writable 子代理的进程内 effects 归并已在 `2026-07-14-m4-writable-subagent-effects.md` 关闭；跨 turn/crash 的 durable effect journal 仍未实现。
-- 跨 continuation 的成功读取/验证循环与 durable evidence 最小引用已由 `2026-07-14-m4-durable-evidence.md` 后续批次关闭；完整 child effect journal 仍未实现。
-- runtime/checkpoint 持久化失败向 writer 的 fail-closed 传播和断电窗口。
-- RestoreCode 的 handle-relative no-reparse/resolve-beneath 写入、`RewindBoth` 跨 transcript/runtime/workspace durable journal，以及 ACL/xattr/硬链接身份恢复。
-- 后台 Task crash-resume 与 compaction 后恢复。
+- 本文成文时尚未关闭的 writer persistence、handle-relative `RestoreCode`、后台 Task/compaction/memory 恢复和 durable child effect journal，已分别由后续审计批次关闭；对应当前证据见 `2026-07-14-m4-writer-persistence-gate.md`、`2026-07-14-m4-task-compaction-memory-recovery.md` 与 `2026-07-14-m4-rooted-writers-child-effects.md`。
+- Journal、subagent transcript/meta、parent runtime、checkpoint 与 workspace 仍是多个原子文件；`RewindBoth` 没有覆盖这些资源的单一 durable crash transaction。
+- `AtomicWriteFile` 的 Windows cross-device/filter-driver fallback 仍可能原地复制，不能无条件声明断电安全。
+- arbitrary shell、MCP 和外部 API 没有逐文件 checkpoint 或 exactly-once 语义；崩溃续跑必须重新核验真实外部状态。
+- Checkpoint 恢复 bytes/mode，不恢复 ACL、xattr 或硬链接身份。
 - 干净云节点、真实 IM、公开签名 release 仍分别需要外部环境，保持 `external-blocked`，不影响继续推进本地 M4。

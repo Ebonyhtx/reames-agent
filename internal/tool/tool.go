@@ -42,22 +42,62 @@ type Previewer interface {
 	Preview(args json.RawMessage) (diff.Change, error)
 }
 
+// MultiPreviewer is the multi-file form of Previewer. It is used by writers
+// such as move_file and apply_patch whose one tool call can mutate more than one
+// path. The returned order is execution order and every change is checkpointed
+// before the tool is allowed to run.
+type MultiPreviewer interface {
+	PreviewChanges(args json.RawMessage) ([]diff.Change, error)
+}
+
+// PreviewFileChanges returns every statically previewable file change for a
+// writer. MultiPreviewer takes precedence when a tool implements both forms.
+func PreviewFileChanges(t Tool, args json.RawMessage) ([]diff.Change, bool, error) {
+	if t == nil || t.ReadOnly() {
+		return nil, false, nil
+	}
+	if pv, ok := t.(MultiPreviewer); ok {
+		changes, err := pv.PreviewChanges(args)
+		return changes, true, err
+	}
+	if pv, ok := t.(Previewer); ok {
+		change, err := pv.Preview(args)
+		if err != nil {
+			return nil, true, err
+		}
+		return []diff.Change{change}, true, nil
+	}
+	return nil, false, nil
+}
+
 // PreviewChange returns the change a writer tool would make for args, or ok=false
 // when there's nothing renderable: t is read-only, doesn't implement Previewer,
 // the preview errored (the edit will likely fail too), or the file is binary.
 func PreviewChange(t Tool, args json.RawMessage) (diff.Change, bool) {
-	if t == nil || t.ReadOnly() {
+	changes, ok, err := PreviewFileChanges(t, args)
+	if !ok || err != nil || len(changes) == 0 {
 		return diff.Change{}, false
 	}
-	pv, ok := t.(Previewer)
-	if !ok {
+	if len(changes) == 1 {
+		if changes[0].Binary {
+			return diff.Change{}, false
+		}
+		return changes[0], true
+	}
+	var combined diff.Change
+	var rendered []string
+	for _, change := range changes {
+		combined.Added += change.Added
+		combined.Removed += change.Removed
+		if !change.Binary && change.Diff != "" {
+			rendered = append(rendered, change.Diff)
+		}
+	}
+	if len(rendered) == 0 {
 		return diff.Change{}, false
 	}
-	ch, err := pv.Preview(args)
-	if err != nil || ch.Binary {
-		return diff.Change{}, false
-	}
-	return ch, true
+	combined.Diff = strings.Join(rendered, "\n")
+	return combined, true
 }
 
 // PlanModeClassifier is an optional capability a Tool may implement to declare

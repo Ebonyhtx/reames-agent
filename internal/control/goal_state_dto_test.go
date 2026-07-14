@@ -35,6 +35,7 @@ func TestGoalStateV2RoundTrip(t *testing.T) {
 			VerifiedChecks: []evidence.VerificationReference{{
 				CheckHash: checkHash, ToolCallID: "bash-1",
 			}},
+			SubagentEffects: []evidence.SubagentEffectCursor{{Ref: "sa_one", JournalID: "sej_one", Sequence: 7}},
 		},
 	}
 
@@ -66,7 +67,7 @@ func TestGoalStateV2RoundTrip(t *testing.T) {
 	if restored.MessageCount != 4 || restored.TranscriptDigest != "abc123" {
 		t.Fatalf("transcript anchor = count %d digest %q", restored.MessageCount, restored.TranscriptDigest)
 	}
-	if restored.DurableEvidence == nil || !restored.DurableEvidence.WritePending || len(restored.DurableEvidence.VerifiedChecks) != 1 {
+	if restored.DurableEvidence == nil || !restored.DurableEvidence.WritePending || len(restored.DurableEvidence.VerifiedChecks) != 1 || len(restored.DurableEvidence.SubagentEffects) != 1 {
 		t.Fatalf("DurableEvidence = %+v", restored.DurableEvidence)
 	}
 	if strings.Contains(string(data), "go test ./...") {
@@ -75,18 +76,30 @@ func TestGoalStateV2RoundTrip(t *testing.T) {
 }
 
 func TestGoalStateDurableEvidenceRoundTripDeepCopies(t *testing.T) {
-	state := &evidence.DurableState{WritePending: true, VerifiedChecks: []evidence.VerificationReference{{CheckHash: "hash", ToolCallID: "call"}}}
+	state := &evidence.DurableState{
+		WritePending:    true,
+		VerifiedChecks:  []evidence.VerificationReference{{CheckHash: "hash", ToolCallID: "call"}},
+		SubagentEffects: []evidence.SubagentEffectCursor{{Ref: "sa_one", JournalID: "sej_one", Sequence: 1}},
+	}
 	v2 := GoalStateV2{DurableEvidence: state}
 	internal := v2.ToGoalState()
 	state.VerifiedChecks[0].ToolCallID = "mutated-source"
+	state.SubagentEffects[0].Sequence = 99
 	if got := internal.DurableEvidence.VerifiedChecks[0].ToolCallID; got != "call" {
 		t.Fatalf("ToGoalState retained source alias: %q", got)
+	}
+	if got := internal.DurableEvidence.SubagentEffects[0].Sequence; got != 1 {
+		t.Fatalf("ToGoalState retained cursor source alias: %d", got)
 	}
 
 	back := FromGoalState(internal)
 	internal.DurableEvidence.VerifiedChecks[0].ToolCallID = "mutated-internal"
+	internal.DurableEvidence.SubagentEffects[0].Sequence = 100
 	if got := back.DurableEvidence.VerifiedChecks[0].ToolCallID; got != "call" {
 		t.Fatalf("FromGoalState retained internal alias: %q", got)
+	}
+	if got := back.DurableEvidence.SubagentEffects[0].Sequence; got != 1 {
+		t.Fatalf("FromGoalState retained cursor internal alias: %d", got)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"reames-agent/internal/diff"
@@ -81,10 +80,13 @@ func (n notebookEdit) Execute(ctx context.Context, raw json.RawMessage) (string,
 		return "", err
 	}
 	a.Path = resolveIn(n.workDir, a.Path)
-	if err := confineWrite(n.roots, n.guard, a.Path); err != nil {
+	target, err := openRootedWriteTarget(n.roots, n.guard, a.Path)
+	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(a.Path)
+	defer target.Close()
+	a.Path = target.path
+	data, err := target.ReadFile()
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", a.Path, err)
 	}
@@ -102,7 +104,7 @@ func (n notebookEdit) Execute(ctx context.Context, raw json.RawMessage) (string,
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(a.Path, out, 0o644); err != nil {
+	if err := target.writeBytes(out, 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", a.Path, err)
 	}
 	return fmt.Sprintf("%s in %s (cell %d; %d cells total)", summary, a.Path, idx, len(nb.cells)), nil
@@ -118,7 +120,13 @@ func (n notebookEdit) Preview(raw json.RawMessage) (diff.Change, error) {
 		return diff.Change{}, err
 	}
 	a.Path = resolveIn(n.workDir, a.Path)
-	data, err := os.ReadFile(a.Path)
+	target, err := openRootedWriteTarget(n.roots, n.guard, a.Path)
+	if err != nil {
+		return diff.Change{}, err
+	}
+	defer target.Close()
+	a.Path = target.path
+	data, err := target.ReadFile()
 	if err != nil {
 		return diff.Change{}, fmt.Errorf("read %s: %w", a.Path, err)
 	}

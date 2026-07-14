@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,6 +43,11 @@ const maxStreamRecoveries = 3
 const maxExecutorHandoffNudges = 1
 const memoryCompilerInjectionMax = 5
 const memoryCompilerInjectionCooldown = 30 * time.Second
+
+// MaxDurableSubagentEffectCursors bounds prompt-invisible runtime bookkeeping.
+// Crossing it fails child writers closed instead of growing a session sidecar
+// without limit.
+const MaxDurableSubagentEffectCursors = 256
 
 // Asker puts structured multiple-choice questions to the user and blocks for the
 // answers. The agent consults it for the `ask` tool. It is interface-shaped so
@@ -1066,6 +1073,9 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 	}
 	a.SetResponseLanguage(opts.ResponseLanguage)
 	a.SetReasoningLanguage(opts.ReasoningLanguage)
+	a.evidence.SetObserver(func(receipt evidence.Receipt) {
+		a.consumeDurableReceipts([]evidence.Receipt{receipt})
+	})
 	return a
 }
 
@@ -1112,7 +1122,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	a.steerConsumed = false
 	a.steerMu.Unlock()
 	if a.evidence != nil {
-		a.consumeDurableReceipts(a.evidence.Rotate())
+		a.evidence.Rotate()
 	}
 	a.repeatSuccessCounts = nil
 	a.blockedTurnStreak = 0
@@ -1459,13 +1469,15 @@ func (a *Agent) EvidenceSnapshot() evidence.Snapshot {
 }
 
 // DurableEvidenceState returns a bounded copy of the latest writer epoch's
-// project-check references. It first folds any receipts that arrived since the
-// last projection, including writable subagent effects merged into this turn.
+// project-check references and acknowledged child-effect journal positions.
+// Ledger observers fold receipts in execution order as they are accepted.
 func (a *Agent) DurableEvidenceState() evidence.DurableState {
 	if a == nil {
 		return evidence.DurableState{}
 	}
-	a.reconcileDurableEvidence()
+	if a.evidence != nil && !a.evidence.HasObserver() {
+		a.consumeDurableReceipts(a.evidence.AllReceipts())
+	}
 	a.durableEvidenceMu.Lock()
 	defer a.durableEvidenceMu.Unlock()
 	return a.durableEvidence.Clone()
@@ -1491,15 +1503,28 @@ func (a *Agent) ResetDurableEvidenceEpoch() {
 	if a.evidence != nil {
 		a.evidence.Reset()
 	}
-	a.ClearDurableEvidence()
+	a.durableEvidenceMu.Lock()
+	cursors := append([]evidence.SubagentEffectCursor(nil), a.durableEvidence.SubagentEffects...)
+	a.durableEvidence = evidence.DurableState{SubagentEffects: cursors}
+	a.durableEvidenceMu.Unlock()
 }
 
 // RestoreDurableEvidence accepts only references that resolve to successful
 // root bash calls in the currently loaded transcript. The Controller separately
 // requires an exact runtime transcript anchor before invoking this method.
 func (a *Agent) RestoreDurableEvidence(state evidence.DurableState) {
-	if a == nil || !state.WritePending || len(a.projectChecks) == 0 {
-		a.ClearDurableEvidence()
+	if a == nil {
+		return
+	}
+	cursors, cursorErr := normalizeSubagentEffectCursors(state.SubagentEffects)
+	if cursorErr != nil {
+		cursors = nil
+		state.VerifiedChecks = nil
+	}
+	if !state.WritePending || len(a.projectChecks) == 0 {
+		a.durableEvidenceMu.Lock()
+		a.durableEvidence = evidence.DurableState{SubagentEffects: cursors}
+		a.durableEvidenceMu.Unlock()
 		return
 	}
 	checks := make(map[string]string, len(a.projectChecks))
@@ -1552,17 +1577,11 @@ func (a *Agent) RestoreDurableEvidence(state evidence.DurableState) {
 	}
 	a.durableEvidenceMu.Lock()
 	a.durableEvidence = evidence.DurableState{
-		WritePending:   true,
-		VerifiedChecks: a.orderedVerificationReferences(valid),
+		WritePending:    true,
+		VerifiedChecks:  a.orderedVerificationReferences(valid),
+		SubagentEffects: cursors,
 	}
 	a.durableEvidenceMu.Unlock()
-}
-
-func (a *Agent) reconcileDurableEvidence() {
-	if a == nil || a.evidence == nil {
-		return
-	}
-	a.consumeDurableReceipts(a.evidence.AllReceipts())
 }
 
 func (a *Agent) consumeDurableReceipts(receipts []evidence.Receipt) {
@@ -1610,6 +1629,111 @@ func (a *Agent) consumeDurableReceipts(receipts []evidence.Receipt) {
 		}
 	}
 	a.durableEvidence.VerifiedChecks = a.orderedVerificationReferences(refs)
+}
+
+// ApplyRecoveredSubagentEffects folds journal events that survived a process
+// restart. Cursors make replay idempotent: an already acknowledged mutation
+// cannot invalidate root checks that were recorded after it.
+func (a *Agent) ApplyRecoveredSubagentEffects(events []RecoveredSubagentEffect) error {
+	for _, event := range events {
+		if err := a.observeDurableSubagentEffect(event.Cursor, event.Receipt); err != nil {
+			a.InvalidateDurableSubagentEffects()
+			return err
+		}
+	}
+	return nil
+}
+
+// InvalidateDurableSubagentEffects is the fail-closed recovery outcome for a
+// corrupt, replaced or unanchored journal. It does not invent a receipt; it only
+// requires the root project checks to run again.
+func (a *Agent) InvalidateDurableSubagentEffects() {
+	if a == nil {
+		return
+	}
+	a.durableEvidenceMu.Lock()
+	defer a.durableEvidenceMu.Unlock()
+	a.durableEvidence.WritePending = len(a.projectChecks) > 0
+	a.durableEvidence.VerifiedChecks = nil
+}
+
+func (a *Agent) observeDurableSubagentEffect(cursor evidence.SubagentEffectCursor, receipt evidence.Receipt) error {
+	if a == nil {
+		return nil
+	}
+	cursor.Ref = strings.TrimSpace(cursor.Ref)
+	cursor.JournalID = strings.TrimSpace(cursor.JournalID)
+	a.durableEvidenceMu.Lock()
+	defer a.durableEvidenceMu.Unlock()
+
+	if cursor.Ref != "" || cursor.JournalID != "" || cursor.Sequence != 0 {
+		if cursor.Ref == "" || cursor.JournalID == "" || cursor.Sequence == 0 {
+			return fmt.Errorf("invalid subagent effect cursor")
+		}
+		found := -1
+		for i, current := range a.durableEvidence.SubagentEffects {
+			if current.Ref != cursor.Ref {
+				continue
+			}
+			if current.JournalID != cursor.JournalID {
+				return fmt.Errorf("subagent effect journal %q was replaced", cursor.Ref)
+			}
+			if cursor.Sequence <= current.Sequence {
+				return nil
+			}
+			found = i
+			break
+		}
+		if found >= 0 {
+			a.durableEvidence.SubagentEffects[found] = cursor
+		} else {
+			if len(a.durableEvidence.SubagentEffects) >= MaxDurableSubagentEffectCursors {
+				return fmt.Errorf("subagent effect cursor limit reached (%d)", MaxDurableSubagentEffectCursors)
+			}
+			a.durableEvidence.SubagentEffects = append(a.durableEvidence.SubagentEffects, cursor)
+			sort.Slice(a.durableEvidence.SubagentEffects, func(i, j int) bool {
+				return a.durableEvidence.SubagentEffects[i].Ref < a.durableEvidence.SubagentEffects[j].Ref
+			})
+		}
+	}
+
+	if receipt.Write && (receipt.Success || receipt.MutationAttempt) {
+		a.durableEvidence.WritePending = len(a.projectChecks) > 0
+		a.durableEvidence.VerifiedChecks = nil
+	}
+	return nil
+}
+
+func normalizeSubagentEffectCursors(cursors []evidence.SubagentEffectCursor) ([]evidence.SubagentEffectCursor, error) {
+	if len(cursors) == 0 {
+		return nil, nil
+	}
+	if len(cursors) > MaxDurableSubagentEffectCursors {
+		return nil, fmt.Errorf("subagent effect cursor limit exceeded: %d", len(cursors))
+	}
+	byRef := make(map[string]evidence.SubagentEffectCursor, len(cursors))
+	for _, cursor := range cursors {
+		cursor.Ref = strings.TrimSpace(cursor.Ref)
+		cursor.JournalID = strings.TrimSpace(cursor.JournalID)
+		if cursor.Ref == "" || cursor.JournalID == "" || cursor.Sequence == 0 {
+			return nil, fmt.Errorf("invalid subagent effect cursor")
+		}
+		if current, ok := byRef[cursor.Ref]; ok {
+			if current.JournalID != cursor.JournalID {
+				return nil, fmt.Errorf("conflicting subagent effect journal identity for %q", cursor.Ref)
+			}
+			if current.Sequence >= cursor.Sequence {
+				continue
+			}
+		}
+		byRef[cursor.Ref] = cursor
+	}
+	out := make([]evidence.SubagentEffectCursor, 0, len(byRef))
+	for _, cursor := range byRef {
+		out = append(out, cursor)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Ref < out[j].Ref })
+	return out, nil
 }
 
 func (a *Agent) orderedVerificationReferences(refs map[string]evidence.VerificationReference) []evidence.VerificationReference {
@@ -2782,9 +2906,9 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	// the writer: executing without a trustworthy pre-edit state would make a
 	// process interruption indistinguishable from an untracked mutation.
 	mutationAttempt := false
+	var previewedChanges []diff.Change
 	if !t.ReadOnly() {
-		if pv, ok := t.(tool.Previewer); ok {
-			change, perr := pv.Preview(json.RawMessage(call.Arguments))
+		if changes, ok, perr := tool.PreviewFileChanges(t, json.RawMessage(call.Arguments)); ok {
 			if perr != nil {
 				return toolOutcome{
 					output:  fmt.Sprintf("blocked: writer preview failed: %v", perr),
@@ -2792,25 +2916,41 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 					errMsg:  "blocked: writer preview failed",
 				}
 			}
-			if a.onPreEdit != nil {
-				if err := a.onPreEdit(change); err != nil {
-					return toolOutcome{
-						output:  fmt.Sprintf("blocked: writer recovery state could not be persisted: %v", err),
-						blocked: true,
-						errMsg:  "blocked: writer recovery persistence failed",
+			for _, change := range changes {
+				if a.onPreEdit != nil {
+					if err := a.onPreEdit(change); err != nil {
+						return toolOutcome{
+							output:  fmt.Sprintf("blocked: writer recovery state could not be persisted: %v", err),
+							blocked: true,
+							errMsg:  "blocked: writer recovery persistence failed",
+						}
+					}
+				}
+				if a.subagentEffects != nil {
+					if err := a.subagentEffects.snapshot(change); err != nil {
+						return toolOutcome{
+							output:  fmt.Sprintf("blocked: writer recovery state could not be persisted: %v", err),
+							blocked: true,
+							errMsg:  "blocked: writer recovery persistence failed",
+						}
 					}
 				}
 			}
-			if a.subagentEffects != nil {
-				if err := a.subagentEffects.snapshot(change); err != nil {
-					return toolOutcome{
-						output:  fmt.Sprintf("blocked: writer recovery state could not be persisted: %v", err),
-						blocked: true,
-						errMsg:  "blocked: writer recovery persistence failed",
-					}
-				}
+			previewedChanges = changes
+			mutationAttempt = len(changes) > 0
+		}
+	}
+	if mutationAttempt && a.subagentEffects != nil {
+		intent := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), false, t.ReadOnly())
+		intent.ToolCallID = call.ID
+		intent.MutationAttempt = true
+		intent.Paths = receiptPathsWithPreview(intent.Paths, previewedChanges)
+		if err := a.subagentEffects.prepare(intent, a.subagentDepth); err != nil {
+			return toolOutcome{
+				output:  fmt.Sprintf("blocked: subagent effect recovery state could not be persisted: %v", err),
+				blocked: true,
+				errMsg:  "blocked: subagent effect persistence failed",
 			}
-			mutationAttempt = true
 		}
 	}
 	cctx := withCallContext(ctx, call.ID, a.sink, a.asker, a.planMode.Load())
@@ -2850,30 +2990,37 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 		a.sink.Emit(event.Event{Kind: event.ToolProgress, Tool: event.Tool{ID: callID, Output: chunk}})
 	})
 	result, err := t.Execute(cctx, json.RawMessage(call.Arguments))
+	toolErr := err
+	var effectErr error
 	if a.evidence != nil {
 		if call.Name == "complete_step" {
-			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), err == nil, t.ReadOnly())
+			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), toolErr == nil, t.ReadOnly())
 			rec.ToolCallID = call.ID
 			rec.MutationAttempt = mutationAttempt
+			rec.Paths = receiptPathsWithPreview(rec.Paths, previewedChanges)
 			a.evidence.Record(rec)
 			if a.subagentEffects != nil {
-				a.subagentEffects.record(rec, a.subagentDepth)
+				effectErr = a.subagentEffects.record(rec, a.subagentDepth)
 			}
-			if err == nil {
+			if toolErr == nil {
 				a.advanceCanonicalTodo(rec.Step)
 			}
 		} else {
-			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), err == nil, t.ReadOnly())
+			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), toolErr == nil, t.ReadOnly())
 			rec.ToolCallID = call.ID
 			rec.MutationAttempt = mutationAttempt
+			rec.Paths = receiptPathsWithPreview(rec.Paths, previewedChanges)
 			a.evidence.Record(rec)
 			if a.subagentEffects != nil {
-				a.subagentEffects.record(rec, a.subagentDepth)
+				effectErr = a.subagentEffects.record(rec, a.subagentDepth)
 			}
-			if err == nil && call.Name == "todo_write" {
+			if toolErr == nil && call.Name == "todo_write" {
 				a.setTodoState(rec.Todos)
 			}
 		}
+	}
+	if effectErr != nil {
+		err = errors.Join(toolErr, fmt.Errorf("persist subagent effect receipt: %w", effectErr))
 	}
 	// PostToolUse hooks observe the result (they can't block); fired whether the
 	// call succeeded or errored, since the tool did run.
@@ -2901,6 +3048,26 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	}
 	body, truncMsg := truncateToolOutput(result)
 	return toolOutcome{output: body, truncated: truncMsg != "", truncMsg: truncMsg}
+}
+
+func receiptPathsWithPreview(paths []string, changes []diff.Change) []string {
+	out := append([]string(nil), paths...)
+	for _, change := range changes {
+		if change.Path == "" {
+			continue
+		}
+		seen := false
+		for _, path := range out {
+			if path == change.Path {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			out = append(out, change.Path)
+		}
+	}
+	return out
 }
 
 func (a *Agent) checkPlanModeMCPReadOnlyTrust(ctx context.Context, call provider.ToolCall, t tool.Tool) (bool, toolOutcome, bool) {
@@ -3060,7 +3227,7 @@ func repeatSuccessSignature(call provider.ToolCall, t tool.Tool) (string, bool) 
 		return "", false
 	}
 	switch call.Name {
-	case "write_file", "edit_file", "multi_edit", "move_file", "notebook_edit":
+	case "write_file", "edit_file", "multi_edit", "move_file", "apply_patch", "notebook_edit", "delete_range", "delete_symbol":
 		return call.Name + "\x00" + canonicalToolArgs(call.Arguments), true
 	case "bash":
 		var p struct {

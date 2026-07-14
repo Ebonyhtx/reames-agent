@@ -9,6 +9,7 @@ import (
 	"sync"
 	"unicode"
 
+	"reames-agent/internal/event"
 	"reames-agent/internal/evidence"
 	"reames-agent/internal/fileutil"
 	"reames-agent/internal/store"
@@ -706,6 +707,7 @@ func (c *Controller) goalTodos() []evidence.TodoItem {
 func (c *Controller) goalRuntimeProjection() goalRuntimeProjection {
 	projection := goalRuntimeProjection{planMode: c.PlanMode(), todos: c.goalTodos()}
 	if c.executor != nil {
+		c.reconcileSubagentEffects()
 		projection.durableEvidence = c.executor.DurableEvidenceState()
 	}
 	if c.executor != nil && c.executor.Session() != nil {
@@ -797,6 +799,7 @@ func (c *Controller) restoreRuntimeEvidence(state goalState) {
 	if c.executor == nil {
 		return
 	}
+	defer c.reconcileSubagentEffects()
 	c.executor.ClearDurableEvidence()
 	if state.DurableEvidence == nil || state.TranscriptDigest == "" {
 		return
@@ -810,6 +813,47 @@ func (c *Controller) restoreRuntimeEvidence(state goalState) {
 		return
 	}
 	c.executor.RestoreDurableEvidence(state.DurableEvidence.Clone())
+}
+
+func (c *Controller) reconcileSubagentEffects() {
+	if c == nil || c.executor == nil || c.subagents == nil {
+		return
+	}
+	parentSession := c.parentSessionID()
+	if parentSession == "" {
+		return
+	}
+	acknowledged := c.executor.DurableEvidenceState().SubagentEffects
+	events, err := c.subagents.RecoverSubagentEffects(parentSession, c.workspaceRoot, c.executor.Session().Snapshot(), acknowledged)
+	if err == nil {
+		err = c.executor.ApplyRecoveredSubagentEffects(events)
+	}
+	if err != nil {
+		if c.reportSubagentEffectRecoveryError(err) {
+			c.executor.InvalidateDurableSubagentEffects()
+		}
+		return
+	}
+	c.reportSubagentEffectRecoveryError(nil)
+}
+
+func (c *Controller) reportSubagentEffectRecoveryError(err error) bool {
+	message := ""
+	if err != nil {
+		message = err.Error()
+	}
+	c.subagentEffectsMu.Lock()
+	if c.subagentEffectsLastErr == message {
+		c.subagentEffectsMu.Unlock()
+		return false
+	}
+	c.subagentEffectsLastErr = message
+	c.subagentEffectsMu.Unlock()
+	if message != "" {
+		slog.Warn("controller: subagent effect recovery failed closed", "err", err)
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "subagent effect recovery failed closed; root project checks must run again: " + message})
+	}
+	return true
 }
 
 func writeSessionRuntimeData(sessionPath string, data []byte) error {

@@ -11,8 +11,11 @@ import (
 type subagentEffectsContextKey struct{}
 
 type subagentEffectLedger struct {
-	ledger     *evidence.Ledger
-	generation uint64
+	ledger       *evidence.Ledger
+	generation   uint64
+	parentCallID string
+	journal      *subagentEffectJournalTarget
+	observer     func(evidence.SubagentEffectCursor, evidence.Receipt) error
 }
 
 // SubagentEffects is a prompt-invisible bridge from a child Agent to all of its
@@ -47,7 +50,12 @@ func (a *Agent) effectsForChild(parentCallID string) *SubagentEffects {
 		return nil
 	}
 	effects := &SubagentEffects{parentCallID: parentCallID}
-	effects.ledgers = appendUniqueLedger(effects.ledgers, a.evidence, a.evidence.Generation())
+	effects.ledgers = appendUniqueLedger(effects.ledgers, subagentEffectLedger{
+		ledger:       a.evidence,
+		generation:   a.evidence.Generation(),
+		parentCallID: parentCallID,
+		observer:     a.observeDurableSubagentEffect,
+	})
 	if a.subagentPreEditHook != nil {
 		if hook := a.subagentPreEditHook(); hook != nil {
 			effects.preEditHooks = append(effects.preEditHooks, hook)
@@ -57,7 +65,7 @@ func (a *Agent) effectsForChild(parentCallID string) *SubagentEffects {
 	}
 	if a.subagentEffects != nil {
 		for _, target := range a.subagentEffects.ledgers {
-			effects.ledgers = appendUniqueLedger(effects.ledgers, target.ledger, target.generation)
+			effects.ledgers = appendUniqueLedger(effects.ledgers, target)
 		}
 		effects.preEditHooks = append(effects.preEditHooks, a.subagentEffects.preEditHooks...)
 	}
@@ -67,16 +75,70 @@ func (a *Agent) effectsForChild(parentCallID string) *SubagentEffects {
 	return effects
 }
 
-func appendUniqueLedger(dst []subagentEffectLedger, ledger *evidence.Ledger, generation uint64) []subagentEffectLedger {
-	if ledger == nil {
+func appendUniqueLedger(dst []subagentEffectLedger, target subagentEffectLedger) []subagentEffectLedger {
+	if target.ledger == nil {
 		return dst
 	}
 	for _, existing := range dst {
-		if existing.ledger == ledger {
+		if existing.ledger == target.ledger {
 			return dst
 		}
 	}
-	return append(dst, subagentEffectLedger{ledger: ledger, generation: generation})
+	return append(dst, target)
+}
+
+// withJournal returns a copy whose outermost ancestor target persists every
+// descendant effect under the top-level subagent ref. Nested task calls inherit
+// that target instead of creating journals whose anchors exist only in a child
+// transcript and cannot be validated by the root session on recovery.
+func (e *SubagentEffects) withJournal(run *SubagentRun) (*SubagentEffects, error) {
+	if e == nil || run == nil || run.Ref == "" || run.store == nil {
+		return e, nil
+	}
+	clone := &SubagentEffects{
+		ledgers:      append([]subagentEffectLedger(nil), e.ledgers...),
+		preEditHooks: append([]PreEditHook(nil), e.preEditHooks...),
+		parentCallID: e.parentCallID,
+	}
+	for _, target := range clone.ledgers {
+		if target.journal != nil {
+			return clone, nil
+		}
+	}
+	if len(clone.ledgers) == 0 {
+		return clone, nil
+	}
+	index := 0
+	for i := range clone.ledgers {
+		callID := clone.ledgers[i].parentCallID
+		if callID == "" {
+			callID = clone.parentCallID
+		}
+		if callID == run.Meta.ParentToolCallID {
+			index = i
+			break
+		}
+	}
+	callID := clone.ledgers[index].parentCallID
+	if callID == "" {
+		callID = clone.parentCallID
+	}
+	target, err := run.store.newSubagentEffectJournalTarget(run, callID)
+	if err != nil {
+		return nil, err
+	}
+	clone.ledgers[index].journal = target
+	return clone, nil
+}
+
+// BindSubagentEffectJournal attaches the outermost persisted subagent ref to an
+// ancestor effects bridge. Task and writer-capable skill runners share this
+// boundary; read-only and ephemeral subagents do not create a journal.
+func BindSubagentEffectJournal(effects *SubagentEffects, run *SubagentRun) (*SubagentEffects, error) {
+	if effects == nil {
+		return nil, nil
+	}
+	return effects.withJournal(run)
 }
 
 func (e *SubagentEffects) snapshot(change diff.Change) error {
@@ -92,14 +154,54 @@ func (e *SubagentEffects) snapshot(change diff.Change) error {
 	return snapshotErr
 }
 
-func (e *SubagentEffects) record(receipt evidence.Receipt, depth int) {
-	if e == nil || (!receipt.Read && !receipt.Write && receipt.Command == "") {
-		return
+func (e *SubagentEffects) prepare(receipt evidence.Receipt, depth int) error {
+	if e == nil || !receipt.Write || !receipt.MutationAttempt {
+		return nil
 	}
-	receipt.Source = "subagent"
-	receipt.ParentToolCallID = e.parentCallID
-	receipt.SubagentDepth = depth
 	for _, target := range e.ledgers {
-		target.ledger.RecordAtGeneration(receipt, target.generation)
+		if target.journal == nil {
+			continue
+		}
+		event, err := target.journal.append(subagentEffectPhaseIntent, receipt, depth)
+		if err != nil {
+			return err
+		}
+		if target.observer != nil {
+			if err := target.observer(event.Cursor, event.Receipt); err != nil {
+				return err
+			}
+		}
 	}
+	return nil
+}
+
+func (e *SubagentEffects) record(receipt evidence.Receipt, depth int) error {
+	if e == nil || (!receipt.Read && !receipt.Write && receipt.Command == "") {
+		return nil
+	}
+	for _, target := range e.ledgers {
+		if target.journal == nil {
+			continue
+		}
+		event, err := target.journal.append(subagentEffectPhaseReceipt, receipt, depth)
+		if err != nil {
+			return err
+		}
+		if target.observer != nil {
+			if err := target.observer(event.Cursor, event.Receipt); err != nil {
+				return err
+			}
+		}
+	}
+	for _, target := range e.ledgers {
+		forwarded := receipt
+		forwarded.Source = "subagent"
+		forwarded.ParentToolCallID = target.parentCallID
+		if forwarded.ParentToolCallID == "" {
+			forwarded.ParentToolCallID = e.parentCallID
+		}
+		forwarded.SubagentDepth = depth
+		target.ledger.RecordAtGeneration(forwarded, target.generation)
+	}
+	return nil
 }

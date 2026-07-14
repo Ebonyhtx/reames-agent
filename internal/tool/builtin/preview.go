@@ -34,9 +34,15 @@ func (w writeFile) Preview(args json.RawMessage) (diff.Change, error) {
 		return diff.Change{}, fmt.Errorf("path is required")
 	}
 	p.Path = resolveIn(w.workDir, p.Path)
+	target, err := openRootedWriteTarget(w.roots, w.guard, p.Path)
+	if err != nil {
+		return diff.Change{}, err
+	}
+	defer target.Close()
+	p.Path = target.path
 
 	old, kind := "", diff.Create
-	if data, err := os.ReadFile(p.Path); err == nil {
+	if data, err := target.ReadFile(); err == nil {
 		enc, _ := fileenc.Detect(data)
 		old, kind = string(fileenc.Decode(data, enc)), diff.Modify
 	} else if !os.IsNotExist(err) {
@@ -64,8 +70,14 @@ func (e editFile) Preview(args json.RawMessage) (diff.Change, error) {
 		return diff.Change{}, fmt.Errorf("old_string is required")
 	}
 	p.Path = resolveIn(e.workDir, p.Path)
+	target, err := openRootedWriteTarget(e.roots, e.guard, p.Path)
+	if err != nil {
+		return diff.Change{}, err
+	}
+	defer target.Close()
+	p.Path = target.path
 
-	content, _, err := readFileEncoded(p.Path)
+	content, _, err := target.readEncoded()
 	if err != nil {
 		return diff.Change{}, fmt.Errorf("read %s: %w", p.Path, err)
 	}
@@ -102,8 +114,14 @@ func (m multiEdit) Preview(args json.RawMessage) (diff.Change, error) {
 		return diff.Change{}, fmt.Errorf("edits must not be empty")
 	}
 	p.Path = resolveIn(m.workDir, p.Path)
+	target, err := openRootedWriteTarget(m.roots, m.guard, p.Path)
+	if err != nil {
+		return diff.Change{}, err
+	}
+	defer target.Close()
+	p.Path = target.path
 
-	content, _, err := readFileEncoded(p.Path)
+	content, _, err := target.readEncoded()
 	if err != nil {
 		return diff.Change{}, fmt.Errorf("read %s: %w", p.Path, err)
 	}

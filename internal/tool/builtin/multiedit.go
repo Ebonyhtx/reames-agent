@@ -77,11 +77,14 @@ func (m multiEdit) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", fmt.Errorf("edits must not be empty")
 	}
 	p.Path = resolveIn(m.workDir, p.Path)
-	if err := confineWrite(m.roots, m.guard, p.Path); err != nil {
+	target, err := openRootedWriteTarget(m.roots, m.guard, p.Path)
+	if err != nil {
 		return "", err
 	}
+	defer target.Close()
+	p.Path = target.path
 
-	content, enc, err := readFileEncoded(p.Path)
+	content, enc, err := target.readEncoded()
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", p.Path, err)
 	}
@@ -109,7 +112,7 @@ func (m multiEdit) Execute(ctx context.Context, args json.RawMessage) (string, e
 		}
 	}
 
-	if err := writeFileEncoded(p.Path, content, enc); err != nil {
+	if err := target.writeEncoded(content, enc, 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", p.Path, err)
 	}
 	if usedFuzzy {

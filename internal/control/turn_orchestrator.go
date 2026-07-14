@@ -51,10 +51,16 @@ func (o *turnOrchestrator) runObservedSyntheticTurn(ctx context.Context, input, 
 	if start < 0 || start > len(history) {
 		return false, nil
 	}
-	for _, msg := range history[start:] {
-		if msg.Role == provider.RoleAssistant {
-			return true, nil
+	// A strict self-check is proven only by this turn's final assistant answer.
+	// An assistant tool-call envelope is not a final: a custom runner may return
+	// after writing one, and reusing the previous turn's [goal:complete] would
+	// otherwise let that partial turn satisfy strict completion.
+	for i := len(history) - 1; i >= start; i-- {
+		msg := history[i]
+		if msg.Role != provider.RoleAssistant {
+			continue
 		}
+		return strings.TrimSpace(msg.Content) != "" && len(msg.ToolCalls) == 0, nil
 	}
 	return false, nil
 }

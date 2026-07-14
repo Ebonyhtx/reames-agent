@@ -18,6 +18,7 @@ import (
 	"reames-agent/internal/jobs"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/tool"
+	"reames-agent/internal/tool/builtin"
 )
 
 func TestWritableSubagentEffectsMergeIntoParentEvidenceAndCheckpoint(t *testing.T) {
@@ -56,17 +57,20 @@ func TestWritableSubagentEffectsMergeIntoParentEvidenceAndCheckpoint(t *testing.
 	if !root.evidence.HasSuccessfulCommandAfter("go test ./...", writeIndex) {
 		t.Fatal("parent evidence did not preserve child write -> verification ordering")
 	}
+	if durable := root.DurableEvidenceState(); !durable.WritePending || len(durable.VerifiedChecks) != 0 || len(durable.SubagentEffects) != 1 {
+		t.Fatalf("child-only check escaped current-turn boundary: %+v", durable)
+	}
 	if touched := root.EvidenceSnapshot().Touched; len(touched) != 1 || !strings.EqualFold(filepath.Base(touched[0]), filepath.Base(path)) {
 		t.Fatalf("parent touched paths = %v, want child path", touched)
 	}
 
 	metas := store.List()
-	if len(metas) != 1 || len(metas[0].Paths) != 1 || metas[0].Paths[0] != path {
+	if len(metas) != 1 || len(metas[0].Paths) != 1 || metas[0].Paths[0] != "child.txt" {
 		t.Fatalf("checkpoint metadata = %+v, want child write", metas)
 	}
 	if _, deleted, err := store.RestoreCode(0); err != nil {
 		t.Fatalf("RestoreCode: %v", err)
-	} else if len(deleted) != 1 || deleted[0] != path {
+	} else if len(deleted) != 1 || deleted[0] != "child.txt" {
 		t.Fatalf("deleted = %v, want child file", deleted)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -160,8 +164,9 @@ func TestBackgroundWritableSubagentCarriesEffectsIntoJobContext(t *testing.T) {
 	}}
 	registry := tool.NewRegistry()
 	registry.Add(&effectsWriter{})
+	transcriptStore := NewSubagentStore(t.TempDir())
 	task := NewTaskTool(childProvider, nil, registry, 20, 0, 0, 0, 0, 0, 0, 0, "", "sys", nil, 0, "", "", nil).
-		WithTranscripts(NewSubagentStore(t.TempDir()), workspace, "child-model", "")
+		WithTranscripts(transcriptStore, workspace, "child-model", "")
 
 	parentLedger := evidence.NewLedger()
 	var changes []diff.Change
@@ -193,6 +198,25 @@ func TestBackgroundWritableSubagentCarriesEffectsIntoJobContext(t *testing.T) {
 	}
 	if len(changes) != 1 || changes[0].Path != path {
 		t.Fatalf("background pre-edit snapshots = %+v", changes)
+	}
+
+	// The original turn-local target is now stale, but the sidecar remains
+	// recoverable and conservatively invalidates root checks after restart.
+	parentLedger.Reset()
+	parentMessages := []provider.Message{{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "task-background", Name: "task", Arguments: `{}`}}}}
+	recovered, err := transcriptStore.RecoverSubagentEffects("parent-session", workspace, parentMessages, nil)
+	if err != nil {
+		t.Fatalf("RecoverSubagentEffects: %v", err)
+	}
+	if len(recovered) != 2 || !recovered[0].Receipt.MutationAttempt || !recovered[1].Receipt.Success {
+		t.Fatalf("background durable effects = %+v", recovered)
+	}
+	restarted := New(nil, tool.NewRegistry(), NewSession("sys"), Options{ProjectChecks: []instruction.VerifyCheck{{Command: "go test ./..."}}}, event.Discard)
+	if err := restarted.ApplyRecoveredSubagentEffects(recovered); err != nil {
+		t.Fatal(err)
+	}
+	if got := restarted.DurableEvidenceState(); !got.WritePending || len(got.SubagentEffects) != 1 {
+		t.Fatalf("background recovered state = %+v", got)
 	}
 }
 
@@ -229,6 +253,94 @@ func TestPreEditPersistenceFailureBlocksWriter(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("blocked writer touched disk: %v", err)
+	}
+}
+
+func TestMultiFilePreviewSnapshotsEveryPathBeforeExecute(t *testing.T) {
+	reg := tool.NewRegistry()
+	writer := &multiEffectsWriter{}
+	reg.Add(writer)
+	a := New(nil, reg, NewSession("sys"), Options{}, event.Discard)
+	var paths []string
+	a.SetPreEditHook(func(change diff.Change) error {
+		paths = append(paths, change.Path)
+		return nil
+	})
+	outcome := a.executeOne(context.Background(), provider.ToolCall{ID: "multi", Name: writer.Name(), Arguments: `{}`})
+	if outcome.blocked || outcome.errMsg != "" {
+		t.Fatalf("outcome = %+v", outcome)
+	}
+	if writer.executed != 1 || len(paths) != 2 || paths[0] != "first.txt" || paths[1] != "second.txt" {
+		t.Fatalf("executed = %d, snapshots = %v", writer.executed, paths)
+	}
+	receipts := a.evidence.Receipts(1)
+	if len(receipts) != 1 || len(receipts[0].Paths) != 2 || receipts[0].Paths[0] != "first.txt" || receipts[0].Paths[1] != "second.txt" {
+		t.Fatalf("multi-file receipt paths = %+v", receipts)
+	}
+}
+
+func TestMultiFilePreviewPersistenceFailureBlocksWholeWriter(t *testing.T) {
+	reg := tool.NewRegistry()
+	writer := &multiEffectsWriter{}
+	reg.Add(writer)
+	a := New(nil, reg, NewSession("sys"), Options{}, event.Discard)
+	calls := 0
+	a.SetPreEditHook(func(diff.Change) error {
+		calls++
+		if calls == 2 {
+			return errors.New("second snapshot failed")
+		}
+		return nil
+	})
+	outcome := a.executeOne(context.Background(), provider.ToolCall{ID: "multi-blocked", Name: writer.Name(), Arguments: `{}`})
+	if !outcome.blocked || !strings.Contains(outcome.output, "second snapshot failed") {
+		t.Fatalf("outcome = %+v", outcome)
+	}
+	if writer.executed != 0 {
+		t.Fatalf("multi-file writer executed %d times after checkpoint failure", writer.executed)
+	}
+}
+
+func TestMoveFileCheckpointRestoresSourceAndDestination(t *testing.T) {
+	workspace := t.TempDir()
+	source := filepath.Join(workspace, "source.txt")
+	destination := filepath.Join(workspace, "nested", "destination.txt")
+	if err := os.WriteFile(source, []byte("move me\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	reg := tool.NewRegistry()
+	for _, tl := range (builtin.Workspace{Dir: workspace}).Tools("move_file") {
+		reg.Add(tl)
+	}
+	a := New(nil, reg, NewSession("sys"), Options{}, event.Discard)
+	store := checkpoint.New("", workspace)
+	if err := store.Begin(0, "move", 0); err != nil {
+		t.Fatal(err)
+	}
+	a.SetPreEditHook(store.Snapshot)
+	args, err := json.Marshal(map[string]string{"source_path": "source.txt", "destination_path": "nested/destination.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome := a.executeOne(context.Background(), provider.ToolCall{ID: "move", Name: "move_file", Arguments: string(args)})
+	if outcome.blocked || outcome.errMsg != "" {
+		t.Fatalf("move outcome = %+v", outcome)
+	}
+	if metas := store.List(); len(metas) != 1 || len(metas[0].Paths) != 2 {
+		t.Fatalf("checkpoint metadata = %+v, want source and destination", metas)
+	}
+	written, deleted, err := store.RestoreCode(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(written) != 1 || len(deleted) != 1 {
+		t.Fatalf("restore = written %v, deleted %v", written, deleted)
+	}
+	if got, err := os.ReadFile(source); err != nil || string(got) != "move me\n" {
+		t.Fatalf("restored source = %q, err = %v", got, err)
+	}
+	if _, err := os.Stat(destination); !os.IsNotExist(err) {
+		t.Fatalf("destination remains after restore: %v", err)
 	}
 }
 
@@ -343,6 +455,23 @@ func (w *effectsWriter) Execute(ctx context.Context, args json.RawMessage) (stri
 type effectsWriterArgs struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+}
+
+type multiEffectsWriter struct{ executed int }
+
+func (*multiEffectsWriter) Name() string            { return "multi_effects_writer" }
+func (*multiEffectsWriter) Description() string     { return "test multi-file writer" }
+func (*multiEffectsWriter) Schema() json.RawMessage { return json.RawMessage(`{"type":"object"}`) }
+func (*multiEffectsWriter) ReadOnly() bool          { return false }
+func (*multiEffectsWriter) PreviewChanges(json.RawMessage) ([]diff.Change, error) {
+	return []diff.Change{
+		diff.Build("first.txt", "before one", "after one", diff.Modify),
+		diff.Build("second.txt", "before two", "after two", diff.Modify),
+	}, nil
+}
+func (w *multiEffectsWriter) Execute(context.Context, json.RawMessage) (string, error) {
+	w.executed++
+	return "written", nil
 }
 
 func decodeEffectsWriterArgs(args json.RawMessage) (effectsWriterArgs, error) {

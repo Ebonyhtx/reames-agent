@@ -97,7 +97,7 @@ func toolDot(name string) string {
 var toolCategory = map[string]string{
 	"read_file": "read", "ls": "read", "glob": "read", "grep": "read",
 	"web_fetch": "read", "web_search": "read", "bash_output": "read",
-	"write_file": "write", "edit_file": "write", "multi_edit": "write",
+	"write_file": "write", "edit_file": "write", "multi_edit": "write", "apply_patch": "write",
 	"move_file": "write", "delete_range": "write", "delete_symbol": "write", "notebook_edit": "write",
 	"bash": "exec",
 	"wait": "proc", "kill_shell": "proc",

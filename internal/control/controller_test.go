@@ -587,6 +587,38 @@ func TestResumeReplaysAppendOnlyTodoSuffixFromV2Anchor(t *testing.T) {
 	}
 }
 
+func TestResumePreservesV2TodosAcrossUnrelatedAppendOnlySuffix(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	loaded := agent.NewSession("sys")
+	loaded.Add(provider.Message{Role: provider.RoleUser, Content: "compacted history without todo calls"})
+	messageCount, transcriptDigest := loaded.TranscriptAnchor()
+	loaded.Add(provider.Message{Role: provider.RoleUser, Content: "clarify the output format"})
+	loaded.Add(provider.Message{Role: provider.RoleAssistant, Content: "Understood; continuing the same plan."})
+	state := GoalStateV2{
+		Version:          GoalStateVersion,
+		Goal:             "finish compacted plan",
+		Status:           GoalStatusRunning,
+		TodosKnown:       true,
+		Todos:            []evidence.TodoItem{{Content: "a", Status: "in_progress"}, {Content: "b", Status: "pending"}},
+		MessageCount:     messageCount,
+		TranscriptDigest: transcriptDigest,
+		Revision:         5,
+	}
+	if err := WriteGoalStateV2(goalStatePath(path), state); err != nil {
+		t.Fatal(err)
+	}
+
+	exec := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{}, event.Discard)
+	c := New(Options{Executor: exec, SessionDir: dir, Label: "test"})
+	c.Resume(loaded, path)
+
+	todos := c.Todos()
+	if len(todos) != 2 || todos[0].Status != "in_progress" || todos[1].Status != "pending" {
+		t.Fatalf("Todos() after unrelated append-only resume = %+v, want durable base unchanged", todos)
+	}
+}
+
 func TestResumeKeepsNewerTranscriptTodosThanV2Sidecar(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.jsonl")

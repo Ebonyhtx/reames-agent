@@ -135,6 +135,12 @@ type Controller struct {
 	// Close cancels its still-running jobs.
 	jobs *jobs.Manager
 
+	// subagents owns durable child transcripts and their prompt-invisible effect
+	// journals. Recovery scans are anchored to the active parent transcript.
+	subagents              *agent.SubagentStore
+	subagentEffectsMu      sync.Mutex
+	subagentEffectsLastErr string
+
 	// mcp owns the session's live tool/plugin surface — the MCP plugin Host, the
 	// tool registry the executor reads each turn, and the session-scoped context a
 	// hot-added stdio server binds its subprocess to — behind its own lock, off
@@ -360,6 +366,9 @@ type Options struct {
 	BalanceClient *http.Client
 	// Jobs is the session-scoped background-job manager (nil disables background jobs).
 	Jobs *jobs.Manager
+	// SubagentStore is shared with task tools so Controller can reconcile durable
+	// child effects before persisting or restoring root readiness state.
+	SubagentStore *agent.SubagentStore
 	// Registry is the executor's live tool set, and PluginCtx the session-scoped
 	// context; both are needed for hot-adding MCP servers via AddMCPServer.
 	Registry  *tool.Registry
@@ -459,6 +468,7 @@ func New(opts Options) *Controller {
 		balanceKey:                        opts.BalanceKey,
 		balanceClient:                     opts.BalanceClient,
 		jobs:                              opts.Jobs,
+		subagents:                         opts.SubagentStore,
 		mcp:                               newMcpManager(opts.Host, opts.Registry, pluginCtx),
 		workspaceRoot:                     opts.WorkspaceRoot,
 		externalFolderToolRefs:            opts.ExternalFolderToolRefs,

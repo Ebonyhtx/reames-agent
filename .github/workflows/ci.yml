@@ -96,6 +96,7 @@ jobs:
       - name: Validate server deployment contracts
         run: |
           python scripts/check_deploy_contracts.py
+          python -m unittest scripts.test_verify_baseline -v
           python -m unittest scripts.test_smoke_gateway_headless -v
           python -m unittest scripts.test_smoke_gateway_service_linux -v
       - name: Validate Unix installer dry-run

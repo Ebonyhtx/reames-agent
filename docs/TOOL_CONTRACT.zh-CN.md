@@ -30,6 +30,18 @@
 | `list_jobs` | true | 列出所有运行中的后台任务（bash 和 task），不阻塞。 |
 | `write_file` | false | 写入文件内容，必要时创建父目录。 |
 
+## 文件变更边界
+
+所有可预览的内置 writer 都先把目标绑定为打开的 `os.Root` 与 root-relative
+path；read/stat、临时写入、fsync/chmod、rename/remove 均通过该 handle
+resolve-beneath 执行，验证后的路径组件被替换成 symlink/reparse point 时也不能把
+操作重定向到授权 root 外。`move_file` 同时预览 source delete 与 destination
+create；`apply_patch` 在写入前验证完整 multi-file diff，逐文件原子替换，并在后续
+文件失败时回滚先前文件。Agent 会在执行前 checkpoint 全部 preview change。
+
+该边界不为 `bash`、MCP 或外部 API 提供 exactly-once，也不保留 ACL、xattr 或
+硬链接身份。
+
 ## Schema 快照
 
 完整 canonical schema 不在文档中手写，避免文档和代码手工漂移。运行：
