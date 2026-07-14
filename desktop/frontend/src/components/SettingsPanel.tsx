@@ -266,6 +266,7 @@ export function SettingsPanel({
             {SETTINGS_TABS.map((id) => (
               <button
                 key={id}
+                id={`settings-tab-${id}`}
                 className={`settings-center__navitem${tab === id ? " settings-center__navitem--active" : ""}`}
                 onClick={() => setTab(id)}
               >

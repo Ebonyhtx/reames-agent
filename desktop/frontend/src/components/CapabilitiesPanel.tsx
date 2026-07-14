@@ -1825,9 +1825,9 @@ export function PluginsSettingsPage() {
 	};
 
 	return (
-		<section className="mem-section">
-			{err && <div className="banner banner--error">{err}</div>}
-			{notice && !err && <div className={`banner banner--${notice.tone}`}>{notice.message}</div>}
+		<section id="plugin-settings-page" className="mem-section" aria-label={t("caps.pluginInstallTitle")}>
+			{err && <div id="plugin-operation-error" className="banner banner--error" role="alert">{err}</div>}
+			{notice && !err && <div id="plugin-operation-notice" className={`banner banner--${notice.tone}`} role="status">{notice.message}</div>}
 			<div className="cap-plugin-installer">
 				<div className="cap-plugin-installer__head">
 					<div className="cap-plugin-installer__copy">
@@ -1836,6 +1836,7 @@ export function PluginsSettingsPage() {
 					</div>
 					<div className="cap-tabs cap-plugin-installer__mode" role="group" aria-label={t("caps.pluginInstallMethod")}>
 						<button
+							id="plugin-install-mode-local"
 							className={`cap-tab${installMode === "local" ? " cap-tab--active" : ""}`}
 							type="button"
 							aria-pressed={installMode === "local"}
@@ -1844,6 +1845,7 @@ export function PluginsSettingsPage() {
 							{t("caps.pluginInstallLocal")}
 						</button>
 						<button
+							id="plugin-install-mode-git"
 							className={`cap-tab${installMode === "git" ? " cap-tab--active" : ""}`}
 							type="button"
 							aria-pressed={installMode === "git"}
@@ -1857,20 +1859,24 @@ export function PluginsSettingsPage() {
 					{installMode === "local" ? (
 						<div className="cap-plugin-fields cap-plugin-fields--local">
 							<div className="cap-plugin-folder-field">
-								<button className="btn btn--small" disabled={actionBusy} type="button" onClick={pickPluginFolder}>
+								<button id="plugin-install-pick-folder" className="btn btn--small" disabled={actionBusy} type="button" onClick={pickPluginFolder}>
 									{t("caps.pluginChooseLocalFolder")}
 								</button>
-								<div
-									className={`cap-plugin-path${localSource ? "" : " cap-plugin-path--empty"}`}
+								<input
+									id="plugin-install-local-source"
+									className={`mem-input cap-plugin-path${localSource ? "" : " cap-plugin-path--empty"}`}
 									aria-label={t("caps.pluginLocalFolder")}
-								>
-									{localSource || t("caps.pluginNoLocalFolder")}
-								</div>
+									placeholder={t("caps.pluginNoLocalFolder")}
+									value={localSource}
+									onInput={(e) => updateLocalSource(e.currentTarget.value)}
+									onChange={(e) => updateLocalSource(e.target.value)}
+								/>
 							</div>
 						</div>
 					) : (
 						<div className="cap-plugin-fields cap-plugin-fields--git">
 							<input
+								id="plugin-install-git-source"
 								className="mem-input"
 								aria-label={t("caps.pluginGitSource")}
 								placeholder={t("caps.pluginSourcePlaceholder")}
@@ -1880,6 +1886,7 @@ export function PluginsSettingsPage() {
 							/>
 							<div className="cap-plugin-field">
 								<input
+									id="plugin-install-name"
 									className="mem-input"
 									aria-label={t("caps.pluginInstallName")}
 									placeholder={t("caps.pluginInstallNamePlaceholder")}
@@ -1908,16 +1915,16 @@ export function PluginsSettingsPage() {
 						)}
 					</div>
 					<div className="cap-plugin-installer__actions">
-						<button className="btn btn--small" type="button" disabled={!canPlan} onClick={previewInstall}>
+						<button id="plugin-install-preview" className="btn btn--small" type="button" disabled={!canPlan} onClick={previewInstall}>
 							{t("caps.pluginPreview")}
 						</button>
-						<button className="btn btn--primary btn--small" type="button" disabled={!canInstall} onClick={install}>
+						<button id="plugin-install-apply" className="btn btn--primary btn--small" type="button" disabled={!canInstall} onClick={install}>
 							{t("caps.pluginInstall")}
 						</button>
 					</div>
 				</div>
 			</div>
-			{plan && <PluginPlanPreview plan={plan} />}
+			{plan && <PluginPlanPreview plan={plan} id="plugin-install-plan" />}
 			<div className="cap-server-section cap-plugin-section">
 				<div className="cap-server-section__head">
 					<div className="cap-server-section__copy">
@@ -1963,12 +1970,17 @@ export function PluginsSettingsPage() {
 	);
 }
 
-function PluginPlanPreview({ plan }: { plan: PluginOperationView }) {
+function PluginPlanPreview({ plan, id }: { plan: PluginOperationView; id?: string }) {
 	const t = useT();
 	const isError = ["failed", "blocked", "denied"].includes(plan.status) || (!plan.ok && plan.status !== "partial");
 	const isWarning = plan.status === "partial" || plan.actions.some((action) => action.riskLevel === "high");
 	return (
-		<div className={`cap-plugin-plan${isError ? " cap-plugin-plan--error" : isWarning ? " cap-plugin-plan--warning" : ""}`}>
+		<div
+			id={id}
+			className={`cap-plugin-plan${isError ? " cap-plugin-plan--error" : isWarning ? " cap-plugin-plan--warning" : ""}`}
+			role="group"
+			aria-label={isError ? t("caps.pluginPlanError") : t("caps.pluginPlanReady")}
+		>
 			<div className="cap-plugin-plan__head">
 				<div className="cap-plugin-plan__title">{isError ? t("caps.pluginPlanError") : t("caps.pluginPlanReady")}</div>
 				{plan.status && <span className="cap-source-badge">{plan.status}</span>}
@@ -2043,11 +2055,17 @@ function PluginRow({
 	const sub = plugin.error || pluginCapabilitiesSummary(plugin, t);
 	const canEnable = plugin.enabled || Boolean(plugin.digest);
 	return (
-		<div className={`cap-server-entry cap-plugin-entry${plugin.enabled ? "" : " cap-server-entry--disabled"}`}>
+		<div
+			id={`plugin-row-${plugin.name}`}
+			className={`cap-server-entry cap-plugin-entry${plugin.enabled ? "" : " cap-server-entry--disabled"}`}
+			role="group"
+			aria-label={plugin.name}
+		>
 			<Tooltip label={plugin.error} disabled={!plugin.error} fill block>
 				<div className={`cap-row${plugin.enabled ? "" : " cap-row--disabled"}`}>
 					<Tooltip label={expanded ? t("caps.collapseDetails") : t("caps.expandDetails")}>
 						<button
+							id={`plugin-${plugin.name}-details`}
 							className="cap-disclosure"
 							aria-expanded={expanded}
 							type="button"
@@ -2068,8 +2086,9 @@ function PluginRow({
 					</div>
 					<div className="cap-row__actions">
 						<Tooltip label={plugin.enabled ? t("caps.pluginDisable") : t("caps.pluginEnable")}>
-							<label className="cap-switch">
+							<label id={`plugin-${plugin.name}-enable-toggle`} className="cap-switch" aria-label={plugin.enabled ? t("caps.pluginDisable") : t("caps.pluginEnable")}>
 								<input
+									id={`plugin-${plugin.name}-enabled`}
 									type="checkbox"
 									checked={plugin.enabled}
 									disabled={busy || !canEnable}
@@ -2165,23 +2184,26 @@ function PluginRow({
 					{warnings.map((warning, idx) => (
 						<div className="cap-source__warning" key={`${plugin.name}-warning-${idx}`}>{warning}</div>
 					))}
-					{pending && <PluginPlanPreview plan={pending.plan} />}
+					{pending && <PluginPlanPreview plan={pending.plan} id={`plugin-${plugin.name}-${pending.kind}-plan`} />}
 					<div className="cap-detail-actions">
-						<button className="btn btn--small" disabled={busy} type="button" onClick={onUpdate}>
+						<button id={`plugin-${plugin.name}-update`} className="btn btn--small" disabled={busy} type="button" onClick={onUpdate}>
 							{pending?.kind === "update" ? t("caps.pluginApplyUpdate") : t("caps.pluginUpdate")}
 						</button>
 						{plugin.rollback && (
-							<button className="btn btn--small" disabled={busy} type="button" onClick={onRollback}>
+							<button id={`plugin-${plugin.name}-rollback`} className="btn btn--small" disabled={busy} type="button" onClick={onRollback}>
 								{pending?.kind === "rollback" ? t("caps.pluginApplyRollback") : t("caps.pluginRollback")}
 							</button>
 						)}
-						<button className="btn btn--small" disabled={busy} type="button" onClick={onDoctor}>
+						<button id={`plugin-${plugin.name}-doctor`} className="btn btn--small" disabled={busy} type="button" onClick={onDoctor}>
 							{t("caps.pluginDoctor")}
 						</button>
 						{pending?.kind === "remove" ? (
-							<button className="btn btn--danger btn--small" disabled={busy} type="button" onClick={onRemove}>{t("caps.pluginApplyRemove")}</button>
+							<button id={`plugin-${plugin.name}-remove-apply`} className="btn btn--danger btn--small" disabled={busy} type="button" onClick={onRemove}>{t("caps.pluginApplyRemove")}</button>
 						) : (
 							<InlineConfirmButton
+								id={`plugin-${plugin.name}-remove`}
+								confirmId={`plugin-${plugin.name}-remove-confirm`}
+								cancelId={`plugin-${plugin.name}-remove-cancel`}
 								label={t("caps.pluginRemove")}
 								confirmLabel={t("caps.pluginConfirmRemove")}
 								cancelLabel={t("common.cancel")}
@@ -2210,7 +2232,7 @@ function PluginEnableApprovalReview({
 }) {
 	const t = useT();
 	return (
-		<div className="cap-plugin-plan cap-plugin-plan--warning" role="group" aria-label={t("caps.pluginEnableReview")}>
+		<div id={`plugin-${approval.name}-enable-review`} className="cap-plugin-plan cap-plugin-plan--warning" role="group" aria-label={t("caps.pluginEnableReview")}>
 			<div className="cap-plugin-plan__head">
 				<div className="cap-plugin-plan__title">{t("caps.pluginEnableReview")}</div>
 				<span className="cap-source-badge">{approval.name}</span>
@@ -2220,8 +2242,8 @@ function PluginEnableApprovalReview({
 			<div className="cap-plugin-plan__meta">{t("caps.pluginPermissions")}: <code>{approval.permissions.join(", ") || t("caps.pluginNoPermissions")}</code></div>
 			<div className="cap-plugin-plan__meta">{t("caps.pluginCounts", { skills: approval.skills, hooks: approval.hooks, mcps: approval.mcpServers })}</div>
 			<div className="cap-detail-actions">
-				<button className="btn btn--small" disabled={busy} type="button" onClick={onCancel}>{t("common.cancel")}</button>
-				<button className="btn btn--primary btn--small" disabled={busy || !approval.digest} type="button" onClick={onApprove}>{t("caps.pluginApproveEnable")}</button>
+				<button id={`plugin-${approval.name}-enable-cancel`} className="btn btn--small" disabled={busy} type="button" onClick={onCancel}>{t("common.cancel")}</button>
+				<button id={`plugin-${approval.name}-enable-approve`} className="btn btn--primary btn--small" disabled={busy || !approval.digest} type="button" onClick={onApprove}>{t("caps.pluginApproveEnable")}</button>
 			</div>
 		</div>
 	);

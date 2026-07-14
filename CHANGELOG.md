@@ -23,6 +23,7 @@
 ### Desktop
 
 - Added true-modal background isolation, stable dialog identities, inherited opener restore chains, transcript accessibility semantics, and a strict Windows UIA accessibility smoke. Actual NVDA/Narrator listening and Windows High Contrast validation remain manual evidence.
+- Added real-Chromium and native Wails plugin lifecycle smoke coverage for stale-plan rejection, disabled-by-default install, exact permission approval, generation update/rollback, diagnostics, removal, and isolated-state cleanup; the installed Windows candidate now retains the native evidence artifact.
 
 ### Deployment
 

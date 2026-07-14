@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 // global modal. First click arms the action, second click confirms it, and the
 // adjacent Cancel button or any disabled state returns the button to normal.
 export function InlineConfirmButton({
+  id,
+  confirmId,
+  cancelId,
   label,
   confirmLabel,
   cancelLabel,
@@ -11,6 +14,9 @@ export function InlineConfirmButton({
   danger = false,
   onConfirm,
 }: {
+  id?: string;
+  confirmId?: string;
+  cancelId?: string;
   label: string;
   confirmLabel: string;
   cancelLabel: string;
@@ -36,6 +42,7 @@ export function InlineConfirmButton({
   return (
     <span className="inline-confirm">
       <button
+        id={armed ? confirmId ?? id : id}
         className={`btn btn--small${armed && danger ? " btn--danger" : ""}`}
         disabled={disabled}
         type="button"
@@ -44,7 +51,7 @@ export function InlineConfirmButton({
         {armed ? confirmLabel : label}
       </button>
       {armed && (
-        <button className="btn btn--small" disabled={disabled} type="button" onClick={() => setArmed(false)}>
+        <button id={cancelId} className="btn btn--small" disabled={disabled} type="button" onClick={() => setArmed(false)}>
           {cancelLabel}
         </button>
       )}

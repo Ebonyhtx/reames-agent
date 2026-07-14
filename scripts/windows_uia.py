@@ -828,3 +828,25 @@ class WindowsUIAutomation:
                 "automation_id": info.automation_id,
             }
         )
+
+    def press_space(
+        self,
+        *,
+        automation_id: str,
+        timeout_seconds: float = 10.0,
+    ) -> None:
+        """Activate a focused checkbox or switch through its keyboard contract."""
+
+        item = self._find(
+            automation_id=automation_id,
+            timeout_seconds=timeout_seconds,
+        )
+        info = self._focus(item)
+        self._post_virtual_key(0x20)
+        self.actions.append(
+            {
+                "action": "uia-focus-window-message-space",
+                "name": info.name,
+                "automation_id": info.automation_id,
+            }
+        )

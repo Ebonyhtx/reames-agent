@@ -161,8 +161,8 @@ reames-agent plugin remove superpowers --yes --plan-id sha256:<预检返回的ID
 
 安装区有两种模式：
 
-- **本地目录**：点击 **选择插件目录**，从磁盘选择一个插件目录。
-  选中路径会显示在按钮右侧。
+- **本地目录**：可在路径输入框直接填写或粘贴插件目录，也可以点击
+  **选择插件目录** 从磁盘选取。
 - **Git 仓库**：填写 Git 来源，例如 `git:github.com/obra/superpowers`。
   **安装名称（可选）** 可覆盖插件 manifest 声明的名称，用于本次安装或覆盖。
 

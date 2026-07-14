@@ -60,6 +60,21 @@ jobs:
       - name: Build
         working-directory: desktop/frontend
         run: pnpm build
+      - name: Smoke plugin lifecycle in real Chromium
+        working-directory: desktop/frontend
+        env:
+          REAMES_PLUGIN_BROWSER_SMOKE_OUT: ${{ runner.temp }}/plugin-browser-smoke.json
+          REAMES_PLUGIN_BROWSER_SMOKE_SCREENSHOT: ${{ runner.temp }}/plugin-browser-smoke.png
+        run: pnpm smoke:plugin-browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: plugin-browser-smoke
+          path: |
+            ${{ runner.temp }}/plugin-browser-smoke.json
+            ${{ runner.temp }}/plugin-browser-smoke.png
+          if-no-files-found: warn
+          retention-days: 7
 
   upstream-watch-contracts:
     name: Upstream watch contracts

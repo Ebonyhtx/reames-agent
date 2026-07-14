@@ -173,8 +173,8 @@ the CLI.
 
 The installer has two modes:
 
-- **Local folder**: click **Choose plugin folder** and select a plugin directory
-  on disk. The selected path is shown next to the button.
+- **Local folder**: type or paste a plugin directory into the path field, or
+  click **Choose plugin folder** to select it from disk.
 - **Git repository**: enter a Git source such as
   `git:github.com/obra/superpowers`. **Install name (optional)** can override
   the plugin manifest name for this install or overwrite.

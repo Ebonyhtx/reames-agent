@@ -2,9 +2,9 @@
 
 > 日期：2026-07-15
 >
-> 范围：M5 第一批本地生命周期、Desktop 审批和运行时所有权合同
+> 范围：M5 生命周期、Desktop 审批/原生交互和运行时所有权合同
 >
-> 结论：核心、CLI 与 Desktop 自动化纵向链路已形成确定性证据；M5 尚未完成
+> 结论：核心、CLI、真实 Chromium 与源码 production Wails 已形成分层证据；M5 尚未完成
 
 ## 缺口与采用机制
 
@@ -100,18 +100,43 @@ Push-Location desktop/frontend; corepack pnpm test:all; corepack pnpm build; Pop
 门禁；跨平台二进制只写入系统临时目录。以上仍是本地证据，不替代集中 push 后的新
 CI/CodeQL。
 
+## 浏览器与原生 Wails 交互证据
+
+第二批把 React 合同提升为两条互不冒充的实际交互链：
+
+- `desktop/frontend/scripts/smoke-plugin-browser.mjs` 使用 `playwright-core` 驱动系统
+  Chrome/Edge，不下载浏览器。证据固定标记 `backend=browser-mock`，只声明真实
+  Chromium 的设置、install、enable、update、rollback、doctor、remove 和布局链路；
+  本机 Chrome `150.0.7871.115` 运行通过，`console_errors=[]`、`page_errors=[]`、
+  `horizontal_overflow=false`，截图 SHA-256 为
+  `3dced154e5c9a32000ce9fe3930a5bfcf0922d14edd6138af7e083d2ebbcafe9`。
+- `scripts/smoke_desktop_plugin_lifecycle.py` 启动源码 production Wails，可执行文件
+  SHA-256 为 `11D8391D1DDCE62BF731F6F1AB84E5298471DFCC1175725CE41CC28D144D31A1`
+  （48,677,376 bytes）。它使用隔离 `REAMES_AGENT_HOME` 和本地 schema v1 合成包，
+  经 UIA 与真实 Go 后端完成 stale install plan 拒绝、1.0.0 默认禁用安装、exact
+  `skills.load` 授权、2.0.0 不同 digest 更新、恢复原 digest 的 1.0.0 回滚、doctor、
+  两阶段移除和受管安装根清理；最终 15.2 秒运行结果为 `outcome=passed`、
+  `boundary_changes=[]`、`errors=[]`、`temp_cleaned=true`。
+- 原生调试先暴露两个真实缺口：无可访问语义的普通容器不会进入 WebView2 UIA 树，
+  styled checkbox 的隐藏几何也不是可靠点击合同。插件 page/plan/row/banner 已补
+  region/group/alert/status 语义，checkbox 改用聚焦后 Space 的标准键盘路径，并有
+  React 与 UIA 驱动单测。
+- 普通 CI 前端 job 运行真实 Chromium smoke 并保留七天 JSON/截图；Desktop candidate
+  Windows job 在实际 NSIS 安装后运行原生插件 smoke，JSON 绑定 installer/executable
+  SHA-256 并保留十四天。两条 workflow 变更只有远端运行成功后才构成远端证据。
+
 ## 未关闭边界
 
 - GitHub 来源仍是 unsigned HTTPS；没有运营中的默认 registry、Reames 签名、
   provenance 或密钥轮换。
 - 权限授权不等于 Hook/MCP 子进程受到 OS sandbox；插件崩溃、资源耗尽和恶意进程
   的隔离 E2E 尚未完成。
-- CLI 与 Desktop 自动化明确流程已有证据；真实浏览器、原生 Wails、模型工具宿主和
-  其他嵌入方仍需统一展示并绑定同一结构化审批计划。
+- CLI、真实浏览器与源码 production Wails 明确流程已有证据；模型工具宿主和其他
+  嵌入方仍需统一展示并绑定同一结构化审批计划，远端 installed candidate 尚待运行。
 - controller 撤销阻止后续 Hook 事件，但不会强制终止已经启动的 Hook/MCP/插件进程；
   Skill fail-closed 会暂时暂停该 controller 的全部 Skill 入口，而不是原地热替换单个插件。
 - generation + 原子状态指针保证进程内失败时 active 不丢失，但没有 durable
   lifecycle journal；突发断电 exactly-once、目录 metadata/ACL 和恶意本机并发组件
   在极窄系统调用窗口内的对抗不在完成声明内。
-- 真实第三方插件、干净 clone、远端 CI/CodeQL、candidate 和原生 Desktop 交互证据
-  必须在本批代码收口后补齐；在此之前 M5 保持“进行中”。
+- 真实第三方插件、干净 clone、远端 CI/CodeQL 和 installed candidate 必须在本批代码
+  收口后补齐；在此之前 M5 保持“进行中”。

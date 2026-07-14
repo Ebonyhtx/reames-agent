@@ -532,11 +532,22 @@ console.log("capabilities panel plugin actions");
     await flush();
   });
   await waitFor("superpowers plugin row", () => Boolean(document.querySelector(".cap-row__name")?.textContent?.includes("superpowers")));
+  ok(Boolean(document.getElementById("plugin-settings-page")), "plugin settings exposes a stable automation root");
+  ok(document.getElementById("plugin-settings-page")?.getAttribute("aria-label") === "Install plugin", "plugin settings root is exposed to accessibility automation");
+  ok(Boolean(document.getElementById("plugin-row-superpowers")), "plugin rows expose name-scoped automation IDs");
+  ok(document.getElementById("plugin-row-superpowers")?.getAttribute("role") === "group", "plugin rows remain visible in the accessibility tree");
   ok(Boolean(document.querySelector(".cap-plugin-form-grid .cap-plugin-fields--local")), "local plugin install mode uses the shared form grid");
   const localOptionTexts = Array.from(document.querySelectorAll(".cap-plugin-installer__options > .cap-plugin-option-block"))
     .map((option) => option.textContent ?? "");
   ok(localOptionTexts[0]?.includes("Overwrite same-name plugin"), "local install mode shows overwrite before link mode");
   ok(localOptionTexts[1]?.includes("Developer mode: link source folder"), "local install mode shows link mode after overwrite");
+  const localSourceInput = document.getElementById("plugin-install-local-source") as HTMLInputElement | null;
+  if (!localSourceInput) throw new Error("missing editable local plugin source input");
+  await act(async () => {
+    setInputValue(localSourceInput, "/tmp/typed-plugin");
+    await flush();
+  });
+  await waitFor("typed local plugin source", () => localSourceInput.value === "/tmp/typed-plugin" && findButton("Preview")?.disabled === false);
 
   const chooseFolder = findButton("Choose plugin folder");
   if (!chooseFolder) throw new Error("missing plugin folder picker button");
@@ -544,10 +555,10 @@ console.log("capabilities panel plugin actions");
     chooseFolder.click();
     await flush();
   });
-  await waitFor("picked plugin folder source", () => document.body.textContent?.includes("/tmp/superpowers-plugin") ?? false);
+  await waitFor("picked plugin folder source", () => localSourceInput.value === "/tmp/superpowers-plugin");
   ok(pickFolderCalls === 1, "clicking Choose folder invokes the plugin folder picker once");
-  const localPreview = findButton("Preview");
-  const localInstall = findButton("Install plugin");
+  const localPreview = document.getElementById("plugin-install-preview") as HTMLButtonElement | null;
+  const localInstall = document.getElementById("plugin-install-apply") as HTMLButtonElement | null;
   const localOptions = document.querySelectorAll<HTMLInputElement>('.cap-plugin-installer__options input[type="checkbox"]');
   if (!localPreview || !localInstall || !localOptions[1]) throw new Error("missing local plugin plan controls");
   await act(async () => {
@@ -555,6 +566,8 @@ console.log("capabilities panel plugin actions");
     await flush();
   });
   await waitFor("local plugin plan", () => planCalls === 1 && localInstall.disabled === false);
+  ok(Boolean(document.getElementById("plugin-install-plan")), "install preview exposes a stable plan automation ID");
+  ok(document.getElementById("plugin-install-plan")?.getAttribute("role") === "group", "install preview remains visible in the accessibility tree");
   await act(async () => {
     localOptions[1]?.click();
     await flush();
@@ -648,6 +661,7 @@ console.log("capabilities panel plugin actions");
 
   const disclosure = document.querySelector<HTMLButtonElement>(".cap-plugin-entry .cap-disclosure");
   if (!disclosure) throw new Error("missing plugin disclosure");
+  ok(disclosure.id === "plugin-superpowers-details", "plugin disclosure uses its name-scoped automation ID");
   await act(async () => {
     disclosure.click();
     await flush();
@@ -670,6 +684,7 @@ console.log("capabilities panel plugin actions");
   await waitFor("plugin update plan", () => updatePlanCalls === 1 && updateCalls === 0 && Boolean(findButton("Apply update")));
   const applyUpdate = findButton("Apply update");
   if (!applyUpdate) throw new Error("missing plugin apply update button");
+  ok(applyUpdate.id === "plugin-superpowers-update", "plugin update keeps one stable automation ID across plan and apply");
   await act(async () => {
     applyUpdate.click();
     await flush();
@@ -685,6 +700,7 @@ console.log("capabilities panel plugin actions");
   await waitFor("plugin rollback plan", () => rollbackPlanCalls === 1 && rollbackCalls === 0 && Boolean(findButton("Apply rollback")));
   const applyRollback = findButton("Apply rollback");
   if (!applyRollback) throw new Error("missing plugin apply rollback button");
+  ok(applyRollback.id === "plugin-superpowers-rollback", "plugin rollback keeps one stable automation ID across plan and apply");
   await act(async () => {
     applyRollback.click();
     await flush();
@@ -712,6 +728,7 @@ console.log("capabilities panel plugin actions");
   ok(document.body.textContent?.includes("skills.load, hooks.execute") ?? false, "plugin authorization review displays the exact permission set");
   const approveEnable = findButton("Grant permissions and enable");
   if (!approveEnable) throw new Error("missing plugin enable approval button");
+  ok(approveEnable.id === "plugin-superpowers-enable-approve", "plugin authorization exposes a stable approval automation ID");
   await act(async () => {
     approveEnable.click();
     await flush();
@@ -729,6 +746,7 @@ console.log("capabilities panel plugin actions");
   });
   const confirmRemove = findButton("Confirm remove");
   if (!confirmRemove) throw new Error("missing plugin confirm remove button");
+  ok(confirmRemove.id === "plugin-superpowers-remove-confirm", "destructive confirmation exposes a distinct automation ID");
   await act(async () => {
     confirmRemove.click();
     await flush();
@@ -736,6 +754,7 @@ console.log("capabilities panel plugin actions");
   await waitFor("plugin remove plan", () => removePlanCalls === 1 && removeCalls === 0 && Boolean(findButton("Apply removal")));
   const applyRemove = findButton("Apply removal");
   if (!applyRemove) throw new Error("missing apply removal button");
+  ok(applyRemove.id === "plugin-superpowers-remove-apply", "planned removal exposes a distinct apply automation ID");
   await act(async () => {
     applyRemove.click();
     await flush();

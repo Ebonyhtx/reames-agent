@@ -64,10 +64,26 @@ def check_desktop_candidate_workflow(failures: list[str]) -> None:
         'if ($LASTEXITCODE -ne 0) { throw "installed Desktop accessibility smoke failed with exit code $LASTEXITCODE" }',
     ]:
         require(token in accessibility_block, f"Windows accessibility smoke must retain {token!r}.", failures)
+    plugin_command = "python scripts/smoke_desktop_plugin_lifecycle.py"
+    require(workflow.count(plugin_command) == 1, "desktop candidate must run the Windows plugin lifecycle smoke exactly once.", failures)
+    plugin_start = workflow.find(plugin_command)
+    plugin_end = workflow.find("} finally {", plugin_start)
+    plugin_block = workflow[plugin_start:plugin_end] if plugin_start >= 0 and plugin_end > plugin_start else ""
+    plugin_step_start = workflow.rfind("- name: Smoke installed Windows candidate", 0, plugin_start)
+    plugin_step = workflow[plugin_step_start:plugin_start] if plugin_step_start >= 0 and plugin_start >= 0 else ""
+    require("if: runner.os == 'Windows'" in plugin_step, "plugin lifecycle smoke must stay in the Windows candidate step.", failures)
+    for token in [
+        "--artifact $installer",
+        "--exe $exe",
+        "--out artifacts/desktop-windows-plugin-lifecycle-smoke.json",
+        'if ($LASTEXITCODE -ne 0) { throw "installed Desktop plugin lifecycle smoke failed with exit code $LASTEXITCODE" }',
+    ]:
+        require(token in plugin_block, f"Windows plugin lifecycle smoke must retain {token!r}.", failures)
     require("Start-Process -FilePath $installer" in workflow and "uninstall.exe" in workflow and "InstallLocation" in workflow, "desktop candidate must install, smoke, and uninstall the Windows NSIS package.", failures)
     require("artifacts/desktop-*-native-smoke.json" in workflow, "desktop candidate must upload native smoke evidence.", failures)
     require("artifacts/desktop-*-interaction-smoke.json" in workflow, "desktop candidate must upload Windows interaction evidence.", failures)
     require("artifacts/desktop-*-accessibility-smoke.json" in workflow, "desktop candidate must upload Windows accessibility evidence.", failures)
+    require("artifacts/desktop-*-plugin-lifecycle-smoke.json" in workflow, "desktop candidate must upload Windows plugin lifecycle evidence.", failures)
     forbidden = [
         "gh release create",
         "GITHUB_TOKEN:",
@@ -110,6 +126,7 @@ def check_release_docs(failures: list[str]) -> None:
         "scripts/smoke_desktop_native.py",
         "scripts/smoke_desktop_interaction.py",
         "scripts/smoke_desktop_accessibility.py",
+        "scripts/smoke_desktop_plugin_lifecycle.py",
         "Sigstore/cosign",
         "OIDC keyless signing",
         "fail closed",

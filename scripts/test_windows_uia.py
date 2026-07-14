@@ -117,6 +117,29 @@ class WindowsUIAutomationContractTests(unittest.TestCase):
         with self.assertRaisesRegex(OSError, "invoke failed"):
             value.invoke(automation_id="control")
 
+    def test_press_space_uses_focused_keyboard_contract(self) -> None:
+        value = driver()
+        info = element(automation_id="plugin-example-enabled")
+        item = {"info": info, "element": object()}
+        keys: list[int] = []
+        value._find = lambda **_kwargs: item  # type: ignore[method-assign]
+        value._focus = lambda selected: selected["info"]  # type: ignore[method-assign]
+        value._post_virtual_key = keys.append  # type: ignore[method-assign]
+
+        value.press_space(automation_id="plugin-example-enabled")
+
+        self.assertEqual(keys, [0x20])
+        self.assertEqual(
+            value.actions,
+            [
+                {
+                    "action": "uia-focus-window-message-space",
+                    "name": "Control",
+                    "automation_id": "plugin-example-enabled",
+                }
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

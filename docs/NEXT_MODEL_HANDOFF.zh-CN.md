@@ -32,12 +32,14 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 ## 当前基线
 
-- M0、M1、M2、M3、M4 已按各自路线图门槛关闭；进入 M5 本批时 `main`/`origin/main`
-  基线为 `32e5e6e feat: close M4 cross-resource recovery`。当前提交和远端状态必须以
-  `git log`、`git status` 和 GitHub Actions 为准。
-- M5 进行中。本批收口 plugin manifest、内容身份、权限授权、两阶段生命周期、
-  Desktop 自动化审批和旧 generation 运行时撤销，但不关闭原生交互、进程隔离、
-  registry 签名、真实第三方 E2E 与发布链。
+- M0、M1、M2、M3、M4 已按各自路线图门槛关闭；`main`/`origin/main` 基线为
+  `923e57e feat: harden plugin package lifecycle`。该提交的 CI `29373567554` 8/8、
+  CodeQL `29373567549` 3/3 全绿。当前提交和远端状态仍必须以 `git log`、`git status`
+  和 GitHub Actions 为准。
+- M5 进行中。第一批已收口 plugin manifest、内容身份、权限授权、两阶段生命周期、
+  Desktop 自动化审批和旧 generation 运行时撤销；当前第二批已取得真实 Chromium 与
+  源码 production Wails 原生交互，但不关闭进程隔离、registry 签名、真实第三方 E2E、
+  installed candidate 与发布链。
 - M6 的真实 linger logout/reboot、干净云节点、真实 IM 和公开签名 release 仍为
   `external-blocked`，不能用 mock 或 localhost 代替。
 
@@ -109,9 +111,28 @@ gofmt -l: empty; git diff --check: passed
 六目标二进制和综合报告只写入系统临时目录。以上为本地证据，不替代集中 push 后的新
 CI/CodeQL；不要为了回填静态 run ID 单独 push。
 
+第二批新增的定向证据：
+
+```text
+Real Chromium: backend=browser-mock, Chrome 150.0.7871.115, full plugin UI lifecycle passed
+Native Wails: sha256 11D8391D..., 15.2s, stale-plan/install/enable/update/rollback/doctor/remove passed
+Native state: update digest changed, rollback restored original digest, boundary_changes=[], errors=[]
+Python UIA/plugin contracts, TypeScript, component actions and production frontend build passed
+```
+
+普通 CI 已加入真实 Chromium smoke，Desktop candidate Windows job 已加入安装后原生
+插件生命周期 smoke；两者尚未经过当前第二批的远端运行，不得写成远端已通过。
+
+第二批提交前完整门禁也已通过：root `go build ./...`、`go vet ./...`、
+`go test ./internal/...`，M5 四包 race，Desktop vet/full test，前端 `test:all`、production
+build 与 bundle budget，`verify-baseline.ps1`，工具/文档/发布/部署/公共就绪合同，以及
+darwin/linux/windows × amd64/arm64 的 `CGO_ENABLED=0` 交叉编译。`git diff --check`
+通过；本批没有 Go 文件 diff。仓库级 `gofmt -l .` 在当前 Go 1.26 工具链仍列出八个
+`HEAD` 既有文件，本批未夹带格式化或改写它们。
+
 ## 未关闭边界
 
-- 真实浏览器与原生 Wails 插件安装、授权、更新、回滚、移除和失败恢复交互。
+- 已安装 Windows candidate 的插件安装、授权、更新、回滚、移除和失败恢复交互。
 - 所有模型宿主共用的 permission/control 结构化审批 UX。
 - Hook/MCP/插件进程 OS sandbox、资源限制、崩溃和恶意进程隔离。
 - 真实运营 registry、签名、provenance、密钥轮换和公开可信发布链。
@@ -120,9 +141,10 @@ CI/CodeQL；不要为了回填静态 run ID 单独 push。
 
 ## 下一执行顺序
 
-1. 完整复核 staged diff；只显式暂存允许文件，形成一个 M5 大提交。
-2. 单次 push 后守候并修复该提交的新 CI/CodeQL，不为回填 run ID 额外 push。
-3. 取得真实浏览器/原生 Wails 插件交互；随后统一模型宿主审批并推进插件进程隔离。
-4. 外部环境到位时并行关闭真实第三方插件、M6 云节点/IM 和公开签名发布证据。
+1. 跑第二批完整本地门禁并复核 diff；只显式暂存允许文件，形成一个 M5 大提交。
+2. 单次 push 后守候并修复新 CI/CodeQL，再手动触发并核验 Desktop candidate；不为回填
+   静态 run ID 额外 push。
+3. 统一模型宿主审批并推进插件进程隔离与真实第三方插件 E2E。
+4. 外部环境到位时并行关闭 M6 云节点/IM 和公开签名发布证据。
 
 长期 GOAL 尚未完成；M5 本批的本地合同不得扩大为插件生态或整个项目完成。
