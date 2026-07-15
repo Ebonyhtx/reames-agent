@@ -23,6 +23,16 @@ type recoveryTransactionFixture struct {
 	startMessages int
 }
 
+type interruptedTranscriptRunner struct {
+	session *agent.Session
+}
+
+func (r interruptedTranscriptRunner) Run(_ context.Context, input string) error {
+	r.session.Add(provider.Message{Role: provider.RoleUser, Content: input})
+	r.session.Add(provider.Message{Role: provider.RoleAssistant, Content: "durable partial response"})
+	return &provider.StreamInterruptedError{Err: errors.New("connection reset by peer")}
+}
+
 func newRecoveryTransactionFixture(t *testing.T) recoveryTransactionFixture {
 	t.Helper()
 	workspace := t.TempDir()
@@ -143,6 +153,95 @@ func TestCommittedWriterTransactionSurvivesCrashBeforeMarkerClear(t *testing.T) 
 	meta, ok, err = agent.LoadBranchMeta(f.sessionPath)
 	if err != nil || !ok || meta.InFlightTurn != nil {
 		t.Fatalf("committed marker after recovery ok=%v err=%v marker=%+v", ok, err, meta.InFlightTurn)
+	}
+}
+
+func TestStreamInterruptedTurnCommitsPartialTranscriptAndRuntime(t *testing.T) {
+	workspace := t.TempDir()
+	sessionDir := t.TempDir()
+	path := filepath.Join(sessionDir, "stream-interrupted.jsonl")
+	sess := agent.NewSession("system")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "previous"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "done"})
+	if err := sess.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	startMessages := sess.Len()
+	exec := agent.New(nil, nil, sess, agent.Options{}, event.Discard)
+	c := New(Options{
+		Runner: interruptedTranscriptRunner{session: sess}, Executor: exec,
+		SessionDir: sessionDir, SessionPath: path, WorkspaceRoot: workspace,
+	})
+
+	err := c.runTurnWithRaw(context.Background(), "continue", "continue")
+	if !provider.IsStreamInterrupted(err) {
+		t.Fatalf("turn error = %v, want StreamInterruptedError", err)
+	}
+	loaded, loadErr := agent.LoadSession(path)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	msgs := loaded.Messages
+	if len(msgs) != startMessages+2 || msgs[len(msgs)-1].Role != provider.RoleAssistant || msgs[len(msgs)-1].Content != "durable partial response" {
+		t.Fatalf("persisted interrupted transcript = %+v, want partial assistant tail", msgs)
+	}
+	state, ok := c.goals.readSessionState(path)
+	if !ok {
+		t.Fatal("interrupted stream runtime sidecar missing")
+	}
+	equal, _ := loaded.CompareTranscriptAnchor(state.MessageCount, state.TranscriptDigest)
+	if !equal {
+		t.Fatalf("runtime anchor count=%d digest=%q does not match partial transcript", state.MessageCount, state.TranscriptDigest)
+	}
+	meta, ok, metaErr := agent.LoadBranchMeta(path)
+	if metaErr != nil || !ok || meta.InFlightTurn != nil {
+		t.Fatalf("stream interruption marker after commit ok=%v err=%v marker=%+v", ok, metaErr, meta.InFlightTurn)
+	}
+}
+
+func TestStreamInterruptedTurnCommitFailureRollsBackPartialTranscript(t *testing.T) {
+	workspace := t.TempDir()
+	sessionDir := t.TempDir()
+	path := filepath.Join(sessionDir, "stream-interrupted-commit-failure.jsonl")
+	sess := agent.NewSession("system")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "previous"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "done"})
+	if err := sess.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	startMessages := sess.Len()
+	exec := agent.New(nil, nil, sess, agent.Options{}, event.Discard)
+	c := New(Options{
+		Runner: interruptedTranscriptRunner{session: sess}, Executor: exec,
+		SessionDir: sessionDir, SessionPath: path, WorkspaceRoot: workspace,
+	})
+	c.inFlightCommit = func(string, agent.InFlightTurnMeta, int, string) error {
+		return errors.New("injected interrupted stream commit failure")
+	}
+
+	err := c.runTurnWithRaw(context.Background(), "continue", "continue")
+	if !provider.IsStreamInterrupted(err) || !strings.Contains(err.Error(), "commit interrupted stream turn") {
+		t.Fatalf("turn error = %v, want interrupted stream commit failure", err)
+	}
+	loaded, loadErr := agent.LoadSession(path)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	msgs := loaded.Messages
+	if len(msgs) != startMessages+1 || msgs[len(msgs)-1].Role != provider.RoleUser || msgs[len(msgs)-1].Content != "continue" {
+		t.Fatalf("rolled-back interrupted transcript = %+v, want only preserved visible user prompt", msgs)
+	}
+	state, ok := c.goals.readSessionState(path)
+	if !ok {
+		t.Fatal("rolled-back interrupted stream runtime sidecar missing")
+	}
+	equal, _ := loaded.CompareTranscriptAnchor(state.MessageCount, state.TranscriptDigest)
+	if !equal {
+		t.Fatalf("runtime anchor count=%d digest=%q does not match rolled-back transcript", state.MessageCount, state.TranscriptDigest)
+	}
+	meta, ok, metaErr := agent.LoadBranchMeta(path)
+	if metaErr != nil || !ok || meta.InFlightTurn != nil {
+		t.Fatalf("stream interruption marker after rollback ok=%v err=%v marker=%+v", ok, metaErr, meta.InFlightTurn)
 	}
 }
 

@@ -125,6 +125,26 @@ CI/CodeQL。
   Windows job 在实际 NSIS 安装后运行原生插件 smoke，JSON 绑定 installer/executable
   SHA-256 并保留十四天。两条 workflow 变更只有远端运行成功后才构成远端证据。
 
+## 远端基线与 candidate 诊断
+
+commit `a0c09de` 的普通 CI run `29376470335` 8/8、CodeQL run `29376470342`
+3/3 全绿；其中 Desktop frontend job 的真实 Chromium plugin lifecycle smoke 通过，因而
+浏览器链已有远端证据。Desktop candidate run `29376807221` 的 Linux/macOS jobs 通过；
+Windows 安装与启动 smoke 通过，但既有 interaction smoke 在流中断场景发现 partial
+assistant response 未持久化，因而在 plugin lifecycle smoke 运行前正确失败。该 run 不能
+证明 installed Windows 插件生命周期。
+
+根因位于 M4 turn transaction 对已耗尽恢复的 `StreamInterruptedError` 仍执行通用回滚；
+当前源码已改为提交 coherent partial transcript/runtime boundary，并用 production Wails
+二进制重新完成 19 请求、五类失败恢复、Stop 和重启恢复，最终
+`boundary_changes=[]`、`errors=[]`。这项本地原生复验关闭了修复诊断，不替代下一次
+远端 installed candidate。
+
+修复后完整本地门禁再次通过：root build/vet/internal 全测、`internal/control` race、
+Desktop vet/full test、前端 `test:all`/production build 与 bundle budget、工具/文档/公共
+发布/部署合同、119 个 Python 合同测试（2 skipped）、Node/upstream scan 和六目标
+`CGO_ENABLED=0` 交叉编译。
+
 ## 未关闭边界
 
 - GitHub 来源仍是 unsigned HTTPS；没有运营中的默认 registry、Reames 签名、
@@ -132,11 +152,12 @@ CI/CodeQL。
 - 权限授权不等于 Hook/MCP 子进程受到 OS sandbox；插件崩溃、资源耗尽和恶意进程
   的隔离 E2E 尚未完成。
 - CLI、真实浏览器与源码 production Wails 明确流程已有证据；模型工具宿主和其他
-  嵌入方仍需统一展示并绑定同一结构化审批计划，远端 installed candidate 尚待运行。
+  嵌入方仍需统一展示并绑定同一结构化审批计划，新修复的远端 installed candidate
+  尚待运行。
 - controller 撤销阻止后续 Hook 事件，但不会强制终止已经启动的 Hook/MCP/插件进程；
   Skill fail-closed 会暂时暂停该 controller 的全部 Skill 入口，而不是原地热替换单个插件。
 - generation + 原子状态指针保证进程内失败时 active 不丢失，但没有 durable
   lifecycle journal；突发断电 exactly-once、目录 metadata/ACL 和恶意本机并发组件
   在极窄系统调用窗口内的对抗不在完成声明内。
-- 真实第三方插件、干净 clone、远端 CI/CodeQL 和 installed candidate 必须在本批代码
-  收口后补齐；在此之前 M5 保持“进行中”。
+- 真实第三方插件、干净 clone 和新修复的 installed candidate 仍必须补齐；普通
+  CI/CodeQL 已在 `a0c09de` 通过。在这些边界关闭前 M5 保持“进行中”。

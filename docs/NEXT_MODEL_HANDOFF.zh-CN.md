@@ -32,14 +32,20 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 ## 当前基线
 
-- M0、M1、M2、M3、M4 已按各自路线图门槛关闭；`main`/`origin/main` 基线为
-  `923e57e feat: harden plugin package lifecycle`。该提交的 CI `29373567554` 8/8、
-  CodeQL `29373567549` 3/3 全绿。当前提交和远端状态仍必须以 `git log`、`git status`
-  和 GitHub Actions 为准。
+- M0、M1、M2、M3、M4 已按各自路线图门槛关闭；本批修复之前的已验证远端基线为
+  `a0c09de test: gate plugin lifecycle in Chromium and Wails`。该提交的 CI
+  `29376470335` 8/8、CodeQL `29376470342` 3/3 全绿；CI 中真实 Chromium plugin
+  lifecycle smoke 已通过。当前提交和远端状态仍必须以 `git log`、`git status` 和
+  GitHub Actions 为准。
 - M5 进行中。第一批已收口 plugin manifest、内容身份、权限授权、两阶段生命周期、
   Desktop 自动化审批和旧 generation 运行时撤销；当前第二批已取得真实 Chromium 与
   源码 production Wails 原生交互，但不关闭进程隔离、registry 签名、真实第三方 E2E、
   installed candidate 与发布链。
+- Desktop candidate `29376807221` 的 Linux/macOS 通过；Windows 安装与启动 smoke
+  通过，但既有 interaction smoke 在 plugin lifecycle 前发现流中断 partial response 被
+  M4 通用事务回滚删除。本批修复改为提交 coherent partial transcript/runtime；
+  production Wails 本地复验完成 19 请求和五类失败恢复，最终 `boundary_changes=[]`、
+  `errors=[]`。这仍不是新 installed candidate 证据。
 - M6 的真实 linger logout/reboot、干净云节点、真实 IM 和公开签名 release 仍为
   `external-blocked`，不能用 mock 或 localhost 代替。
 
@@ -87,7 +93,7 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 ## 本地验证门禁
 
-2026-07-15 当前工作树的提交前结果：
+`a0c09de` 提交前结果：
 
 ```text
 go build ./...
@@ -120,8 +126,16 @@ Native state: update digest changed, rollback restored original digest, boundary
 Python UIA/plugin contracts, TypeScript, component actions and production frontend build passed
 ```
 
-普通 CI 已加入真实 Chromium smoke，Desktop candidate Windows job 已加入安装后原生
-插件生命周期 smoke；两者尚未经过当前第二批的远端运行，不得写成远端已通过。
+普通 CI 的真实 Chromium smoke 已在 run `29376470335` 通过。Desktop candidate Windows
+job 已加入安装后原生插件生命周期 smoke，但 run `29376807221` 在它之前的 interaction
+smoke 失败，未生成 plugin lifecycle 通过证据。
+
+当前流中断事务修复已重新通过完整本地门禁：root build/vet/internal 全测、
+`internal/control` 全测与 race、Desktop vet/full test、前端 `test:all`/production build
+与 bundle budget、工具/文档/公共发布/部署合同、119 个 Python 合同测试（2 skipped）、
+Node upstream reconciliation、实际 upstream scan，以及六目标 `CGO_ENABLED=0` 交叉编译。
+聚焦回归同时覆盖 partial transcript 成功提交和注入提交失败后的 fail-closed 回滚；
+`git diff --check` 通过。新 installed candidate 仍需按下方顺序执行。
 
 第二批提交前完整门禁也已通过：root `go build ./...`、`go vet ./...`、
 `go test ./internal/...`，M5 四包 race，Desktop vet/full test，前端 `test:all`、production
@@ -141,9 +155,9 @@ darwin/linux/windows × amd64/arm64 的 `CGO_ENABLED=0` 交叉编译。`git diff
 
 ## 下一执行顺序
 
-1. 跑第二批完整本地门禁并复核 diff；只显式暂存允许文件，形成一个 M5 大提交。
-2. 单次 push 后守候并修复新 CI/CodeQL，再手动触发并核验 Desktop candidate；不为回填
-   静态 run ID 额外 push。
+1. 守候本批修复的 CI/CodeQL；若失败，从日志根因修复而不是重跑掩盖。
+2. 全绿后手动触发并核验 Desktop candidate，下载 Windows interaction、accessibility 和
+   plugin lifecycle 三份 JSON；不为回填静态 run ID 额外 push。
 3. 统一模型宿主审批并推进插件进程隔离与真实第三方插件 E2E。
 4. 外部环境到位时并行关闭 M6 云节点/IM 和公开签名发布证据。
 

@@ -128,6 +128,20 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 			}
 			return
 		}
+		// A StreamInterruptedError is returned only after the provider emitted
+		// output and the agent exhausted its bounded tail-recovery attempts. Any
+		// tool calls preceding that cut have already completed synchronously, and
+		// the partial assistant messages are intentionally useful context for the
+		// user's Continue action. Commit that coherent boundary instead of making
+		// the durable transcript contradict the "partial response was kept" UI.
+		// Process crashes and every other runtime error remain fail-closed below.
+		if provider.IsStreamInterrupted(runErr) {
+			if err := c.commitInFlightTurn(startMessages); err == nil {
+				return
+			} else {
+				runErr = errors.Join(runErr, fmt.Errorf("commit interrupted stream turn: %w", err))
+			}
+		}
 		if err := c.recoverInterruptedTurnState(c.SessionPath()); err != nil {
 			runErr = errors.Join(runErr, fmt.Errorf("rollback interrupted turn: %w", err))
 		}

@@ -29,7 +29,12 @@ persist transcript
 -> clear in-flight marker
 ```
 
-Resume 遇到 marker 时同时比较 transcript prefix 和 runtime sidecar anchor。两者都匹配 commit anchor 才视为“结果已提交、仅 marker 未清”；否则从 `CheckpointTurn` 恢复 workspace 和 Goal/Plan/Todo/evidence projection，并按 visible/synthetic 语义删除 partial transcript。当前进程内的 runner error、cancel 和 commit persistence error 复用相同恢复函数。
+Resume 遇到 marker 时同时比较 transcript prefix 和 runtime sidecar anchor。两者都匹配 commit anchor 才视为“结果已提交、仅 marker 未清”；否则从 `CheckpointTurn` 恢复 workspace 和 Goal/Plan/Todo/evidence projection，并按 visible/synthetic 语义删除 partial transcript。当前进程内的 cancel、非流中断 runner error 和 commit persistence error 复用相同恢复函数。
+
+`provider.StreamInterruptedError` 是一个更窄的已产出边界：Provider 已发送可见输出，Agent
+已经耗尽有界 tail recovery，前置同步 tool call 也已经完成。此时 Controller 按上述成功
+顺序提交当前 partial transcript/runtime 并清 marker，让用户可见的“部分响应已保留”和
+Continue 操作与持久状态一致；若这次提交任一步失败，则仍进入同一个 fail-closed 回滚。
 
 Previewable writer 仍在执行前要求 checkpoint record、runtime sidecar 和当前 marker 全部持久化；因此进程退出时要么没有 writer effect，要么存在精确 checkpoint 可回滚。无 session path 的内存 Controller 只保留兼容行为，不获得跨重启保证。
 
@@ -61,6 +66,8 @@ Session append event 从 best-effort append 改为同步文件；首次创建 ev
 
 - 未提交 writer 进程退出后同时恢复 workspace、transcript 和 runtime；
 - transcript/runtime commit 已完成但 marker clear 前退出，重启保留完整结果；
+- 流中断耗尽恢复后提交 partial transcript/runtime 并清 marker；注入该提交失败时仅保留
+  visible user prompt、runtime anchor 重新匹配回滚后的 transcript；
 - 遗留 active-turn 自动恢复再次失败时，新模型 turn 在 checkpoint 分配前被阻断且 marker 保留；
 - 新 turn 的 checkpoint 分配或 in-flight marker 持久化失败时，模型 runner 在调用前被阻断；marker 失败后刚分配但未武装的 checkpoint 会被退休，不暴露幽灵 rewind 点；
 - synthetic checkpoint 重启后仍隐藏，且只恢复自身 `v2 -> v1`，不跨越 visible turn 回到 `v0`；
@@ -92,6 +99,29 @@ Go brand residue: 0; gofmt -l: empty; git diff --check: passed
 综合 baseline 实际构建 CLI、运行缓存敏感测试、公开/部署/发布合同、localhost Gateway smoke 和核心包集；报告与六目标二进制均写入系统临时目录，未污染仓库 `artifacts/`。上述是本地证据；远端 CI/CodeQL 必须在本大批集中 push 后另行核验，且不为回填 run ID 制造额外提交。
 
 普通 `go test ./internal/...` 不会仅因开发机存在 `DEEPSEEK_API_KEY` 而访问真实服务；DeepSeek cache probe 现与 ACP 真实测试统一使用 `live` build tag，只有显式 `go test -tags live ...` 才会编译执行。当前真实 cache probe 的网络请求超时，不计入本批通过证据，也不影响确定性门禁。
+
+## 2026-07-15 installed candidate 回归与修复复验
+
+commit `a0c09de` 的普通 CI run `29376470335` 8/8、CodeQL run `29376470342`
+3/3 全绿。Desktop candidate run `29376807221` 的 Linux/macOS jobs 通过，Windows
+安装、启动 smoke 也通过，但 interaction smoke 在进入新增 plugin lifecycle 前失败：
+`stream_interruption.idle_recovered=false`，错误为
+`partial stream output was not persisted after disconnect`。这证明 M4 通用事务回滚错误地
+删除了 M1 原生合同明确要求保留的 partial assistant response，不是插件 smoke 本身失败。
+
+当前源码修复后重新构建 production Wails：48,678,400 bytes，SHA-256
+`939CC9A9172F7BB7586FCA44DDD1925F04F4D3E34C6715B07C50C230511ED934`。同一 Windows
+UIA interaction smoke 完成 19 次 localhost Provider 请求，五类失败场景的
+`signal_visible`、`idle_recovered`、`followup_succeeded` 全部为 `true`；
+`stream_partial_persisted=true`、`stream_retry_invoked=true`、`recovery_verified=true`，
+最终 `boundary_changes=[]`、`errors=[]`。证据写在系统临时目录，不进入仓库。该结果是
+源码 production Wails 证据，仍需新 commit 的 installed candidate 远端复验，不能冒充
+旧 run 已通过。
+
+修复批次重新通过 root build/vet/internal 全测、`internal/control` 全测与 race、Desktop
+vet/full test、前端 `test:all`/production build 与 bundle budget、工具/文档/公共发布/部署
+合同、119 个 Python 合同测试（2 skipped）、Node upstream reconciliation、实际 upstream
+scan 和六目标 `CGO_ENABLED=0` 交叉编译。以上仍是提交前本地证据。
 
 ## 完成边界
 
