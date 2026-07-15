@@ -11,6 +11,7 @@ import (
 
 	"reames-agent/internal/control"
 	"reames-agent/internal/event"
+	"reames-agent/internal/eventwire"
 	"reames-agent/internal/permission"
 )
 
@@ -247,6 +248,12 @@ func (s *updateSink) requestPermission(ctx context.Context, a event.Approval) {
 			Status:     "pending",
 		},
 		Options: options,
+	}
+	if a.Plan != nil {
+		wire := eventwire.ToWire(event.Event{Kind: event.ApprovalRequest, Approval: a})
+		if raw, err := json.Marshal(wire.Approval.Plan); err == nil {
+			params.ToolCall.RawInput = raw
+		}
 	}
 
 	allow, session, persist := false, false, false

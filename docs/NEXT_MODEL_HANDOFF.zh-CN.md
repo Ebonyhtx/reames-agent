@@ -32,20 +32,19 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 ## 当前基线
 
-- M0、M1、M2、M3、M4 已按各自路线图门槛关闭；本批修复之前的已验证远端基线为
-  `a0c09de test: gate plugin lifecycle in Chromium and Wails`。该提交的 CI
-  `29376470335` 8/8、CodeQL `29376470342` 3/3 全绿；CI 中真实 Chromium plugin
-  lifecycle smoke 已通过。当前提交和远端状态仍必须以 `git log`、`git status` 和
+- M0、M1、M2、M3、M4 已按各自路线图门槛关闭；当前已验证远端基线为
+  `e9de895 fix: preserve partial stream recovery transcript`。该提交的 CI
+  `29378573077` 8/8、CodeQL `29378573116` 3/3、Desktop candidate
+  `29378899444` 三平台全绿。当前提交和远端状态仍必须以 `git log`、`git status` 和
   GitHub Actions 为准。
 - M5 进行中。第一批已收口 plugin manifest、内容身份、权限授权、两阶段生命周期、
-  Desktop 自动化审批和旧 generation 运行时撤销；当前第二批已取得真实 Chromium 与
-  源码 production Wails 原生交互，但不关闭进程隔离、registry 签名、真实第三方 E2E、
-  installed candidate 与发布链。
-- Desktop candidate `29376807221` 的 Linux/macOS 通过；Windows 安装与启动 smoke
-  通过，但既有 interaction smoke 在 plugin lifecycle 前发现流中断 partial response 被
-  M4 通用事务回滚删除。本批修复改为提交 coherent partial transcript/runtime；
-  production Wails 本地复验完成 19 请求和五类失败恢复，最终 `boundary_changes=[]`、
-  `errors=[]`。这仍不是新 installed candidate 证据。
+  Desktop 自动化审批和旧 generation 运行时撤销；真实 Chromium、源码 production Wails
+  与已安装 Windows candidate 均已有分层证据，但不关闭进程隔离、registry 签名、真实
+  第三方 E2E 与发布链。
+- candidate `29378899444` 的 Windows interaction/accessibility/native/plugin 四份 JSON
+  均通过，`boundary_changes=[]`、`errors=[]`；installer/executable SHA-256 分别为
+  `779706C1FA70D172912527E9130C4D9FDEFC1AD5C40885EF7BB719445438DF09` 和
+  `4326C3B5DFC690DA584E8E1F20A8AD061CD03EFAB0780F8C9F6E2ECEE6DA394F`。
 - M6 的真实 linger logout/reboot、干净云节点、真实 IM 和公开签名 release 仍为
   `external-blocked`，不能用 mock 或 localhost 代替。
 
@@ -91,6 +90,23 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 - 已经运行的 Hook/子进程不会被此 controller 内撤销强杀；Hook/MCP/插件进程 OS sandbox
   和故障隔离仍未完成。
 
+### 跨宿主结构化审批
+
+- `install_source apply=false` 按调用级只读；`apply=true` 在执行前重算确定性计划，并要求
+  先前 preview 返回的精确 `planId`。审批包含 actions、风险、target、权限、版本/digest、
+  trust、source revision 和 MCP URL/command/args/env/headers；URL 凭据、敏感 query/参数、
+  环境变量与请求头在展示和 pending persistence 前结构化脱敏。
+- Controller 强制 fresh-human 决策；YOLO、Auto、Guardian、已批准 Plan 执行窗口、
+  session/persistent grant 和 headless autonomy 均不能代答。显式 deny 在联网或读盘预览前
+  拦截；无结构化审批能力及 headless apply 的宿主零预览、零执行 fail closed。
+- Desktop、Bubble Tea CLI、Bot、Serve/event wire 与 ACP 消费同一计划；pending snapshot
+  和 replay 保留完整字段，结构化批准后 PreToolUse hooks 仍可阻断。
+- 本批 33 个受跟踪文件已通过 root build/vet/internal 全测、M5 四包 race、Desktop
+  vet/full test、前端 `test:all`/production build/bundle budget、基线与合同、119 项 Python
+  合同（2 skipped）、真实 Chrome plugin smoke、实际 upstream scan、品牌残留 0 和六目标
+  `CGO_ENABLED=0` 交叉编译。这些结果是本地证据；提交、push 与远端 CI/CodeQL 状态必须
+  以当前 `git log`、`git status` 和 GitHub Actions 单独核验。
+
 ## 本地验证门禁
 
 `a0c09de` 提交前结果：
@@ -126,39 +142,34 @@ Native state: update digest changed, rollback restored original digest, boundary
 Python UIA/plugin contracts, TypeScript, component actions and production frontend build passed
 ```
 
-普通 CI 的真实 Chromium smoke 已在 run `29376470335` 通过。Desktop candidate Windows
-job 已加入安装后原生插件生命周期 smoke，但 run `29376807221` 在它之前的 interaction
-smoke 失败，未生成 plugin lifecycle 通过证据。
+普通 CI 的真实 Chromium smoke 已在 run `29378573077` 通过；Desktop candidate
+`29378899444` 已生成安装后 Windows plugin lifecycle 通过证据。
 
 当前流中断事务修复已重新通过完整本地门禁：root build/vet/internal 全测、
 `internal/control` 全测与 race、Desktop vet/full test、前端 `test:all`/production build
 与 bundle budget、工具/文档/公共发布/部署合同、119 个 Python 合同测试（2 skipped）、
 Node upstream reconciliation、实际 upstream scan，以及六目标 `CGO_ENABLED=0` 交叉编译。
 聚焦回归同时覆盖 partial transcript 成功提交和注入提交失败后的 fail-closed 回滚；
-`git diff --check` 通过。新 installed candidate 仍需按下方顺序执行。
+`git diff --check` 通过；其远端 CI/CodeQL/candidate 现已由上述 `e9de895` runs 关闭。
 
-第二批提交前完整门禁也已通过：root `go build ./...`、`go vet ./...`、
-`go test ./internal/...`，M5 四包 race，Desktop vet/full test，前端 `test:all`、production
-build 与 bundle budget，`verify-baseline.ps1`，工具/文档/发布/部署/公共就绪合同，以及
-darwin/linux/windows × amd64/arm64 的 `CGO_ENABLED=0` 交叉编译。`git diff --check`
-通过；本批没有 Go 文件 diff。仓库级 `gofmt -l .` 在当前 Go 1.26 工具链仍列出八个
-`HEAD` 既有文件，本批未夹带格式化或改写它们。
+当前跨宿主审批批次已重新通过 root build/vet/internal 全测、M5 四包 race、Desktop
+vet/full test、前端 `test:all`/production build/bundle budget、合同与 upstream checks、
+真实 Chrome smoke 和六目标 `CGO_ENABLED=0` 交叉编译。提交前仍需完成最终差异审查、
+`git diff --check` 和显式暂存；这些结果不替代 push 后的新远端 CI/CodeQL。
 
 ## 未关闭边界
 
-- 已安装 Windows candidate 的插件安装、授权、更新、回滚、移除和失败恢复交互。
-- 所有模型宿主共用的 permission/control 结构化审批 UX。
 - Hook/MCP/插件进程 OS sandbox、资源限制、崩溃和恶意进程隔离。
 - 真实运营 registry、签名、provenance、密钥轮换和公开可信发布链。
-- 至少一个真实第三方插件 E2E、干净 clone、远端 CI/CodeQL 和 candidate。
+- 至少一个真实第三方插件 E2E 和干净 clone；关闭 M5 时最新提交必须远端全绿。
 - `bash`、MCP、外部 API 和后台 opaque side effect 仍无任意副作用 exactly-once。
 
 ## 下一执行顺序
 
-1. 守候本批修复的 CI/CodeQL；若失败，从日志根因修复而不是重跑掩盖。
-2. 全绿后手动触发并核验 Desktop candidate，下载 Windows interaction、accessibility 和
-   plugin lifecycle 三份 JSON；不为回填静态 run ID 额外 push。
-3. 统一模型宿主审批并推进插件进程隔离与真实第三方插件 E2E。
+1. 核对当前分支、提交和远端状态；若本批尚未 push，显式暂存受跟踪文件后集中
+   commit/push 一次，若已 push 则不要为回填静态 run ID 重复推送。
+2. 守候最新 CI/CodeQL；若失败，从日志根因修复而不是重跑掩盖。
+3. 推进插件进程隔离、真实第三方插件 E2E 和运营 registry 信任链。
 4. 外部环境到位时并行关闭 M6 云节点/IM 和公开签名发布证据。
 
 长期 GOAL 尚未完成；M5 本批的本地合同不得扩大为插件生态或整个项目完成。

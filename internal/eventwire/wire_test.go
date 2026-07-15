@@ -260,6 +260,26 @@ func TestToWireInteractionAndLifecyclePayloads(t *testing.T) {
 			want: []string{`"kind":"approval_request"`, `"approval":{"id":"a1","tool":"write_file","subject":"a.txt","diff":"@@ -0,0 +1 @@\n+hello\n","added":1}`},
 		},
 		{
+			name: "structured approval",
+			in: event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{
+				ID: "a2", Tool: "install_source", Subject: "install reviewed",
+				Plan: &event.ApprovalPlan{
+					PlanID: "plan-7", Operation: "install", Source: "plugin.zip", Scope: "global",
+					Actions: []event.ApprovalAction{{
+						Kind: "plugin", Action: "install_plugin_package", RiskLevel: "high", Name: "reviewed",
+						Target: "plugins/reviewed", Transport: "stdio", Command: "node", Args: []string{"server.js"},
+						Env: map[string]string{"MODE": "reviewed"}, Headers: map[string]string{"X-Mode": "reviewed"},
+						Permissions: []string{"hooks:execute"}, RiskReasons: []string{"runs hooks"},
+					}},
+				},
+			}},
+			want: []string{
+				`"kind":"approval_request"`, `"tool":"install_source"`, `"planId":"plan-7"`,
+				`"operation":"install"`, `"riskLevel":"high"`, `"permissions":["hooks:execute"]`, `"target":"plugins/reviewed"`,
+				`"transport":"stdio"`, `"command":"node"`, `"args":["server.js"]`, `"env":{"MODE":"reviewed"}`, `"headers":{"X-Mode":"reviewed"}`,
+			},
+		},
+		{
 			name: "ask",
 			in: event.Event{Kind: event.AskRequest, Ask: event.Ask{
 				ID: "ask-1",

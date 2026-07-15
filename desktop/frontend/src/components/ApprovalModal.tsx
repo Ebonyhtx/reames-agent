@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import gsap from "gsap";
 import { useT, type Translator } from "../lib/i18n";
-import type { ComposerInsertRequest, DirEntry, WireApproval } from "../lib/types";
+import type { ComposerInsertRequest, DirEntry, WireApproval, WireApprovalPlan } from "../lib/types";
 import { PromptAction, PromptBadge, PromptHeaderAction, PromptShelf } from "./PromptShelf";
 import { DUR_FAST } from "../lib/gsapAnimations";
 import { fileDiffFromWire, summarizeFileDiff } from "../lib/tools";
@@ -29,7 +29,7 @@ function animateShelfExit(
 }
 
 function requiresFreshHumanApproval(tool: string): boolean {
-  return tool === "remember" || tool === "forget" || tool === "exit_plan_mode" || tool === "sandbox_escape";
+  return tool === "remember" || tool === "forget" || tool === "exit_plan_mode" || tool === "sandbox_escape" || tool === "install_source";
 }
 
 function approvalToolLabel(tool: string, t: Translator): string {
@@ -56,9 +56,95 @@ function approvalToolLabel(tool: string, t: Translator): string {
       return t("approval.toolLabelSandboxEscape");
     case "plan_mode_read_only_command":
       return t("approval.toolLabelPlanModeReadOnly");
+    case "install_source":
+      return t("approval.toolLabelInstallSource");
     default:
       return tool;
   }
+}
+
+function InstallApprovalPlan({ plan, t }: { plan: WireApprovalPlan; t: Translator }) {
+  const formatMap = (values?: Record<string, string>) => Object.entries(values ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join(", ");
+  return (
+    <div className="approval-install-plan" data-automation-id="install-source-approval-plan">
+      <div className="approval-install-plan__header">
+        <strong>{t("approval.installPlan")}</strong>
+        <span><span>{t("approval.planId")}</span> <code>{plan.planId}</code></span>
+      </div>
+      <dl className="approval-install-plan__meta">
+        <div><dt>{t("approval.operation")}</dt><dd>{plan.operation}</dd></div>
+        {plan.name && <div><dt>{t("approval.name")}</dt><dd>{plan.name}</dd></div>}
+        {plan.kind && <div><dt>{t("approval.kind")}</dt><dd>{plan.kind}</dd></div>}
+        {plan.scope && <div><dt>{t("approval.scope")}</dt><dd>{plan.scope}</dd></div>}
+        {plan.mode && <div><dt>{t("approval.mode")}</dt><dd>{plan.mode}</dd></div>}
+        {plan.source && <div><dt>{t("approval.source")}</dt><dd>{plan.source}</dd></div>}
+      </dl>
+      <div className="approval-install-plan__actions">
+        {plan.actions.map((action, index) => {
+          const permissions = action.permissions ?? [];
+          const addedPermissions = action.addedPermissions ?? [];
+          const removedPermissions = action.removedPermissions ?? [];
+          return (
+            <div className="approval-install-action" key={`${action.action}:${action.name ?? action.target ?? index}`}>
+              <div className="approval-install-action__title">
+                <span>{index + 1}. {action.kind} / {action.action}</span>
+                <span className={`approval-risk approval-risk--${action.riskLevel || "unknown"}`}>{action.riskLevel || "unknown"}</span>
+              </div>
+              {(action.name || action.target) && (
+                <div className="approval-install-action__line">
+                  <span>{t("approval.target")}</span>
+                  <code>{action.target || action.name}</code>
+                </div>
+              )}
+              {action.source && <div className="approval-install-action__line"><span>{t("approval.actionSource")}</span><code>{action.source}</code></div>}
+              {action.configPath && <div className="approval-install-action__line"><span>{t("approval.configPath")}</span><code>{action.configPath}</code></div>}
+              {action.scope && <div className="approval-install-action__line"><span>{t("approval.actionScope")}</span><span>{action.scope}</span></div>}
+              {action.mode && <div className="approval-install-action__line"><span>{t("approval.mode")}</span><span>{action.mode}</span></div>}
+              {action.transport && <div className="approval-install-action__line"><span>{t("approval.transport")}</span><span>{action.transport}</span></div>}
+              {action.url && <div className="approval-install-action__line"><span>{t("approval.url")}</span><code>{action.url}</code></div>}
+              {(action.command || (action.args?.length ?? 0) > 0) && <div className="approval-install-action__line"><span>{t("approval.command")}</span><code>{[action.command, ...(action.args ?? [])].filter(Boolean).join(" ")}</code></div>}
+              {Object.keys(action.env ?? {}).length > 0 && <div className="approval-install-action__line"><span>{t("approval.environment")}</span><code>{formatMap(action.env)}</code></div>}
+              {Object.keys(action.headers ?? {}).length > 0 && <div className="approval-install-action__line"><span>{t("approval.headers")}</span><code>{formatMap(action.headers)}</code></div>}
+              {(action.currentVersion || action.version) && (
+                <div className="approval-install-action__line"><span>{t("approval.version")}</span><code>{[action.currentVersion, action.version].filter(Boolean).join(" -> ")}</code></div>
+              )}
+              {(action.currentDigest || action.digest) && (
+                <div className="approval-install-action__line"><span>{t("approval.digest")}</span><code>{[action.currentDigest, action.digest].filter(Boolean).join(" -> ")}</code></div>
+              )}
+              {action.sourceRevision && (
+                <div className="approval-install-action__line"><span>{t("approval.sourceRevision")}</span><code>{action.sourceRevision}</code></div>
+              )}
+              {action.sourceKind && <div className="approval-install-action__line"><span>{t("approval.sourceKind")}</span><span>{action.sourceKind}</span></div>}
+              {action.trustStatus && (
+                <div className="approval-install-action__line"><span>{t("approval.trust")}</span><span>{action.trustStatus}</span></div>
+              )}
+              {action.kind === "plugin" && (
+                <div className="approval-install-action__line"><span>{t("approval.activeAfterApply")}</span><span>{t(action.willEnable ? "approval.yes" : "approval.no")}</span></div>
+              )}
+              {permissions.length > 0 && (
+                <div className="approval-install-action__line"><span>{t("approval.permissions")}</span><code>{permissions.join(", ")}</code></div>
+              )}
+              {addedPermissions.length > 0 && (
+                <div className="approval-install-action__line"><span>{t("approval.addedPermissions")}</span><code>{addedPermissions.join(", ")}</code></div>
+              )}
+              {removedPermissions.length > 0 && (
+                <div className="approval-install-action__line"><span>{t("approval.removedPermissions")}</span><code>{removedPermissions.join(", ")}</code></div>
+              )}
+              {(action.riskReasons?.length ?? 0) > 0 && (
+                <div className="approval-install-action__line"><span>{t("approval.risk")}</span><span>{action.riskReasons?.join("; ")}</span></div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {(plan.warnings?.length ?? 0) > 0 && (
+        <div className="approval-install-plan__warnings"><strong>{t("approval.warnings")}</strong><span>{plan.warnings?.join("; ")}</span></div>
+      )}
+    </div>
+  );
 }
 
 const sandboxEscapeEnglishSubjectFallback = "run shell command unconfined once";
@@ -143,7 +229,7 @@ export function ApprovalModal({
   const subjectSummary = subject.split(/\r?\n/).find((line) => line.trim())?.trim() ?? "";
   const toolMeta = reason || subjectSummary || approval.tool;
   const approvalFileDiff = fileDiffFromWire(approval);
-  const hasToolDetails = Boolean(reason || subject || approvalFileDiff?.diff);
+  const hasToolDetails = Boolean(reason || subject || approval.plan || approvalFileDiff?.diff);
   const showToolDetailsByDefault = !isPlanApproval && hasToolDetails;
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionText, setRevisionText] = useState("");
@@ -435,6 +521,7 @@ export function ApprovalModal({
             {subject && (
               <pre className="approval-subject">{subject}</pre>
             )}
+            {approval.plan && <InstallApprovalPlan plan={approval.plan} t={t} />}
             {approvalFileDiff?.diff && (
               <div className="approval-diff">
                 <div className="approval-diff__header">

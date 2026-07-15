@@ -97,6 +97,101 @@ func registeredRoots(actions []action) []string {
 	return roots
 }
 
+func TestInvocationClassificationAndStructuredApprovalPreview(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	source := filepath.Join(t.TempDir(), "reviewable", "SKILL.md")
+	writeFile(t, source, "---\nname: reviewable\ndescription: Reviewable skill\n---\nUse carefully.\n")
+
+	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
+	classifier, ok := tl.(tool.InvocationReadOnlyClassifier)
+	if !ok {
+		t.Fatal("install_source must expose invocation-level read-only classification")
+	}
+	previewer, ok := tl.(tool.ApprovalPreviewer)
+	if !ok {
+		t.Fatal("install_source must expose a structured approval preview")
+	}
+
+	planArgs, _ := json.Marshal(map[string]any{
+		"source": source, "kind": "skill", "scope": "project", "mode": "copy",
+	})
+	if !classifier.InvocationReadOnly(planArgs) {
+		t.Fatal("apply=false planning call must be read-only")
+	}
+	if _, required, err := previewer.PreviewApproval(context.Background(), planArgs); err != nil || required {
+		t.Fatalf("planning approval preview = required %v, err %v; want ordinary read-only path", required, err)
+	}
+
+	planned := execInstall(t, tl, map[string]any{
+		"source": source, "kind": "skill", "scope": "project", "mode": "copy",
+	})
+	applyArgs, _ := json.Marshal(map[string]any{
+		"source": source, "kind": "skill", "scope": "project", "mode": "copy",
+		"apply": true, "planId": planned.PlanID,
+	})
+	if classifier.InvocationReadOnly(applyArgs) {
+		t.Fatal("apply=true call must be side-effecting")
+	}
+	approvalPlan, required, err := previewer.PreviewApproval(context.Background(), applyArgs)
+	if err != nil || !required {
+		t.Fatalf("apply approval preview = required %v, err %v", required, err)
+	}
+	if approvalPlan.PlanID != planned.PlanID || approvalPlan.Operation != "install" || approvalPlan.Scope != "project" {
+		t.Fatalf("approval plan identity = %+v, planned = %+v", approvalPlan, planned)
+	}
+	if len(approvalPlan.Actions) != 1 || approvalPlan.Actions[0].Name != "reviewable" || approvalPlan.Actions[0].RiskLevel == "" || approvalPlan.Actions[0].Target == "" {
+		t.Fatalf("approval actions = %+v, want named action with risk and target", approvalPlan.Actions)
+	}
+
+	missingPlanArgs, _ := json.Marshal(map[string]any{
+		"source": source, "kind": "skill", "scope": "project", "mode": "copy", "apply": true,
+	})
+	if _, required, err := previewer.PreviewApproval(context.Background(), missingPlanArgs); !required || !errors.Is(err, ErrApprovalDenied) {
+		t.Fatalf("missing plan preview = required %v, err %v; want ErrApprovalDenied", required, err)
+	}
+}
+
+func TestRedactApprovalTextRemovesURLCredentials(t *testing.T) {
+	secret := "sk-abcdefghijklmnopqrstuvwxyzABCDEF1234567890"
+	got := redactApprovalText("https://user:password@example.com/plugin.zip?token=" + secret + "&version=2#private")
+	if strings.Contains(got, "user") || strings.Contains(got, "password") || strings.Contains(got, secret) || strings.Contains(got, "private") {
+		t.Fatalf("redacted approval URL leaked credentials: %s", got)
+	}
+	if !strings.Contains(got, "example.com/plugin.zip") || !strings.Contains(got, "version=2") || !strings.Contains(got, "REDACTED") {
+		t.Fatalf("redacted approval URL lost safe identity fields: %s", got)
+	}
+}
+
+func TestStructuredApprovalActionRedactsMCPSecrets(t *testing.T) {
+	secretURL := "https://user:password@example.com/mcp?token=short-secret&version=2#private"
+	raw := action{
+		Kind: "mcp", Action: "install_mcp_server", Transport: "stdio", URL: secretURL,
+		Command: "node", Args: []string{"server.js", "--token", "short-secret", "--endpoint=" + secretURL},
+		Env:     map[string]string{"API_KEY": "short-secret", "MODE": "reviewed"},
+		Headers: map[string]string{"Authorization": "Bearer short-secret", "X-Mode": "reviewed"},
+	}
+	got := structuredApprovalAction(raw)
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(encoded)
+	for _, secret := range []string{"user", "password", "short-secret", "private"} {
+		if strings.Contains(text, secret) {
+			t.Fatalf("structured approval leaked %q: %s", secret, text)
+		}
+	}
+	for _, safe := range []string{"example.com/mcp", "version=2", "server.js", "MODE", "reviewed", "X-Mode", "REDACTED"} {
+		if !strings.Contains(text, safe) {
+			t.Fatalf("structured approval lost %q: %s", safe, text)
+		}
+	}
+	if raw.Env["API_KEY"] != "short-secret" || raw.Args[2] != "short-secret" {
+		t.Fatalf("redaction mutated executable plan: %+v", raw)
+	}
+}
+
 // stubConnector returns a ConnectMCP closure that records every entry and
 // returns the configured tool count + Disconnect. disconnectCalls counts
 // rollback invocations so tests can assert on ghost-install behavior.

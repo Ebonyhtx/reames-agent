@@ -35,6 +35,34 @@ func TestApprovalCardCarriesChatType(t *testing.T) {
 	}
 }
 
+func TestApprovalPlanDetailsCarryRiskTargetAndPermissions(t *testing.T) {
+	approval := event.Approval{ID: "approval-plan", Tool: "install_source", Plan: &event.ApprovalPlan{
+		PlanID: "plan-4", Operation: "install", Source: "plugin.zip", Scope: "global",
+		Actions: []event.ApprovalAction{{
+			Kind: "plugin", Action: "install_plugin_package", RiskLevel: "high", Name: "reviewed",
+			Source: "plugin.zip", Target: "plugins/reviewed", ConfigPath: "plugins/state.json", Scope: "global",
+			Transport: "stdio", URL: "https://example.invalid/mcp", Command: "node", Args: []string{"server.js"},
+			Env: map[string]string{"MODE": "reviewed"}, Headers: map[string]string{"Authorization": "[REDACTED]"},
+			Version: "2.0.0", CurrentVersion: "1.0.0", Digest: "new", CurrentDigest: "old",
+			SourceKind: "github", SourceRevision: "abc123", TrustStatus: "unsigned_https", WillEnable: false,
+			Permissions: []string{"hooks:execute"}, RiskReasons: []string{"runs hooks"},
+		}},
+	}}
+	details := renderApprovalPlanDetails(approval.Plan)
+	for _, want := range []string{"plan-4", "install", "high", "plugins/reviewed", "plugins/state.json", "stdio", "example.invalid", "node", "server.js", "MODE=reviewed", "Authorization=[REDACTED]", "1.0.0 -> 2.0.0", "old -> new", "github", "abc123", "unsigned_https", "Enabled after apply: false", "hooks:execute", "runs hooks"} {
+		if !strings.Contains(details, want) {
+			t.Fatalf("plan details %q missing %q", details, want)
+		}
+	}
+	card := approvalCard(approval, ChatDM, "allowed-user")
+	if len(card.Elements) != 3 || !strings.Contains(card.Elements[1].Content, "plan-4") {
+		t.Fatalf("structured approval card = %+v, want content + plan + actions", card.Elements)
+	}
+	if _, ok := card.Elements[2].Extra["actions"]; !ok {
+		t.Fatalf("structured approval card actions missing: %+v", card.Elements[2])
+	}
+}
+
 func TestApprovalCardActionsAreToolAgnostic(t *testing.T) {
 	for _, approval := range []event.Approval{
 		{ID: "plan-1", Tool: "exit_plan_mode", Subject: "plan"},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -112,6 +113,7 @@ func (s *renderSink) Emit(e event.Event) {
 		}
 		approvalText := fmt.Sprintf("⚠️ 需要批准操作:\n工具: %s\n操作: %s\n\nID: `%s`\n回复 1 批准，回复 2 拒绝；也可用 /approve %s 或 /deny %s。",
 			e.Approval.Tool, e.Approval.Subject, e.Approval.ID, e.Approval.ID, e.Approval.ID)
+		approvalText += renderApprovalPlanDetails(e.Approval.Plan)
 		msg := OutboundMessage{
 			ConnectionID: s.connID,
 			Domain:       s.domain,
@@ -360,7 +362,7 @@ func approvalKeyboard(id string) *InlineKeyboard {
 }
 
 func approvalCard(a event.Approval, chatType ChatType, userID string) *InteractiveCard {
-	return &InteractiveCard{
+	card := &InteractiveCard{
 		Header: "需要批准操作",
 		Elements: []InteractiveCardElement{
 			{Tag: "markdown", Content: fmt.Sprintf("**工具**: %s\n\n**操作**: %s\n\nID: `%s`", a.Tool, a.Subject, a.ID)},
@@ -372,6 +374,100 @@ func approvalCard(a event.Approval, chatType ChatType, userID string) *Interacti
 			}},
 		},
 	}
+	if details := renderApprovalPlanDetails(a.Plan); details != "" {
+		planElement := InteractiveCardElement{Tag: "markdown", Content: details}
+		card.Elements = append(card.Elements[:1], append([]InteractiveCardElement{planElement}, card.Elements[1:]...)...)
+	}
+	return card
+}
+
+func renderApprovalPlanDetails(plan *event.ApprovalPlan) string {
+	if plan == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n\nPlan: `%s`\nOperation: %s\nScope: %s", plan.PlanID, plan.Operation, plan.Scope)
+	if plan.Mode != "" {
+		fmt.Fprintf(&b, "\nMode: %s", plan.Mode)
+	}
+	if plan.Source != "" {
+		fmt.Fprintf(&b, "\nSource: %s", plan.Source)
+	}
+	for i, action := range plan.Actions {
+		name := action.Name
+		if name == "" {
+			name = action.Target
+		}
+		fmt.Fprintf(&b, "\n%d. [%s] %s/%s %s", i+1, action.RiskLevel, action.Kind, action.Action, name)
+		if action.Target != "" && action.Target != name {
+			fmt.Fprintf(&b, " -> %s", action.Target)
+		}
+		for _, field := range []struct{ label, value string }{
+			{"Source", action.Source}, {"Config", action.ConfigPath}, {"Scope", action.Scope},
+			{"Mode", action.Mode}, {"Transport", action.Transport}, {"URL", action.URL},
+			{"Command", action.Command},
+		} {
+			if field.value != "" {
+				fmt.Fprintf(&b, "\n   %s: %s", field.label, field.value)
+			}
+		}
+		if len(action.Args) > 0 {
+			fmt.Fprintf(&b, "\n   Args: %s", strings.Join(action.Args, " "))
+		}
+		if len(action.Env) > 0 {
+			fmt.Fprintf(&b, "\n   Env: %s", formatApprovalMap(action.Env))
+		}
+		if len(action.Headers) > 0 {
+			fmt.Fprintf(&b, "\n   Headers: %s", formatApprovalMap(action.Headers))
+		}
+		if action.CurrentVersion != "" || action.Version != "" {
+			fmt.Fprintf(&b, "\n   Version: %s -> %s", action.CurrentVersion, action.Version)
+		}
+		if action.CurrentDigest != "" || action.Digest != "" {
+			fmt.Fprintf(&b, "\n   Digest: %s -> %s", action.CurrentDigest, action.Digest)
+		}
+		if action.SourceKind != "" {
+			fmt.Fprintf(&b, "\n   Source kind: %s", action.SourceKind)
+		}
+		if action.SourceRevision != "" {
+			fmt.Fprintf(&b, "\n   Source revision: %s", action.SourceRevision)
+		}
+		if action.TrustStatus != "" {
+			fmt.Fprintf(&b, "\n   Trust: %s", action.TrustStatus)
+		}
+		if action.Kind == "plugin" {
+			fmt.Fprintf(&b, "\n   Enabled after apply: %t", action.WillEnable)
+		}
+		if len(action.Permissions) > 0 {
+			fmt.Fprintf(&b, "\n   Permissions: %s", strings.Join(action.Permissions, ", "))
+		}
+		if len(action.AddedPermissions) > 0 {
+			fmt.Fprintf(&b, "\n   New permissions: %s", strings.Join(action.AddedPermissions, ", "))
+		}
+		if len(action.RemovedPermissions) > 0 {
+			fmt.Fprintf(&b, "\n   Removed permissions: %s", strings.Join(action.RemovedPermissions, ", "))
+		}
+		if len(action.RiskReasons) > 0 {
+			fmt.Fprintf(&b, "\n   Risk: %s", strings.Join(action.RiskReasons, "; "))
+		}
+	}
+	if len(plan.Warnings) > 0 {
+		fmt.Fprintf(&b, "\nWarnings: %s", strings.Join(plan.Warnings, "; "))
+	}
+	return b.String()
+}
+
+func formatApprovalMap(values map[string]string) string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+values[key])
+	}
+	return strings.Join(parts, ", ")
 }
 
 func cardActionValue(command string, chatType ChatType, userID string) map[string]string {

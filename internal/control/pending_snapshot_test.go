@@ -77,3 +77,33 @@ func TestPendingSnapshotPersistsApprovalFileDiff(t *testing.T) {
 		t.Fatalf("pending snapshot after resolve stat err = %v, want removed", err)
 	}
 }
+
+func TestPendingSnapshotPersistsStructuredApprovalPlan(t *testing.T) {
+	isolateControlConfigHome(t)
+	path := pendingSnapshotPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir pending snapshot dir: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(path) })
+
+	am := newApprovalManager(permission.New("ask", nil, nil, nil), ToolApprovalAsk, 0)
+	plan := &event.ApprovalPlan{
+		PlanID: "plan-persisted", Operation: "install", Scope: "global",
+		Actions: []event.ApprovalAction{{Kind: "plugin", Action: "install_plugin_package", RiskLevel: "high", Target: "plugins/reviewed", Permissions: []string{"hooks:execute"}}},
+	}
+	id, _ := am.registerStructuredDecision("install_source", "install reviewed", "review exact plan", plan)
+
+	snaps, err := LoadPendingSnapshots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snaps) != 1 || snaps[0].ID != id || snaps[0].Plan == nil {
+		t.Fatalf("structured snapshots = %+v", snaps)
+	}
+	got := snaps[0].Plan
+	if got.PlanID != plan.PlanID || len(got.Actions) != 1 || got.Actions[0].RiskLevel != "high" || got.Actions[0].Target != "plugins/reviewed" || len(got.Actions[0].Permissions) != 1 {
+		t.Fatalf("persisted plan = %+v, want %+v", got, plan)
+	}
+
+	am.resolve(id)
+}

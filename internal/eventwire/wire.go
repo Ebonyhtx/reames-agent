@@ -2,6 +2,8 @@
 package eventwire
 
 import (
+	"maps"
+
 	"reames-agent/internal/control"
 	"reames-agent/internal/event"
 	"reames-agent/internal/provider"
@@ -108,6 +110,9 @@ func ToWire(e event.Event) Event {
 		w.Approval = &Approval{
 			ID: e.Approval.ID, Tool: e.Approval.Tool, Subject: e.Approval.Subject, Reason: e.Approval.Reason,
 			Diff: e.Approval.Diff, Added: e.Approval.Added, Removed: e.Approval.Removed,
+		}
+		if e.Approval.Plan != nil {
+			w.Approval.Plan = toWireApprovalPlan(e.Approval.Plan)
 		}
 	case event.AskRequest:
 		w.Ask = ToWireAsk(e.Ask)
@@ -269,13 +274,86 @@ type CacheDiagnostics struct {
 
 // Approval is the JSON form of an event.Approval.
 type Approval struct {
-	ID      string `json:"id"`
-	Tool    string `json:"tool"`
-	Subject string `json:"subject"`
-	Reason  string `json:"reason,omitempty"`
-	Diff    string `json:"diff,omitempty"`
-	Added   int    `json:"added,omitempty"`
-	Removed int    `json:"removed,omitempty"`
+	ID      string        `json:"id"`
+	Tool    string        `json:"tool"`
+	Subject string        `json:"subject"`
+	Reason  string        `json:"reason,omitempty"`
+	Plan    *ApprovalPlan `json:"plan,omitempty"`
+	Diff    string        `json:"diff,omitempty"`
+	Added   int           `json:"added,omitempty"`
+	Removed int           `json:"removed,omitempty"`
+}
+
+type ApprovalPlan struct {
+	PlanID    string           `json:"planId"`
+	Operation string           `json:"operation"`
+	Source    string           `json:"source,omitempty"`
+	Name      string           `json:"name,omitempty"`
+	Kind      string           `json:"kind,omitempty"`
+	Scope     string           `json:"scope,omitempty"`
+	Mode      string           `json:"mode,omitempty"`
+	Actions   []ApprovalAction `json:"actions"`
+	Warnings  []string         `json:"warnings,omitempty"`
+}
+
+type ApprovalAction struct {
+	Kind               string            `json:"kind"`
+	Action             string            `json:"action"`
+	RiskLevel          string            `json:"riskLevel"`
+	RiskReasons        []string          `json:"riskReasons,omitempty"`
+	Name               string            `json:"name,omitempty"`
+	Source             string            `json:"source,omitempty"`
+	Target             string            `json:"target,omitempty"`
+	ConfigPath         string            `json:"configPath,omitempty"`
+	Scope              string            `json:"scope,omitempty"`
+	Mode               string            `json:"mode,omitempty"`
+	Transport          string            `json:"transport,omitempty"`
+	URL                string            `json:"url,omitempty"`
+	Command            string            `json:"command,omitempty"`
+	Args               []string          `json:"args,omitempty"`
+	Env                map[string]string `json:"env,omitempty"`
+	Headers            map[string]string `json:"headers,omitempty"`
+	Permissions        []string          `json:"permissions,omitempty"`
+	AddedPermissions   []string          `json:"addedPermissions,omitempty"`
+	RemovedPermissions []string          `json:"removedPermissions,omitempty"`
+	Version            string            `json:"version,omitempty"`
+	CurrentVersion     string            `json:"currentVersion,omitempty"`
+	Digest             string            `json:"digest,omitempty"`
+	CurrentDigest      string            `json:"currentDigest,omitempty"`
+	TrustStatus        string            `json:"trustStatus,omitempty"`
+	SourceKind         string            `json:"sourceKind,omitempty"`
+	SourceRevision     string            `json:"sourceRevision,omitempty"`
+	WillEnable         bool              `json:"willEnable"`
+}
+
+func toWireApprovalPlan(plan *event.ApprovalPlan) *ApprovalPlan {
+	if plan == nil {
+		return nil
+	}
+	actions := make([]ApprovalAction, len(plan.Actions))
+	for i, action := range plan.Actions {
+		actions[i] = ApprovalAction{
+			Kind: action.Kind, Action: action.Action, RiskLevel: action.RiskLevel,
+			RiskReasons: append([]string(nil), action.RiskReasons...),
+			Name:        action.Name, Source: action.Source, Target: action.Target, ConfigPath: action.ConfigPath,
+			Scope: action.Scope, Mode: action.Mode, Transport: action.Transport, URL: action.URL, Command: action.Command,
+			Args:               append([]string(nil), action.Args...),
+			Env:                maps.Clone(action.Env),
+			Headers:            maps.Clone(action.Headers),
+			Permissions:        append([]string(nil), action.Permissions...),
+			AddedPermissions:   append([]string(nil), action.AddedPermissions...),
+			RemovedPermissions: append([]string(nil), action.RemovedPermissions...),
+			Version:            action.Version, CurrentVersion: action.CurrentVersion,
+			Digest: action.Digest, CurrentDigest: action.CurrentDigest,
+			TrustStatus: action.TrustStatus, WillEnable: action.WillEnable,
+			SourceKind: action.SourceKind, SourceRevision: action.SourceRevision,
+		}
+	}
+	return &ApprovalPlan{
+		PlanID: plan.PlanID, Operation: plan.Operation, Source: plan.Source, Name: plan.Name,
+		Kind: plan.Kind, Scope: plan.Scope, Mode: plan.Mode, Actions: actions,
+		Warnings: append([]string(nil), plan.Warnings...),
+	}
 }
 
 // Guardian is the JSON form of an event.GuardianResult.

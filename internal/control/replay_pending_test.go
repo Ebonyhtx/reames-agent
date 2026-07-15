@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"reames-agent/internal/agent"
 	"reames-agent/internal/event"
@@ -46,6 +47,60 @@ func TestReplayPendingPromptsReEmitsBlockedApproval(t *testing.T) {
 
 	c.Approve(first.ID, true, false, false)
 	<-done
+}
+
+func TestStructuredApprovalSurvivesReplayAndYolo(t *testing.T) {
+	reqs := make(chan event.Approval, 4)
+	c := New(Options{
+		Policy: permission.New("ask", nil, nil, nil),
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.ApprovalRequest {
+				reqs <- e.Approval
+			}
+		}),
+	})
+	c.SetToolApprovalMode(ToolApprovalYolo)
+	gate := c.newInteractiveGate()
+	plan := tool.ApprovalPlan{
+		PlanID: "install-plan-7", Operation: "install", Source: "https://example.invalid/plugin.zip", Scope: "global",
+		Actions: []tool.ApprovalAction{{
+			Kind: "plugin", Action: "install_plugin_package", RiskLevel: "high", Name: "reviewed",
+			Target: "plugins/reviewed", Permissions: []string{"hooks:execute"}, RiskReasons: []string{"executes lifecycle hooks"},
+		}},
+	}
+	result := make(chan bool, 1)
+	go func() {
+		allow, _, err := gate.CheckStructuredApproval(context.Background(), "install_source", json.RawMessage(`{"apply":true}`), plan)
+		result <- allow && err == nil
+	}()
+
+	var first event.Approval
+	select {
+	case first = <-reqs:
+	case <-time.After(2 * time.Second):
+		t.Fatal("YOLO suppressed structured install approval")
+	}
+	if first.Tool != "install_source" || first.Plan == nil || first.Plan.PlanID != plan.PlanID || len(first.Plan.Actions) != 1 {
+		t.Fatalf("first structured approval = %+v", first)
+	}
+	if got := first.Plan.Actions[0]; got.RiskLevel != "high" || got.Target != "plugins/reviewed" || len(got.Permissions) != 1 {
+		t.Fatalf("first structured action = %+v", got)
+	}
+
+	c.ReplayPendingPrompts()
+	replayed := <-reqs
+	if replayed.ID != first.ID || replayed.Plan == nil || replayed.Plan.PlanID != first.Plan.PlanID || replayed.Plan.Actions[0].RiskReasons[0] != "executes lifecycle hooks" {
+		t.Fatalf("replayed structured approval = %+v, first = %+v", replayed, first)
+	}
+	c.Approve(first.ID, true, true, true)
+	select {
+	case allowed := <-result:
+		if !allowed {
+			t.Fatal("explicit structured approval did not allow the operation")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("structured approval did not unblock")
+	}
 }
 
 // TestReplayPendingPromptsPreservesApprovalFileDiff proves a frontend reload

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +22,7 @@ import (
 	"reames-agent/internal/pluginpkg"
 	"reames-agent/internal/skill"
 	"reames-agent/internal/tool"
+	"reames-agent/internal/trust"
 )
 
 // MCPConnectResult is what the ConnectMCP callback returns. Disconnect is
@@ -135,6 +137,174 @@ func NewTool(opts Options) tool.Tool {
 
 func (*installSourceTool) Name() string   { return "install_source" }
 func (*installSourceTool) ReadOnly() bool { return false }
+
+// InvocationReadOnly classifies the two phases independently: planning is a
+// read-only discovery operation, while apply can mutate skills, configuration,
+// plugin generations, and live MCP connections.
+func (*installSourceTool) InvocationReadOnly(raw json.RawMessage) bool {
+	var req request
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return false
+	}
+	return !req.Apply
+}
+
+// PreviewApproval recomputes the exact read-only plan for an apply invocation.
+// The model must supply the planId returned by an earlier planning call, and the
+// current plan must still match before the host is asked to approve it.
+func (t *installSourceTool) PreviewApproval(ctx context.Context, raw json.RawMessage) (tool.ApprovalPlan, bool, error) {
+	var req request
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return tool.ApprovalPlan{}, true, fmt.Errorf("install_source approval preview: invalid args: %w", err)
+	}
+	if !req.Apply {
+		return tool.ApprovalPlan{}, false, nil
+	}
+
+	req.Apply = false
+	previewRaw, err := json.Marshal(req)
+	if err != nil {
+		return tool.ApprovalPlan{}, true, fmt.Errorf("install_source approval preview: encode plan request: %w", err)
+	}
+	output, err := t.Execute(ctx, previewRaw)
+	if err != nil {
+		return tool.ApprovalPlan{}, true, fmt.Errorf("install_source approval preview: %w", err)
+	}
+	var planned response
+	if err := json.Unmarshal([]byte(output), &planned); err != nil {
+		return tool.ApprovalPlan{}, true, fmt.Errorf("install_source approval preview: decode plan: %w", err)
+	}
+	if !planned.OK || planned.Status != "planned" || planned.PlanID == "" || len(planned.Actions) == 0 {
+		detail := strings.TrimSpace(planned.Next)
+		if detail == "" {
+			detail = "no actionable plan was produced"
+		}
+		return tool.ApprovalPlan{}, true, fmt.Errorf("install_source approval preview: %s", detail)
+	}
+	if strings.TrimSpace(req.PlanID) == "" {
+		return tool.ApprovalPlan{}, true, newErr(ErrApprovalDenied, "apply requires the planId returned by a prior preview")
+	}
+	if req.PlanID != planned.PlanID {
+		return tool.ApprovalPlan{}, true, newErr(ErrApprovalDenied, "planId mismatch (got %s, expected %s); re-plan and re-approve", req.PlanID, planned.PlanID)
+	}
+
+	actions := make([]tool.ApprovalAction, len(planned.Actions))
+	for i, action := range planned.Actions {
+		actions[i] = structuredApprovalAction(action)
+	}
+	return tool.ApprovalPlan{
+		PlanID:    planned.PlanID,
+		Operation: planned.Op,
+		Source:    redactApprovalText(planned.Source),
+		Name:      planned.Name,
+		Kind:      planned.Kind,
+		Scope:     planned.Scope,
+		Mode:      planned.Mode,
+		Actions:   actions,
+		Warnings:  append([]string(nil), planned.Warnings...),
+	}, true, nil
+}
+
+func structuredApprovalAction(action action) tool.ApprovalAction {
+	return tool.ApprovalAction{
+		Kind:               action.Kind,
+		Action:             action.Action,
+		RiskLevel:          string(action.RiskLevel),
+		RiskReasons:        append([]string(nil), action.RiskReasons...),
+		Name:               action.Name,
+		Source:             redactApprovalText(action.Source),
+		Target:             action.Target,
+		ConfigPath:         action.ConfigPath,
+		Scope:              action.Scope,
+		Mode:               action.Mode,
+		Transport:          action.Transport,
+		URL:                redactApprovalText(action.URL),
+		Command:            redactApprovalText(action.Command),
+		Args:               redactApprovalArgs(action.Args),
+		Env:                redactApprovalMap(action.Env),
+		Headers:            redactApprovalMap(action.Headers),
+		Permissions:        append([]string(nil), action.Permissions...),
+		AddedPermissions:   append([]string(nil), action.AddedPermissions...),
+		RemovedPermissions: append([]string(nil), action.RemovedPermissions...),
+		Version:            action.Version,
+		CurrentVersion:     action.CurrentVersion,
+		Digest:             action.Digest,
+		CurrentDigest:      action.CurrentDigest,
+		TrustStatus:        action.TrustStatus,
+		SourceKind:         action.SourceKind,
+		SourceRevision:     action.SourceRevision,
+		WillEnable:         action.WillEnable,
+	}
+}
+
+func redactApprovalArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	out := make([]string, len(args))
+	redactNext := false
+	for i, arg := range args {
+		if redactNext {
+			out[i] = "[REDACTED]"
+			redactNext = false
+			continue
+		}
+		if key, value, ok := strings.Cut(arg, "="); ok {
+			if isSensitiveApprovalKey(key) {
+				out[i] = key + "=[REDACTED]"
+			} else {
+				out[i] = key + "=" + redactApprovalText(value)
+			}
+			continue
+		}
+		out[i] = redactApprovalText(arg)
+		redactNext = strings.HasPrefix(strings.TrimSpace(arg), "-") && isSensitiveApprovalKey(arg)
+	}
+	return out
+}
+
+func redactApprovalMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		if isSensitiveApprovalKey(key) {
+			out[key] = "[REDACTED]"
+			continue
+		}
+		out[key] = redactApprovalText(value)
+	}
+	return out
+}
+
+func isSensitiveApprovalKey(key string) bool {
+	lower := strings.ToLower(strings.TrimLeft(strings.TrimSpace(key), "-_/"))
+	for _, marker := range []string{"token", "key", "secret", "password", "passwd", "auth", "signature", "credential", "cookie"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func redactApprovalText(value string) string {
+	redacted := trust.RedactSecrets(value)
+	u, err := url.Parse(redacted)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return redacted
+	}
+	u.User = nil
+	u.Fragment = ""
+	query := u.Query()
+	for key := range query {
+		if isSensitiveApprovalKey(key) {
+			query.Set(key, "[REDACTED]")
+		}
+	}
+	u.RawQuery = query.Encode()
+	return u.String()
+}
 
 func (*installSourceTool) Description() string {
 	return "Plan, install, uninstall, or roll back a Reames Agent skill, MCP server, or plugin package from a URL, local file/folder, .mcp.json, executable, or package name. Plugin install/update/rollback/uninstall operations return a deterministic plan with per-action risk and require the same planId when applied. op='uninstall' removes an installed item; op='rollback' restores a plugin's previous verified generation."

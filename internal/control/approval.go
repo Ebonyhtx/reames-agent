@@ -12,6 +12,7 @@ import (
 	"reames-agent/internal/event"
 	"reames-agent/internal/i18n"
 	"reames-agent/internal/permission"
+	"reames-agent/internal/tool"
 )
 
 // PlanModeReadOnlyCommandApprovalTool is the stable approval protocol name for
@@ -88,10 +89,22 @@ type freshHumanHeadlessGate struct {
 }
 
 func (g *freshHumanHeadlessGate) Check(ctx context.Context, toolName string, args json.RawMessage, readOnly bool) (bool, string, error) {
-	if RequiresFreshHumanApprovalTool(toolName) {
+	if RequiresFreshHumanApprovalTool(toolName) && !(toolName == "install_source" && readOnly) {
 		return false, "this tool requires fresh human approval and cannot run in a non-interactive session. Use an interactive session or a user-initiated memory command.", nil
 	}
 	return g.gate.Check(ctx, toolName, args, readOnly)
+}
+
+func (g *freshHumanHeadlessGate) CheckStructuredApproval(context.Context, string, json.RawMessage, tool.ApprovalPlan) (bool, string, error) {
+	return false, "this invocation requires fresh human approval and cannot run in a non-interactive session", nil
+}
+
+func (g *freshHumanHeadlessGate) CheckStructuredApprovalPreflight(ctx context.Context, toolName string, args json.RawMessage) (bool, string, error) {
+	allow, reason, err := g.gate.Check(ctx, toolName, args, false)
+	if err != nil || !allow {
+		return allow, reason, err
+	}
+	return false, "this invocation requires fresh human approval and cannot preview or apply in a non-interactive session", nil
 }
 
 // preApproved reports whether a tool call can skip the prompt — either the
@@ -118,13 +131,17 @@ func (a *approvalManager) preApprovedForDecision(tool, subject string, fresh boo
 // register allocates an approval ID, records the pending prompt, and returns the
 // reply channel the resolve path will signal.
 func (a *approvalManager) register(tool, subject, reason string, fileDiff event.FileDiff) (string, chan approvalReply) {
-	return a.registerDecision(tool, subject, reason, fileDiff, false)
+	return a.registerDecision(tool, subject, reason, fileDiff, nil, false)
+}
+
+func (a *approvalManager) registerStructuredDecision(toolName, subject, reason string, plan *event.ApprovalPlan) (string, chan approvalReply) {
+	return a.registerDecision(toolName, subject, reason, event.FileDiff{}, plan, true)
 }
 
 // registerDecision allocates an approval ID for either an ordinary tool
 // permission or a fresh user decision. Fresh decisions are not auto-drained when
 // the user switches to auto/yolo tool approval while the prompt is visible.
-func (a *approvalManager) registerDecision(tool, subject, reason string, fileDiff event.FileDiff, fresh bool) (string, chan approvalReply) {
+func (a *approvalManager) registerDecision(tool, subject, reason string, fileDiff event.FileDiff, plan *event.ApprovalPlan, fresh bool) (string, chan approvalReply) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.nextID++
@@ -134,7 +151,7 @@ func (a *approvalManager) registerDecision(tool, subject, reason string, fileDif
 	if !fresh {
 		autoDrain = a.autoApprovalWouldAllowLocked(tool, subject)
 	}
-	a.approvals[id] = pendingApproval{tool: tool, subject: subject, reason: reason, fileDiff: fileDiff, fresh: fresh, autoDrain: autoDrain, reply: reply}
+	a.approvals[id] = pendingApproval{tool: tool, subject: subject, reason: reason, fileDiff: fileDiff, plan: plan, fresh: fresh, autoDrain: autoDrain, reply: reply}
 	a.writePendingSnapshotLocked(a.sessionID)
 	return id, reply
 }
@@ -278,7 +295,7 @@ func (a *approvalManager) snapshotPrompts() ([]event.Approval, []event.Ask) {
 	defer a.mu.Unlock()
 	approvals := make([]event.Approval, 0, len(a.approvals))
 	for id, p := range a.approvals {
-		approvals = append(approvals, event.Approval{ID: id, Tool: p.tool, Subject: p.subject, Reason: p.reason, FileDiff: p.fileDiff})
+		approvals = append(approvals, event.Approval{ID: id, Tool: p.tool, Subject: p.subject, Reason: p.reason, Plan: p.plan, FileDiff: p.fileDiff})
 	}
 	asks := make([]event.Ask, 0, len(a.asks))
 	for id, p := range a.asks {
@@ -357,7 +374,7 @@ func normalizeToolApprovalMode(mode string) string {
 // approver. A small subset may still opt into explicit session grants.
 func RequiresFreshHumanApprovalTool(tool string) bool {
 	switch tool {
-	case planApprovalTool, memoryRememberTool, memoryForgetTool, SandboxEscapeApprovalTool:
+	case planApprovalTool, memoryRememberTool, memoryForgetTool, SandboxEscapeApprovalTool, "install_source":
 		return true
 	default:
 		return false

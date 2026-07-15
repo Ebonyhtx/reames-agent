@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2791,6 +2792,7 @@ func (m chatTUI) renderApprovalBanner() string {
 		choices = fmt.Sprintf(i18n.M.BashPrefixChoices, prefixRule, prefixRule)
 	}
 	text := fmt.Sprintf(i18n.M.ToolApprovalPromptFmt, name, subj, detail, choices)
+	text += renderApprovalPlanSummary(m.pendingApproval.Plan, w)
 	if reason := strings.TrimSpace(m.pendingApproval.Reason); reason != "" {
 		text += " · " + truncateSubject(reason, w)
 	}
@@ -2800,6 +2802,93 @@ func (m chatTUI) renderApprovalBanner() string {
 // approvalToolDetails turns provider-visible tool IDs into user-facing labels.
 // MCP tools are advertised as mcp__<server>__<tool>; showing the short tool name
 // first keeps the approval prompt readable while preserving the source.
+func renderApprovalPlanSummary(plan *event.ApprovalPlan, width int) string {
+	if plan == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nPlan %s | %s | %s", plan.PlanID, plan.Operation, plan.Scope)
+	if plan.Source != "" {
+		fmt.Fprintf(&b, "\n%s", truncateSubject("source: "+plan.Source, width))
+	}
+	if plan.Mode != "" {
+		fmt.Fprintf(&b, "\n%s", truncateSubject("mode: "+plan.Mode, width))
+	}
+	for i, action := range plan.Actions {
+		name := action.Name
+		if name == "" {
+			name = action.Target
+		}
+		line := fmt.Sprintf("%d. [%s] %s/%s %s", i+1, action.RiskLevel, action.Kind, action.Action, name)
+		fmt.Fprintf(&b, "\n%s", truncateSubject(line, width))
+		for _, field := range []struct{ label, value string }{
+			{"source", action.Source}, {"target", action.Target}, {"config", action.ConfigPath},
+			{"scope", action.Scope}, {"mode", action.Mode}, {"transport", action.Transport},
+			{"url", action.URL}, {"command", action.Command},
+		} {
+			if field.value != "" {
+				fmt.Fprintf(&b, "\n   %s", truncateSubject(field.label+": "+field.value, width))
+			}
+		}
+		if len(action.Args) > 0 {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("args: "+strings.Join(action.Args, " "), width))
+		}
+		if len(action.Env) > 0 {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("env: "+formatApprovalMap(action.Env), width))
+		}
+		if len(action.Headers) > 0 {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("headers: "+formatApprovalMap(action.Headers), width))
+		}
+		if action.CurrentVersion != "" || action.Version != "" {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("version: "+action.CurrentVersion+" -> "+action.Version, width))
+		}
+		if action.CurrentDigest != "" || action.Digest != "" {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("digest: "+action.CurrentDigest+" -> "+action.Digest, width))
+		}
+		if action.SourceKind != "" {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("source kind: "+action.SourceKind, width))
+		}
+		if action.SourceRevision != "" {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("source revision: "+action.SourceRevision, width))
+		}
+		if action.TrustStatus != "" {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("trust: "+action.TrustStatus, width))
+		}
+		if action.Kind == "plugin" {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject(fmt.Sprintf("enabled after apply: %t", action.WillEnable), width))
+		}
+		if len(action.Permissions) > 0 {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("permissions: "+strings.Join(action.Permissions, ", "), width))
+		}
+		if len(action.AddedPermissions) > 0 {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("new permissions: "+strings.Join(action.AddedPermissions, ", "), width))
+		}
+		if len(action.RemovedPermissions) > 0 {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("removed permissions: "+strings.Join(action.RemovedPermissions, ", "), width))
+		}
+		if len(action.RiskReasons) > 0 {
+			fmt.Fprintf(&b, "\n   %s", truncateSubject("risk: "+strings.Join(action.RiskReasons, "; "), width))
+		}
+	}
+	if len(plan.Warnings) > 0 {
+		fmt.Fprintf(&b, "\n%s", truncateSubject("warnings: "+strings.Join(plan.Warnings, "; "), width))
+	}
+	return b.String()
+}
+
+func formatApprovalMap(values map[string]string) string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+values[key])
+	}
+	return strings.Join(parts, ", ")
+}
+
 func approvalToolDetails(toolName string) (name, detail string) {
 	if toolName == control.PlanModeReadOnlyCommandApprovalTool {
 		return i18n.M.ApprovalToolLabelPlanModeReadOnly, fmt.Sprintf(i18n.M.ToolApprovalSourceFmt, i18n.M.ToolApprovalBuiltIn)

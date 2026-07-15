@@ -513,5 +513,65 @@ console.log("\napproval modal file references");
   dom.window.close();
 }
 
+{
+  const dom = installDom();
+  mockApp({ ListDir: async () => [], SearchFileRefs: async () => [] });
+  const { root } = await renderApproval({
+    approval: {
+      id: "install-source-approval",
+      tool: "install_source",
+      subject: "install reviewed (1 action, plan plan-42)",
+      plan: {
+        planId: "plan-42",
+        operation: "install",
+        source: "https://example.invalid/reviewed.zip",
+        scope: "global",
+        actions: [{
+          kind: "plugin",
+          action: "install_plugin_package",
+          riskLevel: "high",
+          riskReasons: ["executes lifecycle hooks"],
+          name: "reviewed",
+          source: "https://example.invalid/reviewed.zip",
+          target: "plugins/reviewed",
+          configPath: "plugins/state.json",
+          scope: "global",
+          transport: "stdio",
+          url: "https://example.invalid/mcp",
+          command: "node",
+          args: ["server.js"],
+          env: { MODE: "reviewed" },
+          headers: { Authorization: "[REDACTED]" },
+          currentVersion: "1.0.0",
+          version: "2.0.0",
+          currentDigest: "old-digest",
+          digest: "new-digest",
+          sourceKind: "github",
+          sourceRevision: "abc123",
+          trustStatus: "unsigned_https",
+          willEnable: false,
+          permissions: ["hooks:execute"],
+          addedPermissions: ["mcp:network"],
+        }],
+        warnings: ["unsigned source"],
+      },
+    },
+  });
+
+  const text = document.body.textContent ?? "";
+  for (const expected of ["Exact operation plan", "Plan ID", "plan-42", "install", "global", "high", "plugins/reviewed", "plugins/state.json", "stdio", "https://example.invalid/mcp", "node server.js", "MODE=reviewed", "Authorization=[REDACTED]", "1.0.0 -> 2.0.0", "old-digest -> new-digest", "github", "abc123", "unsigned_https", "Active after apply", "no", "hooks:execute", "mcp:network", "executes lifecycle hooks", "unsigned source"]) {
+    ok(text.includes(expected), `structured install approval renders ${expected}`);
+  }
+  eq(
+    Array.from(document.querySelectorAll(".prompt-shelf__actions button")).map((button) => button.textContent).join("|"),
+    "1Allow once|2Deny",
+    "structured install approval is a fresh one-shot human decision",
+  );
+  ok(document.querySelector("[data-automation-id='install-source-approval-plan']") != null, "structured install plan exposes stable automation target");
+
+  await act(async () => { root.unmount(); });
+  dom.window.close();
+}
+
 console.log(`\n${passed} passed, ${failed} failed, ${passed + failed} total`);
 if (failed > 0) process.exit(1);

@@ -292,6 +292,55 @@ func TestUpdateSinkApprovalAllowAlways(t *testing.T) {
 	}
 }
 
+func TestUpdateSinkStructuredApprovalCarriesExactPlan(t *testing.T) {
+	fn := &fakeNotifier{onReq: func(_ string, params any) (json.RawMessage, error) {
+		p, ok := params.(PermissionRequestParams)
+		if !ok {
+			t.Fatalf("permission params type = %T", params)
+		}
+		if len(p.Options) != 2 || p.Options[0].Kind != OptAllowOnce || p.Options[1].Kind != OptRejectOnce {
+			t.Fatalf("structured approval options = %+v, want one-shot allow/reject", p.Options)
+		}
+		var plan struct {
+			PlanID  string `json:"planId"`
+			Actions []struct {
+				RiskLevel   string   `json:"riskLevel"`
+				Permissions []string `json:"permissions"`
+				Target      string   `json:"target"`
+			} `json:"actions"`
+		}
+		if err := json.Unmarshal(p.ToolCall.RawInput, &plan); err != nil {
+			t.Fatalf("structured rawInput: %v (%s)", err, p.ToolCall.RawInput)
+		}
+		if plan.PlanID != "plan-22" || len(plan.Actions) != 1 || plan.Actions[0].RiskLevel != "high" || plan.Actions[0].Target != "plugins/reviewed" || len(plan.Actions[0].Permissions) != 1 {
+			t.Fatalf("structured rawInput plan = %+v", plan)
+		}
+		return json.Marshal(PermissionRequestResult{Outcome: PermissionOutcome{Outcome: "selected", OptionID: string(OptAllowOnce)}})
+	}}
+	sink := newUpdateSink(fn, "sess-1")
+	got := make(chan approveCall, 1)
+	sink.bindApprove(func(id string, allow, session, persist bool) { got <- approveCall{id, allow, session, persist} })
+	sink.Emit(event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{
+		ID: "22", Tool: "install_source", Subject: "install reviewed",
+		Plan: &event.ApprovalPlan{
+			PlanID: "plan-22", Operation: "install", Scope: "global",
+			Actions: []event.ApprovalAction{{
+				Kind: "plugin", Action: "install_plugin_package", RiskLevel: "high", Name: "reviewed",
+				Target: "plugins/reviewed", Permissions: []string{"hooks:execute"},
+			}},
+		},
+	}})
+
+	select {
+	case call := <-got:
+		if call != (approveCall{id: "22", allow: true}) {
+			t.Fatalf("approve = %+v, want one-shot allow", call)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("structured ACP approval was never resolved")
+	}
+}
+
 func TestUpdateSinkApprovalBashPrefix(t *testing.T) {
 	fn := &fakeNotifier{onReq: func(_ string, params any) (json.RawMessage, error) {
 		raw, _ := json.Marshal(params)

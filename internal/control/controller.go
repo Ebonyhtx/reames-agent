@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
@@ -252,6 +253,7 @@ type pendingApproval struct {
 	subject   string
 	reason    string
 	fileDiff  event.FileDiff
+	plan      *event.ApprovalPlan
 	fresh     bool
 	autoDrain bool
 	reply     chan approvalReply
@@ -1562,7 +1564,7 @@ func (c *Controller) EnableInteractiveApproval() {
 	}
 }
 
-func (c *Controller) newInteractiveGate() *permission.Gate {
+func (c *Controller) newInteractiveGate() *interactiveGate {
 	policy := c.policy
 	mode := c.approval.mode()
 	switch mode {
@@ -1581,7 +1583,7 @@ func (c *Controller) newInteractiveGate() *permission.Gate {
 			_ = c.onRemember(rule)
 		}
 	}
-	return gate
+	return &interactiveGate{Gate: gate, c: c}
 }
 
 func (c *Controller) refreshInteractiveGate() {
@@ -4734,6 +4736,110 @@ func (c *Controller) Memory() *memory.Set {
 
 // --- approval bridge (agent gate → events) ---
 
+// interactiveGate preserves the ordinary permission policy while adding the
+// structured fresh-human path used by sensitive two-phase tools.
+type interactiveGate struct {
+	*permission.Gate
+	c *Controller
+}
+
+func (g *interactiveGate) CheckStructuredApprovalPreflight(_ context.Context, toolName string, args json.RawMessage) (bool, string, error) {
+	if g == nil || g.Gate == nil {
+		return false, "structured approval host is unavailable", nil
+	}
+	if g.Policy.Decide(toolName, false, args) == permission.Deny {
+		return false, "denied by permission policy - this tool is on the deny list", nil
+	}
+	return true, "", nil
+}
+
+func (g *interactiveGate) CheckStructuredApproval(ctx context.Context, toolName string, args json.RawMessage, plan tool.ApprovalPlan) (bool, string, error) {
+	if g == nil || g.Gate == nil || g.c == nil {
+		return false, "structured approval host is unavailable", nil
+	}
+	if g.Policy.Decide(toolName, false, args) == permission.Deny {
+		return false, "denied by permission policy - this tool is on the deny list", nil
+	}
+	eventPlan := approvalPlanEvent(plan)
+	subject := structuredApprovalSubject(eventPlan)
+	reason := "Review the exact plan, risks, targets, and requested permissions before applying it."
+	reply, err := g.c.requestFreshApprovalDecisionWithPlan(ctx, toolName, subject, args, reason, eventPlan)
+	if err != nil {
+		return false, "approval aborted", err
+	}
+	if !reply.allow {
+		return false, "the user declined this exact operation plan; do not retry it without revising or re-planning", nil
+	}
+	return true, "", nil
+}
+
+func approvalPlanEvent(plan tool.ApprovalPlan) *event.ApprovalPlan {
+	actions := make([]event.ApprovalAction, len(plan.Actions))
+	for i, action := range plan.Actions {
+		actions[i] = event.ApprovalAction{
+			Kind:               action.Kind,
+			Action:             action.Action,
+			RiskLevel:          action.RiskLevel,
+			RiskReasons:        append([]string(nil), action.RiskReasons...),
+			Name:               action.Name,
+			Source:             action.Source,
+			Target:             action.Target,
+			ConfigPath:         action.ConfigPath,
+			Scope:              action.Scope,
+			Mode:               action.Mode,
+			Transport:          action.Transport,
+			URL:                action.URL,
+			Command:            action.Command,
+			Args:               append([]string(nil), action.Args...),
+			Env:                maps.Clone(action.Env),
+			Headers:            maps.Clone(action.Headers),
+			Permissions:        append([]string(nil), action.Permissions...),
+			AddedPermissions:   append([]string(nil), action.AddedPermissions...),
+			RemovedPermissions: append([]string(nil), action.RemovedPermissions...),
+			Version:            action.Version,
+			CurrentVersion:     action.CurrentVersion,
+			Digest:             action.Digest,
+			CurrentDigest:      action.CurrentDigest,
+			TrustStatus:        action.TrustStatus,
+			SourceKind:         action.SourceKind,
+			SourceRevision:     action.SourceRevision,
+			WillEnable:         action.WillEnable,
+		}
+	}
+	return &event.ApprovalPlan{
+		PlanID:    plan.PlanID,
+		Operation: plan.Operation,
+		Source:    plan.Source,
+		Name:      plan.Name,
+		Kind:      plan.Kind,
+		Scope:     plan.Scope,
+		Mode:      plan.Mode,
+		Actions:   actions,
+		Warnings:  append([]string(nil), plan.Warnings...),
+	}
+}
+
+func structuredApprovalSubject(plan *event.ApprovalPlan) string {
+	if plan == nil {
+		return "apply sensitive operation"
+	}
+	operation := strings.TrimSpace(plan.Operation)
+	if operation == "" {
+		operation = "apply"
+	}
+	target := strings.TrimSpace(plan.Name)
+	if target == "" {
+		target = strings.TrimSpace(plan.Source)
+	}
+	if target == "" {
+		target = strings.TrimSpace(plan.Kind)
+	}
+	if target == "" {
+		target = "source"
+	}
+	return fmt.Sprintf("%s %s (%d actions, plan %s)", operation, target, len(plan.Actions), plan.PlanID)
+}
+
 // gateApprover adapts the Controller to permission.Approver. It is distinct
 // from the public Approve command (different signature, different direction).
 type gateApprover struct{ c *Controller }
@@ -5276,11 +5382,16 @@ func (c *Controller) requestFreshApprovalDecision(ctx context.Context, tool, sub
 	return c.requestApprovalDecisionWithOptions(ctx, tool, subject, args, reason, approvalDecisionOptions{fresh: true})
 }
 
+func (c *Controller) requestFreshApprovalDecisionWithPlan(ctx context.Context, toolName, subject string, args json.RawMessage, reason string, plan *event.ApprovalPlan) (approvalReply, error) {
+	return c.requestApprovalDecisionWithOptions(ctx, toolName, subject, args, reason, approvalDecisionOptions{fresh: true, plan: plan})
+}
+
 type approvalDecisionOptions struct {
 	// fresh marks a user trust/business decision rather than an ordinary tool
 	// permission. It may reuse an explicit session grant, but YOLO/auto approval
 	// must not answer or drain the prompt.
 	fresh bool
+	plan  *event.ApprovalPlan
 }
 
 func (c *Controller) requestApprovalDecisionWithOptions(ctx context.Context, tool, subject string, args json.RawMessage, reason string, opts approvalDecisionOptions) (approvalReply, error) {
@@ -5302,13 +5413,15 @@ func (c *Controller) requestApprovalDecisionWithOptions(ctx context.Context, too
 	var id string
 	var reply chan approvalReply
 	fileDiff := c.approvalFileDiff(tool, args)
-	if opts.fresh {
-		id, reply = c.approval.registerDecision(tool, subject, reason, fileDiff, true)
+	if opts.plan != nil {
+		id, reply = c.approval.registerStructuredDecision(tool, subject, reason, opts.plan)
+	} else if opts.fresh {
+		id, reply = c.approval.registerDecision(tool, subject, reason, fileDiff, nil, true)
 	} else {
 		id, reply = c.approval.register(tool, subject, reason, fileDiff)
 	}
 
-	c.sink.Emit(event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{ID: id, Tool: tool, Subject: subject, Reason: reason, FileDiff: fileDiff}})
+	c.sink.Emit(event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{ID: id, Tool: tool, Subject: subject, Reason: reason, Plan: opts.plan, FileDiff: fileDiff}})
 	if hookSubject, hookArgs, ok := permissionRequestHookPayload(tool, subject, args); ok {
 		go c.hooks.PermissionRequest(ctx, tool, hookSubject, hookArgs)
 	}

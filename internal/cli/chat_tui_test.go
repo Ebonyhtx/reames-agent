@@ -2426,11 +2426,36 @@ func TestFreshApprovalBannerUsesConventionalDenyChoice(t *testing.T) {
 	}
 }
 
+func TestInstallSourceApprovalBannerShowsExactExecutionFields(t *testing.T) {
+	m := newTestChatTUI()
+	m.width = 240
+	m.pendingApproval = &event.Approval{
+		ID: "approval-1", Tool: "install_source", Subject: "install reviewed",
+		Plan: &event.ApprovalPlan{
+			PlanID: "plan-42", Operation: "install", Source: "plugin.zip", Scope: "global",
+			Actions: []event.ApprovalAction{{
+				Kind: "plugin", Action: "install_plugin_package", RiskLevel: "high", Name: "reviewed",
+				Target: "plugins/reviewed", ConfigPath: "plugins/state.json", Transport: "stdio",
+				Command: "node", Args: []string{"server.js"}, Env: map[string]string{"MODE": "reviewed"},
+				Headers: map[string]string{"Authorization": "[REDACTED]"}, CurrentVersion: "1.0.0", Version: "2.0.0",
+				CurrentDigest: "old", Digest: "new", SourceKind: "github", SourceRevision: "abc123",
+				TrustStatus: "unsigned_https", Permissions: []string{"hooks:execute"}, RiskReasons: []string{"runs hooks"},
+			}},
+		},
+	}
+	banner := m.renderApprovalBanner()
+	for _, want := range []string{"plan-42", "plugins/reviewed", "plugins/state.json", "stdio", "node", "server.js", "MODE=reviewed", "Authorization=[REDACTED]", "1.0.0 -> 2.0.0", "old -> new", "github", "abc123", "unsigned_https", "hooks:execute", "runs hooks", "1. Allow once", "2. Deny"} {
+		if !strings.Contains(banner, want) {
+			t.Fatalf("approval banner missing %q: %q", want, banner)
+		}
+	}
+}
+
 func TestFreshApprovalSessionChoiceIsLimitedToSandboxEscape(t *testing.T) {
 	if !freshApprovalAllowsSession(control.SandboxEscapeApprovalTool) {
 		t.Fatal("sandbox escape should allow an explicit session choice")
 	}
-	for _, toolName := range []string{"remember", "forget", planApprovalTool, agent.PlanModeReadOnlyCommandApprovalTool} {
+	for _, toolName := range []string{"remember", "forget", "install_source", planApprovalTool, agent.PlanModeReadOnlyCommandApprovalTool} {
 		if freshApprovalAllowsSession(toolName) {
 			t.Fatalf("%s should not allow the sandbox escape session choice", toolName)
 		}

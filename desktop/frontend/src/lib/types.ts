@@ -92,9 +92,52 @@ export interface WireApproval {
   tool: string;
   subject: string;
   reason?: string;
+  plan?: WireApprovalPlan;
   diff?: string;
   added?: number;
   removed?: number;
+}
+
+export interface WireApprovalPlan {
+  planId: string;
+  operation: string;
+  source?: string;
+  name?: string;
+  kind?: string;
+  scope?: string;
+  mode?: string;
+  actions: WireApprovalAction[];
+  warnings?: string[];
+}
+
+export interface WireApprovalAction {
+  kind: string;
+  action: string;
+  riskLevel: string;
+  riskReasons?: string[];
+  name?: string;
+  source?: string;
+  target?: string;
+  configPath?: string;
+  scope?: string;
+  mode?: string;
+  transport?: string;
+  url?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+  permissions?: string[];
+  addedPermissions?: string[];
+  removedPermissions?: string[];
+  version?: string;
+  currentVersion?: string;
+  digest?: string;
+  currentDigest?: string;
+  trustStatus?: string;
+  sourceKind?: string;
+  sourceRevision?: string;
+  willEnable?: boolean;
 }
 
 export interface WireGuardian {

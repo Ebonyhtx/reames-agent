@@ -13,6 +13,7 @@
 
 ### Security / Governance
 
+- Added exact-plan structured approval for model-driven `install_source` apply calls across Controller, Desktop, CLI, Bot, Serve/event wire, and ACP. Planning remains invocation-level read-only; apply requires a fresh human decision that YOLO, auto mode, Guardian, plan execution windows, grants, and headless autonomy cannot replace. Unsupported and headless hosts fail closed before preview or mutation, and MCP URL/command/args/environment/header details are structurally redacted before display or persistence.
 - Added public-readiness gates for ownership, release safety, deployment docs, and attribution.
 - Restored CodeQL workflow for Go, JavaScript/TypeScript, and GitHub Actions analysis.
 - Documented SemVer source, changelog expectations, and signing/checksum strategy before production releases.
@@ -23,6 +24,7 @@
 
 ### Desktop
 
+- Added a structured plugin/source approval modal that displays operation, risk, target, MCP execution details, version/digest changes, trust, requested permissions, source revision, warnings, and enable state from the same exact plan used by every host.
 - Added true-modal background isolation, stable dialog identities, inherited opener restore chains, transcript accessibility semantics, and a strict Windows UIA accessibility smoke. Actual NVDA/Narrator listening and Windows High Contrast validation remain manual evidence.
 - Added real-Chromium and native Wails plugin lifecycle smoke coverage for stale-plan rejection, disabled-by-default install, exact permission approval, generation update/rollback, diagnostics, removal, and isolated-state cleanup; the installed Windows candidate now retains the native evidence artifact.
 

@@ -32,6 +32,79 @@ type Tool interface {
 	ReadOnly() bool
 }
 
+// InvocationReadOnlyClassifier optionally refines ReadOnly for one invocation.
+// It is intended for two-phase tools whose preview form is side-effect-free but
+// whose apply form mutates host state. Invalid or ambiguous args must return
+// false so permission and plan-mode checks fail closed.
+type InvocationReadOnlyClassifier interface {
+	InvocationReadOnly(args json.RawMessage) bool
+}
+
+// InvocationReadOnly returns the effective read-only classification for args.
+// Tools without a call-level classifier retain their static Tool contract.
+func InvocationReadOnly(t Tool, args json.RawMessage) bool {
+	if t == nil {
+		return false
+	}
+	if classifier, ok := t.(InvocationReadOnlyClassifier); ok {
+		return classifier.InvocationReadOnly(args)
+	}
+	return t.ReadOnly()
+}
+
+// ApprovalPlan is a side-effect-free, structured preview of a sensitive tool
+// invocation. PlanID binds the user's decision to the exact actions the tool
+// will recompute immediately before applying them.
+type ApprovalPlan struct {
+	PlanID    string
+	Operation string
+	Source    string
+	Name      string
+	Kind      string
+	Scope     string
+	Mode      string
+	Actions   []ApprovalAction
+	Warnings  []string
+}
+
+// ApprovalAction is one user-visible action in an ApprovalPlan.
+type ApprovalAction struct {
+	Kind               string
+	Action             string
+	RiskLevel          string
+	RiskReasons        []string
+	Name               string
+	Source             string
+	Target             string
+	ConfigPath         string
+	Scope              string
+	Mode               string
+	Transport          string
+	URL                string
+	Command            string
+	Args               []string
+	Env                map[string]string
+	Headers            map[string]string
+	Permissions        []string
+	AddedPermissions   []string
+	RemovedPermissions []string
+	Version            string
+	CurrentVersion     string
+	Digest             string
+	CurrentDigest      string
+	TrustStatus        string
+	SourceKind         string
+	SourceRevision     string
+	WillEnable         bool
+}
+
+// ApprovalPreviewer marks invocations that require a fresh human decision.
+// required=false means the invocation can use the ordinary permission path.
+// Preview must never apply actions; errors are treated as a hard block.
+type ApprovalPreviewer interface {
+	PreviewApproval(ctx context.Context, args json.RawMessage) (plan ApprovalPlan, required bool, err error)
+}
+
 // Previewer is an optional capability a writer Tool may implement: given the
 // same raw JSON args Execute would receive, compute the file change the call
 // *would* make — without touching disk. A front-end uses it to show an approval

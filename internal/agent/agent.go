@@ -154,6 +154,20 @@ type Gate interface {
 	Check(ctx context.Context, toolName string, args json.RawMessage, readOnly bool) (allow bool, reason string, err error)
 }
 
+// StructuredApprovalGate resolves sensitive invocations that expose an exact,
+// user-visible ApprovalPlan. The decision must be fresh: policy auto-allow,
+// YOLO, Guardian, and headless autonomy cannot substitute for a human answer.
+type StructuredApprovalGate interface {
+	CheckStructuredApproval(ctx context.Context, toolName string, args json.RawMessage, plan tool.ApprovalPlan) (allow bool, reason string, err error)
+}
+
+// StructuredApprovalPreflightGate can reject a sensitive invocation from its
+// arguments before generating a plan that may read local files or remote URLs.
+// It must not prompt or approve; the full decision still happens with the plan.
+type StructuredApprovalPreflightGate interface {
+	CheckStructuredApprovalPreflight(ctx context.Context, toolName string, args json.RawMessage) (allow bool, reason string, err error)
+}
+
 const PlanModeReadOnlyCommandApprovalTool = "plan_mode_read_only_command"
 
 // PlanModeReadOnlyTrustRequest describes a read-only claim that plan mode will
@@ -2430,7 +2444,7 @@ func (a *Agent) systemPrompt() string {
 func (a *Agent) executeBatch(ctx context.Context, calls []provider.ToolCall) []string {
 	for _, c := range calls {
 		t, ok := a.tools.Get(c.Name)
-		ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ReadOnly: ok && t.ReadOnly()}
+		ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ReadOnly: ok && tool.InvocationReadOnly(t, json.RawMessage(c.Arguments))}
 		ev.FileDiff = event.FileDiff{Diff: c.Diff, Added: c.Added, Removed: c.Removed}
 		if ok && ev.Diff == "" && ev.Added == 0 && ev.Removed == 0 {
 			if ch, ok := tool.PreviewChange(t, json.RawMessage(c.Arguments)); ok {
@@ -2524,7 +2538,7 @@ func (a *Agent) executeBatch(ctx context.Context, calls []provider.ToolCall) []s
 			Args:       c.Arguments,
 			Output:     o.output,
 			Err:        o.errMsg,
-			ReadOnly:   ok && t.ReadOnly(),
+			ReadOnly:   ok && tool.InvocationReadOnly(t, json.RawMessage(c.Arguments)),
 			Truncated:  o.truncated,
 			DurationMs: durations[i],
 		}})
@@ -2543,7 +2557,7 @@ func (a *Agent) executeBatch(ctx context.Context, calls []provider.ToolCall) []s
 				Args:       c.Arguments,
 				Output:     o.output,
 				Error:      o.errMsg,
-				ReadOnly:   ok && t.ReadOnly(),
+				ReadOnly:   ok && tool.InvocationReadOnly(t, json.RawMessage(c.Arguments)),
 				Blocked:    o.blocked,
 				DurationMs: durations[i],
 				Truncated:  o.truncated,
@@ -2595,10 +2609,10 @@ type toolCallBatch struct {
 func partitionToolCalls(r *tool.Registry, calls []provider.ToolCall) []toolCallBatch {
 	var batches []toolCallBatch
 	for i := 0; i < len(calls); {
-		if parallelisable(r, calls[i].Name) {
+		if parallelisable(r, calls[i]) {
 			start := i
 			i++
-			for i < len(calls) && parallelisable(r, calls[i].Name) {
+			for i < len(calls) && parallelisable(r, calls[i]) {
 				i++
 			}
 			batches = append(batches, toolCallBatch{start: start, end: i, parallel: true})
@@ -2610,12 +2624,12 @@ func partitionToolCalls(r *tool.Registry, calls []provider.ToolCall) []toolCallB
 	return batches
 }
 
-func parallelisable(r *tool.Registry, name string) bool {
-	if name == "complete_step" || name == "todo_write" {
+func parallelisable(r *tool.Registry, call provider.ToolCall) bool {
+	if call.Name == "complete_step" || call.Name == "todo_write" {
 		return false
 	}
-	t, ok := r.Get(name)
-	return ok && t.ReadOnly()
+	t, ok := r.Get(call.Name)
+	return ok && tool.InvocationReadOnly(t, json.RawMessage(call.Arguments))
 }
 
 func runParallel(ctx context.Context, start, end int, run func(int)) int {
@@ -2809,6 +2823,8 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 			errMsg: fmt.Sprintf("unknown tool %q", call.Name),
 		}
 	}
+	callArgs := json.RawMessage(call.Arguments)
+	callReadOnly := tool.InvocationReadOnly(t, callArgs)
 	if out, blocked := a.repeatedSuccessBlock(call, t); blocked {
 		return toolOutcome{
 			output:  out,
@@ -2841,7 +2857,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 		if u, ok := t.(tool.PlanModeUntrustedReadOnly); ok {
 			untrusted = u.PlanModeUntrustedReadOnly()
 		}
-		if decision := a.planModeDecision(call.Name, t.ReadOnly(), untrusted, safety, json.RawMessage(call.Arguments)); decision.Blocked {
+		if decision := a.planModeDecision(call.Name, callReadOnly, untrusted, safety, callArgs); decision.Blocked {
 			trustAllowed := false
 			if decision.ReadOnlyCommandTrust != nil {
 				if allow, outcome, handled := a.checkPlanModeBashReadOnlyTrust(ctx, call, decision.ReadOnlyCommandTrust); handled {
@@ -2851,7 +2867,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 					trustAllowed = true
 					planModeTrustedReadOnly = true
 				}
-			} else if t.ReadOnly() && untrusted && safety != planmode.PlanSafetyUnsafe {
+			} else if callReadOnly && untrusted && safety != planmode.PlanSafetyUnsafe {
 				if allow, outcome, handled := a.checkPlanModeMCPReadOnlyTrust(ctx, call, t); handled {
 					if !allow {
 						return outcome
@@ -2868,9 +2884,71 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 			}
 		}
 	}
-	if a.gate != nil {
-		readOnly := t.ReadOnly() || planModeTrustedReadOnly
-		allow, reason, err := a.gate.Check(ctx, call.Name, json.RawMessage(call.Arguments), readOnly)
+	structuredApprovalHandled := false
+	if previewer, ok := t.(tool.ApprovalPreviewer); ok {
+		structuredGate, hasStructuredGate := a.gate.(StructuredApprovalGate)
+		if !callReadOnly && !hasStructuredGate {
+			return toolOutcome{
+				output:  "blocked: this invocation requires a fresh structured human approval, but this host cannot provide one",
+				blocked: true,
+				errMsg:  "blocked: structured human approval unavailable",
+			}
+		}
+		if !callReadOnly {
+			if preflight, ok := a.gate.(StructuredApprovalPreflightGate); ok {
+				allow, reason, err := preflight.CheckStructuredApprovalPreflight(ctx, call.Name, callArgs)
+				if err != nil {
+					return toolOutcome{output: fmt.Sprintf("blocked: %s (%v)", reason, err), blocked: true, errMsg: fmt.Sprintf("blocked: %v", err)}
+				}
+				if !allow {
+					return toolOutcome{output: "blocked: " + reason, blocked: true, errMsg: "blocked by permission policy"}
+				}
+			}
+		}
+		plan, required, err := previewer.PreviewApproval(ctx, callArgs)
+		if err != nil {
+			return toolOutcome{
+				output:  fmt.Sprintf("blocked: structured approval preview failed (%v)", err),
+				blocked: true,
+				errMsg:  "blocked: structured approval preview failed",
+			}
+		}
+		if required {
+			if strings.TrimSpace(plan.PlanID) == "" || len(plan.Actions) == 0 {
+				return toolOutcome{
+					output:  "blocked: structured approval preview returned an invalid empty plan",
+					blocked: true,
+					errMsg:  "blocked: invalid structured approval plan",
+				}
+			}
+			if !hasStructuredGate {
+				return toolOutcome{
+					output:  "blocked: this invocation requires a fresh structured human approval, but this host cannot provide one",
+					blocked: true,
+					errMsg:  "blocked: structured human approval unavailable",
+				}
+			}
+			allow, reason, err := structuredGate.CheckStructuredApproval(ctx, call.Name, callArgs, plan)
+			if err != nil {
+				return toolOutcome{
+					output:  fmt.Sprintf("blocked: %s (%v)", reason, err),
+					blocked: true,
+					errMsg:  fmt.Sprintf("blocked: %v", err),
+				}
+			}
+			if !allow {
+				return toolOutcome{
+					output:  "blocked: " + reason,
+					blocked: true,
+					errMsg:  "blocked by structured approval",
+				}
+			}
+			structuredApprovalHandled = true
+		}
+	}
+	if a.gate != nil && !structuredApprovalHandled {
+		readOnly := callReadOnly || planModeTrustedReadOnly
+		allow, reason, err := a.gate.Check(ctx, call.Name, callArgs, readOnly)
 		if err != nil {
 			return toolOutcome{
 				output:  fmt.Sprintf("blocked: %s (%v)", reason, err),
@@ -2907,8 +2985,8 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	// process interruption indistinguishable from an untracked mutation.
 	mutationAttempt := false
 	var previewedChanges []diff.Change
-	if !t.ReadOnly() {
-		if changes, ok, perr := tool.PreviewFileChanges(t, json.RawMessage(call.Arguments)); ok {
+	if !callReadOnly {
+		if changes, ok, perr := tool.PreviewFileChanges(t, callArgs); ok {
 			if perr != nil {
 				return toolOutcome{
 					output:  fmt.Sprintf("blocked: writer preview failed: %v", perr),
@@ -2941,7 +3019,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 		}
 	}
 	if mutationAttempt && a.subagentEffects != nil {
-		intent := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), false, t.ReadOnly())
+		intent := evidence.ReceiptFromToolCall(call.Name, callArgs, false, callReadOnly)
 		intent.ToolCallID = call.ID
 		intent.MutationAttempt = true
 		intent.Paths = receiptPathsWithPreview(intent.Paths, previewedChanges)
@@ -2989,12 +3067,12 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	cctx = tool.WithProgress(cctx, func(chunk string) {
 		a.sink.Emit(event.Event{Kind: event.ToolProgress, Tool: event.Tool{ID: callID, Output: chunk}})
 	})
-	result, err := t.Execute(cctx, json.RawMessage(call.Arguments))
+	result, err := t.Execute(cctx, callArgs)
 	toolErr := err
 	var effectErr error
 	if a.evidence != nil {
 		if call.Name == "complete_step" {
-			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), toolErr == nil, t.ReadOnly())
+			rec := evidence.ReceiptFromToolCall(call.Name, callArgs, toolErr == nil, callReadOnly)
 			rec.ToolCallID = call.ID
 			rec.MutationAttempt = mutationAttempt
 			rec.Paths = receiptPathsWithPreview(rec.Paths, previewedChanges)
@@ -3006,7 +3084,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 				a.advanceCanonicalTodo(rec.Step)
 			}
 		} else {
-			rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), toolErr == nil, t.ReadOnly())
+			rec := evidence.ReceiptFromToolCall(call.Name, callArgs, toolErr == nil, callReadOnly)
 			rec.ToolCallID = call.ID
 			rec.MutationAttempt = mutationAttempt
 			rec.Paths = receiptPathsWithPreview(rec.Paths, previewedChanges)

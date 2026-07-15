@@ -2761,8 +2761,20 @@ func TestHeadlessGateRefusesFreshHumanApprovalTools(t *testing.T) {
 			t.Fatalf("%s headless check = (%v,%q,%v), want fresh-human refusal", toolName, allow, reason, err)
 		}
 	}
+	allow, reason, err := gate.Check(context.Background(), "install_source", json.RawMessage(`{"apply":false}`), true)
+	if err != nil || !allow || reason != "" {
+		t.Fatalf("headless install planning = (%v,%q,%v), want autonomous read-only allow", allow, reason, err)
+	}
+	allow, reason, err = gate.CheckStructuredApproval(context.Background(), "install_source", json.RawMessage(`{"apply":true}`), tool.ApprovalPlan{PlanID: "p1"})
+	if err != nil || allow || !strings.Contains(reason, "fresh human approval") {
+		t.Fatalf("headless structured apply = (%v,%q,%v), want fresh-human refusal", allow, reason, err)
+	}
+	allow, reason, err = gate.CheckStructuredApprovalPreflight(context.Background(), "install_source", json.RawMessage(`{"apply":true}`))
+	if err != nil || allow || !strings.Contains(reason, "cannot preview or apply") {
+		t.Fatalf("headless structured preflight = (%v,%q,%v), want refusal before preview", allow, reason, err)
+	}
 
-	allow, reason, err := gate.Check(context.Background(), "bash", json.RawMessage(`{"command":"go test ./..."}`), false)
+	allow, reason, err = gate.Check(context.Background(), "bash", json.RawMessage(`{"command":"go test ./..."}`), false)
 	if err != nil || !allow || reason != "" {
 		t.Fatalf("ordinary headless ask = (%v,%q,%v), want autonomous allow", allow, reason, err)
 	}
