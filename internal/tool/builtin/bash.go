@@ -20,6 +20,7 @@ import (
 	"reames-agent/internal/i18n"
 	"reames-agent/internal/jobs"
 	"reames-agent/internal/proc"
+	"reames-agent/internal/processpolicy"
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/shellparse"
 	"reames-agent/internal/tool"
@@ -496,7 +497,7 @@ func commandPreview(cmd string) string {
 }
 
 func bashCommandEnv(ctx context.Context) []string {
-	env := os.Environ()
+	env := processpolicy.ProcessEnvironment()
 	if runtime.GOOS == "windows" {
 		return env
 	}
@@ -554,6 +555,7 @@ func runShellPATHCommand(parent context.Context, shell string, args []string) []
 	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, shell, args...)
+	cmd.Env = processpolicy.ProcessEnvironment()
 	proc.PrepareShellPATHProbe(cmd)
 	cmd.Stdin = strings.NewReader("")
 	out, _ := cmd.CombinedOutput()

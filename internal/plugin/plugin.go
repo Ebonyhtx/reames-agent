@@ -547,6 +547,7 @@ type ToolInfo struct {
 	Name         string
 	Description  string
 	ReadOnlyHint bool
+	SchemaError  string
 }
 
 // ServerStatus summarises one connected server for the /mcp command.
@@ -1162,18 +1163,25 @@ func (c *Client) listTools(ctx context.Context) ([]tool.Tool, error) {
 	tools := make([]tool.Tool, 0, len(out))
 	for _, t := range out {
 		hinted := t.Annotations != nil && t.Annotations.ReadOnlyHint
+		info := ToolInfo{Name: t.Name, Description: t.Description, ReadOnlyHint: hinted}
+		schema, err := normalizeAndValidateToolSchema(t.InputSchema)
+		if err != nil {
+			info.SchemaError = schemaValidationError(err)
+			toolInfos = append(toolInfos, info)
+			continue
+		}
 		visibleName := t.Name
 		if c.spec.StripRawPrefix != "" {
 			visibleName = strings.TrimPrefix(visibleName, c.spec.StripRawPrefix)
 		}
-		toolInfos = append(toolInfos, ToolInfo{Name: t.Name, Description: t.Description, ReadOnlyHint: hinted})
+		toolInfos = append(toolInfos, info)
 		trusted := c.spec.toolReadOnlyTrusted(t.Name, visibleName)
 		tools = append(tools, &remoteTool{
 			client:          c,
 			name:            toolName(c.name, visibleName),
 			rawName:         t.Name,
 			desc:            t.Description,
-			schema:          canonicalizeSchema(t.InputSchema),
+			schema:          schema,
 			readOnly:        c.spec.toolReadOnly(t.Name, visibleName, hinted),
 			readOnlyTrusted: trusted,
 		})

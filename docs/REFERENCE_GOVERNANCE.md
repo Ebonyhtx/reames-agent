@@ -124,3 +124,22 @@ Reasonix 从初始跟踪点之后新增 133 个提交，值得优先审查的候
 - Desktop 滚动意图、恢复副本、上下文窗口环和审批交互。
 
 具体差异报告位于 `artifacts/upstream-watch/upstream-report.md`。
+
+## 6. 2026-07-17 上游再同步
+
+Reasonix `main-v2` 已审查至 `9b54b9f8937b9878d9052833bff4ab99ba7638de`，相对原 reviewed
+点新增 525 个提交（392 个非 merge）。本轮直接采用 MCP schema 隔离、保存凭据的环境/读取
+保护、credential-free cache identity、Anthropic usage 合并和 MiMo schema dialect；Reames
+适配、测试、拒绝项和后续门槛见
+[`audits/2026-07-17-reasonix-upstream-sync.md`](audits/2026-07-17-reasonix-upstream-sync.md)。
+
+本轮同时安全快进并审查 Hermes、Codex、MiMo、Impeccable、Scream Code、AgentArk、Claude Code
+和 Kimi Code 的干净本地参考仓库。只形成三个新的路线图信号：
+
+1. Reasonix 的 MCP identity receipt/launcher lock 进入 M5 P0；
+2. Reasonix + MiMo 的 workspace lease/worktree 进入 M4 持续加固 P1；
+3. Reasonix offline Guard/Safe Mode 进入 P2，必须复用现有恢复事务。
+
+其他 UI、主题、发布、遥测、Python/Electron runtime 和参考项目依赖体系不进入 Reames 主树。
+正式 reviewed SHA 保存在 `docs/upstreams/upstreams.lock.json`；`artifacts/upstream-watch/` 仍只
+是本地分析输出，不提交。

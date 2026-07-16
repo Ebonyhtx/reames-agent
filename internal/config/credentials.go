@@ -159,6 +159,9 @@ func credentialEnvNamesForRoot(root string) []string {
 }
 
 func credentialEnvNamesFromConfig(cfg *Config) []string {
+	if cfg == nil {
+		return nil
+	}
 	seen := map[string]bool{}
 	var out []string
 	add := func(name string) {
@@ -182,6 +185,31 @@ func credentialEnvNamesFromConfig(cfg *Config) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// CredentialEnvNames returns every environment-variable name whose value can
+// be loaded from Reames Agent's global credential store. Besides configured
+// provider, serve, and bot keys, it includes stored keys no longer referenced
+// by the current config: the credential loader pins the whole file into this
+// process, so stale entries must remain outside child-process environments too.
+func (c *Config) CredentialEnvNames() []string {
+	names := credentialEnvNamesFromConfig(c)
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		seen[name] = true
+	}
+	if file, ok := readDotEnvFile(UserCredentialsPath()); ok {
+		for name := range file.Values {
+			name = strings.TrimSpace(name)
+			if !isCredentialKey(name) || seen[name] {
+				continue
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func resolveProviderCredentialsForRoot(root string, cfg *Config) {

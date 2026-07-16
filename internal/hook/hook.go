@@ -571,11 +571,12 @@ func DefaultSpawner(ctx context.Context, in SpawnInput) SpawnResult {
 		cmd.Env = hostEnv
 	} else {
 		cmd = spawnCommand(cctx, in.Command)
+		cmd.Env = processpolicy.ProcessEnvironment()
 	}
 	proc.HideWindow(cmd)
 	cmd.Dir = in.Cwd
 	if !in.PackagePolicy.Enabled() && len(in.Env) > 0 {
-		cmd.Env = processpolicy.MergeEnvironment(os.Environ(), in.Env)
+		cmd.Env = processpolicy.MergeEnvironment(cmd.Env, in.Env)
 	}
 	cmd.Stdin = strings.NewReader(in.Stdin)
 	var outBuf, errBuf cappedBuffer

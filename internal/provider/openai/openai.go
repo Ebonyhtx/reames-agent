@@ -186,6 +186,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		headers:      cleanCustomHeaders(headers),
 		extraBody:    cleanExtraBody(extraBody),
 		model:        cfg.Model,
+		mimo:         provider.IsMiMoEndpoint(cfg.BaseURL),
 		deepseek:     deepseek,
 		minimax:      minimax,
 		zhipu:        zhipu,
@@ -221,6 +222,7 @@ type client struct {
 	model        string
 	http         *http.Client
 	deepseek     bool
+	mimo         bool          // official MiMo endpoints require draft 2020-12 tuple syntax
 	minimax      bool          // true for api.minimaxi.com — emits MiniMax-M3's thinking knob instead of reasoning_effort
 	zhipu        bool          // true for Zhipu GLM (bigmodel.cn / z.ai) — gates thinking via thinking.type, ignores reasoning_effort
 	longcat      bool          // true for LongCat — gates thinking via thinking.type, ignores reasoning_effort
@@ -365,7 +367,7 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 	}
 	resp, err := provider.SendWithRetry(ctx, c.http, c.sendOpts(), newReq)
 	if err != nil {
-		return nil, err
+		return nil, provider.AnnotateToolSchemaError(err, req.Tools)
 	}
 	c.authed.Store(true)
 
@@ -463,6 +465,9 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		parameters := t.Parameters
 		if len(parameters) == 0 {
 			parameters = provider.CanonicalizeSchema(nil)
+		}
+		if c.mimo {
+			parameters = provider.NormalizeLegacyTupleItemsForDraft202012(parameters)
 		}
 		tools = append(tools, chatTool{
 			Type:     "function",

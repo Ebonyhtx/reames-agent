@@ -63,7 +63,19 @@ MEDIUM_RISK_AREAS = {"desktop-go", "desktop-ui", "mcp-plugin-skill", "gateway", 
 
 
 def run(args: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=cwd, check=check, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # Git commit subjects and patches are UTF-8 even when Windows' active code
+    # page is GBK. Relying on locale decoding makes deep upstream analysis crash
+    # as soon as an upstream contains bilingual commit messages.
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        check=check,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
 
 def git_ls_remote(repo: str) -> dict[str, str]:

@@ -98,6 +98,23 @@ func TestBuildRequestNoSystem(t *testing.T) {
 	}
 }
 
+func TestBuildRequestNormalizesLegacyTupleSchemaOnlyForMiMo(t *testing.T) {
+	toolSchema := json.RawMessage(`{"type":"object","properties":{"pair":{"type":"array","items":[{"type":"string"},{"type":"number"}],"additionalItems":false}}}`)
+	req := provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "test"}},
+		Tools:    []provider.ToolSchema{{Name: "tuple", Parameters: toolSchema}},
+	}
+	mimo := (&client{model: "mimo", mimo: true}).buildRequest(req)
+	got := string(mimo.Tools[0].InputSchema)
+	if !strings.Contains(got, `"prefixItems"`) || !strings.Contains(got, `"items":false`) {
+		t.Fatalf("MiMo tuple schema not normalized: %s", got)
+	}
+	other := (&client{model: "other"}).buildRequest(req)
+	if got := string(other.Tools[0].InputSchema); got != string(toolSchema) {
+		t.Fatalf("non-MiMo schema changed:\n got: %s\nwant: %s", got, toolSchema)
+	}
+}
+
 func TestMapStopReason(t *testing.T) {
 	cases := map[string]string{
 		"end_turn":      "stop",
@@ -199,6 +216,47 @@ func TestReadStream(t *testing.T) {
 	}
 	if !done {
 		t.Fatal("expected a done chunk")
+	}
+}
+
+func TestReadStreamUsageFromMessageDelta(t *testing.T) {
+	sse := `event: message_start
+data: {"type":"message_start","message":{"id":"msg_1"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":13,"output_tokens":3,"cache_creation_input_tokens":5,"cache_read_input_tokens":7}}
+
+event: message_stop
+data: {"type":"message_stop"}
+`
+	c := &client{name: "longcat-anthropic"}
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(sse))}
+	ch := make(chan provider.Chunk)
+	go c.readStream(context.Background(), resp, ch)
+
+	var usage *provider.Usage
+	for ck := range ch {
+		if ck.Type == provider.ChunkError {
+			t.Fatalf("unexpected error chunk: %v", ck.Err)
+		}
+		if ck.Type == provider.ChunkUsage {
+			usage = ck.Usage
+		}
+	}
+	if usage == nil {
+		t.Fatal("expected a usage chunk")
+	}
+	if usage.PromptTokens != 25 || usage.CompletionTokens != 3 || usage.TotalTokens != 28 {
+		t.Fatalf("usage tokens = %+v", usage)
+	}
+	if usage.CacheHitTokens != 7 || usage.CacheMissTokens != 18 {
+		t.Fatalf("usage cache = hit %d miss %d", usage.CacheHitTokens, usage.CacheMissTokens)
+	}
+	if usage.FinishReason != "stop" {
+		t.Fatalf("finish reason = %q", usage.FinishReason)
 	}
 }
 

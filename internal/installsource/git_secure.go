@@ -21,6 +21,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 
 	"reames-agent/internal/pluginregistry"
+	"reames-agent/internal/processpolicy"
 )
 
 const (
@@ -71,8 +72,9 @@ func secureGitCommand(ctx context.Context, args ...string) *exec.Cmd {
 		"-c", "advice.detachedHead=false",
 	}
 	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
-	env := make([]string, 0, len(os.Environ())+5)
-	for _, item := range os.Environ() {
+	ambient := processpolicy.ProcessEnvironment()
+	env := make([]string, 0, len(ambient)+5)
+	for _, item := range ambient {
 		key, _, _ := strings.Cut(item, "=")
 		if strings.HasPrefix(strings.ToUpper(key), "GIT_") || strings.EqualFold(key, "GCM_INTERACTIVE") {
 			continue

@@ -28,6 +28,7 @@ import (
 	"reames-agent/internal/netclient"
 	"reames-agent/internal/plugin"
 	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/processpolicy"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/tool"
@@ -126,6 +127,85 @@ api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 
 	if mem := ctrl.Memory(); mem == nil || len(mem.Docs) == 0 {
 		t.Fatal("controller memory set is empty after discovering REASONIX.md")
+	}
+}
+
+func TestBuildRegistersConfiguredAndStaleStoredCredentialsForSubprocessFiltering(t *testing.T) {
+	isolateConfigHome(t)
+	dir := robustTempDir(t)
+	t.Chdir(dir)
+	configuredKey := "REAMES_AGENT_BOOT_TEST_CONFIGURED_CREDENTIAL"
+	staleKey := "REAMES_AGENT_BOOT_TEST_STALE_CREDENTIAL"
+	writeFile(t, dir, "reames-agent.toml", `
+default_model = "test-model"
+
+[[providers]]
+name = "test-model"
+kind = "openai"
+base_url = "https://example.invalid"
+model = "x"
+api_key_env = "`+configuredKey+`"
+`)
+	if err := os.MkdirAll(filepath.Dir(config.UserCredentialsPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.UserCredentialsPath(), []byte(configuredKey+"=configured-secret\n"+staleKey+"=stale-secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctrl, err := Build(context.Background(), Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctrl.Close()
+	joined := strings.Join(processpolicy.ProcessEnvironment(), "\n")
+	for _, forbidden := range []string{configuredKey + "=", staleKey + "=", "configured-secret", "stale-secret"} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("credential %q survived in subprocess environment", forbidden)
+		}
+	}
+}
+
+func TestRuntimeForbidReadPolicyProtectsCredentialFile(t *testing.T) {
+	isolateConfigHome(t)
+	workspace := robustTempDir(t)
+	configuredDir := filepath.Join(workspace, "private")
+	if err := os.MkdirAll(configuredDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(config.UserCredentialsPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.UserCredentialsPath(), []byte("OPAQUE_KEY=secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Sandbox.ForbidRead = []string{configuredDir}
+
+	policy := runtimeForbidReadPolicy(cfg, workspace)
+	hasPath := func(paths []string, want string) bool {
+		if abs, err := filepath.Abs(want); err == nil {
+			want = abs
+		}
+		if real, err := filepath.EvalSymlinks(want); err == nil {
+			want = real
+		}
+		want = filepath.Clean(want)
+		for _, path := range paths {
+			if filepath.Clean(path) == want || runtime.GOOS == "windows" && strings.EqualFold(filepath.Clean(path), want) {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasPath(policy.AllPaths, config.UserCredentialsPath()) || !hasPath(policy.Files, config.UserCredentialsPath()) {
+		t.Fatalf("credential file missing from runtime policy: %+v", policy)
+	}
+	if !hasPath(policy.Directories, configuredDir) {
+		t.Fatalf("configured directory missing from runtime policy: %+v", policy)
+	}
+	if hasPath(policy.Directories, config.UserCredentialsPath()) {
+		t.Fatalf("credential file classified as a directory: %+v", policy)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 
 	fileenc "reames-agent/internal/fileutil/encoding"
 	"reames-agent/internal/proc"
+	"reames-agent/internal/processpolicy"
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/tool"
 )
@@ -291,6 +292,7 @@ func (g grepTool) runRipgrep(ctx context.Context, pattern, path string, to time.
 	}
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Env = processpolicy.ProcessEnvironment()
 	proc.HideWindow(cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

@@ -365,6 +365,66 @@ func TestClientListToolsRetriesAdvertisedEmptyToolList(t *testing.T) {
 	}
 }
 
+func TestClientListToolsQuarantinesMalformedSchema(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tr := &countingToolsTransport{raw: json.RawMessage(`{
+		"tools":[
+			{"name":"echo","description":"Still available.","inputSchema":{"type":"object","properties":{"msg":{"type":"string"}}}},
+			{"name":"broken","description":"Broken nested schema.","inputSchema":{"type":"object","properties":{"options":{"type":"array","items":{"key":{"type":"string"},"type":{"type":"string"},"value":{"type":"string"}}}}}}
+		]
+	}`)}
+	c := &Client{name: "srv", t: tr, spec: Spec{Name: "srv"}, transport: "stdio"}
+
+	tools, err := c.listTools(ctx)
+	if err != nil {
+		t.Fatalf("listTools: %v", err)
+	}
+	if len(tools) != 1 || tools[0].Name() != "mcp__srv__echo" {
+		t.Fatalf("tools = %v, want only mcp__srv__echo", names(tools))
+	}
+	if len(c.tools) != 2 {
+		t.Fatalf("tool status count = %d, want both advertised tools", len(c.tools))
+	}
+	if c.tools[0].Name != "broken" || !strings.Contains(c.tools[0].SchemaError, "/properties/options/items/type") {
+		t.Fatalf("quarantined tool status = %+v", c.tools[0])
+	}
+	if c.tools[1].Name != "echo" || c.tools[1].SchemaError != "" {
+		t.Fatalf("valid tool status = %+v", c.tools[1])
+	}
+}
+
+func TestClientListToolsNormalizesMissingRootTypeAndRejectsNonObjectRoots(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tr := &countingToolsTransport{raw: json.RawMessage(`{
+		"tools":[
+			{"name":"no_args","inputSchema":{}},
+			{"name":"nullable_root","inputSchema":{"type":["object","null"]}},
+			{"name":"string_root","inputSchema":{"type":"string"}}
+		]
+	}`)}
+	c := &Client{name: "srv", t: tr, spec: Spec{Name: "srv"}, transport: "stdio"}
+
+	tools, err := c.listTools(ctx)
+	if err != nil {
+		t.Fatalf("listTools: %v", err)
+	}
+	if len(tools) != 1 || tools[0].Name() != "mcp__srv__no_args" {
+		t.Fatalf("tools = %v, want normalized no_args only", names(tools))
+	}
+	if got := string(tools[0].Schema()); got != `{"properties":{},"type":"object"}` {
+		t.Fatalf("no_args schema = %s", got)
+	}
+	for _, info := range c.tools {
+		if info.Name != "no_args" && !strings.Contains(info.SchemaError, `"object"`) {
+			t.Fatalf("non-object schema status = %+v", info)
+		}
+	}
+}
+
 func TestSpecReadOnlyToolNamesMarksUnhintedToolsReadOnly(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -75,10 +75,10 @@ type CachedTool struct {
 }
 
 // SpecFingerprint hashes the load-bearing parts of a Spec so changing the
-// command/url/args/env (not just renaming) invalidates the cache. Env map
-// keys are sorted so ordering doesn't perturb the hash — Go map iteration
-// order is randomised, so we'd otherwise get fingerprint churn on every
-// launch.
+// command, URL, args, env/header names, or trust policy invalidates the cache.
+// Credential values are deliberately excluded: rotating a token does not
+// change an MCP server's advertised schema and must not churn the cache or
+// persist a secret-derived digest. Map keys are sorted for stable output.
 func SpecFingerprint(s Spec) string {
 	h := sha256.New()
 	writeField(h, "type", s.Type)
@@ -92,8 +92,8 @@ func SpecFingerprint(s Spec) string {
 	for _, a := range s.Args {
 		writeField(h, "arg", a)
 	}
-	writeKV(h, "env", s.Env)
-	writeKV(h, "headers", s.Headers)
+	writeMapKeys(h, "env", s.Env)
+	writeMapKeys(h, "headers", s.Headers)
 	if len(s.ReadOnlyToolNames) > 0 {
 		writeBoolKV(h, "read_only_tool", s.ReadOnlyToolNames)
 	}
@@ -123,10 +123,24 @@ func LoadCachedSchema(name, expectedHash string) (*CachedSchema, bool) {
 	if cs.Version != cacheVersion {
 		return nil, false
 	}
+	cs.Tools = filterValidCachedTools(cs.Tools)
 	if cs.SpecHash != expectedHash {
 		return nil, false
 	}
 	return &cs, true
+}
+
+func filterValidCachedTools(tools []CachedTool) []CachedTool {
+	out := make([]CachedTool, 0, len(tools))
+	for _, cached := range tools {
+		schema, err := normalizeAndValidateToolSchema(cached.Schema)
+		if err != nil {
+			continue
+		}
+		cached.Schema = schema
+		out = append(out, cached)
+	}
+	return out
 }
 
 // SaveCachedSchema atomically writes cs under name. Best-effort: an error
@@ -191,9 +205,7 @@ func writeField(h io.Writer, key, val string) {
 	_, _ = h.Write([]byte{1})
 }
 
-// writeKV hashes a map deterministically by sorting keys, so Go's randomised
-// map iteration doesn't churn the fingerprint between launches.
-func writeKV(h io.Writer, key string, m map[string]string) {
+func writeMapKeys(h io.Writer, key string, m map[string]string) {
 	if len(m) == 0 {
 		writeField(h, key, "")
 		return
@@ -204,7 +216,7 @@ func writeKV(h io.Writer, key string, m map[string]string) {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		writeField(h, key+"."+k, m[k])
+		writeField(h, key+"."+k, "present")
 	}
 }
 

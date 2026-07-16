@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"reames-agent/internal/proc"
+	"reames-agent/internal/processpolicy"
 )
 
 // docState tracks what we last sent the server for a document, so ensureSynced
@@ -46,7 +47,7 @@ func startClient(ctx context.Context, bin string, args []string, env map[string]
 	cmd := exec.CommandContext(ctx, bin, args...)
 	proc.HideWindow(cmd)
 	cmd.Dir = root
-	cmd.Env = append(os.Environ(), envSlice(env)...)
+	cmd.Env = processpolicy.MergeEnvironment(processpolicy.ProcessEnvironment(), env)
 	cmd.Stderr = io.Discard
 
 	stdin, err := cmd.StdinPipe()

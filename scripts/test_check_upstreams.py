@@ -118,6 +118,16 @@ class AnalysisTests(unittest.TestCase):
     def test_gateway_service_paths_are_gateway_area(self):
         self.assertEqual(watch.classify_path("internal/gatewayservice/service.go"), "gateway")
 
+    @mock.patch.object(watch.subprocess, "run")
+    def test_command_output_is_decoded_as_utf8(self, run):
+        run.return_value = subprocess.CompletedProcess([], 0, stdout="中英提交\n", stderr="")
+
+        result = watch.run(["git", "log"])
+
+        self.assertEqual("中英提交\n", result.stdout)
+        self.assertEqual("utf-8", run.call_args.kwargs["encoding"])
+        self.assertEqual("replace", run.call_args.kwargs["errors"])
+
     @mock.patch.object(watch, "fetch_comparison_refs", return_value="")
     @mock.patch.object(watch, "run")
     def test_deep_diff_collects_bounded_evidence(self, run, _fetch):

@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"reames-agent/internal/control"
+	"reames-agent/internal/proc"
+	"reames-agent/internal/processpolicy"
 )
 
 const (
@@ -616,6 +618,8 @@ func searchBotProjectsWithRG(ctx context.Context, rg string, projects []botProje
 	}
 	args = append(args, roots...)
 	cmd := exec.CommandContext(ctx, rg, args...)
+	cmd.Env = processpolicy.ProcessEnvironment()
+	proc.HideWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError

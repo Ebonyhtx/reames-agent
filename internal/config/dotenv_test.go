@@ -44,6 +44,28 @@ func TestLoadDotEnvDoesNotImportProjectOrHomeEnv(t *testing.T) {
 	}
 }
 
+func TestCredentialEnvNamesIncludesUnconfiguredStoredKeys(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REAMES_AGENT_HOME", filepath.Join(home, "reames-home"))
+	t.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
+
+	credentialPath := UserCredentialsPath()
+	if err := os.MkdirAll(filepath.Dir(credentialPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(credentialPath, []byte("CONFIGURED_PROVIDER_KEY=configured\nSTALE_PROVIDER_KEY=stale\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &Config{Providers: []ProviderEntry{{APIKeyEnv: "CONFIGURED_PROVIDER_KEY"}}}
+	got := cfg.CredentialEnvNames()
+	for _, want := range []string{"CONFIGURED_PROVIDER_KEY", "STALE_PROVIDER_KEY"} {
+		if !containsString(got, want) {
+			t.Fatalf("credential env names = %v, missing %s", got, want)
+		}
+	}
+}
+
 // TestLoadDotEnvReadsGlobalCredentials proves `reames-agent setup`'s target — the
 // reamesAgent-owned credentials file under Reames Agent home — is loaded from any
 // working directory and wins over a project ./.env on a shared key.

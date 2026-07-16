@@ -1133,3 +1133,20 @@ func TestBuildRequestDefaultsEmptyToolParameters(t *testing.T) {
 		t.Fatalf("nil parameters should default to %s, got %s in %s", want, got, body)
 	}
 }
+
+func TestBuildRequestNormalizesLegacyTupleSchemaOnlyForMiMo(t *testing.T) {
+	toolSchema := json.RawMessage(`{"type":"object","properties":{"pair":{"type":"array","items":[{"type":"string"},{"type":"number"}],"additionalItems":false}}}`)
+	req := provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "test"}},
+		Tools:    []provider.ToolSchema{{Name: "tuple", Parameters: toolSchema}},
+	}
+	mimo := (&client{model: "mimo", mimo: true}).buildRequest(req)
+	got := string(mimo.Tools[0].Function.Parameters)
+	if !strings.Contains(got, `"prefixItems"`) || !strings.Contains(got, `"items":false`) {
+		t.Fatalf("MiMo tuple schema not normalized: %s", got)
+	}
+	other := (&client{model: "other"}).buildRequest(req)
+	if got := string(other.Tools[0].Function.Parameters); got != string(toolSchema) {
+		t.Fatalf("non-MiMo schema changed:\n got: %s\nwant: %s", got, toolSchema)
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	"reames-agent/internal/sandbox"
 )
@@ -20,6 +21,54 @@ import (
 var commandArgsWithOptions = sandbox.CommandArgsWithOptions
 
 var sensitiveEnvKeyPattern = regexp.MustCompile(`(?i)((^|[_-])(api[_-]?key|access[_-]?key|private[_-]?key|secret|token|password|passwd)([_-]|$)|[_-]pwd([_-]|$))`)
+
+var credentialEnvKeys = struct {
+	sync.RWMutex
+	keys map[string]struct{}
+}{keys: map[string]struct{}{}}
+
+// RegisterCredentialEnvKeys permanently marks variables that Reames Agent may
+// load as application credentials. Registration is a process-lifetime union:
+// concurrent workspaces cannot make another workspace's saved keys visible to
+// a child process by rebuilding with a narrower config. Explicit per-process
+// env may still add a required value after ProcessEnvironment returns.
+func RegisterCredentialEnvKeys(keys []string) {
+	credentialEnvKeys.Lock()
+	defer credentialEnvKeys.Unlock()
+	for _, key := range keys {
+		if key = credentialEnvKey(key); key != "" {
+			credentialEnvKeys.keys[key] = struct{}{}
+		}
+	}
+}
+
+// ProcessEnvironment returns the ambient environment for tool and integration
+// subprocesses after removing every registered Reames Agent credential. It
+// deliberately preserves unrelated variables (including developer CLI auth)
+// for compatibility; callers overlay narrowly scoped explicit env afterwards.
+func ProcessEnvironment() []string {
+	env := os.Environ()
+	out := make([]string, 0, len(env))
+	for _, item := range env {
+		key, _, ok := strings.Cut(item, "=")
+		if !ok || registeredCredentialEnvKey(key) {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func credentialEnvKey(key string) string {
+	return strings.ToUpper(strings.TrimSpace(key))
+}
+
+func registeredCredentialEnvKey(key string) bool {
+	credentialEnvKeys.RLock()
+	defer credentialEnvKeys.RUnlock()
+	_, ok := credentialEnvKeys.keys[credentialEnvKey(key)]
+	return ok
+}
 
 // PackagePolicy identifies one installed package's immutable code, managed
 // runtime state, workspace, and host application home.

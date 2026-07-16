@@ -5,6 +5,8 @@ package notify
 import (
 	"os/exec"
 	"strings"
+
+	"reames-agent/internal/processpolicy"
 )
 
 // PlatformSender delivers notifications through the host OS.
@@ -16,6 +18,7 @@ func NewPlatformSender() PlatformSender { return PlatformSender{} }
 func (PlatformSender) Send(m Message) error {
 	script := `display notification "` + appleScriptString(m.Body) + `" with title "` + appleScriptString(m.Title) + `"`
 	cmd := exec.Command("osascript", "-e", script)
+	cmd.Env = processpolicy.ProcessEnvironment()
 	if err := cmd.Start(); err != nil {
 		return err
 	}

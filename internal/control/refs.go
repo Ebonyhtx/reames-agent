@@ -19,6 +19,7 @@ import (
 
 	"reames-agent/internal/fileref"
 	"reames-agent/internal/proc"
+	"reames-agent/internal/processpolicy"
 )
 
 // maxFileRefBytes caps how much of an @-referenced file is injected into a
@@ -1124,6 +1125,7 @@ func runPDFTextCommand(name string, args []string) (string, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pdfExtractTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = processpolicy.ProcessEnvironment()
 	setShellKillTree(cmd)
 	cmd.WaitDelay = pdfExtractWaitDelay
 	proc.HideWindow(cmd)

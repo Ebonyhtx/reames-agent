@@ -30,7 +30,16 @@ func CanonicalizeSchema(raw json.RawMessage) json.RawMessage {
 
 func ensureRootObjectProperties(v any) {
 	m, ok := v.(map[string]any)
-	if !ok || m["type"] != "object" {
+	if !ok {
+		return
+	}
+	if _, ok := m["type"]; !ok {
+		// MCP servers commonly omit the root type or advertise a bare {}.
+		// Tool arguments are JSON objects, so make that implicit contract
+		// explicit before provider validation.
+		m["type"] = "object"
+	}
+	if m["type"] != "object" {
 		return
 	}
 	if _, ok := m["properties"]; !ok {

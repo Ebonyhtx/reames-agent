@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"reames-agent/internal/proc"
+	"reames-agent/internal/processpolicy"
 	"reames-agent/internal/shellparse"
 )
 
@@ -236,9 +237,10 @@ func runOne(ctx context.Context, command string, opts ProbeOptions) ProbeResult 
 	cmdCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(cmdCtx, exe, parts[1:]...)
-	if len(probe.Env) > 0 {
-		cmd.Env = append(os.Environ(), probe.Env...)
-	}
+	// Always set an explicit base so a probe with no inline assignments cannot
+	// inherit credentials pinned into the Reames Agent process. Static command
+	// assignments are narrowly overlaid after filtering.
+	cmd.Env = append(processpolicy.ProcessEnvironment(), probe.Env...)
 	prepareProbeCommand(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

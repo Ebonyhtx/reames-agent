@@ -35,6 +35,19 @@ func TestCanonicalizeSchemaAddsEmptyPropertiesForNoArgumentObject(t *testing.T) 
 	}
 }
 
+func TestCanonicalizeSchemaAddsMissingRootType(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{`{}`, `{"properties":{},"type":"object"}`},
+		{`{"properties":{"q":{"type":"string"}}}`, `{"properties":{"q":{"type":"string"}},"type":"object"}`},
+		{`{"type":"string"}`, `{"type":"string"}`},
+		{`{"type":["object","null"]}`, `{"type":["object","null"]}`},
+	} {
+		if got := string(CanonicalizeSchema(json.RawMessage(tc.raw))); got != tc.want {
+			t.Fatalf("CanonicalizeSchema(%s) = %s, want %s", tc.raw, got, tc.want)
+		}
+	}
+}
+
 func TestCanonicalizeSchemaPreservesPropertyNamedRequired(t *testing.T) {
 	raw := json.RawMessage(`{
 		"type":"object",

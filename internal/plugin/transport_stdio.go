@@ -67,7 +67,7 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 			releaseSlot()
 		}
 	}()
-	env := mergeEnv(os.Environ(), s.Env)
+	env := mergeEnv(processpolicy.ProcessEnvironment(), s.Env)
 	if s.PackagePolicy.Enabled() {
 		env = s.PackagePolicy.ChildEnvironment(s.Env)
 	}
@@ -390,6 +390,7 @@ func runShellPATHCommand(parent context.Context, shell string, args []string) []
 	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, shell, args...)
+	cmd.Env = processpolicy.ProcessEnvironment()
 	prepareStdioShellPATHProbe(cmd)
 	cmd.Stdin = strings.NewReader("")
 	out, _ := cmd.CombinedOutput()

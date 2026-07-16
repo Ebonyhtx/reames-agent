@@ -35,6 +35,16 @@ import (
 	"reames-agent/internal/tool"
 )
 
+func TestPluginToolsToViewPreservesSchemaError(t *testing.T) {
+	got := pluginToolsToView([]plugin.ToolInfo{{
+		Name: "broken", Description: "Broken tool", ReadOnlyHint: true,
+		SchemaError: "invalid input schema: bad nested type",
+	}})
+	if len(got) != 1 || got[0].SchemaError != "invalid input schema: bad nested type" {
+		t.Fatalf("tool views = %+v", got)
+	}
+}
+
 func desktopMCPHTTPServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -151,6 +151,59 @@ type Options struct {
 	OnSessionRecovered  func(control.SessionRecoveryInfo) error
 }
 
+type runtimeReadPolicy struct {
+	AllPaths    []string
+	Directories []string
+	Files       []string
+}
+
+// runtimeForbidReadPolicy expands configured read denials and always adds the
+// Reames Agent credential file when it exists. Built-in readers receive the
+// combined list; OS sandboxes need files and directories separated so Linux
+// can mask a file with /dev/null rather than attempting a tmpfs mount on it.
+func runtimeForbidReadPolicy(cfg *config.Config, root string) runtimeReadPolicy {
+	if cfg == nil {
+		return runtimeReadPolicy{}
+	}
+	candidates := append([]string(nil), cfg.ForbidReadRootsForRoot(root)...)
+	if credentialPath := strings.TrimSpace(config.UserCredentialsPath()); credentialPath != "" {
+		if info, err := os.Stat(credentialPath); err == nil && !info.IsDir() {
+			candidates = append(candidates, credentialPath)
+		}
+	}
+
+	var policy runtimeReadPolicy
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if abs, err := filepath.Abs(candidate); err == nil {
+			candidate = abs
+		}
+		if real, err := filepath.EvalSymlinks(candidate); err == nil {
+			candidate = real
+		}
+		candidate = filepath.Clean(candidate)
+		key := candidate
+		if runtime.GOOS == "windows" {
+			key = strings.ToLower(key)
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		policy.AllPaths = append(policy.AllPaths, candidate)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			policy.Files = append(policy.Files, candidate)
+		} else {
+			policy.Directories = append(policy.Directories, candidate)
+		}
+	}
+	return policy
+}
+
 // Build loads config, resolves the model(s), and returns a Controller wrapping a
 // single Agent, or a two-model Coordinator when agent.planner_model is set. The
 // returned controller owns plugin subprocesses; call Close (via Controller.Close)
@@ -169,6 +222,11 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Config loading pins the global credential store into this process so
+	// providers and bot runtimes can resolve keys. Register the complete key set
+	// immediately, including stale stored names, before any tool, MCP, Hook, LSP,
+	// or environment-probe subprocess can be launched.
+	processpolicy.RegisterCredentialEnvKeys(cfg.CredentialEnvNames())
 	modelName := opts.Model
 	if modelName == "" {
 		modelName = cfg.DefaultModel
@@ -331,7 +389,14 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	}
 
 	reg := tool.NewRegistry()
-	bashSpec := sandbox.Spec{Mode: cfg.BashMode(), WriteRoots: cfg.WriteRootsForRoot(root), ForbidReadRoots: cfg.ForbidReadRootsForRoot(root), Network: cfg.Sandbox.Network}
+	readPolicy := runtimeForbidReadPolicy(cfg, root)
+	bashSpec := sandbox.Spec{
+		Mode:            cfg.BashMode(),
+		WriteRoots:      cfg.WriteRootsForRoot(root),
+		ForbidReadRoots: readPolicy.Directories,
+		ForbidReadPaths: readPolicy.Files,
+		Network:         cfg.Sandbox.Network,
+	}
 	bashSpec.Shell = shell
 	// The session-data guard blocks agent writes into Reames Agent's own session
 	// stores (they race the app's saves and surface as conflict-copy loops);
@@ -350,7 +415,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		enabledBuiltins = tokenEconomyBuiltins(enabledBuiltins)
 	}
 	readPathResolver := builtin.NewPathResolver()
-	addBuiltins(reg, enabledBuiltins, cfg.WriteRootsForRoot(root), bashSpec, bashTimeout, searchSpec, stderr, root, proxySpec, cfg.ForbidReadRootsForRoot(root), readPathResolver, sessionGuard)
+	addBuiltins(reg, enabledBuiltins, cfg.WriteRootsForRoot(root), bashSpec, bashTimeout, searchSpec, stderr, root, proxySpec, readPolicy.AllPaths, readPathResolver, sessionGuard)
 	// Use the caller-supplied shared host when set, so controllers for the same
 	// workspace root reuse running MCP processes (e.g. one CodeGraph daemon
 	// instead of one per tab). Otherwise construct a private host per controller.

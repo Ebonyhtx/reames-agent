@@ -2,7 +2,11 @@
 
 package notify
 
-import "os/exec"
+import (
+	"os/exec"
+
+	"reames-agent/internal/processpolicy"
+)
 
 // PlatformSender delivers notifications through the host OS.
 type PlatformSender struct{}
@@ -12,6 +16,7 @@ func NewPlatformSender() PlatformSender { return PlatformSender{} }
 
 func (PlatformSender) Send(m Message) error {
 	cmd := exec.Command("notify-send", m.Title, m.Body)
+	cmd.Env = processpolicy.ProcessEnvironment()
 	if err := cmd.Start(); err != nil {
 		return err
 	}

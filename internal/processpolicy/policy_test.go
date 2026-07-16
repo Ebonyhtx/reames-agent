@@ -2,6 +2,7 @@ package processpolicy
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -9,6 +10,57 @@ import (
 
 	"reames-agent/internal/sandbox"
 )
+
+func TestProcessEnvironmentFiltersRegisteredCredentialsInRealChild(t *testing.T) {
+	credentialKey := "REAMES_AGENT_PROCESSPOLICY_TEST_CREDENTIAL"
+	benignKey := "REAMES_AGENT_PROCESSPOLICY_TEST_BENIGN"
+	t.Setenv(credentialKey, "opaque-provider-secret")
+	t.Setenv(benignKey, "visible")
+	RegisterCredentialEnvKeys([]string{credentialKey})
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestProcessEnvironmentHelper", "--")
+	cmd.Env = MergeEnvironment(ProcessEnvironment(), map[string]string{
+		"GO_WANT_PROCESS_ENV_HELPER": "1",
+		"GO_PROCESS_ENV_SECRET_KEY":  credentialKey,
+		"GO_PROCESS_ENV_BENIGN_KEY":  benignKey,
+	})
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("child process: %v: %s", err, out)
+	}
+	if got := strings.TrimSpace(string(out)); got != "secret= benign=visible" {
+		t.Fatalf("child environment = %q, want registered secret absent and benign value visible", got)
+	}
+}
+
+func TestProcessEnvironmentAllowsExplicitCredentialOverlay(t *testing.T) {
+	credentialKey := "REAMES_AGENT_PROCESSPOLICY_TEST_EXPLICIT"
+	t.Setenv(credentialKey, "ambient-secret")
+	RegisterCredentialEnvKeys([]string{credentialKey})
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestProcessEnvironmentHelper", "--")
+	cmd.Env = MergeEnvironment(ProcessEnvironment(), map[string]string{
+		"GO_WANT_PROCESS_ENV_HELPER": "1",
+		"GO_PROCESS_ENV_SECRET_KEY":  credentialKey,
+		credentialKey:                "explicit-plugin-secret",
+	})
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("child process: %v: %s", err, out)
+	}
+	if got := strings.TrimSpace(string(out)); got != "secret=explicit-plugin-secret benign=" {
+		t.Fatalf("child environment = %q, want explicit scoped credential", got)
+	}
+}
+
+func TestProcessEnvironmentHelper(t *testing.T) {
+	if os.Getenv("GO_WANT_PROCESS_ENV_HELPER") != "1" {
+		return
+	}
+	_, _ = os.Stdout.WriteString("secret=" + os.Getenv(os.Getenv("GO_PROCESS_ENV_SECRET_KEY")) +
+		" benign=" + os.Getenv(os.Getenv("GO_PROCESS_ENV_BENIGN_KEY")))
+	os.Exit(0)
+}
 
 func TestCoreEnvironmentDropsAmbientSecretsAndRuntimeInjection(t *testing.T) {
 	got := CoreEnvironment([]string{
