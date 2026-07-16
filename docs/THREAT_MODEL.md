@@ -50,6 +50,8 @@ Controller ── Agent loop ── Provider API
 
 - 真实 Provider 的鉴权、计费/用量和供应商网络行为；
 - 真实 IM 平台的身份、回调/WebSocket、审批与重连回环；
+- 真实运营公开 registry 的人员 quorum、离线 root/targets 仪式、HSM 或等价托管、生产
+  HTTPS 发布与 freshness 监控、实际轮换/compromise drill，以及独立 provenance policy；
 - 公网 TLS、反向代理、安全组、linger-enabled logout/reboot 常驻，以及干净云节点上的备份/恢复和公开签名 release 升级/回滚实启；
 - Windows/macOS 代码签名、Apple notarization、OIDC provenance 与公开 updater 链。
 
