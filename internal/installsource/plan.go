@@ -18,6 +18,12 @@ var githubAPIBaseURL = "https://api.github.com"
 // plan turns a request into a list of actions plus a warnings slice. It
 // does not touch the disk; the apply phase is responsible for side effects.
 func (t *installSourceTool) plan(ctx context.Context, req request) ([]action, []string, error) {
+	if strings.HasPrefix(req.Source, "registry:") {
+		if req.Kind != "auto" && req.Kind != "plugin" {
+			return nil, nil, newErr(ErrUnsupportedKind, "signed registry sources can install only plugin packages")
+		}
+		return t.planRegistryPluginPackage(ctx, req)
+	}
 	if strings.HasPrefix(req.Source, "git:github.com/") {
 		req.Source = "https://github.com/" + strings.TrimPrefix(req.Source, "git:github.com/")
 	}

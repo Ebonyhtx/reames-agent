@@ -24,6 +24,13 @@ type InstallRequest struct {
 	SourceKind           string
 	SourceRevision       string
 	TrustStatus          string
+	RegistryName         string
+	RegistryMetadataURL  string
+	RegistryRootVersion  int64
+	RegistryRootDigest   string
+	RegistryEntryDigest  string
+	ProvenanceStatus     string
+	AttestationDigest    string
 	Mode                 string
 	ExpectedDigest       string
 	ExpectedCurrentState string
@@ -55,8 +62,10 @@ var (
 // A failed state write can leave at most an inactive orphan generation; the
 // previous active state and content are never replaced in place.
 func Install(reamesAgentHome string, req InstallRequest) (InstallResult, error) {
-	if !IsValidName(req.Name) {
-		return InstallResult{}, fmt.Errorf("invalid plugin name %q", req.Name)
+	req.Name = strings.TrimSpace(req.Name)
+	nameKey, err := CanonicalNameKey(req.Name)
+	if err != nil {
+		return InstallResult{}, err
 	}
 	req.SourceRoot = filepath.Clean(req.SourceRoot)
 	if req.Mode == "" {
@@ -79,7 +88,7 @@ func Install(reamesAgentHome string, req InstallRequest) (InstallResult, error) 
 	}
 
 	var result InstallResult
-	err := withStateLock(reamesAgentHome, func() error {
+	err = withStateLock(reamesAgentHome, func() error {
 		st, err := LoadState(reamesAgentHome)
 		if err != nil {
 			return err
@@ -89,6 +98,10 @@ func Install(reamesAgentHome string, req InstallRequest) (InstallResult, error) 
 			if st.Plugins[i].Name == req.Name {
 				existingIndex = i
 				break
+			}
+			existingKey, _ := CanonicalNameKey(st.Plugins[i].Name)
+			if existingKey == nameKey {
+				return fmt.Errorf("plugin name %q conflicts with installed plugin %q on case-insensitive filesystems", req.Name, st.Plugins[i].Name)
 			}
 		}
 		if req.BindCurrentState {
@@ -130,6 +143,13 @@ func Install(reamesAgentHome string, req InstallRequest) (InstallResult, error) 
 			SourceKind:          req.SourceKind,
 			SourceRevision:      req.SourceRevision,
 			TrustStatus:         req.TrustStatus,
+			RegistryName:        req.RegistryName,
+			RegistryMetadataURL: req.RegistryMetadataURL,
+			RegistryRootVersion: req.RegistryRootVersion,
+			RegistryRootDigest:  req.RegistryRootDigest,
+			RegistryEntryDigest: req.RegistryEntryDigest,
+			ProvenanceStatus:    req.ProvenanceStatus,
+			AttestationDigest:   req.AttestationDigest,
 			Digest:              digest,
 			Permissions:         append([]string(nil), pkg.Manifest.Permissions...),
 			MCPServerNames:      packageMCPServerNames(pkg),
@@ -691,6 +711,13 @@ func releaseFromInstalled(installed InstalledPlugin) PluginRelease {
 		SourceKind:          installed.SourceKind,
 		SourceRevision:      installed.SourceRevision,
 		TrustStatus:         installed.TrustStatus,
+		RegistryName:        installed.RegistryName,
+		RegistryMetadataURL: installed.RegistryMetadataURL,
+		RegistryRootVersion: installed.RegistryRootVersion,
+		RegistryRootDigest:  installed.RegistryRootDigest,
+		RegistryEntryDigest: installed.RegistryEntryDigest,
+		ProvenanceStatus:    installed.ProvenanceStatus,
+		AttestationDigest:   installed.AttestationDigest,
 		Digest:              installed.Digest,
 		Permissions:         append([]string(nil), installed.Permissions...),
 		GrantedPermissions:  append([]string(nil), installed.GrantedPermissions...),
@@ -714,6 +741,13 @@ func installedFromRelease(name string, release PluginRelease) InstalledPlugin {
 		SourceKind:          release.SourceKind,
 		SourceRevision:      release.SourceRevision,
 		TrustStatus:         release.TrustStatus,
+		RegistryName:        release.RegistryName,
+		RegistryMetadataURL: release.RegistryMetadataURL,
+		RegistryRootVersion: release.RegistryRootVersion,
+		RegistryRootDigest:  release.RegistryRootDigest,
+		RegistryEntryDigest: release.RegistryEntryDigest,
+		ProvenanceStatus:    release.ProvenanceStatus,
+		AttestationDigest:   release.AttestationDigest,
 		Digest:              release.Digest,
 		Permissions:         append([]string(nil), release.Permissions...),
 		GrantedPermissions:  append([]string(nil), release.GrantedPermissions...),

@@ -26,6 +26,11 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - LICENSE
+      - NOTICE.md
+      - third_party/go-tuf/LICENSE
+      - third_party/go-tuf/NOTICE
 
 checksum:
   name_template: SHA256SUMS

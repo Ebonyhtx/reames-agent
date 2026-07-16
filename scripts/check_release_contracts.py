@@ -105,12 +105,31 @@ def check_goreleaser_contract(failures: list[str]) -> None:
     require("goos: [darwin, linux, windows]" in config, "GoReleaser must build darwin/linux/windows.", failures)
     require("goarch: [amd64, arm64]" in config, "GoReleaser must build amd64/arm64.", failures)
     require("SHA256SUMS" in config, "GoReleaser must emit SHA256SUMS.", failures)
+    for legal_file in ["LICENSE", "NOTICE.md", "third_party/go-tuf/LICENSE", "third_party/go-tuf/NOTICE"]:
+        require(f"- {legal_file}" in config, f"GoReleaser archives must include {legal_file}.", failures)
 
     upgrade = read("internal/cli/upgrade.go")
     require('ghOwner        = "Ebonyhtx"' in upgrade, "CLI upgrade must use the official Reames Agent GitHub owner.", failures)
     require('ghRepo         = "reames-agent"' in upgrade, "CLI upgrade must use the official Reames Agent repository.", failures)
     require('fmt.Sprintf("reames-agent-%s-%s%s"' in upgrade, "CLI upgrade asset names must match GoReleaser archives.", failures)
     require('return "reames-agent.exe"' in upgrade, "CLI upgrade must extract the GoReleaser Windows binary name.", failures)
+
+    desktop_build = read("scripts/desktop-build.sh")
+    require("copy_legal_files" in desktop_build, "Desktop archives must stage project and third-party legal files.", failures)
+    require('Contents/Resources/licenses' in desktop_build, "macOS app bundles must include readable legal files.", failures)
+    windows_installer = read("desktop/build/windows/installer/project.nsi")
+    require('third_party\\go-tuf\\LICENSE' in windows_installer and 'third_party\\go-tuf\\NOTICE' in windows_installer, "Windows installer must include go-tuf legal files.", failures)
+    linux_package = read("desktop/build/linux/nfpm.yaml")
+    require("/usr/share/doc/reames-agent-desktop/go-tuf/LICENSE" in linux_package and "/usr/share/doc/reames-agent-desktop/go-tuf/NOTICE" in linux_package, "Linux package must include go-tuf legal files.", failures)
+
+
+def check_build_toolchain(failures: list[str]) -> None:
+    for module in ["go.mod", "desktop/go.mod"]:
+        require(
+            "toolchain go1.26.5" in read(module),
+            f"{module} must pin the patched Go 1.26.5 build toolchain.",
+            failures,
+        )
 
 
 def check_release_docs(failures: list[str]) -> None:
@@ -158,6 +177,7 @@ def main() -> int:
     check_release_candidate_workflow(failures)
     check_desktop_candidate_workflow(failures)
     check_goreleaser_contract(failures)
+    check_build_toolchain(failures)
     check_release_docs(failures)
 
     if failures:

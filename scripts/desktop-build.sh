@@ -28,6 +28,15 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APPNAME="Reames Agent"            # wails.json productName -> Reames Agent.app
 BINNAME="reames-agent-desktop"    # wails.json outputfilename -> linux binary name
 
+copy_legal_files() {
+	local destination="$1"
+	mkdir -p "$destination/go-tuf"
+	cp "$ROOT/LICENSE" "$destination/LICENSE"
+	cp "$ROOT/NOTICE.md" "$destination/NOTICE.md"
+	cp "$ROOT/third_party/go-tuf/LICENSE" "$destination/go-tuf/LICENSE"
+	cp "$ROOT/third_party/go-tuf/NOTICE" "$destination/go-tuf/NOTICE"
+}
+
 cd "$ROOT/desktop"
 
 # Stamp the version resource (Windows file properties, macOS CFBundleVersion) from
@@ -71,6 +80,7 @@ darwin)
 	staging=$(mktemp -d)
 	app="$staging/${APPNAME}.app"
 	cp -R "build/bin/reames-agent-desktop.app" "$app"
+	copy_legal_files "$app/Contents/Resources/licenses"
 
 	# Two signing paths, selected by HAS_APPLE_CERT (set by release-desktop.yml when
 	# the APPLE_* secrets are present). With a real Developer ID cert + notarization
@@ -146,6 +156,7 @@ windows)
 	[ -n "$portable" ] || { echo "no portable Windows exe found in build/bin" >&2; exit 1; }
 	staging=$(mktemp -d)
 	cp "$portable" "$staging/${APPNAME}.exe"
+	copy_legal_files "$staging/licenses"
 	helper="build/windows/installer/$UPDATE_HELPER"
 	if [ -f "$helper" ]; then
 		cp "$helper" "$staging/$UPDATE_HELPER"
@@ -156,7 +167,11 @@ windows)
 	rm -rf "$staging"
 	;;
 linux)
-	tar -czf "$ROOT/dist/${APPNAME}-linux-${arch}.tar.gz" -C build/bin "$BINNAME"
+	staging=$(mktemp -d)
+	cp "build/bin/$BINNAME" "$staging/$BINNAME"
+	copy_legal_files "$staging/licenses"
+	tar -czf "$ROOT/dist/${APPNAME}-linux-${arch}.tar.gz" -C "$staging" "$BINNAME" licenses
+	rm -rf "$staging"
 	# Also build a .deb for Debian/Ubuntu users (goreleaser/nfpm; see
 	# desktop/build/linux/nfpm.yaml). Human-download only: the Linux updater channel
 	# stays the tarball and cmd/sign's manifest skips .deb files. nfpm reads

@@ -549,6 +549,13 @@ console.log("\napproval modal file references");
           sourceKind: "github",
           sourceRevision: "abc123",
           trustStatus: "unsigned_https",
+          registryName: "official",
+          registryMetadataUrl: "https://registry.example.invalid/metadata/",
+          registryRootVersion: 7,
+          registryRootDigest: `sha256:${"a".repeat(64)}`,
+          registryEntryDigest: `sha256:${"b".repeat(64)}`,
+          provenanceStatus: "registry-assertion-tuf-authenticated",
+          attestationDigest: `sha256:${"c".repeat(64)}`,
           willEnable: false,
           permissions: ["hooks:execute"],
           addedPermissions: ["mcp:network"],
@@ -559,7 +566,7 @@ console.log("\napproval modal file references");
   });
 
   const text = document.body.textContent ?? "";
-  for (const expected of ["Exact operation plan", "Plan ID", "plan-42", "install", "global", "high", "plugins/reviewed", "plugins/state.json", "stdio", "https://example.invalid/mcp", "node server.js", "MODE=reviewed", "Authorization=[REDACTED]", "1.0.0 -> 2.0.0", "old-digest -> new-digest", "github", "abc123", "unsigned_https", "Active after apply", "no", "hooks:execute", "mcp:network", "executes lifecycle hooks", "unsigned source"]) {
+  for (const expected of ["Exact operation plan", "Plan ID", "plan-42", "install", "global", "high", "plugins/reviewed", "plugins/state.json", "stdio", "https://example.invalid/mcp", "node server.js", "MODE=reviewed", "Authorization=[REDACTED]", "1.0.0 -> 2.0.0", "old-digest -> new-digest", "github", "abc123", "unsigned_https", "official", "https://registry.example.invalid/metadata/", "Trusted root version", "7", `sha256:${"a".repeat(64)}`, `sha256:${"b".repeat(64)}`, "registry-assertion-tuf-authenticated", `sha256:${"c".repeat(64)}`, "Active after apply", "no", "hooks:execute", "mcp:network", "executes lifecycle hooks", "unsigned source"]) {
     ok(text.includes(expected), `structured install approval renders ${expected}`);
   }
   eq(

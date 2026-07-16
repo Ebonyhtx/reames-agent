@@ -192,6 +192,31 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		}
 		b.WriteString("\n")
 	}
+
+	if scope != RenderScopeProject {
+		b.WriteString("[plugin_registry]\n")
+		if strings.TrimSpace(c.PluginRegistry.MetadataURL) != "" {
+			fmt.Fprintf(&b, "metadata_url = %q   # HTTPS base containing TUF metadata\n", c.PluginRegistry.MetadataURL)
+		} else {
+			b.WriteString("# metadata_url = \"https://registry.example/metadata\"   # no default registry is advertised yet\n")
+		}
+		if strings.TrimSpace(c.PluginRegistry.TargetsURL) != "" {
+			fmt.Fprintf(&b, "targets_url = %q   # HTTPS base containing TUF targets\n", c.PluginRegistry.TargetsURL)
+		} else {
+			b.WriteString("# targets_url = \"https://registry.example/targets\"   # defaults to the metadata URL's sibling /targets\n")
+		}
+		if strings.TrimSpace(c.PluginRegistry.TrustedRoot) != "" {
+			fmt.Fprintf(&b, "trusted_root = %q   # bootstrap root.json delivered out of band; relative paths use Reames Agent home\n", c.PluginRegistry.TrustedRoot)
+		} else {
+			b.WriteString("# trusted_root = \"registry/root.json\"   # never bootstrap this file from the registry network endpoint\n")
+		}
+		if strings.TrimSpace(c.PluginRegistry.IndexTarget) != "" {
+			fmt.Fprintf(&b, "index_target = %q   # signed TUF target containing the plugin discovery index\n", c.PluginRegistry.IndexTarget)
+		} else {
+			b.WriteString("# index_target = \"plugins.json\"\n")
+		}
+		b.WriteString("\n")
+	}
 	if shouldRenderEnvironment(c, defaults, scope) {
 		renderEnvironmentConfig(&b, c.Environment)
 	}

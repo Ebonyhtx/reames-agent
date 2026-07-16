@@ -66,6 +66,9 @@ func TestStructuredApprovalSurvivesReplayAndYolo(t *testing.T) {
 		Actions: []tool.ApprovalAction{{
 			Kind: "plugin", Action: "install_plugin_package", RiskLevel: "high", Name: "reviewed",
 			Target: "plugins/reviewed", Permissions: []string{"hooks:execute"}, RiskReasons: []string{"executes lifecycle hooks"},
+			RegistryName: "official", RegistryMetadataURL: "https://registry.example.invalid/metadata/",
+			RegistryRootVersion: 7, RegistryRootDigest: "sha256:root", RegistryEntryDigest: "sha256:entry",
+			ProvenanceStatus: "registry-assertion-tuf-authenticated", AttestationDigest: "sha256:attestation",
 		}},
 	}
 	result := make(chan bool, 1)
@@ -83,13 +86,17 @@ func TestStructuredApprovalSurvivesReplayAndYolo(t *testing.T) {
 	if first.Tool != "install_source" || first.Plan == nil || first.Plan.PlanID != plan.PlanID || len(first.Plan.Actions) != 1 {
 		t.Fatalf("first structured approval = %+v", first)
 	}
-	if got := first.Plan.Actions[0]; got.RiskLevel != "high" || got.Target != "plugins/reviewed" || len(got.Permissions) != 1 {
+	if got := first.Plan.Actions[0]; got.RiskLevel != "high" || got.Target != "plugins/reviewed" || len(got.Permissions) != 1 ||
+		got.RegistryName != "official" || got.RegistryMetadataURL != "https://registry.example.invalid/metadata/" ||
+		got.RegistryRootVersion != 7 || got.RegistryRootDigest != "sha256:root" || got.RegistryEntryDigest != "sha256:entry" ||
+		got.ProvenanceStatus != "registry-assertion-tuf-authenticated" || got.AttestationDigest != "sha256:attestation" {
 		t.Fatalf("first structured action = %+v", got)
 	}
 
 	c.ReplayPendingPrompts()
 	replayed := <-reqs
-	if replayed.ID != first.ID || replayed.Plan == nil || replayed.Plan.PlanID != first.Plan.PlanID || replayed.Plan.Actions[0].RiskReasons[0] != "executes lifecycle hooks" {
+	if replayed.ID != first.ID || replayed.Plan == nil || replayed.Plan.PlanID != first.Plan.PlanID || replayed.Plan.Actions[0].RiskReasons[0] != "executes lifecycle hooks" ||
+		replayed.Plan.Actions[0].RegistryRootDigest != "sha256:root" || replayed.Plan.Actions[0].AttestationDigest != "sha256:attestation" {
 		t.Fatalf("replayed structured approval = %+v, first = %+v", replayed, first)
 	}
 	c.Approve(first.ID, true, true, true)

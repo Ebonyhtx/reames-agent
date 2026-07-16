@@ -4,7 +4,7 @@ import { asArray } from "../lib/array";
 import { app, openExternal } from "../lib/bridge";
 import { useT } from "../lib/i18n";
 import { mcpServerLifecycleActions, mcpServerRetryableFromAvailableList } from "../lib/mcpServerLifecycle";
-import type { CapabilitiesView, MCPServerInput, PluginHookView, PluginInstallOptions, PluginMCPServerView, PluginOperationAction, PluginOperationView, PluginSkillView, PluginView, ServerView, SkillRootSkillView, SkillRootView, SkillsSettingsView, SkillView, TabMeta } from "../lib/types";
+import type { CapabilitiesView, MCPServerInput, PluginHookView, PluginInstallOptions, PluginMCPServerView, PluginOperationAction, PluginOperationView, PluginRegistryEntryView, PluginSkillView, PluginView, ServerView, SkillRootSkillView, SkillRootView, SkillsSettingsView, SkillView, TabMeta } from "../lib/types";
 import { InlineConfirmButton } from "./InlineConfirmButton";
 import { ResizableDrawer } from "./ResizableDrawer";
 import { Tooltip } from "./Tooltip";
@@ -1592,7 +1592,7 @@ function AddServerForm({
   );
 }
 
-type PluginInstallMode = "local" | "git";
+type PluginInstallMode = "local" | "git" | "registry";
 type PluginLifecycleKind = "update" | "rollback" | "remove";
 type PluginLifecyclePlan = { kind: PluginLifecycleKind; plan: PluginOperationView };
 type PluginNotice = { message: string; tone: "success" | "warning" };
@@ -1618,6 +1618,9 @@ export function PluginsSettingsPage() {
 	const [installMode, setInstallMode] = useState<PluginInstallMode>("local");
 	const [localSource, setLocalSource] = useState("");
 	const [gitSource, setGitSource] = useState("");
+	const [registryQuery, setRegistryQuery] = useState("");
+	const [registryEntries, setRegistryEntries] = useState<PluginRegistryEntryView[] | null>(null);
+	const [registryName, setRegistryName] = useState("");
 	const [name, setName] = useState("");
 	const [link, setLink] = useState(false);
 	const [replace, setReplace] = useState(false);
@@ -1672,7 +1675,12 @@ export function PluginsSettingsPage() {
 		}
 	};
 
-	const sourceValue = (installMode === "local" ? localSource : gitSource).trim();
+	const sourceValue = installMode === "local"
+		? localSource.trim()
+		: installMode === "registry"
+			? (registryName ? `registry:${registryName}` : "")
+			: gitSource.trim();
+	const selectedRegistryEntry = registryEntries?.find((entry) => entry.name === registryName);
 	const installOptions = (planId?: string): PluginInstallOptions => ({
 		dryRun: false,
 		link: installMode === "local" ? link : false,
@@ -1725,6 +1733,18 @@ export function PluginsSettingsPage() {
 		setPlan(null);
 		setPlannedInputKey("");
 	};
+	const searchRegistry = () => {
+		void run(async () => {
+			const entries = await app.SearchPluginRegistry(registryQuery.trim());
+			setRegistryEntries(entries);
+			setRegistryName((current) => entries.some((entry) => entry.name === current) ? current : (entries[0]?.name ?? ""));
+		}, false);
+	};
+	useEffect(() => {
+		if (installMode === "registry" && registryEntries === null && !busy) searchRegistry();
+		// Search is explicitly refreshed after the first registry-mode load.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [installMode, registryEntries, busy]);
 	const previewInstall = () => {
 		if (!sourceValue) return;
 		setPlan(null);
@@ -1769,6 +1789,11 @@ export function PluginsSettingsPage() {
 	};
 	const updateGitSource = (value: string) => {
 		setGitSource(value);
+		setPlan(null);
+		setPlannedInputKey("");
+	};
+	const updateRegistryName = (value: string) => {
+		setRegistryName(value);
 		setPlan(null);
 		setPlannedInputKey("");
 	};
@@ -1853,6 +1878,15 @@ export function PluginsSettingsPage() {
 						>
 							{t("caps.pluginInstallGit")}
 						</button>
+						<button
+							id="plugin-install-mode-registry"
+							className={`cap-tab${installMode === "registry" ? " cap-tab--active" : ""}`}
+							type="button"
+							aria-pressed={installMode === "registry"}
+							onClick={() => setMode("registry")}
+						>
+							{t("caps.pluginInstallRegistry")}
+						</button>
 					</div>
 				</div>
 				<div className="cap-plugin-form-grid">
@@ -1873,7 +1907,7 @@ export function PluginsSettingsPage() {
 								/>
 							</div>
 						</div>
-					) : (
+					) : installMode === "git" ? (
 						<div className="cap-plugin-fields cap-plugin-fields--git">
 							<input
 								id="plugin-install-git-source"
@@ -1894,6 +1928,42 @@ export function PluginsSettingsPage() {
 									onInput={(e) => { setName(e.currentTarget.value); invalidateInstallPlan(); }}
 								/>
 							</div>
+						</div>
+					) : (
+						<div className="cap-plugin-fields cap-plugin-fields--registry">
+							<div className="cap-plugin-registry-search">
+								<input
+									id="plugin-registry-search"
+									className="mem-input"
+									aria-label={t("caps.pluginRegistrySearch")}
+									placeholder={t("caps.pluginRegistrySearchPlaceholder")}
+									value={registryQuery}
+									onInput={(e) => setRegistryQuery(e.currentTarget.value)}
+									onChange={(e) => setRegistryQuery(e.target.value)}
+									onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); searchRegistry(); } }}
+								/>
+								<button className="btn btn--small" type="button" disabled={busy} onClick={searchRegistry}>{t("caps.pluginRegistrySearchAction")}</button>
+							</div>
+							<select
+								id="plugin-registry-entry"
+								className="mem-input"
+								aria-label={t("caps.pluginRegistryEntry")}
+								value={registryName}
+								disabled={busy || !registryEntries?.length}
+								onChange={(e) => updateRegistryName(e.target.value)}
+							>
+								{!registryEntries?.length && <option value="">{t("caps.pluginRegistryEmpty")}</option>}
+								{registryEntries?.map((entry) => <option key={entry.name} value={entry.name}>{entry.name} - {entry.version} - {entry.description || entry.category}</option>)}
+							</select>
+							{selectedRegistryEntry && (
+								<div className="cap-plugin-registry-evidence">
+									{t("caps.pluginRegistryEvidence", {
+										registry: selectedRegistryEntry.registryName,
+										version: String(selectedRegistryEntry.registryRootVersion),
+									})}
+									<div><code>{selectedRegistryEntry.registryEntryDigest}</code></div>
+								</div>
+							)}
 						</div>
 					)}
 					<div className="cap-plugin-installer__options">
@@ -2000,6 +2070,9 @@ function PluginPlanPreview({ plan, id }: { plan: PluginOperationView; id?: strin
 							{action.source && <span className="cap-plugin-action__source">{action.source}</span>}
 							{(action.currentVersion || action.version) && <span className="cap-plugin-action__source">{t("caps.pluginVersionChange", { current: action.currentVersion || "-", next: action.version || "-" })}</span>}
 							{action.trustStatus && <span className="cap-plugin-action__source">{t("caps.pluginTrust")}: {action.trustStatus}</span>}
+							{action.registryName && <span className="cap-plugin-action__source">{t("caps.pluginRegistryTrustRoot")}: {action.registryName} @ root v{action.registryRootVersion || "-"}</span>}
+							{action.registryEntryDigest && <span className="cap-plugin-action__source">{t("caps.pluginRegistryEntryDigest")}: {action.registryEntryDigest}</span>}
+							{action.provenanceStatus && <span className="cap-plugin-action__source">{t("caps.pluginProvenance")}: {action.provenanceStatus}{action.attestationDigest ? ` · ${action.attestationDigest}` : ""}</span>}
 							{action.willEnable !== undefined && <span className="cap-plugin-action__source">{action.willEnable ? t("caps.pluginWillEnable") : t("caps.pluginWillStayDisabled")}</span>}
 							{action.rollbackAvailable && <span className="cap-plugin-action__source">{t("caps.pluginRollbackAvailable")}</span>}
 							{asArray(action.addedPermissions).length > 0 && <span className="cap-plugin-plan__warning">{t("caps.pluginAddedPermissions")}: {asArray(action.addedPermissions).join(", ")}</span>}
@@ -2155,6 +2228,30 @@ function PluginRow({
 							<div className="cap-detail">
 								<span className="cap-detail__label">{t("caps.pluginSourceKind")}</span>
 								<span className="cap-detail__value">{plugin.sourceKind}{plugin.sourceRevision ? ` @ ${plugin.sourceRevision}` : ""}</span>
+							</div>
+						)}
+						{plugin.registryName && (
+							<div className="cap-detail cap-detail--wide">
+								<span className="cap-detail__label">{t("caps.pluginRegistryTrustRoot")}</span>
+								<span className="cap-detail__code">{plugin.registryName} @ root v{plugin.registryRootVersion || "-"} · {plugin.registryMetadataUrl}</span>
+							</div>
+						)}
+						{plugin.registryRootDigest && (
+							<div className="cap-detail cap-detail--wide">
+								<span className="cap-detail__label">{t("caps.pluginRegistryRootDigest")}</span>
+								<span className="cap-detail__code">{plugin.registryRootDigest}</span>
+							</div>
+						)}
+						{plugin.registryEntryDigest && (
+							<div className="cap-detail cap-detail--wide">
+								<span className="cap-detail__label">{t("caps.pluginRegistryEntryDigest")}</span>
+								<span className="cap-detail__code">{plugin.registryEntryDigest}</span>
+							</div>
+						)}
+						{plugin.provenanceStatus && (
+							<div className="cap-detail cap-detail--wide">
+								<span className="cap-detail__label">{t("caps.pluginProvenance")}</span>
+								<span className="cap-detail__code">{plugin.provenanceStatus}{plugin.attestationDigest ? ` · ${plugin.attestationDigest}` : ""}</span>
 							</div>
 						)}
 						{plugin.digest && (

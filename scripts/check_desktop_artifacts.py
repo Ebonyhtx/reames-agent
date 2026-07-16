@@ -151,7 +151,14 @@ def check_windows(files: list[CandidateFile], failures: list[str]) -> None:
         failures,
     )
     if portable:
-        failures.extend(zip_contains(portable, ["Reames Agent.exe", "reames-agent-update-helper.exe"]))
+        failures.extend(zip_contains(portable, [
+            "Reames Agent.exe",
+            "reames-agent-update-helper.exe",
+            "licenses/LICENSE",
+            "licenses/NOTICE.md",
+            "licenses/go-tuf/LICENSE",
+            "licenses/go-tuf/NOTICE",
+        ]))
 
 
 def check_linux(files: list[CandidateFile], failures: list[str]) -> None:
@@ -162,7 +169,13 @@ def check_linux(files: list[CandidateFile], failures: list[str]) -> None:
         failures,
     )
     if tarball:
-        failures.extend(tar_contains(tarball, ["reames-agent-desktop"]))
+        failures.extend(tar_contains(tarball, [
+            "reames-agent-desktop",
+            "licenses/LICENSE",
+            "licenses/NOTICE.md",
+            "licenses/go-tuf/LICENSE",
+            "licenses/go-tuf/NOTICE",
+        ]))
     deb = find_one(
         files,
         lambda file: basename(file) == "Reames Agent-linux-amd64.deb",
@@ -188,6 +201,10 @@ def check_macos_zip(files: list[CandidateFile], arch: str, failures: list[str]) 
                     "Reames Agent.app/Contents/MacOS/reames-agent-desktop",
                     "Reames Agent.app/Contents/Info.plist",
                     "Reames Agent.app/Contents/Resources/iconfile.icns",
+                    "Reames Agent.app/Contents/Resources/licenses/LICENSE",
+                    "Reames Agent.app/Contents/Resources/licenses/NOTICE.md",
+                    "Reames Agent.app/Contents/Resources/licenses/go-tuf/LICENSE",
+                    "Reames Agent.app/Contents/Resources/licenses/go-tuf/NOTICE",
                 ],
             )
         )

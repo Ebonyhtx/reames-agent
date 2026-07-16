@@ -25,6 +25,7 @@
 | [工具审批模式](TOOL_APPROVAL_MODES.zh-CN.md) | 询问、自动和 Yolo 权限语义 |
 | [桌面 Hooks](DESKTOP_HOOKS.zh-CN.md) | Hook 配置、事件和 payload |
 | [插件包（中文）](PLUGIN_PACKAGES.zh-CN.md) / [English](PLUGIN_PACKAGES.md) | 插件包安装与管理 |
+| [插件 Registry 运维（中文）](PLUGIN_REGISTRY_OPERATIONS.zh-CN.md) / [English](PLUGIN_REGISTRY_OPERATIONS.md) | TUF 仓库结构、角色密钥、发布顺序、轮换与泄露恢复合同 |
 
 ## 工程契约
 
@@ -119,6 +120,7 @@
 | [M4 跨资源恢复事务收官审计](audits/2026-07-14-m4-cross-resource-recovery-transaction.md) | visible/synthetic turn commit anchor、Rewind 两阶段 journal、断电重放、原子替换 fail-closed 与 M4 完成边界 |
 | [M5 插件生命周期信任审计](audits/2026-07-14-m5-plugin-lifecycle-trust.md) | schema v1、内容寻址 generation、两阶段生命周期、Desktop 审批/原生交互与旧运行时撤销边界 |
 | [M5 插件进程隔离与真实第三方 E2E 审计](audits/2026-07-15-m5-plugin-process-isolation.md) | package-owned Hook/MCP 最小环境、隔离后 child env、严格 OS sandbox、运行中撤销、真实 superpowers 固定 revision Windows E2E 与剩余边界 |
+| [M5 TUF 插件 Registry 信任链审计](audits/2026-07-16-m5-tuf-plugin-registry.md) | 带外 root、项目抗覆盖配置、TUF 轮换/回滚/冻结、签名 entry/apply 绑定、生命周期证据和运营边界 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 

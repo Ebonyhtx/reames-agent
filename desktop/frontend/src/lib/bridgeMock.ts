@@ -1884,6 +1884,34 @@ export function makeMockApp(): AppBindings {
     async Plugins() {
       return capPlugins.map((p) => ({ ...p }));
     },
+    async SearchPluginRegistry(query: string) {
+      const entries = [{
+        name: "superpowers", description: "Planning and execution workflows", version: "5.1.0",
+        author: "obra", category: "workflow", source: "https://github.com/obra/superpowers",
+        revision: "d72560e462a74e10d161b7f993d5fc3282bfa1e2",
+        digest: "sha256-git-tree-v1:26bcf3b5d0eafe546bdd843185960c65aef576ebc7a1ee8d530c2f8487de7e79",
+        permissions: ["hooks.context", "hooks.execute", "skills.load"], registryName: "mock-signed-registry",
+        registryMetadataUrl: "https://registry.example/metadata", registryRootVersion: 1,
+        registryRootDigest: `sha256:${"a".repeat(64)}`, registryEntryDigest: `sha256:${"c".repeat(64)}`,
+        provenanceStatus: "registry-assertion-tuf-authenticated",
+      }];
+      const needle = query.trim().toLowerCase();
+      return entries.filter((entry) => !needle || `${entry.name} ${entry.description} ${entry.category}`.toLowerCase().includes(needle));
+    },
+    async PluginRegistryEntry(name: string) {
+      if (name !== "superpowers") throw new Error(`plugin ${name} is not present in the configured registry`);
+      return {
+        name: "superpowers", description: "Planning and execution workflows", version: "5.1.0",
+        author: "obra", category: "workflow", source: "https://github.com/obra/superpowers",
+        revision: "d72560e462a74e10d161b7f993d5fc3282bfa1e2",
+        digest: "sha256-git-tree-v1:26bcf3b5d0eafe546bdd843185960c65aef576ebc7a1ee8d530c2f8487de7e79",
+        permissions: ["hooks.context", "hooks.execute", "skills.load"], registryName: "mock-signed-registry",
+        registryMetadataUrl: "https://registry.example/metadata", registryRootVersion: 1,
+        registryRootDigest: `sha256:${"a".repeat(64)}`, registryEntryDigest: `sha256:${"c".repeat(64)}`,
+        provenanceStatus: "tuf-attestation-target-integrity-verified",
+        attestationDigest: `sha256:${"b".repeat(64)}`,
+      };
+    },
     async PlanPluginInstall(source: string, options: PluginInstallOptions) {
       const name = options.name || source.split("/").filter(Boolean).pop()?.replace(/\.git$/, "") || "plugin";
       return mockPluginPlan("install", name, "install_plugin_package", source);

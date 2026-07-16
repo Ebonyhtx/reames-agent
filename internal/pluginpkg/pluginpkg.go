@@ -148,6 +148,13 @@ type InstalledPlugin struct {
 	SourceKind          string         `json:"sourceKind,omitempty"`
 	SourceRevision      string         `json:"sourceRevision,omitempty"`
 	TrustStatus         string         `json:"trustStatus,omitempty"`
+	RegistryName        string         `json:"registryName,omitempty"`
+	RegistryMetadataURL string         `json:"registryMetadataUrl,omitempty"`
+	RegistryRootVersion int64          `json:"registryRootVersion,omitempty"`
+	RegistryRootDigest  string         `json:"registryRootDigest,omitempty"`
+	RegistryEntryDigest string         `json:"registryEntryDigest,omitempty"`
+	ProvenanceStatus    string         `json:"provenanceStatus,omitempty"`
+	AttestationDigest   string         `json:"attestationDigest,omitempty"`
 	Digest              string         `json:"digest,omitempty"`
 	Permissions         []string       `json:"permissions,omitempty"`
 	GrantedPermissions  []string       `json:"grantedPermissions,omitempty"`
@@ -172,6 +179,13 @@ type PluginRelease struct {
 	SourceKind          string   `json:"sourceKind,omitempty"`
 	SourceRevision      string   `json:"sourceRevision,omitempty"`
 	TrustStatus         string   `json:"trustStatus,omitempty"`
+	RegistryName        string   `json:"registryName,omitempty"`
+	RegistryMetadataURL string   `json:"registryMetadataUrl,omitempty"`
+	RegistryRootVersion int64    `json:"registryRootVersion,omitempty"`
+	RegistryRootDigest  string   `json:"registryRootDigest,omitempty"`
+	RegistryEntryDigest string   `json:"registryEntryDigest,omitempty"`
+	ProvenanceStatus    string   `json:"provenanceStatus,omitempty"`
+	AttestationDigest   string   `json:"attestationDigest,omitempty"`
 	Digest              string   `json:"digest,omitempty"`
 	Permissions         []string `json:"permissions,omitempty"`
 	GrantedPermissions  []string `json:"grantedPermissions,omitempty"`
@@ -196,7 +210,32 @@ type EnableRequest struct {
 	GrantedPermissions []string
 }
 
-func IsValidName(name string) bool { return validName.MatchString(strings.TrimSpace(name)) }
+// CanonicalNameKey validates a plugin name against the portable on-disk name
+// contract and returns the key used to detect aliases on case-insensitive
+// filesystems. Plugin names are deliberately ASCII-only, so ASCII lowercase is
+// also the complete case-fold for this namespace.
+func CanonicalNameKey(name string) (string, error) {
+	if name == "" || name != strings.TrimSpace(name) || !validName.MatchString(name) || strings.HasSuffix(name, ".") {
+		return "", fmt.Errorf("invalid plugin name %q", name)
+	}
+	base, _, _ := strings.Cut(name, ".")
+	upper := strings.ToUpper(base)
+	if upper == "CON" || upper == "PRN" || upper == "AUX" || upper == "NUL" ||
+		(len(upper) == 4 && (strings.HasPrefix(upper, "COM") || strings.HasPrefix(upper, "LPT")) && upper[3] >= '1' && upper[3] <= '9') {
+		return "", fmt.Errorf("invalid plugin name %q: reserved on Windows", name)
+	}
+	return strings.ToLower(name), nil
+}
+
+func IsValidName(name string) bool {
+	_, err := CanonicalNameKey(name)
+	return err == nil
+}
+
+// NormalizePermissions validates, deduplicates, and sorts a permission set.
+// Registry metadata and manifests use the same contract so a signed discovery
+// entry cannot describe a different capability grant from the installed tree.
+func NormalizePermissions(in []string) ([]string, error) { return normalizePermissions(in) }
 
 // InstalledStateToken is an opaque digest of the complete persisted lifecycle
 // state for one plugin. Plans use it for optimistic concurrency; apply compares
@@ -272,13 +311,14 @@ func SaveState(reamesAgentHome string, st State) error {
 func validateStateEntries(st State) error {
 	seen := make(map[string]struct{}, len(st.Plugins))
 	for _, installed := range st.Plugins {
-		if !IsValidName(installed.Name) {
+		key, err := CanonicalNameKey(installed.Name)
+		if err != nil {
 			return fmt.Errorf("plugin state contains invalid name %q", installed.Name)
 		}
-		if _, duplicate := seen[installed.Name]; duplicate {
-			return fmt.Errorf("plugin state contains duplicate plugin %q", installed.Name)
+		if _, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("plugin state contains cross-platform duplicate plugin %q", installed.Name)
 		}
-		seen[installed.Name] = struct{}{}
+		seen[key] = struct{}{}
 		if err := validateBoundMCPServerNames(installed.Name, installed.MCPServerNames, installed.MCPServerNamesBound); err != nil {
 			return err
 		}
@@ -344,14 +384,19 @@ func withStateLock(reamesAgentHome string, fn func() error) error {
 }
 
 func Upsert(reamesAgentHome string, p InstalledPlugin) error {
-	if !IsValidName(p.Name) {
-		return fmt.Errorf("invalid plugin name %q", p.Name)
+	key, err := CanonicalNameKey(p.Name)
+	if err != nil {
+		return err
 	}
 	return withStateMutation(reamesAgentHome, func(st State) (State, error) {
 		for i := range st.Plugins {
 			if st.Plugins[i].Name == p.Name {
 				st.Plugins[i] = p
 				return st, nil
+			}
+			existingKey, _ := CanonicalNameKey(st.Plugins[i].Name)
+			if existingKey == key {
+				return st, fmt.Errorf("plugin name %q conflicts with installed plugin %q on case-insensitive filesystems", p.Name, st.Plugins[i].Name)
 			}
 		}
 		st.Plugins = append(st.Plugins, p)

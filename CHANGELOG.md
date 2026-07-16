@@ -13,6 +13,9 @@
 
 ### Security / Governance
 
+- Raised the pinned build toolchain to Go 1.26.5 so release and source builds include the standard-library fixes for GO-2026-5856 and GO-2026-4970; the source minimum remains Go 1.25 with automatic toolchain selection.
+- Added an opt-in TUF plugin registry client with an out-of-band bootstrap root, project-resistant trust configuration, persistent rollback/freeze metadata, sequential root rotation, strict signed index/provenance bindings, canonical cross-platform Git source digests, ambient-Git-config isolation, apply-time re-resolution, lifecycle evidence persistence, and packaged Apache-2.0/NOTICE attribution. No public registry or TOFU endpoint is enabled; optional attestation targets are authenticated bytes, not claimed DSSE identity or SLSA policy verification.
+- Unified plugin state, install, and signed-registry names under one portable ASCII identity: case aliases, trailing dots, and Windows reserved device names now fail before materialization, preventing cross-platform generation/state ownership collisions.
 - Isolated installed-package Hook/MCP processes behind a fail-closed OS sandbox with core-only wrapper environments, post-confinement child-environment restoration that keeps manifest secrets out of wrapper argv, managed state/temp roots, sensitive-path read barriers, bounded/redacted diagnostics, process-tree cancellation, and active Hook revocation. Missing helper payloads or dispatch routes fail closed. Added Windows shebang compatibility for verified package hooks and validated a pinned unsigned `obra/superpowers` install/enable/SessionStart flow in the native Windows sandbox.
 - Added exact-plan structured approval for model-driven `install_source` apply calls across Controller, Desktop, CLI, Bot, Serve/event wire, and ACP. Planning remains invocation-level read-only; apply requires a fresh human decision that YOLO, auto mode, Guardian, plan execution windows, grants, and headless autonomy cannot replace. Unsupported and headless hosts fail closed before preview or mutation, and MCP URL/command/args/environment/header details are structurally redacted before display or persistence.
 - Added public-readiness gates for ownership, release safety, deployment docs, and attribution.
@@ -25,6 +28,8 @@
 
 ### Desktop
 
+- Kept fresh-clone Windows production builds Git-clean by restoring the embedded frontend `dist` placeholder as a byte-empty file, avoiding CRLF/LF-only worktree drift after Vite clears stale assets.
+- Added authenticated signed-registry search and release selection to Plugin settings, including trusted registry/root evidence in preview and installed-plugin details; an unconfigured registry fails closed without changing direct local/Git installs.
 - Added a structured plugin/source approval modal that displays operation, risk, target, MCP execution details, version/digest changes, trust, requested permissions, source revision, warnings, and enable state from the same exact plan used by every host.
 - Added true-modal background isolation, stable dialog identities, inherited opener restore chains, transcript accessibility semantics, and a strict Windows UIA accessibility smoke. Actual NVDA/Narrator listening and Windows High Contrast validation remain manual evidence.
 - Added real-Chromium and native Wails plugin lifecycle smoke coverage for stale-plan rejection, disabled-by-default install, exact permission approval, generation update/rollback, diagnostics, removal, and isolated-state cleanup; the installed Windows candidate now retains the native evidence artifact.

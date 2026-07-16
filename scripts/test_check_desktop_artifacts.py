@@ -57,10 +57,20 @@ class DesktopArtifactCheckTests(unittest.TestCase):
             {
                 "Reames Agent.exe": b"app",
                 "reames-agent-update-helper.exe": b"helper",
+                "licenses/LICENSE": b"project license",
+                "licenses/NOTICE.md": b"project notice",
+                "licenses/go-tuf/LICENSE": b"apache license",
+                "licenses/go-tuf/NOTICE": b"go-tuf notice",
             },
         )
         (root / "linux" / "Reames Agent-linux-amd64.tar.gz").write_bytes(
-            tar_gz_bytes({"reames-agent-desktop": b"linux"})
+            tar_gz_bytes({
+                "reames-agent-desktop": b"linux",
+                "licenses/LICENSE": b"project license",
+                "licenses/NOTICE.md": b"project notice",
+                "licenses/go-tuf/LICENSE": b"apache license",
+                "licenses/go-tuf/NOTICE": b"go-tuf notice",
+            })
         )
         (root / "linux" / "Reames Agent-linux-amd64.deb").write_bytes(deb_bytes())
         for arch in ("amd64", "arm64"):
@@ -70,6 +80,10 @@ class DesktopArtifactCheckTests(unittest.TestCase):
                     "Reames Agent.app/Contents/MacOS/reames-agent-desktop": b"mac",
                     "Reames Agent.app/Contents/Info.plist": b"plist",
                     "Reames Agent.app/Contents/Resources/iconfile.icns": b"icon",
+                    "Reames Agent.app/Contents/Resources/licenses/LICENSE": b"project license",
+                    "Reames Agent.app/Contents/Resources/licenses/NOTICE.md": b"project notice",
+                    "Reames Agent.app/Contents/Resources/licenses/go-tuf/LICENSE": b"apache license",
+                    "Reames Agent.app/Contents/Resources/licenses/go-tuf/NOTICE": b"go-tuf notice",
                 },
             )
         (root / "darwin" / "Reames Agent-darwin-universal.dmg").write_bytes(b"dmg")

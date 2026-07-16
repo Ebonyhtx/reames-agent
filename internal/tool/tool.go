@@ -69,33 +69,40 @@ type ApprovalPlan struct {
 
 // ApprovalAction is one user-visible action in an ApprovalPlan.
 type ApprovalAction struct {
-	Kind               string
-	Action             string
-	RiskLevel          string
-	RiskReasons        []string
-	Name               string
-	Source             string
-	Target             string
-	ConfigPath         string
-	Scope              string
-	Mode               string
-	Transport          string
-	URL                string
-	Command            string
-	Args               []string
-	Env                map[string]string
-	Headers            map[string]string
-	Permissions        []string
-	AddedPermissions   []string
-	RemovedPermissions []string
-	Version            string
-	CurrentVersion     string
-	Digest             string
-	CurrentDigest      string
-	TrustStatus        string
-	SourceKind         string
-	SourceRevision     string
-	WillEnable         bool
+	Kind                string
+	Action              string
+	RiskLevel           string
+	RiskReasons         []string
+	Name                string
+	Source              string
+	Target              string
+	ConfigPath          string
+	Scope               string
+	Mode                string
+	Transport           string
+	URL                 string
+	Command             string
+	Args                []string
+	Env                 map[string]string
+	Headers             map[string]string
+	Permissions         []string
+	AddedPermissions    []string
+	RemovedPermissions  []string
+	Version             string
+	CurrentVersion      string
+	Digest              string
+	CurrentDigest       string
+	TrustStatus         string
+	SourceKind          string
+	SourceRevision      string
+	RegistryName        string
+	RegistryMetadataURL string
+	RegistryRootVersion int64
+	RegistryRootDigest  string
+	RegistryEntryDigest string
+	ProvenanceStatus    string
+	AttestationDigest   string
+	WillEnable          bool
 }
 
 // ApprovalPreviewer marks invocations that require a fresh human decision.

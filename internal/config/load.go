@@ -52,6 +52,7 @@ func LoadForRoot(root string) (*Config, error) {
 	globalSubagentMaxTokens := cfg.Agent.SubagentMaxTokens
 	globalSubagentMaxDurationSeconds := cfg.Agent.SubagentMaxDurationSeconds
 	globalMemoryCompiler := cfg.Agent.MemoryCompiler
+	globalPluginRegistry := cfg.PluginRegistry
 
 	tomlSources = append(tomlSources, projectTOML)
 	if err := mergeRuntimeTOMLFile(cfg, projectTOML); err != nil {
@@ -67,6 +68,9 @@ func LoadForRoot(root string) (*Config, error) {
 	cfg.Agent.SubagentMaxTokens = globalSubagentMaxTokens
 	cfg.Agent.SubagentMaxDurationSeconds = globalSubagentMaxDurationSeconds
 	cfg.Agent.MemoryCompiler = globalMemoryCompiler
+	// A project is untrusted input relative to account-level plugin installation:
+	// it cannot replace the registry endpoint or TUF bootstrap root.
+	cfg.PluginRegistry = globalPluginRegistry
 	// toml.DecodeFile replaces [[plugins]] wholesale, so cfg.Plugins now holds
 	// only the last file's. Re-merge by name across all sources (later wins) so a
 	// project reames-agent.toml doesn't drop the global config's MCP servers.

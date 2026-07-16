@@ -121,6 +121,27 @@ function InstallApprovalPlan({ plan, t }: { plan: WireApprovalPlan; t: Translato
               {action.trustStatus && (
                 <div className="approval-install-action__line"><span>{t("approval.trust")}</span><span>{action.trustStatus}</span></div>
               )}
+              {action.registryName && (
+                <div className="approval-install-action__line"><span>{t("approval.registryName")}</span><span>{action.registryName}</span></div>
+              )}
+              {action.registryMetadataUrl && (
+                <div className="approval-install-action__line"><span>{t("approval.registryMetadataUrl")}</span><code>{action.registryMetadataUrl}</code></div>
+              )}
+              {action.registryRootVersion != null && (
+                <div className="approval-install-action__line"><span>{t("approval.registryRootVersion")}</span><code>{action.registryRootVersion}</code></div>
+              )}
+              {action.registryRootDigest && (
+                <div className="approval-install-action__line"><span>{t("approval.registryRootDigest")}</span><code>{action.registryRootDigest}</code></div>
+              )}
+              {action.registryEntryDigest && (
+                <div className="approval-install-action__line"><span>{t("approval.registryEntryDigest")}</span><code>{action.registryEntryDigest}</code></div>
+              )}
+              {action.provenanceStatus && (
+                <div className="approval-install-action__line"><span>{t("approval.provenanceStatus")}</span><span>{action.provenanceStatus}</span></div>
+              )}
+              {action.attestationDigest && (
+                <div className="approval-install-action__line"><span>{t("approval.attestationDigest")}</span><code>{action.attestationDigest}</code></div>
+              )}
               {action.kind === "plugin" && (
                 <div className="approval-install-action__line"><span>{t("approval.activeAfterApply")}</span><span>{t(action.willEnable ? "approval.yes" : "approval.no")}</span></div>
               )}

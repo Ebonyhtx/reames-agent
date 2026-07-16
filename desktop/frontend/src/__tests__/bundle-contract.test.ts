@@ -34,6 +34,8 @@ const scrollManagerSource = readFileSync(resolve(here, "../lib/useScrollManager.
 const i18nSource = readFileSync(resolve(here, "../lib/i18n.tsx"), "utf8");
 const mainSource = readFileSync(resolve(here, "../main.tsx"), "utf8");
 const packageSource = readFileSync(resolve(here, "../../package.json"), "utf8");
+const viteSource = readFileSync(resolve(here, "../../vite.config.ts"), "utf8");
+const distPlaceholder = readFileSync(resolve(here, "../../dist/.gitkeep"));
 const wordmarkSource = readFileSync(resolve(here, "../assets/logo-wordmark.svg"), "utf8");
 
 console.log("\nbundle contract");
@@ -84,6 +86,11 @@ ok(
   packageSource.includes("check-css-syntax.mjs src/styles.css src/components/SettingsPanel.css") &&
     packageSource.includes("check-z-index-tokens.mjs src/styles.css src/components/SettingsPanel.css"),
   "every production stylesheet stays behind syntax and z-index gates",
+);
+ok(
+  distPlaceholder.byteLength === 0 &&
+    viteSource.includes('writeFile(resolve(distDir, ".gitkeep"), "")'),
+  "production builds restore a byte-empty dist placeholder without line-ending worktree drift",
 );
 const deferredSurfaces = [
   "ApprovalModal",

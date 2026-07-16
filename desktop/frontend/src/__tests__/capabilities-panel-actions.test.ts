@@ -6,7 +6,7 @@ import { MCPServersSettingsPage, PluginsSettingsPage } from "../components/Capab
 import type { AppBindings } from "../lib/bridge";
 import { LocaleProvider } from "../lib/i18n";
 import { mcpServerLifecycleActions, mcpServerRetryableFromAvailableList } from "../lib/mcpServerLifecycle";
-import type { Meta, PluginInstallOptions, PluginOperationView, PluginView, ServerView, TabMeta } from "../lib/types";
+import type { Meta, PluginInstallOptions, PluginOperationView, PluginRegistryEntryView, PluginView, ServerView, TabMeta } from "../lib/types";
 
 function ok(value: unknown, message: string) {
   if (!value) throw new Error(message);
@@ -379,10 +379,30 @@ console.log("capabilities panel plugin actions");
   let removePlanCalls = 0;
   let removeCalls = 0;
   let pickFolderCalls = 0;
+  let registrySearchCalls = 0;
   let latestInstallPlanId = "";
   let enabledBinding: { digest: string; permissions: string[] } | null = null;
   const plannedSources: string[] = [];
   const installedSources: string[] = [];
+  const registryQueries: string[] = [];
+  const signedRegistryEntry: PluginRegistryEntryView = {
+    name: "superpowers",
+    description: "Authenticated agent skills and hooks.",
+    version: "5.1.0",
+    author: "obra",
+    category: "workflow",
+    source: "https://github.com/obra/superpowers",
+    revision: "d72560e462a74e10d161b7f993d5fc3282bfa1e2",
+    digest: `sha256-git-tree-v1:${"a".repeat(64)}`,
+    permissions: ["skills.load", "hooks.context", "hooks.execute"],
+    registryName: "reames-signed-test",
+    registryMetadataUrl: "https://registry.example/metadata",
+    registryRootVersion: 7,
+    registryRootDigest: `sha256:${"b".repeat(64)}`,
+    registryEntryDigest: `sha256:${"d".repeat(64)}`,
+    provenanceStatus: "tuf-attestation-target-integrity-verified",
+    attestationDigest: `sha256:${"c".repeat(64)}`,
+  };
   const pluginOperation = (status: string, planId: string, action: string, overrides: Partial<PluginOperationView> = {}): PluginOperationView => ({
     ok: status === "planned" || status === "done",
     status,
@@ -434,12 +454,37 @@ console.log("capabilities panel plugin actions");
         Meta: async () => meta,
         ListTabs: async () => tabs,
         Plugins: async () => plugins.map((plugin) => ({ ...plugin, warnings: [...(plugin.warnings ?? [])] })),
+        SearchPluginRegistry: async (query: string) => {
+          registrySearchCalls += 1;
+          registryQueries.push(query);
+          return [{ ...signedRegistryEntry, permissions: [...signedRegistryEntry.permissions] }];
+        },
+        PluginRegistryEntry: async (name: string) => {
+          if (name !== signedRegistryEntry.name) throw new Error(`missing registry entry ${name}`);
+          return { ...signedRegistryEntry, permissions: [...signedRegistryEntry.permissions] };
+        },
         PlanPluginInstall: async (source: string, options: PluginInstallOptions) => {
           planCalls += 1;
           plannedSources.push(source);
           ok(options.dryRun === true, "plugin preview asks for dry-run planning");
           latestInstallPlanId = `install-plan-${planCalls}`;
-          return pluginOperation("planned", latestInstallPlanId, "install_plugin_package", { source, name: "superpowers" });
+          const result = pluginOperation("planned", latestInstallPlanId, "install_plugin_package", { source, name: "superpowers" });
+          if (source.startsWith("registry:")) {
+            Object.assign(result.actions[0] ?? {}, {
+              source,
+              sourceRevision: "d72560e462a74e10d161b7f993d5fc3282bfa1e2",
+              trustStatus: "tuf-registry-signed",
+              registryName: "reames-signed-test",
+              registryMetadataUrl: "https://registry.example/metadata",
+              registryRootVersion: 7,
+              registryRootDigest: `sha256:${"b".repeat(64)}`,
+              registryEntryDigest: `sha256:${"d".repeat(64)}`,
+              provenanceStatus: "tuf-attestation-target-integrity-verified",
+              attestationDigest: `sha256:${"c".repeat(64)}`,
+              riskReasons: ["plugin package changes executable capabilities"],
+            });
+          }
+          return result;
         },
         InstallPlugin: async (source: string, options: PluginInstallOptions) => {
           installCalls += 1;
@@ -574,6 +619,40 @@ console.log("capabilities panel plugin actions");
   });
   await waitFor("link invalidates plan", () => findButton("Install plugin")?.disabled === true);
 
+  const registryMode = findButton("Signed registry");
+  if (!registryMode) throw new Error("missing signed registry install mode");
+  await act(async () => {
+    registryMode.click();
+    await flush();
+  });
+  await waitFor("initial signed registry search", () => registrySearchCalls === 1);
+  ok(Boolean(document.querySelector(".cap-plugin-form-grid .cap-plugin-fields--registry")), "signed registry install mode uses the shared form grid");
+  const registrySearch = document.getElementById("plugin-registry-search") as HTMLInputElement | null;
+  if (!registrySearch) throw new Error("missing signed registry search input");
+  await act(async () => {
+    setInputValue(registrySearch, "superpowers");
+    await flush();
+  });
+  await act(async () => {
+    findButton("Search")?.click();
+    await flush();
+  });
+  await waitFor("explicit signed registry search", () => registrySearchCalls === 2);
+  ok(registryQueries[1] === "superpowers", "signed registry search forwards the entered query");
+  const registryEntry = document.getElementById("plugin-registry-entry") as HTMLSelectElement | null;
+  if (!registryEntry) throw new Error("missing signed registry release selector");
+  ok(registryEntry.value === "superpowers", "signed registry search selects the authenticated release");
+  ok(document.body.textContent?.includes("Authenticated by reames-signed-test, TUF root version 7") ?? false, "signed registry selection displays trust-root evidence");
+  ok(document.body.textContent?.includes(signedRegistryEntry.registryEntryDigest) ?? false, "signed registry selection displays the authenticated entry digest");
+  await act(async () => {
+    findButton("Preview")?.click();
+    await flush();
+  });
+  await waitFor("signed registry plugin plan", () => planCalls === 2 && findButton("Install plugin")?.disabled === false);
+  ok(plannedSources[1] === "registry:superpowers", "signed registry preview plans the stable registry source identity");
+  ok(document.body.textContent?.includes("tuf-registry-signed") ?? false, "signed registry plan displays authenticated trust metadata");
+  ok(document.body.textContent?.includes("tuf-attestation-target-integrity-verified") ?? false, "signed registry plan scopes attestation evidence to target-byte integrity");
+
   const gitMode = findButton("Git repository");
   if (!gitMode) throw new Error("missing Git repository install mode");
   await act(async () => {
@@ -605,8 +684,8 @@ console.log("capabilities panel plugin actions");
     await flush();
   });
   await waitFor("plugin install plan", () => document.body.textContent?.includes("install_plugin_package") ?? false);
-  ok(planCalls === 2, "clicking Preview invokes plugin install planning once for the Git source");
-  ok(plannedSources[1] === "git:github.com/obra/superpowers", "plugin preview receives the entered Git source");
+  ok(planCalls === 3, "clicking Preview invokes plugin install planning once for the Git source");
+  ok(plannedSources[2] === "git:github.com/obra/superpowers", "plugin preview receives the entered Git source");
   ok(findButton("Install plugin")?.disabled === false, "a planned response with planId enables plugin apply");
   ok(document.body.textContent?.includes("Risk: medium") ?? false, "plugin plan displays risk metadata");
   ok(document.body.textContent?.includes("github-https-unsigned") ?? false, "plugin plan displays trust metadata");
@@ -625,7 +704,7 @@ console.log("capabilities panel plugin actions");
     findButton("Preview")?.click();
     await flush();
   });
-  await waitFor("replanned after name change", () => planCalls === 3 && findButton("Install plugin")?.disabled === false);
+  await waitFor("replanned after name change", () => planCalls === 4 && findButton("Install plugin")?.disabled === false);
   const replaceInput = document.querySelector<HTMLInputElement>('.cap-plugin-installer__options input[type="checkbox"]');
   if (!replaceInput) throw new Error("missing replace option");
   await act(async () => {
@@ -637,7 +716,7 @@ console.log("capabilities panel plugin actions");
     preview.click();
     await flush();
   });
-  await waitFor("replanned after replace change", () => planCalls === 4 && findButton("Install plugin")?.disabled === false);
+  await waitFor("replanned after replace change", () => planCalls === 5 && findButton("Install plugin")?.disabled === false);
   await act(async () => {
     setInputValue(sourceInput, "git:github.com/obra/superpowers-next");
     await flush();
@@ -651,7 +730,7 @@ console.log("capabilities panel plugin actions");
     findButton("Preview")?.click();
     await flush();
   });
-  await waitFor("replanned after source change", () => planCalls === 5 && findButton("Install plugin")?.disabled === false);
+  await waitFor("replanned after source change", () => planCalls === 6 && findButton("Install plugin")?.disabled === false);
   await act(async () => {
     install.click();
     await flush();

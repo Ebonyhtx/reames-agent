@@ -42,6 +42,7 @@ import (
 	"reames-agent/internal/permission"
 	"reames-agent/internal/planmode"
 	"reames-agent/internal/plugin"
+	"reames-agent/internal/pluginregistry"
 	"reames-agent/internal/processpolicy"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/sandbox"
@@ -910,9 +911,12 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			return "install_source is already enabled."
 		}
 		installSourceAdded = true
+		registryClient, registryErr := pluginregistry.NewConfigured(cfg, balanceClient)
 		reg.Add(installsource.NewTool(installsource.Options{
-			ProjectRoot: root,
-			HTTPClient:  balanceClient,
+			ProjectRoot:         root,
+			HTTPClient:          balanceClient,
+			PluginRegistry:      registryClient,
+			PluginRegistryError: registryErr,
 			ConnectMCP: func(e config.PluginEntry) (installsource.MCPConnectResult, error) {
 				spec := pluginSpecFromEntryWithOptions(e, root, pluginSpecOptions)
 				if opts.Stderr != nil {

@@ -33,6 +33,22 @@ contents:
     dst: /usr/share/applications/reames-agent.desktop
     file_info:
       mode: 0644
+  - src: ../LICENSE
+    dst: /usr/share/doc/reames-agent-desktop/LICENSE
+    file_info:
+      mode: 0644
+  - src: ../NOTICE.md
+    dst: /usr/share/doc/reames-agent-desktop/NOTICE.md
+    file_info:
+      mode: 0644
+  - src: ../third_party/go-tuf/LICENSE
+    dst: /usr/share/doc/reames-agent-desktop/go-tuf/LICENSE
+    file_info:
+      mode: 0644
+  - src: ../third_party/go-tuf/NOTICE
+    dst: /usr/share/doc/reames-agent-desktop/go-tuf/NOTICE
+    file_info:
+      mode: 0644
   # appicon.png is 1024x1024 — not a standard hicolor size dir, so install it under
   # the size-agnostic pixmaps path that the .desktop's `Icon=reames-agent-desktop` finds.
   - src: ./build/appicon.png

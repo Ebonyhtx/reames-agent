@@ -187,33 +187,40 @@ type ApprovalPlan struct {
 
 // ApprovalAction is one user-visible operation in an ApprovalPlan.
 type ApprovalAction struct {
-	Kind               string            `json:"kind"`
-	Action             string            `json:"action"`
-	RiskLevel          string            `json:"riskLevel"`
-	RiskReasons        []string          `json:"riskReasons,omitempty"`
-	Name               string            `json:"name,omitempty"`
-	Source             string            `json:"source,omitempty"`
-	Target             string            `json:"target,omitempty"`
-	ConfigPath         string            `json:"configPath,omitempty"`
-	Scope              string            `json:"scope,omitempty"`
-	Mode               string            `json:"mode,omitempty"`
-	Transport          string            `json:"transport,omitempty"`
-	URL                string            `json:"url,omitempty"`
-	Command            string            `json:"command,omitempty"`
-	Args               []string          `json:"args,omitempty"`
-	Env                map[string]string `json:"env,omitempty"`
-	Headers            map[string]string `json:"headers,omitempty"`
-	Permissions        []string          `json:"permissions,omitempty"`
-	AddedPermissions   []string          `json:"addedPermissions,omitempty"`
-	RemovedPermissions []string          `json:"removedPermissions,omitempty"`
-	Version            string            `json:"version,omitempty"`
-	CurrentVersion     string            `json:"currentVersion,omitempty"`
-	Digest             string            `json:"digest,omitempty"`
-	CurrentDigest      string            `json:"currentDigest,omitempty"`
-	TrustStatus        string            `json:"trustStatus,omitempty"`
-	SourceKind         string            `json:"sourceKind,omitempty"`
-	SourceRevision     string            `json:"sourceRevision,omitempty"`
-	WillEnable         bool              `json:"willEnable"`
+	Kind                string            `json:"kind"`
+	Action              string            `json:"action"`
+	RiskLevel           string            `json:"riskLevel"`
+	RiskReasons         []string          `json:"riskReasons,omitempty"`
+	Name                string            `json:"name,omitempty"`
+	Source              string            `json:"source,omitempty"`
+	Target              string            `json:"target,omitempty"`
+	ConfigPath          string            `json:"configPath,omitempty"`
+	Scope               string            `json:"scope,omitempty"`
+	Mode                string            `json:"mode,omitempty"`
+	Transport           string            `json:"transport,omitempty"`
+	URL                 string            `json:"url,omitempty"`
+	Command             string            `json:"command,omitempty"`
+	Args                []string          `json:"args,omitempty"`
+	Env                 map[string]string `json:"env,omitempty"`
+	Headers             map[string]string `json:"headers,omitempty"`
+	Permissions         []string          `json:"permissions,omitempty"`
+	AddedPermissions    []string          `json:"addedPermissions,omitempty"`
+	RemovedPermissions  []string          `json:"removedPermissions,omitempty"`
+	Version             string            `json:"version,omitempty"`
+	CurrentVersion      string            `json:"currentVersion,omitempty"`
+	Digest              string            `json:"digest,omitempty"`
+	CurrentDigest       string            `json:"currentDigest,omitempty"`
+	TrustStatus         string            `json:"trustStatus,omitempty"`
+	SourceKind          string            `json:"sourceKind,omitempty"`
+	SourceRevision      string            `json:"sourceRevision,omitempty"`
+	RegistryName        string            `json:"registryName,omitempty"`
+	RegistryMetadataURL string            `json:"registryMetadataUrl,omitempty"`
+	RegistryRootVersion int64             `json:"registryRootVersion,omitempty"`
+	RegistryRootDigest  string            `json:"registryRootDigest,omitempty"`
+	RegistryEntryDigest string            `json:"registryEntryDigest,omitempty"`
+	ProvenanceStatus    string            `json:"provenanceStatus,omitempty"`
+	AttestationDigest   string            `json:"attestationDigest,omitempty"`
+	WillEnable          bool              `json:"willEnable"`
 }
 
 // AskOption is one choice the user can pick for an AskQuestion.

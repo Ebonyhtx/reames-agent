@@ -32,15 +32,16 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 
 ## 当前基线
 
-- M0、M1、M2、M3、M4 已按各自路线图门槛关闭；当前已验证远端基线为
-  `92e15e7 feat: unify structured source approvals`。该提交的 CI
-  `29386016928` 8/8、CodeQL `29386016898` 3/3 全绿；最近完整 Desktop candidate
-  `29378899444` 仍是三平台全绿。当前提交和远端状态必须以 `git log`、`git status` 和
-  GitHub Actions 为准。
+- M0、M1、M2、M3、M4 已按各自路线图门槛关闭；进入当前本地批次前的已验证远端基线为
+  `f303ebf feat: isolate installed plugin processes`，普通 CI 8/8、CodeQL 3/3 全绿；最近
+  完整 Desktop candidate `29378899444` 仍是三平台全绿。当前提交和远端状态必须以
+  `git log`、`git status` 和 GitHub Actions 为准。
 - M5 进行中。已收口 plugin manifest、内容身份、权限授权、两阶段生命周期、Desktop
   自动化审批、旧 generation 运行时撤销、package-owned Hook/MCP 进程隔离与一条真实固定
-  revision 第三方 E2E；真实 Chromium、源码 production Wails 与已安装 Windows candidate
-  均已有分层证据。仍未关闭运营 registry、签名/provenance、密钥轮换与公开发布信任链。
+  revision 第三方 E2E，以及无默认 endpoint/TOFU 的 TUF registry 客户端；真实 Chromium、
+  源码 production Wails 与已安装 Windows candidate 均已有分层证据。仍未关闭真实运营
+  registry、生产密钥仪式/实际轮换/compromise drill、DSSE/SLSA policy verifier 与公开
+  发布信任链。
 - candidate `29378899444` 的 Windows interaction/accessibility/native/plugin 四份 JSON
   均通过，`boundary_changes=[]`、`errors=[]`；installer/executable SHA-256 分别为
   `779706C1FA70D172912527E9130C4D9FDEFC1AD5C40885EF7BB719445438DF09` 和
@@ -60,6 +61,31 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
   enable 绑定 exact digest 和 exact grants，权限扩张更新自动禁用。
 - GitHub 来源记录 shallow clone commit revision，但信任状态仍是 unsigned HTTPS，
   不得表述为 Reames 签名或 provenance。
+
+### TUF Registry 客户端信任
+
+- 根模块与 Desktop 模块的 build toolchain 已固定为 Go 1.26.5，覆盖本轮 `govulncheck` 指出的
+  GO-2026-5856 / GO-2026-4970 标准库修复；源码入口仍声明 Go 1.25+，默认 Go toolchain
+  selection 会选择固定的已修补版本。
+- `[plugin_registry]` 只接受用户全局配置，且不提供默认 endpoint/TOFU。metadata/targets URL
+  与带外 bootstrap root 不可被项目 TOML 或项目 `.env` 覆盖；endpoint/bootstrap-root 字段
+  中的变量只使用进程环境，`index_target` 按字面值使用。相对 root 和持久 trust cache 位于 Reames home。
+- `internal/pluginregistry` 使用官方 `go-tuf/v2`，验证连续 root rotation、阈值、过期、
+  rollback/freeze/mix-and-match、consistent snapshot target hash/length；HTTP 仅允许
+  loopback 测试，单次请求拒绝跨 origin redirect，响应与条目数量有上限。
+- 严格索引只接受 canonical GitHub repo、完整 40 字符 commit、跨平台 `sha256-git-tree-v1`、已知权限
+  和绑定 source/subpath/revision/digest 的 registry assertion。完整认证 entry digest 进入
+  planId 与 active/previous 生命周期状态；任何规范化后的 source、builderId、attestation target
+  或展示字段语义变化都会要求新预检。
+- 插件 state、安装请求与 registry 索引共享可移植 ASCII 名称身份；大小写别名、尾点和 Windows
+  设备保留名会在内容物化前拒绝，避免 `plugins/<name>` 在 Windows/默认 macOS 上发生物理别名。
+- optional attestation target 只验证 TUF target 字节完整性；状态名和 UI/CLI 文案不得声称
+  DSSE signer identity、builder、predicate policy、transparency 或 SLSA level 已验证。
+- `registry:<name>` 的 preview/apply 都重新 refresh、隔离 ambient Git 配置后精确 checkout full
+  commit、核对 manifest name/version/permissions，并从 raw Git blobs 重算 canonical source digest；
+  本地 generation 另算 `sha256-tree-v1`。CLI 提供 registry refresh/search/show/digest，Desktop
+  提供认证搜索、release 选择和 root/entry/provenance evidence 展示；未配置时只让 registry
+  路径 fail closed。
 
 ### 两阶段生命周期与恢复
 
@@ -162,29 +188,31 @@ Node upstream reconciliation、实际 upstream scan，以及六目标 `CGO_ENABL
 聚焦回归同时覆盖 partial transcript 成功提交和注入提交失败后的 fail-closed 回滚；
 `git diff --check` 通过；其远端 CI/CodeQL/candidate 现已由上述 `e9de895` runs 关闭。
 
-当前进程隔离批次已重新通过 root build/vet/internal 全测，hook/control/plugin/pluginpkg/
-installsource/processpolicy/sandbox 七包 race，Desktop build/vet/full test，前端
-`test:all`/production build/bundle budget，文档/公开/部署/发布/工具合同，119 项 Python
-合同（2 skipped）、Node upstream reconciliation、真实 Chrome smoke、六目标 CLI 与
-Linux/macOS 四包 16 个测试二进制 `CGO_ENABLED=0` 交叉编译。Windows 原生 re-exec E2E
-确认显式 child env 在隔离内可用、保留变量已清除；Linux 单元合同确认私有 `/tmp` 后只读
-重挂 generation/helper。提交前仍需最终差异审查、显式暂存与干净 clone；这些本地结果不
-替代 push 后的新远端 CI/CodeQL。
+当前 TUF registry 批次已通过 root build/vet/internal 全测，pluginregistry/installsource/
+pluginpkg/control/eventwire race，Desktop build/vet/full test，前端 `test:all`/production
+build/bundle budget，文档/公开/部署/发布/工具合同，119 项 Python 合同（2 skipped）、
+Node upstream reconciliation、真实 Chrome smoke、六目标 CLI 与 Linux/macOS registry/
+installsource 测试二进制交叉编译。最终候选还在本地 clean clone 重跑 root、Desktop、前端
+和四组合同；该过程发现并关闭 Windows checkout 后 Vite 将 tracked `.gitkeep` 从 CRLF
+改成 LF 的伪修改，现以跨平台 0 字节占位文件保证构建后工作树干净。这些本地结果不替代
+集中 push 后的新远端 CI/CodeQL。
 
 ## 未关闭边界
 
 - package process 当前允许网络，且无跨三平台统一硬 CPU/RSS 配额；用户手工 Hook/MCP
   与 LSP 仍是高权限未自动隔离进程。
-- 真实运营 registry、签名、provenance、密钥轮换和公开可信发布链。
-- 最终候选干净 clone；关闭 M5 时最新提交必须远端 CI/CodeQL 全绿。
+- 真实运营 registry、生产 endpoint、离线 root/targets threshold ceremony、online role
+  custody、实际密钥轮换/compromise drill、DSSE/SLSA policy verifier 和公开可信发布链。
+- 关闭 M5 时最新提交必须远端 CI/CodeQL 全绿。
 - `bash`、MCP、外部 API 和后台 opaque side effect 仍无任意副作用 exactly-once。
 
 ## 下一执行顺序
 
-1. 核对当前分支、提交和远端状态；若本批尚未 push，显式暂存受跟踪文件后集中
-   commit/push 一次，若已 push 则不要为回填静态 run ID 重复推送。
+1. 本批最终候选干净 clone 通过后集中 push 一次；若已 push，不要为回填静态 run ID
+   重复推送。
 2. 守候最新 CI/CodeQL；若失败，从日志根因修复而不是重跑掩盖。
-3. 完成最终候选干净 clone；随后推进运营 registry、签名/provenance 和密钥轮换。
+3. 随后推进真实运营 registry 的外部密钥仪式、实际轮换/
+   compromise drill 和可选 DSSE/SLSA policy verifier。
 4. 外部环境到位时并行关闭 M6 云节点/IM 和公开签名发布证据。
 
 长期 GOAL 尚未完成；M5 本批的本地合同不得扩大为插件生态或整个项目完成。

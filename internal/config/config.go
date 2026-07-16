@@ -39,26 +39,27 @@ func SkillNameKey(name string) string {
 
 // Config is Reames Agent's runtime configuration.
 type Config struct {
-	ConfigVersion    int                 `toml:"config_version"`
-	DefaultModel     string              `toml:"default_model"`
-	Language         string              `toml:"language"` // ui/model language tag (e.g. "zh"); empty = auto-detect from $LANG / $REAMES_AGENT_LANG
-	CredentialsStore string              `toml:"credentials_store"`
-	UI               UIConfig            `toml:"ui"`
-	Desktop          DesktopConfig       `toml:"desktop"`
-	Notifications    NotificationsConfig `toml:"notifications"`
-	Agent            AgentConfig         `toml:"agent"`
-	Providers        []ProviderEntry     `toml:"providers"`
-	Tools            ToolsConfig         `toml:"tools"`
-	Permissions      PermissionsConfig   `toml:"permissions"`
-	Sandbox          SandboxConfig       `toml:"sandbox"`
-	Network          NetworkConfig       `toml:"network"`
-	Environment      EnvironmentConfig   `toml:"environment"`
-	Plugins          []PluginEntry       `toml:"plugins"`
-	Skills           SkillsConfig        `toml:"skills"`
-	Statusline       StatuslineConfig    `toml:"statusline"`
-	LSP              LSPConfig           `toml:"lsp"`
-	Bot              BotConfig           `toml:"bot"`
-	Serve            ServeConfig         `toml:"serve"`
+	ConfigVersion    int                  `toml:"config_version"`
+	DefaultModel     string               `toml:"default_model"`
+	Language         string               `toml:"language"` // ui/model language tag (e.g. "zh"); empty = auto-detect from $LANG / $REAMES_AGENT_LANG
+	CredentialsStore string               `toml:"credentials_store"`
+	UI               UIConfig             `toml:"ui"`
+	Desktop          DesktopConfig        `toml:"desktop"`
+	Notifications    NotificationsConfig  `toml:"notifications"`
+	Agent            AgentConfig          `toml:"agent"`
+	Providers        []ProviderEntry      `toml:"providers"`
+	Tools            ToolsConfig          `toml:"tools"`
+	Permissions      PermissionsConfig    `toml:"permissions"`
+	Sandbox          SandboxConfig        `toml:"sandbox"`
+	Network          NetworkConfig        `toml:"network"`
+	PluginRegistry   PluginRegistryConfig `toml:"plugin_registry"`
+	Environment      EnvironmentConfig    `toml:"environment"`
+	Plugins          []PluginEntry        `toml:"plugins"`
+	Skills           SkillsConfig         `toml:"skills"`
+	Statusline       StatuslineConfig     `toml:"statusline"`
+	LSP              LSPConfig            `toml:"lsp"`
+	Bot              BotConfig            `toml:"bot"`
+	Serve            ServeConfig          `toml:"serve"`
 
 	providerSources          map[string]providerSourceScope
 	shadowedProjectProviders []ProviderEntry
@@ -118,6 +119,59 @@ type NotificationsConfig struct {
 type EnvironmentConfig struct {
 	Enabled *bool             `toml:"enabled"`
 	Tools   map[string]string `toml:"tools"`
+}
+
+// PluginRegistryConfig pins the user-controlled TUF registry root of trust.
+// It is global account state: project files are never allowed to replace the
+// metadata endpoint or bootstrap root for a prompt-triggered installation.
+type PluginRegistryConfig struct {
+	MetadataURL string `toml:"metadata_url"`
+	TargetsURL  string `toml:"targets_url"`
+	TrustedRoot string `toml:"trusted_root"`
+	IndexTarget string `toml:"index_target"`
+}
+
+// PluginRegistryMetadataURL expands placeholders from the process environment
+// only. Project .env values are untrusted relative to this account-level trust
+// configuration and must never select a registry endpoint.
+func (c *Config) PluginRegistryMetadataURL() string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(ExpandVars(c.PluginRegistry.MetadataURL))
+}
+
+// PluginRegistryTargetsURL returns the separately configured target endpoint.
+func (c *Config) PluginRegistryTargetsURL() string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(ExpandVars(c.PluginRegistry.TargetsURL))
+}
+
+// PluginRegistryTrustedRootPath resolves a relative root under Reames Agent's
+// private home rather than the current project.
+func (c *Config) PluginRegistryTrustedRootPath() string {
+	if c == nil {
+		return ""
+	}
+	value := strings.TrimSpace(ExpandVars(c.PluginRegistry.TrustedRoot))
+	if value == "" {
+		return ""
+	}
+	if filepath.IsAbs(value) {
+		return filepath.Clean(value)
+	}
+	return filepath.Join(ReamesAgentHomeDir(), value)
+}
+
+// PluginRegistryCacheDir is the owner-private persistent TUF cache root.
+func PluginRegistryCacheDir() string {
+	home := ReamesAgentHomeDir()
+	if strings.TrimSpace(home) == "" {
+		return ""
+	}
+	return filepath.Join(home, "registry-cache")
 }
 
 // EnvironmentEnabled reports whether startup environment probing should feed the

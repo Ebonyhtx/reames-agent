@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"reames-agent/internal/config"
 	"reames-agent/internal/installsource"
+	"reames-agent/internal/netclient"
 	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/pluginregistry"
 )
 
 func pluginCommand(args []string) int {
@@ -37,6 +41,8 @@ func pluginCommand(args []string) int {
 		return pluginSetEnabledCommand(args[1:], false)
 	case "doctor":
 		return pluginDoctorCommand(args[1:])
+	case "registry":
+		return pluginRegistryCommand(args[1:])
 	case "help", "--help", "-h":
 		pluginUsage()
 		return 0
@@ -57,7 +63,11 @@ func pluginUsage() {
 	  reames-agent plugin enable <name> --yes
 	  reames-agent plugin disable <name>
 	  reames-agent plugin remove <name> [--dry-run] [--yes --plan-id <id>]
-	  reames-agent plugin doctor <name>`)
+	  reames-agent plugin doctor <name>
+	  reames-agent plugin registry search [query]
+	  reames-agent plugin registry show <name>
+	  reames-agent plugin registry refresh
+	  reames-agent plugin registry digest <checkout> [subpath]`)
 }
 
 func pluginInstallCommand(args []string) int {
@@ -283,7 +293,10 @@ func pluginRemoveCommand(args []string) int {
 
 func runInstallSourceJSON(body map[string]any) int {
 	raw, _ := json.Marshal(body)
-	tl := installsource.NewTool(installsource.Options{})
+	httpClient, registryClient, registryErr := pluginRegistryDependencies(false)
+	tl := installsource.NewTool(installsource.Options{
+		HTTPClient: httpClient, PluginRegistry: registryClient, PluginRegistryError: registryErr,
+	})
 	out, err := tl.Execute(context.Background(), raw)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -301,6 +314,128 @@ func runInstallSourceJSON(body map[string]any) int {
 		return 1
 	}
 	return 0
+}
+
+func pluginRegistryCommand(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: reames-agent plugin registry search [query] | show <name> | refresh | digest <checkout> [subpath]")
+		return 2
+	}
+	switch args[0] {
+	case "help", "--help", "-h":
+		if len(args) != 1 {
+			fmt.Fprintln(os.Stderr, "plugin registry help accepts no arguments")
+			return 2
+		}
+		fmt.Fprintln(os.Stderr, "usage: reames-agent plugin registry search [query] | show <name> | refresh | digest <checkout> [subpath]")
+		return 0
+	case "search":
+		if len(args) > 2 {
+			fmt.Fprintln(os.Stderr, "plugin registry search accepts at most one query")
+			return 2
+		}
+	case "show":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "plugin registry show requires exactly one plugin name")
+			return 2
+		}
+	case "refresh":
+		if len(args) != 1 {
+			fmt.Fprintln(os.Stderr, "plugin registry refresh accepts no arguments")
+			return 2
+		}
+	case "digest":
+		if len(args) < 2 || len(args) > 3 {
+			fmt.Fprintln(os.Stderr, "plugin registry digest requires a checkout and optional subpath")
+			return 2
+		}
+	default:
+		fmt.Fprintf(os.Stderr, "unknown plugin registry command %q\n", args[0])
+		return 2
+	}
+	if args[0] == "digest" {
+		subpath := ""
+		if len(args) == 3 {
+			subpath = args[2]
+		}
+		revision, digest, err := installsource.RegistryGitSourceEvidence(context.Background(), args[1], subpath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Printf("revision: %s\ndigest: %s\n", revision, digest)
+		return 0
+	}
+	_, client, err := pluginRegistryDependencies(true)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	switch args[0] {
+	case "search":
+		query := ""
+		if len(args) == 2 {
+			query = args[1]
+		}
+		index, err := client.Refresh(context.Background())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		entries := pluginregistry.Search(index, query)
+		if len(entries) == 0 {
+			fmt.Println("no signed registry plugins matched")
+			return 0
+		}
+		for _, entry := range entries {
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\n", entry.Name, entry.Version, entry.Category, entry.Author, entry.Description)
+		}
+		return 0
+	case "show":
+		entry, err := client.Resolve(context.Background(), args[1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Printf("name: %s\nversion: %s\ndescription: %s\nauthor: %s\ncategory: %s\nsource: %s\nsubpath: %s\nrevision: %s\ndigest: %s\npermissions: %s\nregistry: %s\nmetadataURL: %s\nbootstrapRoot: %s\nrootVersion: %d\nregistryEntryDigest: %s\nprovenance: %s\nattestationDigest: %s\n",
+			entry.Name, entry.Version, entry.Description, entry.Author, entry.Category, entry.Source, entry.Subpath,
+			entry.Revision, entry.Digest, strings.Join(entry.Permissions, ","), entry.RegistryName,
+			entry.RegistryMetadataURL, entry.BootstrapRootSHA256, entry.RootVersion, entry.ReleaseEvidenceSHA256, entry.ProvenanceStatus, entry.AttestationSHA256)
+		return 0
+	case "refresh":
+		index, err := client.Refresh(context.Background())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Printf("ok: %s updated=%s plugins=%d\n", index.Registry, index.Updated.UTC().Format(time.RFC3339), len(index.Plugins))
+		return 0
+	}
+	return 2
+}
+
+func pluginRegistryDependencies(strict bool) (*http.Client, *pluginregistry.Client, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		if strict {
+			return nil, nil, fmt.Errorf("load plugin registry configuration: %w", err)
+		}
+		return nil, nil, err
+	}
+	httpClient, err := netclient.NewHTTPClient(cfg.NetworkProxySpec(), netclient.TransportOptions{
+		DialTimeout: 15 * time.Second, TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 20 * time.Second,
+	})
+	if err != nil {
+		if strict {
+			return nil, nil, fmt.Errorf("configure plugin registry network client: %w", err)
+		}
+		return nil, nil, err
+	}
+	registryClient, err := pluginregistry.NewConfigured(cfg, httpClient)
+	if err != nil && strict {
+		return httpClient, nil, err
+	}
+	return httpClient, registryClient, err
 }
 
 func pluginListCommand() int {
@@ -352,9 +487,9 @@ func pluginShowCommand(args []string) int {
 		return 1
 	}
 	skills, hooks, mcp := pkg.CapabilityCounts()
-	fmt.Printf("name: %s\nversion: %s\nenabled: %t\nkind: %s\nmanifestSchema: %d\ninstallMode: %s\nroot: %s\nsource: %s\nsourceKind: %s\nsourceRevision: %s\ntrust: %s\ndigest: %s\npermissions: %s\ngrantedPermissions: %s\nrollbackAvailable: %t\nskills: %d\nhooks: %d\nmcpServers: %d\n",
+	fmt.Printf("name: %s\nversion: %s\nenabled: %t\nkind: %s\nmanifestSchema: %d\ninstallMode: %s\nroot: %s\nsource: %s\nsourceKind: %s\nsourceRevision: %s\ntrust: %s\ndigest: %s\nregistryEntryDigest: %s\npermissions: %s\ngrantedPermissions: %s\nrollbackAvailable: %t\nskills: %d\nhooks: %d\nmcpServers: %d\n",
 		p.Name, p.Version, p.Enabled, p.ManifestKind, p.ManifestSchema, p.InstallMode, root, p.Source, p.SourceKind, p.SourceRevision,
-		p.TrustStatus, p.Digest, strings.Join(p.Permissions, ","), strings.Join(p.GrantedPermissions, ","), p.Previous != nil, skills, hooks, mcp)
+		p.TrustStatus, p.Digest, p.RegistryEntryDigest, strings.Join(p.Permissions, ","), strings.Join(p.GrantedPermissions, ","), p.Previous != nil, skills, hooks, mcp)
 	printPluginInventory(pkg.Inventory())
 	for _, warning := range warnings {
 		fmt.Println("warning:", warning)

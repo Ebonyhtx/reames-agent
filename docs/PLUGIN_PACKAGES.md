@@ -19,6 +19,63 @@ directory.
   `https://github.com/owner/repo/tree/main/path/to/plugin`.
 - A local directory that contains `reames-agent-plugin.json`,
   `.codex-plugin/plugin.json`, or `.claude-plugin/plugin.json`.
+- A release from an explicitly configured signed registry, written as
+  `registry:<plugin-name>`. Registry installs accept only the authenticated
+  full Git commit, source-tree digest, manifest version, and permissions from
+  the TUF index.
+
+There is no built-in or trust-on-first-use registry. Configure one in the user
+config (never a project config) and deliver its bootstrap `root.json` through a
+separate authenticated channel:
+
+```toml
+[plugin_registry]
+metadata_url = "https://registry.example/metadata"
+targets_url = "https://registry.example/targets"
+trusted_root = "registry/root.json"
+index_target = "plugins.json"
+```
+
+Relative `trusted_root` paths resolve below `REAMES_AGENT_HOME`. Placeholders
+in the endpoint and bootstrap-root fields use the process environment only;
+`index_target` is literal, and a project's `.env` cannot select the endpoint or
+bootstrap root. Discover and inspect only authenticated entries with:
+
+```bash
+reames-agent plugin registry refresh
+reames-agent plugin registry search [query]
+reames-agent plugin registry show <plugin-name>
+reames-agent plugin registry digest <checkout> [subpath]
+```
+
+Plugin names use a portable ASCII namespace. Names that differ only by ASCII
+case are aliases and cannot coexist; trailing dots and Windows device names
+such as `CON`, `AUX`, `COM1`, or those names with extensions are rejected
+before any package content is materialized. The state file and signed registry
+index enforce the same rule so `plugins/<name>` has one physical owner on all
+supported filesystems.
+
+The signed entry uses a cross-platform `sha256-git-tree-v1` digest over canonical
+Git blobs, paths, and executable intent. The installed generation separately uses
+`sha256-tree-v1` over the actual local tree for lifecycle tamper detection. Registry
+GitHub sources must be anonymously fetchable without interactive credentials or
+ambient Git configuration.
+
+Then use the same two-stage install contract:
+
+```bash
+reames-agent plugin install registry:<plugin-name> --dry-run
+reames-agent plugin install registry:<plugin-name> --yes --plan-id sha256:<id-from-preview>
+```
+
+The client uses the official `go-tuf/v2` workflow and persistent metadata to
+verify root rotation, expiry, rollback, freeze, and mix-and-match protections.
+It re-resolves the registry entry and recomputes the source-tree digest on
+apply. The persisted evidence distinguishes a TUF-signed registry assertion
+from an optional TUF-authenticated attestation target. The latter proves target
+integrity only: Reames Agent does not yet verify DSSE signer identity, a SLSA
+predicate policy, or a SLSA level. Registry operation and key ceremonies are
+documented in [Plugin Registry Operations](PLUGIN_REGISTRY_OPERATIONS.md).
 
 Preview the install plan without writing files:
 
@@ -171,13 +228,16 @@ the CLI.
 
 ### Install Plugins
 
-The installer has two modes:
+The installer has three modes:
 
 - **Local folder**: type or paste a plugin directory into the path field, or
   click **Choose plugin folder** to select it from disk.
 - **Git repository**: enter a Git source such as
   `git:github.com/obra/superpowers`. **Install name (optional)** can override
   the plugin manifest name for this install or overwrite.
+- **Signed registry**: search the configured authenticated index, choose a
+  release, and review the registry name and trusted root version before
+  previewing `registry:<plugin-name>`. Missing trust configuration fails closed.
 
 Use the action buttons after choosing the source and options:
 

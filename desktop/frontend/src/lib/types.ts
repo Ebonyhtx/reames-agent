@@ -137,6 +137,13 @@ export interface WireApprovalAction {
   trustStatus?: string;
   sourceKind?: string;
   sourceRevision?: string;
+  registryName?: string;
+  registryMetadataUrl?: string;
+  registryRootVersion?: number;
+  registryRootDigest?: string;
+  registryEntryDigest?: string;
+  provenanceStatus?: string;
+  attestationDigest?: string;
   willEnable?: boolean;
 }
 
@@ -793,6 +800,13 @@ export interface PluginView {
   sourceKind?: string;
   sourceRevision?: string;
   trustStatus?: string;
+  registryName?: string;
+  registryMetadataUrl?: string;
+  registryRootVersion?: number;
+  registryRootDigest?: string;
+  registryEntryDigest?: string;
+  provenanceStatus?: string;
+  attestationDigest?: string;
   digest?: string;
   permissions?: string[];
   grantedPermissions?: string[];
@@ -807,6 +821,25 @@ export interface PluginView {
   mcpServerDetails?: PluginMCPServerView[];
   warnings?: string[];
   error?: string;
+}
+export interface PluginRegistryEntryView {
+  name: string;
+  description?: string;
+  version: string;
+  author?: string;
+  category?: string;
+  source: string;
+  subpath?: string;
+  revision: string;
+  digest: string;
+  permissions: string[];
+  registryName: string;
+  registryMetadataUrl: string;
+  registryRootVersion: number;
+  registryRootDigest: string;
+  registryEntryDigest: string;
+  provenanceStatus: string;
+  attestationDigest?: string;
 }
 export interface PluginRollbackView {
   version?: string;
@@ -870,6 +903,13 @@ export interface PluginOperationAction {
   permissionSource?: string;
   sourceKind?: string;
   sourceRevision?: string;
+  registryName?: string;
+  registryMetadataUrl?: string;
+  registryRootVersion?: number;
+  registryRootDigest?: string;
+  registryEntryDigest?: string;
+  provenanceStatus?: string;
+  attestationDigest?: string;
   trustStatus?: string;
   willEnable?: boolean;
   rollbackAvailable?: boolean;

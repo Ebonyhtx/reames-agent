@@ -20,6 +20,7 @@ import (
 
 	"reames-agent/internal/config"
 	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/pluginregistry"
 	"reames-agent/internal/skill"
 	"reames-agent/internal/tool"
 	"reames-agent/internal/trust"
@@ -62,12 +63,21 @@ type OnPluginDisconnectFunc func(pluginName, serverName string) bool
 // required before the verified generation becomes available.
 type OnPluginRuntimeChangeFunc func(pluginName string) []string
 
+// PluginRegistryResolver supplies a TUF-authenticated immutable release for a
+// registry:<name> source. The concrete client persists trusted metadata and
+// enforces rollback, expiration, signature, and target-integrity checks.
+type PluginRegistryResolver interface {
+	Resolve(context.Context, string) (pluginregistry.Entry, error)
+}
+
 // Options configure the install_source tool. ProjectRoot "" and HomeDir
 // "" fall back to os.Getwd / os.UserHomeDir at construction time.
 type Options struct {
 	ProjectRoot           string
 	HomeDir               string
 	HTTPClient            *http.Client
+	PluginRegistry        PluginRegistryResolver
+	PluginRegistryError   error
 	ConnectMCP            MCPConnector
 	OnDisconnect          OnDisconnectFunc
 	OnPluginDisconnect    OnPluginDisconnectFunc
@@ -80,6 +90,8 @@ type installSourceTool struct {
 	home                  string
 	reamesAgentHome       string
 	httpClient            *http.Client
+	pluginRegistry        PluginRegistryResolver
+	pluginRegistryError   error
 	connectMCP            MCPConnector
 	onDisconnect          OnDisconnectFunc
 	onPluginDisconnect    OnPluginDisconnectFunc
@@ -127,6 +139,8 @@ func NewTool(opts Options) tool.Tool {
 		home:                  home,
 		reamesAgentHome:       reamesAgentHome,
 		httpClient:            client,
+		pluginRegistry:        opts.PluginRegistry,
+		pluginRegistryError:   opts.PluginRegistryError,
 		connectMCP:            opts.ConnectMCP,
 		onDisconnect:          opts.OnDisconnect,
 		onPluginDisconnect:    opts.OnPluginDisconnect,
@@ -207,33 +221,40 @@ func (t *installSourceTool) PreviewApproval(ctx context.Context, raw json.RawMes
 
 func structuredApprovalAction(action action) tool.ApprovalAction {
 	return tool.ApprovalAction{
-		Kind:               action.Kind,
-		Action:             action.Action,
-		RiskLevel:          string(action.RiskLevel),
-		RiskReasons:        append([]string(nil), action.RiskReasons...),
-		Name:               action.Name,
-		Source:             redactApprovalText(action.Source),
-		Target:             action.Target,
-		ConfigPath:         action.ConfigPath,
-		Scope:              action.Scope,
-		Mode:               action.Mode,
-		Transport:          action.Transport,
-		URL:                redactApprovalText(action.URL),
-		Command:            redactApprovalText(action.Command),
-		Args:               redactApprovalArgs(action.Args),
-		Env:                redactApprovalMap(action.Env),
-		Headers:            redactApprovalMap(action.Headers),
-		Permissions:        append([]string(nil), action.Permissions...),
-		AddedPermissions:   append([]string(nil), action.AddedPermissions...),
-		RemovedPermissions: append([]string(nil), action.RemovedPermissions...),
-		Version:            action.Version,
-		CurrentVersion:     action.CurrentVersion,
-		Digest:             action.Digest,
-		CurrentDigest:      action.CurrentDigest,
-		TrustStatus:        action.TrustStatus,
-		SourceKind:         action.SourceKind,
-		SourceRevision:     action.SourceRevision,
-		WillEnable:         action.WillEnable,
+		Kind:                action.Kind,
+		Action:              action.Action,
+		RiskLevel:           string(action.RiskLevel),
+		RiskReasons:         append([]string(nil), action.RiskReasons...),
+		Name:                action.Name,
+		Source:              redactApprovalText(action.Source),
+		Target:              action.Target,
+		ConfigPath:          action.ConfigPath,
+		Scope:               action.Scope,
+		Mode:                action.Mode,
+		Transport:           action.Transport,
+		URL:                 redactApprovalText(action.URL),
+		Command:             redactApprovalText(action.Command),
+		Args:                redactApprovalArgs(action.Args),
+		Env:                 redactApprovalMap(action.Env),
+		Headers:             redactApprovalMap(action.Headers),
+		Permissions:         append([]string(nil), action.Permissions...),
+		AddedPermissions:    append([]string(nil), action.AddedPermissions...),
+		RemovedPermissions:  append([]string(nil), action.RemovedPermissions...),
+		Version:             action.Version,
+		CurrentVersion:      action.CurrentVersion,
+		Digest:              action.Digest,
+		CurrentDigest:       action.CurrentDigest,
+		TrustStatus:         action.TrustStatus,
+		SourceKind:          action.SourceKind,
+		SourceRevision:      action.SourceRevision,
+		RegistryName:        action.RegistryName,
+		RegistryMetadataURL: action.RegistryMetadataURL,
+		RegistryRootVersion: action.RegistryRootVersion,
+		RegistryRootDigest:  action.RegistryRootDigest,
+		RegistryEntryDigest: action.RegistryEntryDigest,
+		ProvenanceStatus:    action.ProvenanceStatus,
+		AttestationDigest:   action.AttestationDigest,
+		WillEnable:          action.WillEnable,
 	}
 }
 
@@ -307,7 +328,7 @@ func redactApprovalText(value string) string {
 }
 
 func (*installSourceTool) Description() string {
-	return "Plan, install, uninstall, or roll back a Reames Agent skill, MCP server, or plugin package from a URL, local file/folder, .mcp.json, executable, or package name. Plugin install/update/rollback/uninstall operations return a deterministic plan with per-action risk and require the same planId when applied. op='uninstall' removes an installed item; op='rollback' restores a plugin's previous verified generation."
+	return "Plan, install, uninstall, or roll back a Reames Agent skill, MCP server, or plugin package from a URL, local file/folder, signed registry:<name>, .mcp.json, executable, or package name. Plugin install/update/rollback/uninstall operations return a deterministic plan with per-action risk and require the same planId when applied. op='uninstall' removes an installed item; op='rollback' restores a plugin's previous verified generation."
 }
 
 func (*installSourceTool) Schema() json.RawMessage {
@@ -315,7 +336,7 @@ func (*installSourceTool) Schema() json.RawMessage {
 "type":"object",
 "properties":{
 	  "op":{"type":"string","enum":["install","uninstall","rollback"],"description":"Whether to install (default), uninstall, or roll back a plugin to its previous verified generation."},
-	  "source":{"type":"string","description":"URL, local file/folder path, .mcp.json path, or package name to install from. Ignored for uninstall and rollback (use name instead)."},
+	  "source":{"type":"string","description":"URL, local file/folder path, signed registry:<name>, .mcp.json path, or package name to install from. Ignored for uninstall and rollback (use name instead)."},
   "kind":{"type":"string","enum":["auto","skill","mcp","plugin"],"description":"Capability kind. Defaults to auto."},
 	  "apply":{"type":"boolean","description":"false (default) returns a deterministic plan; true performs the plan and requires its matching planId for plugin install, update, rollback, and uninstall."},
   "scope":{"type":"string","enum":["project","global"],"description":"Where to persist config or copy skills. MCP installs default to global so every project can use them; project-root .mcp.json imports default to project; skills default to project when a workspace exists, otherwise global."},
@@ -610,29 +631,36 @@ func (t *installSourceTool) executeRollback(ctx context.Context, req request) (s
 	previous := installed.Previous
 	added, removed := permissionDiff(installed.Permissions, previous.Permissions)
 	act := action{
-		Kind:               "plugin",
-		Action:             "rollback_plugin_package",
-		Status:             "planned",
-		RiskLevel:          RiskMedium,
-		RiskReasons:        []string{"atomically switches the active plugin to its previous verified generation"},
-		Name:               installed.Name,
-		Target:             pluginpkg.ResolveRoot(t.reamesAgentHome, previous.Root),
-		Scope:              "global",
-		ConfigPath:         pluginpkg.StatePath(t.reamesAgentHome),
-		ManifestKind:       previous.ManifestKind,
-		Version:            previous.Version,
-		CurrentVersion:     installed.Version,
-		Digest:             previous.Digest,
-		CurrentDigest:      installed.Digest,
-		CurrentStateToken:  pluginpkg.InstalledStateToken(installed),
-		Permissions:        append([]string(nil), previous.Permissions...),
-		AddedPermissions:   added,
-		RemovedPermissions: removed,
-		SourceKind:         previous.SourceKind,
-		SourceRevision:     previous.SourceRevision,
-		TrustStatus:        previous.TrustStatus,
-		WillEnable:         previous.Enabled && permissionSetCovers(previous.GrantedPermissions, previous.Permissions),
-		RollbackAvailable:  true,
+		Kind:                "plugin",
+		Action:              "rollback_plugin_package",
+		Status:              "planned",
+		RiskLevel:           RiskMedium,
+		RiskReasons:         []string{"atomically switches the active plugin to its previous verified generation"},
+		Name:                installed.Name,
+		Target:              pluginpkg.ResolveRoot(t.reamesAgentHome, previous.Root),
+		Scope:               "global",
+		ConfigPath:          pluginpkg.StatePath(t.reamesAgentHome),
+		ManifestKind:        previous.ManifestKind,
+		Version:             previous.Version,
+		CurrentVersion:      installed.Version,
+		Digest:              previous.Digest,
+		CurrentDigest:       installed.Digest,
+		CurrentStateToken:   pluginpkg.InstalledStateToken(installed),
+		Permissions:         append([]string(nil), previous.Permissions...),
+		AddedPermissions:    added,
+		RemovedPermissions:  removed,
+		SourceKind:          previous.SourceKind,
+		SourceRevision:      previous.SourceRevision,
+		TrustStatus:         previous.TrustStatus,
+		RegistryName:        previous.RegistryName,
+		RegistryMetadataURL: previous.RegistryMetadataURL,
+		RegistryRootVersion: previous.RegistryRootVersion,
+		RegistryRootDigest:  previous.RegistryRootDigest,
+		RegistryEntryDigest: previous.RegistryEntryDigest,
+		ProvenanceStatus:    previous.ProvenanceStatus,
+		AttestationDigest:   previous.AttestationDigest,
+		WillEnable:          previous.Enabled && permissionSetCovers(previous.GrantedPermissions, previous.Permissions),
+		RollbackAvailable:   true,
 	}
 	if len(added) > 0 {
 		act.RiskLevel = RiskHigh
@@ -753,18 +781,25 @@ func (t *installSourceTool) uninstallActionsForScope(name, scope, kind string) [
 				}
 				root := pluginpkg.ResolveRoot(t.reamesAgentHome, p.Root)
 				actions = append(actions, action{
-					Kind:              "plugin",
-					Action:            "remove_plugin_package",
-					Name:              p.Name,
-					Target:            root,
-					Scope:             "global",
-					ConfigPath:        pluginpkg.StatePath(t.reamesAgentHome),
-					ManifestKind:      p.ManifestKind,
-					Version:           p.Version,
-					Digest:            p.Digest,
-					Permissions:       append([]string(nil), p.Permissions...),
-					CurrentStateToken: pluginpkg.InstalledStateToken(p),
-					RiskLevel:         RiskMedium,
+					Kind:                "plugin",
+					Action:              "remove_plugin_package",
+					Name:                p.Name,
+					Target:              root,
+					Scope:               "global",
+					ConfigPath:          pluginpkg.StatePath(t.reamesAgentHome),
+					ManifestKind:        p.ManifestKind,
+					Version:             p.Version,
+					Digest:              p.Digest,
+					Permissions:         append([]string(nil), p.Permissions...),
+					RegistryName:        p.RegistryName,
+					RegistryMetadataURL: p.RegistryMetadataURL,
+					RegistryRootVersion: p.RegistryRootVersion,
+					RegistryRootDigest:  p.RegistryRootDigest,
+					RegistryEntryDigest: p.RegistryEntryDigest,
+					ProvenanceStatus:    p.ProvenanceStatus,
+					AttestationDigest:   p.AttestationDigest,
+					CurrentStateToken:   pluginpkg.InstalledStateToken(p),
+					RiskLevel:           RiskMedium,
 					RiskReasons: []string{
 						"removes a plugin package and disables its skills, hooks, and MCP servers",
 					},

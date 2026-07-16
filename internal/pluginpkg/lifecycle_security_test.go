@@ -466,6 +466,9 @@ func TestLoadStateRejectsDuplicateAndInvalidNames(t *testing.T) {
 	for _, body := range []string{
 		`{"version":2,"plugins":[{"name":"../escape","root":"x","enabled":false}]}`,
 		`{"version":2,"plugins":[{"name":"same","root":"a","enabled":false},{"name":"same","root":"b","enabled":false}]}`,
+		`{"version":2,"plugins":[{"name":"Foo","root":"a","enabled":false},{"name":"foo","root":"b","enabled":false}]}`,
+		`{"version":2,"plugins":[{"name":"foo.","root":"a","enabled":false}]}`,
+		`{"version":2,"plugins":[{"name":"CON","root":"a","enabled":false}]}`,
 	} {
 		home := t.TempDir()
 		if err := os.WriteFile(StatePath(home), []byte(body), 0o600); err != nil {
@@ -474,6 +477,33 @@ func TestLoadStateRejectsDuplicateAndInvalidNames(t *testing.T) {
 		if _, err := LoadState(home); err == nil {
 			t.Fatalf("LoadState accepted invalid state: %s", body)
 		}
+	}
+}
+
+func TestPortablePluginNamesRejectFilesystemAliases(t *testing.T) {
+	fooKey, err := CanonicalNameKey("Foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key, err := CanonicalNameKey("foo"); err != nil || key != fooKey {
+		t.Fatalf("canonical foo key = %q, err = %v; want %q", key, err, fooKey)
+	}
+	for _, name := range []string{"foo.", "CON", "con.txt", "PRN", "AUX.log", "NUL", "COM1", "com9.txt", "LPT1", "lpt9.data"} {
+		if IsValidName(name) {
+			t.Errorf("non-portable plugin name %q accepted", name)
+		}
+	}
+}
+
+func TestLifecycleRejectsCaseAliasBeforeMaterializing(t *testing.T) {
+	home := t.TempDir()
+	source := newNativePluginFixture(t, "Foo", "1.0.0", []string{PermissionSkillsLoad})
+	installFixture(t, home, source, "Foo", false)
+
+	missing := filepath.Join(t.TempDir(), "missing-source")
+	_, err := Install(home, InstallRequest{Name: "foo", Source: missing, SourceRoot: missing, Replace: true})
+	if err == nil || !strings.Contains(err.Error(), "case-insensitive filesystems") {
+		t.Fatalf("case-alias install err = %v, want pre-materialization conflict", err)
 	}
 }
 

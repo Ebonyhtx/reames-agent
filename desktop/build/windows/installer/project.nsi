@@ -182,6 +182,14 @@ Section
     !warning "${REAMES_AGENT_UPDATE_HELPER} was not found; Windows auto-update will fall back to installer-side waiting only."
     !endif
 
+    SetOutPath "$INSTDIR\licenses"
+    File "/oname=LICENSE" "..\..\..\..\LICENSE"
+    File "/oname=NOTICE.md" "..\..\..\..\NOTICE.md"
+    SetOutPath "$INSTDIR\licenses\go-tuf"
+    File "/oname=LICENSE" "..\..\..\..\third_party\go-tuf\LICENSE"
+    File "/oname=NOTICE" "..\..\..\..\third_party\go-tuf\NOTICE"
+    SetOutPath "$INSTDIR"
+
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
@@ -199,6 +207,7 @@ Section "uninstall"
     ; Precision uninstall: delete main application files
     Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
     Delete "$INSTDIR\${REAMES_AGENT_UPDATE_HELPER}"
+	RMDir /r "$INSTDIR\licenses"
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"

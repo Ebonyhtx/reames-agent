@@ -30,6 +30,8 @@ def check_required_files(failures: list[str]) -> None:
         "README.md",
         "LICENSE",
         "NOTICE.md",
+        "third_party/go-tuf/LICENSE",
+        "third_party/go-tuf/NOTICE",
         "SECURITY.md",
         "CONTRIBUTING.md",
         "AGENTS.md",
@@ -79,6 +81,12 @@ def check_ownership_and_license(failures: list[str]) -> None:
     notice = read("NOTICE.md")
     require("DeepSeek Reasonix" in notice, "NOTICE.md must attribute DeepSeek Reasonix.", failures)
     require("https://github.com/esengine/DeepSeek-Reasonix" in notice, "NOTICE.md must link the upstream repository.", failures)
+    require("The Update Framework Authors" in notice, "NOTICE.md must preserve go-tuf attribution.", failures)
+    require("third_party/go-tuf/LICENSE" in notice and "third_party/go-tuf/NOTICE" in notice, "NOTICE.md must point to preserved go-tuf legal files.", failures)
+    go_tuf_license = read("third_party/go-tuf/LICENSE")
+    go_tuf_notice = read("third_party/go-tuf/NOTICE")
+    require("Apache License" in go_tuf_license and "Version 2.0" in go_tuf_license, "go-tuf Apache-2.0 license text must be preserved.", failures)
+    require("Copyright 2024 The Update Framework Authors" in go_tuf_notice, "go-tuf NOTICE attribution must be preserved.", failures)
 
 
 def check_release_and_deploy_controls(failures: list[str]) -> None:

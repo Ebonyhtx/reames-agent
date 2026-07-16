@@ -4,40 +4,51 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
+	"time"
 
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
 	"reames-agent/internal/installsource"
+	"reames-agent/internal/netclient"
 	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/pluginregistry"
 )
 
 type PluginView struct {
-	Name               string                `json:"name"`
-	Version            string                `json:"version,omitempty"`
-	Description        string                `json:"description,omitempty"`
-	Source             string                `json:"source,omitempty"`
-	Root               string                `json:"root"`
-	ManifestKind       string                `json:"manifestKind,omitempty"`
-	ManifestSchema     int                   `json:"manifestSchema,omitempty"`
-	InstallMode        string                `json:"installMode,omitempty"`
-	SourceKind         string                `json:"sourceKind,omitempty"`
-	SourceRevision     string                `json:"sourceRevision,omitempty"`
-	TrustStatus        string                `json:"trustStatus,omitempty"`
-	Digest             string                `json:"digest,omitempty"`
-	Permissions        []string              `json:"permissions,omitempty"`
-	GrantedPermissions []string              `json:"grantedPermissions,omitempty"`
-	LifecycleSecurity  int                   `json:"lifecycleSecurity,omitempty"`
-	Rollback           *PluginRollbackView   `json:"rollback,omitempty"`
-	Enabled            bool                  `json:"enabled"`
-	Skills             int                   `json:"skills"`
-	Hooks              int                   `json:"hooks"`
-	MCPServers         int                   `json:"mcpServers"`
-	SkillDetails       []PluginSkillView     `json:"skillDetails,omitempty"`
-	HookDetails        []PluginHookView      `json:"hookDetails,omitempty"`
-	MCPServerDetails   []PluginMCPServerView `json:"mcpServerDetails,omitempty"`
-	Warnings           []string              `json:"warnings,omitempty"`
-	Error              string                `json:"error,omitempty"`
+	Name                string                `json:"name"`
+	Version             string                `json:"version,omitempty"`
+	Description         string                `json:"description,omitempty"`
+	Source              string                `json:"source,omitempty"`
+	Root                string                `json:"root"`
+	ManifestKind        string                `json:"manifestKind,omitempty"`
+	ManifestSchema      int                   `json:"manifestSchema,omitempty"`
+	InstallMode         string                `json:"installMode,omitempty"`
+	SourceKind          string                `json:"sourceKind,omitempty"`
+	SourceRevision      string                `json:"sourceRevision,omitempty"`
+	TrustStatus         string                `json:"trustStatus,omitempty"`
+	RegistryName        string                `json:"registryName,omitempty"`
+	RegistryMetadataURL string                `json:"registryMetadataUrl,omitempty"`
+	RegistryRootVersion int64                 `json:"registryRootVersion,omitempty"`
+	RegistryRootDigest  string                `json:"registryRootDigest,omitempty"`
+	RegistryEntryDigest string                `json:"registryEntryDigest,omitempty"`
+	ProvenanceStatus    string                `json:"provenanceStatus,omitempty"`
+	AttestationDigest   string                `json:"attestationDigest,omitempty"`
+	Digest              string                `json:"digest,omitempty"`
+	Permissions         []string              `json:"permissions,omitempty"`
+	GrantedPermissions  []string              `json:"grantedPermissions,omitempty"`
+	LifecycleSecurity   int                   `json:"lifecycleSecurity,omitempty"`
+	Rollback            *PluginRollbackView   `json:"rollback,omitempty"`
+	Enabled             bool                  `json:"enabled"`
+	Skills              int                   `json:"skills"`
+	Hooks               int                   `json:"hooks"`
+	MCPServers          int                   `json:"mcpServers"`
+	SkillDetails        []PluginSkillView     `json:"skillDetails,omitempty"`
+	HookDetails         []PluginHookView      `json:"hookDetails,omitempty"`
+	MCPServerDetails    []PluginMCPServerView `json:"mcpServerDetails,omitempty"`
+	Warnings            []string              `json:"warnings,omitempty"`
+	Error               string                `json:"error,omitempty"`
 }
 
 type PluginInstallOptions struct {
@@ -48,13 +59,34 @@ type PluginInstallOptions struct {
 	PlanID  string `json:"planId,omitempty"`
 }
 
+type PluginRegistryEntryView struct {
+	Name                string   `json:"name"`
+	Description         string   `json:"description,omitempty"`
+	Version             string   `json:"version"`
+	Author              string   `json:"author,omitempty"`
+	Category            string   `json:"category,omitempty"`
+	Source              string   `json:"source"`
+	Subpath             string   `json:"subpath,omitempty"`
+	Revision            string   `json:"revision"`
+	Digest              string   `json:"digest"`
+	Permissions         []string `json:"permissions"`
+	RegistryName        string   `json:"registryName"`
+	RegistryMetadataURL string   `json:"registryMetadataUrl"`
+	RegistryRootVersion int64    `json:"registryRootVersion"`
+	RegistryRootDigest  string   `json:"registryRootDigest"`
+	RegistryEntryDigest string   `json:"registryEntryDigest"`
+	ProvenanceStatus    string   `json:"provenanceStatus"`
+	AttestationDigest   string   `json:"attestationDigest,omitempty"`
+}
+
 type PluginRollbackView struct {
-	Version            string   `json:"version,omitempty"`
-	Digest             string   `json:"digest,omitempty"`
-	TrustStatus        string   `json:"trustStatus,omitempty"`
-	Permissions        []string `json:"permissions,omitempty"`
-	GrantedPermissions []string `json:"grantedPermissions,omitempty"`
-	Enabled            bool     `json:"enabled"`
+	Version             string   `json:"version,omitempty"`
+	Digest              string   `json:"digest,omitempty"`
+	TrustStatus         string   `json:"trustStatus,omitempty"`
+	RegistryEntryDigest string   `json:"registryEntryDigest,omitempty"`
+	Permissions         []string `json:"permissions,omitempty"`
+	GrantedPermissions  []string `json:"grantedPermissions,omitempty"`
+	Enabled             bool     `json:"enabled"`
 }
 
 type PluginOperationKinds struct {
@@ -64,33 +96,40 @@ type PluginOperationKinds struct {
 }
 
 type PluginOperationAction struct {
-	Kind               string   `json:"kind,omitempty"`
-	Action             string   `json:"action,omitempty"`
-	Status             string   `json:"status,omitempty"`
-	RiskLevel          string   `json:"riskLevel,omitempty"`
-	RiskReasons        []string `json:"riskReasons,omitempty"`
-	Name               string   `json:"name,omitempty"`
-	Source             string   `json:"source,omitempty"`
-	Target             string   `json:"target,omitempty"`
-	Scope              string   `json:"scope,omitempty"`
-	Mode               string   `json:"mode,omitempty"`
-	ManifestKind       string   `json:"manifestKind,omitempty"`
-	Version            string   `json:"version,omitempty"`
-	CurrentVersion     string   `json:"currentVersion,omitempty"`
-	Digest             string   `json:"digest,omitempty"`
-	CurrentDigest      string   `json:"currentDigest,omitempty"`
-	Permissions        []string `json:"permissions,omitempty"`
-	AddedPermissions   []string `json:"addedPermissions,omitempty"`
-	RemovedPermissions []string `json:"removedPermissions,omitempty"`
-	PermissionSource   string   `json:"permissionSource,omitempty"`
-	SourceKind         string   `json:"sourceKind,omitempty"`
-	SourceRevision     string   `json:"sourceRevision,omitempty"`
-	TrustStatus        string   `json:"trustStatus,omitempty"`
-	WillEnable         bool     `json:"willEnable"`
-	RollbackAvailable  bool     `json:"rollbackAvailable"`
-	Warnings           []string `json:"warnings,omitempty"`
-	Error              string   `json:"error,omitempty"`
-	Next               string   `json:"next,omitempty"`
+	Kind                string   `json:"kind,omitempty"`
+	Action              string   `json:"action,omitempty"`
+	Status              string   `json:"status,omitempty"`
+	RiskLevel           string   `json:"riskLevel,omitempty"`
+	RiskReasons         []string `json:"riskReasons,omitempty"`
+	Name                string   `json:"name,omitempty"`
+	Source              string   `json:"source,omitempty"`
+	Target              string   `json:"target,omitempty"`
+	Scope               string   `json:"scope,omitempty"`
+	Mode                string   `json:"mode,omitempty"`
+	ManifestKind        string   `json:"manifestKind,omitempty"`
+	Version             string   `json:"version,omitempty"`
+	CurrentVersion      string   `json:"currentVersion,omitempty"`
+	Digest              string   `json:"digest,omitempty"`
+	CurrentDigest       string   `json:"currentDigest,omitempty"`
+	Permissions         []string `json:"permissions,omitempty"`
+	AddedPermissions    []string `json:"addedPermissions,omitempty"`
+	RemovedPermissions  []string `json:"removedPermissions,omitempty"`
+	PermissionSource    string   `json:"permissionSource,omitempty"`
+	SourceKind          string   `json:"sourceKind,omitempty"`
+	SourceRevision      string   `json:"sourceRevision,omitempty"`
+	RegistryName        string   `json:"registryName,omitempty"`
+	RegistryMetadataURL string   `json:"registryMetadataUrl,omitempty"`
+	RegistryRootVersion int64    `json:"registryRootVersion,omitempty"`
+	RegistryRootDigest  string   `json:"registryRootDigest,omitempty"`
+	RegistryEntryDigest string   `json:"registryEntryDigest,omitempty"`
+	ProvenanceStatus    string   `json:"provenanceStatus,omitempty"`
+	AttestationDigest   string   `json:"attestationDigest,omitempty"`
+	TrustStatus         string   `json:"trustStatus,omitempty"`
+	WillEnable          bool     `json:"willEnable"`
+	RollbackAvailable   bool     `json:"rollbackAvailable"`
+	Warnings            []string `json:"warnings,omitempty"`
+	Error               string   `json:"error,omitempty"`
+	Next                string   `json:"next,omitempty"`
 }
 
 type PluginOperationView struct {
@@ -155,33 +194,96 @@ func (a *App) Plugins() []PluginView {
 	return out
 }
 
+// SearchPluginRegistry returns only entries authenticated by the configured
+// user-global TUF root. An unconfigured registry is an explicit error rather
+// than a fallback to an unsigned marketplace document.
+func (a *App) SearchPluginRegistry(query string) ([]PluginRegistryEntryView, error) {
+	_, client, err := desktopPluginRegistryDependencies(a.pluginRegistryWorkspaceRoot())
+	if err != nil {
+		return nil, err
+	}
+	index, err := client.Refresh(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	entries := pluginregistry.Search(index, query)
+	out := make([]PluginRegistryEntryView, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, pluginRegistryEntryView(entry))
+	}
+	return out, nil
+}
+
+// PluginRegistryEntry resolves one entry and verifies its optional attestation
+// target before the Desktop offers it for installation.
+func (a *App) PluginRegistryEntry(name string) (PluginRegistryEntryView, error) {
+	_, client, err := desktopPluginRegistryDependencies(a.pluginRegistryWorkspaceRoot())
+	if err != nil {
+		return PluginRegistryEntryView{}, err
+	}
+	entry, err := client.Resolve(context.Background(), name)
+	if err != nil {
+		return PluginRegistryEntryView{}, err
+	}
+	return pluginRegistryEntryView(entry), nil
+}
+
+func (a *App) pluginRegistryWorkspaceRoot() string {
+	if tab := a.activeTab(); tab != nil {
+		a.reconcileTabWithPinnedSessionMeta(tab)
+		if root := strings.TrimSpace(tab.WorkspaceRoot); root != "" {
+			return root
+		}
+	}
+	return "."
+}
+
+func pluginRegistryEntryView(entry pluginregistry.Entry) PluginRegistryEntryView {
+	return PluginRegistryEntryView{
+		Name: entry.Name, Description: entry.Description, Version: entry.Version, Author: entry.Author,
+		Category: entry.Category, Source: entry.Source, Subpath: entry.Subpath, Revision: entry.Revision,
+		Digest: entry.Digest, Permissions: append([]string(nil), entry.Permissions...), RegistryName: entry.RegistryName,
+		RegistryMetadataURL: entry.RegistryMetadataURL, RegistryRootVersion: entry.RootVersion,
+		RegistryRootDigest: entry.BootstrapRootSHA256, ProvenanceStatus: entry.ProvenanceStatus,
+		RegistryEntryDigest: entry.ReleaseEvidenceSHA256, AttestationDigest: entry.AttestationSHA256,
+	}
+}
+
 func pluginViewFromInstalled(home string, installed pluginpkg.InstalledPlugin) PluginView {
 	view := PluginView{
-		Name:               installed.Name,
-		Version:            installed.Version,
-		Description:        installed.Description,
-		Source:             installed.Source,
-		Root:               pluginpkg.ResolveRoot(home, installed.Root),
-		ManifestKind:       installed.ManifestKind,
-		ManifestSchema:     installed.ManifestSchema,
-		InstallMode:        installed.InstallMode,
-		SourceKind:         installed.SourceKind,
-		SourceRevision:     installed.SourceRevision,
-		TrustStatus:        installed.TrustStatus,
-		Digest:             installed.Digest,
-		Permissions:        append([]string(nil), installed.Permissions...),
-		GrantedPermissions: append([]string(nil), installed.GrantedPermissions...),
-		LifecycleSecurity:  installed.LifecycleSecurity,
-		Enabled:            installed.Enabled,
+		Name:                installed.Name,
+		Version:             installed.Version,
+		Description:         installed.Description,
+		Source:              installed.Source,
+		Root:                pluginpkg.ResolveRoot(home, installed.Root),
+		ManifestKind:        installed.ManifestKind,
+		ManifestSchema:      installed.ManifestSchema,
+		InstallMode:         installed.InstallMode,
+		SourceKind:          installed.SourceKind,
+		SourceRevision:      installed.SourceRevision,
+		TrustStatus:         installed.TrustStatus,
+		RegistryName:        installed.RegistryName,
+		RegistryMetadataURL: installed.RegistryMetadataURL,
+		RegistryRootVersion: installed.RegistryRootVersion,
+		RegistryRootDigest:  installed.RegistryRootDigest,
+		RegistryEntryDigest: installed.RegistryEntryDigest,
+		ProvenanceStatus:    installed.ProvenanceStatus,
+		AttestationDigest:   installed.AttestationDigest,
+		Digest:              installed.Digest,
+		Permissions:         append([]string(nil), installed.Permissions...),
+		GrantedPermissions:  append([]string(nil), installed.GrantedPermissions...),
+		LifecycleSecurity:   installed.LifecycleSecurity,
+		Enabled:             installed.Enabled,
 	}
 	if installed.Previous != nil {
 		view.Rollback = &PluginRollbackView{
-			Version:            installed.Previous.Version,
-			Digest:             installed.Previous.Digest,
-			TrustStatus:        installed.Previous.TrustStatus,
-			Permissions:        append([]string(nil), installed.Previous.Permissions...),
-			GrantedPermissions: append([]string(nil), installed.Previous.GrantedPermissions...),
-			Enabled:            installed.Previous.Enabled,
+			Version:             installed.Previous.Version,
+			Digest:              installed.Previous.Digest,
+			TrustStatus:         installed.Previous.TrustStatus,
+			RegistryEntryDigest: installed.Previous.RegistryEntryDigest,
+			Permissions:         append([]string(nil), installed.Previous.Permissions...),
+			GrantedPermissions:  append([]string(nil), installed.Previous.GrantedPermissions...),
+			Enabled:             installed.Previous.Enabled,
 		}
 	}
 	return view
@@ -383,8 +485,9 @@ func (a *App) executePluginOperation(body map[string]any) (PluginOperationView, 
 			workspaceRoot = tab.WorkspaceRoot
 		}
 	}
+	httpClient, registryClient, registryErr := desktopPluginRegistryDependencies(workspaceRoot)
 	tl := installsource.NewTool(installsource.Options{
-		ProjectRoot: workspaceRoot,
+		ProjectRoot: workspaceRoot, HTTPClient: httpClient, PluginRegistry: registryClient, PluginRegistryError: registryErr,
 		OnDisconnect: func(serverName string) bool {
 			if tab == nil || tab.Ctrl == nil {
 				return false
@@ -407,6 +510,21 @@ func (a *App) executePluginOperation(body map[string]any) (PluginOperationView, 
 		return PluginOperationView{}, err
 	}
 	return decodePluginOperation(out)
+}
+
+func desktopPluginRegistryDependencies(workspaceRoot string) (*http.Client, *pluginregistry.Client, error) {
+	cfg, err := config.LoadForRoot(workspaceRoot)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load plugin registry configuration: %w", err)
+	}
+	httpClient, err := netclient.NewHTTPClient(cfg.NetworkProxySpec(), netclient.TransportOptions{
+		DialTimeout: 15 * time.Second, TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 20 * time.Second,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("configure plugin registry network client: %w", err)
+	}
+	registryClient, err := pluginregistry.NewConfigured(cfg, httpClient)
+	return httpClient, registryClient, err
 }
 
 func (a *App) ensurePluginRuntimeMutationAllowed() error {

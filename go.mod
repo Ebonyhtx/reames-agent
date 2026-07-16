@@ -2,7 +2,7 @@ module reames-agent
 
 go 1.25.0
 
-toolchain go1.26.4
+toolchain go1.26.5
 
 require (
 	charm.land/bubbles/v2 v2.1.0
@@ -21,6 +21,8 @@ require (
 	github.com/mattn/go-runewidth v0.0.24
 	github.com/rivo/uniseg v0.4.7
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
+	github.com/sigstore/sigstore v1.10.6
+	github.com/theupdateframework/go-tuf/v2 v2.4.2
 	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/tree-sitter/tree-sitter-javascript v0.25.0
 	github.com/tree-sitter/tree-sitter-python v0.25.0
@@ -41,6 +43,7 @@ require (
 )
 
 require (
+	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260601155805-6cf7526a1b3f // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
@@ -53,9 +56,15 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/google/go-containerregistry v0.20.7 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
+	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/secure-systems-lab/go-securesystemslib v0.11.0 // indirect
+	github.com/sigstore/protobuf-specs v0.5.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.21.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250825161204-c5933d9347a5 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )

@@ -45,6 +45,7 @@ import type {
   NetworkView,
   PluginInstallOptions,
   PluginOperationView,
+  PluginRegistryEntryView,
   PluginView,
   ProjectNode,
   PromptHistoryResult,
@@ -192,6 +193,8 @@ export interface AppBindings {
   MCPServers(): Promise<ServerView[]>;
   SkillsSettings(): Promise<SkillsSettingsView>;
   Plugins(): Promise<PluginView[]>;
+  SearchPluginRegistry(query: string): Promise<PluginRegistryEntryView[]>;
+  PluginRegistryEntry(name: string): Promise<PluginRegistryEntryView>;
   PlanPluginInstall(source: string, options: PluginInstallOptions): Promise<PluginOperationView>;
   InstallPlugin(source: string, options: PluginInstallOptions): Promise<PluginOperationView>;
   PlanPluginRemove(name: string): Promise<PluginOperationView>;

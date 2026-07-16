@@ -10730,7 +10730,7 @@ body > .mermaid-diagram--fullscreen {
   flex: 0 0 auto;
 }
 .cap-plugin-installer {
-  --cap-plugin-side: minmax(240px, 280px);
+  --cap-plugin-side: minmax(280px, 340px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -10801,6 +10801,22 @@ body > .mermaid-diagram--fullscreen {
 .cap-plugin-field .mem-input,
 .cap-plugin-fields > .mem-input {
   width: 100%;
+}
+.cap-plugin-fields--registry {
+  align-items: center;
+}
+.cap-plugin-registry-search {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.cap-plugin-registry-evidence {
+  grid-column: 1 / -1;
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.4;
 }
 .cap-plugin-path {
   min-height: 34px;

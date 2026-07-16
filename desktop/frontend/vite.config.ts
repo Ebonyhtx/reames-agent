@@ -80,7 +80,9 @@ function keepDistPlaceholder(): Plugin {
     closeBundle: async () => {
       const distDir = resolve(configDir, "dist");
       await mkdir(distDir, { recursive: true });
-      await writeFile(resolve(distDir, ".gitkeep"), "\n");
+      // Keep this byte-empty so checkout line-ending conversion cannot make a
+      // successful Windows build look like it modified a tracked file.
+      await writeFile(resolve(distDir, ".gitkeep"), "");
     },
   };
 }
