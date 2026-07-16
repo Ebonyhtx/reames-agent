@@ -46,7 +46,14 @@ reames-agent plugin registry refresh
 reames-agent plugin registry search [query]
 reames-agent plugin registry show <plugin-name>
 reames-agent plugin registry digest <checkout> [subpath]
+reames-agent plugin registry audit <repository> --root <root.json> [--at <RFC3339>]
 ```
+
+The read-only `audit` command is for registry operators and does not require a
+configured endpoint. Its root must come from an independent channel; the JSON
+report verifies production metadata policy while retaining an explicit list of
+external ceremony, custody, endpoint, monitoring, and DSSE/SLSA evidence still
+required. See the operations runbook below.
 
 Plugin names use a portable ASCII namespace. Names that differ only by ASCII
 case are aliases and cannot coexist; trailing dots and Windows device names

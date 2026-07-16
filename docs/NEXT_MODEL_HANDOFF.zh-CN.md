@@ -33,12 +33,14 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 ## 当前基线
 
 - M0、M1、M2、M3、M4 已按各自路线图门槛关闭；进入当前本地批次前的已验证远端基线为
-  `f303ebf feat: isolate installed plugin processes`，普通 CI 8/8、CodeQL 3/3 全绿；最近
+  `13016c6 feat: add authenticated plugin registry`，普通 CI `29487948296` 8/8、CodeQL
+  `29487948316` 3/3 全绿；最近
   完整 Desktop candidate `29378899444` 仍是三平台全绿。当前提交和远端状态必须以
   `git log`、`git status` 和 GitHub Actions 为准。
 - M5 进行中。已收口 plugin manifest、内容身份、权限授权、两阶段生命周期、Desktop
   自动化审批、旧 generation 运行时撤销、package-owned Hook/MCP 进程隔离与一条真实固定
-  revision 第三方 E2E，以及无默认 endpoint/TOFU 的 TUF registry 客户端；真实 Chromium、
+  revision 第三方 E2E，以及无默认 endpoint/TOFU 的 TUF registry 客户端与只读生产策略
+  运维审计；真实 Chromium、
   源码 production Wails 与已安装 Windows candidate 均已有分层证据。仍未关闭真实运营
   registry、生产密钥仪式/实际轮换/compromise drill、DSSE/SLSA policy verifier 与公开
   发布信任链。
@@ -83,9 +85,13 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
   DSSE signer identity、builder、predicate policy、transparency 或 SLSA level 已验证。
 - `registry:<name>` 的 preview/apply 都重新 refresh、隔离 ambient Git 配置后精确 checkout full
   commit、核对 manifest name/version/permissions，并从 raw Git blobs 重算 canonical source digest；
-  本地 generation 另算 `sha256-tree-v1`。CLI 提供 registry refresh/search/show/digest，Desktop
+  本地 generation 另算 `sha256-tree-v1`。CLI 提供 registry refresh/search/show/digest/audit，Desktop
   提供认证搜索、release 选择和 root/entry/provenance evidence 展示；未配置时只让 registry
   路径 fail closed。
+- `plugin registry audit` 必须显式接收带外 root，不读取用户 registry 配置或私钥；它验证
+  连续 root 的旧/新双阈值、四角色独立 canonical key、root/targets 2-of-3、到期窗口、
+  完整 metadata/index/attestation 字节。成功 JSON 仍列出人员 quorum、HSM、endpoint/monitor
+  和 DSSE/SLSA policy 等 `externalRequired`，合成密钥轮换不冒充生产仪式。
 
 ### 两阶段生命周期与恢复
 
@@ -192,10 +198,14 @@ Node upstream reconciliation、实际 upstream scan，以及六目标 `CGO_ENABL
 pluginpkg/control/eventwire race，Desktop build/vet/full test，前端 `test:all`/production
 build/bundle budget，文档/公开/部署/发布/工具合同，119 项 Python 合同（2 skipped）、
 Node upstream reconciliation、真实 Chrome smoke、六目标 CLI 与 Linux/macOS registry/
-installsource 测试二进制交叉编译。最终候选还在本地 clean clone 重跑 root、Desktop、前端
-和四组合同；该过程发现并关闭 Windows checkout 后 Vite 将 tracked `.gitkeep` 从 CRLF
-改成 LF 的伪修改，现以跨平台 0 字节占位文件保证构建后工作树干净。这些本地结果不替代
-集中 push 后的新远端 CI/CodeQL。
+installsource 测试二进制交叉编译。提交 `13016c6` 在第二个 clean clone 重跑 root、Desktop、
+前端和四组合同全绿，构建后 `git status`/`git diff-files` 均为空；该过程发现并关闭 Windows
+checkout 后 Vite 将 tracked `.gitkeep` 从 CRLF 改成 LF 的伪修改。一次集中 push 后，CI
+`29487948296` 的 8 个 jobs 与 CodeQL `29487948316` 的 3 个 jobs 全绿。当前未提交的下一批
+已增加只读生产策略 audit、合成轮换/泄露恢复演练，并把出现 Node.js 20 弃用告警的官方
+Actions 升级到 Node 24 majors。root/desktop/frontend 全量、121 项 Python 合同（2 skipped）、
+actionlint、pluginregistry/CLI race、六目标 CLI 与 Linux/macOS 两包八个测试二进制交叉编译
+均通过；远端状态仍须集中 push 后核验。不得混入受保护的三个用户路径。
 
 ## 未关闭边界
 
@@ -203,16 +213,15 @@ installsource 测试二进制交叉编译。最终候选还在本地 clean clone
   与 LSP 仍是高权限未自动隔离进程。
 - 真实运营 registry、生产 endpoint、离线 root/targets threshold ceremony、online role
   custody、实际密钥轮换/compromise drill、DSSE/SLSA policy verifier 和公开可信发布链。
-- 关闭 M5 时最新提交必须远端 CI/CodeQL 全绿。
+- 当前本地运维审计批次尚未 commit/push；关闭 M5 时最新提交仍必须远端 CI/CodeQL 全绿。
 - `bash`、MCP、外部 API 和后台 opaque side effect 仍无任意副作用 exactly-once。
 
 ## 下一执行顺序
 
-1. 本批最终候选干净 clone 通过后集中 push 一次；若已 push，不要为回填静态 run ID
-   重复推送。
-2. 守候最新 CI/CodeQL；若失败，从日志根因修复而不是重跑掩盖。
-3. 随后推进真实运营 registry 的外部密钥仪式、实际轮换/
+1. 完成并验收只读生产 registry audit、CLI、轮换/泄露恢复合成测试、双语 runbook 与审计；
+   与 CI Actions Node 20 弃用清洁等下一批工作合并后再集中 commit/push，不为单行路线图重复推送。
+2. 随后推进真实运营 registry 的外部密钥仪式、实际轮换/
    compromise drill 和可选 DSSE/SLSA policy verifier。
-4. 外部环境到位时并行关闭 M6 云节点/IM 和公开签名发布证据。
+3. 外部环境到位时并行关闭 M6 云节点/IM 和公开签名发布证据。
 
 长期 GOAL 尚未完成；M5 本批的本地合同不得扩大为插件生态或整个项目完成。

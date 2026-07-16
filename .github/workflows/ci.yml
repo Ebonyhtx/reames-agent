@@ -14,8 +14,8 @@ jobs:
       matrix:
         go-version: ['1.25']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go-version }}
       - name: Build
@@ -29,8 +29,8 @@ jobs:
     name: Desktop Go
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: desktop/go.mod
           cache-dependency-path: desktop/go.sum
@@ -42,11 +42,11 @@ jobs:
     name: Desktop frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 11
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -66,7 +66,7 @@ jobs:
           REAMES_PLUGIN_BROWSER_SMOKE_OUT: ${{ runner.temp }}/plugin-browser-smoke.json
           REAMES_PLUGIN_BROWSER_SMOKE_SCREENSHOT: ${{ runner.temp }}/plugin-browser-smoke.png
         run: pnpm smoke:plugin-browser
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: plugin-browser-smoke
@@ -80,11 +80,11 @@ jobs:
     name: Upstream watch contracts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Test report and decision logic
@@ -101,11 +101,11 @@ jobs:
     name: Deployment contracts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Validate server deployment contracts
@@ -125,7 +125,7 @@ jobs:
           python -m unittest scripts.test_installers.InstallerDryRunTests.test_powershell_release_dry_run_verifies_checksum -v
       - name: Smoke clean-node CLI, Gateway, and feedback operations
         run: python scripts/smoke_gateway_headless.py --out artifacts/headless-gateway-smoke.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: headless-gateway-smoke
@@ -136,8 +136,8 @@ jobs:
     name: Release contracts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Validate release safety contracts
@@ -156,8 +156,8 @@ jobs:
     name: Public readiness and docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Validate documentation contracts
@@ -169,8 +169,8 @@ jobs:
     name: Cross-compile
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25'
       - name: Cross-compile

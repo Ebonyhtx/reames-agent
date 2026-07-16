@@ -9,6 +9,7 @@ required after the repository is made public.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -117,6 +118,58 @@ def check_codeql_workflow(failures: list[str]) -> None:
     for language in ["go", "javascript-typescript", "actions"]:
         require(language in codeql, f"CodeQL workflow must analyze {language}.", failures)
     require("github/codeql-action/autobuild@v4" in codeql, "CodeQL workflow must autobuild compiled Go analysis.", failures)
+
+
+def check_workflow_action_runtimes(failures: list[str]) -> None:
+    """Reject action majors that still embed the retired Node.js 20 runtime."""
+    minimum_node24_major = {
+        "actions/checkout": 5,
+        "actions/setup-go": 6,
+        "actions/setup-python": 6,
+        "actions/setup-node": 6,
+        "actions/upload-artifact": 6,
+        "actions/github-script": 8,
+        "pnpm/action-setup": 6,
+    }
+    approved_node24_pins = {
+        "actions/checkout": {"9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"},
+        "actions/setup-go": {"b7ad1dad31e06c5925ef5d2fc7ad053ef454303e"},
+        "actions/setup-python": {"ece7cb06caefa5fff74198d8649806c4678c61a1"},
+        "actions/setup-node": {"820762786026740c76f36085b0efc47a31fe5020"},
+        "actions/upload-artifact": {"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"},
+        "actions/github-script": {"3a2844b7e9c422d3c10d287c895573f7108da1b3"},
+        "pnpm/action-setup": {"0ebf47130e4866e96fce0953f49152a61190b271"},
+    }
+    pattern = re.compile(
+        r"\buses:\s*['\"]?([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/[^@\s'\"]+)?@([^\s#'\"]+)"
+    )
+    workflow_root = ROOT / ".github" / "workflows"
+    paths = sorted([*workflow_root.glob("*.yml"), *workflow_root.glob("*.yaml")])
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        for action, ref in pattern.findall(text):
+            minimum = minimum_node24_major.get(action)
+            if minimum is None:
+                continue
+            if re.fullmatch(r"[0-9a-fA-F]{40}", ref):
+                require(
+                    ref.lower() in approved_node24_pins[action],
+                    f"{path.relative_to(ROOT).as_posix()} pins unaudited {action}@{ref}; add a verified Node 24 commit before using it.",
+                    failures,
+                )
+                continue
+            version = re.fullmatch(r"v(\d+)(?:\.\d+\.\d+)?", ref)
+            if version is None:
+                failures.append(
+                    f"{path.relative_to(ROOT).as_posix()} uses unsupported {action}@{ref}; use an audited Node 24 major or commit."
+                )
+                continue
+            major = int(version.group(1))
+            require(
+                major >= minimum,
+                f"{path.relative_to(ROOT).as_posix()} uses {action}@v{major}, below the Node 24 baseline v{minimum}.",
+                failures,
+            )
 
 
 def check_brand_env_regressions(failures: list[str]) -> None:
@@ -313,6 +366,7 @@ def main() -> int:
         check_ownership_and_license(failures)
         check_release_and_deploy_controls(failures)
         check_codeql_workflow(failures)
+        check_workflow_action_runtimes(failures)
         check_brand_env_regressions(failures)
         check_root_package_metadata(failures)
         check_tracked_artifacts(failures)

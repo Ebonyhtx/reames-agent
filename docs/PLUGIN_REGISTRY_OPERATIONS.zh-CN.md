@@ -28,6 +28,32 @@ root 必须启用 consistent snapshots。默认签名索引 target 是 `plugins.
 其他干净相对路径。metadata 与 targets 可使用不同 HTTPS origin，但每个请求都拒绝跨 origin
 重定向；明文 HTTP 只允许 loopback 测试。
 
+## 只读运维审计
+
+发布前，使用真正独立渠道取得的 bootstrap root 审计已经装配好的仓库：
+
+```text
+reames-agent plugin registry audit ./repository \
+  --root /offline/reames-registry-root.json \
+  --at 2026-07-16T10:00:00Z
+```
+
+`--root` 必填：解析后的路径必须位于待审计仓库外，也不能通过硬链接与 `repository/metadata`
+下任何文件共用同一物理对象。`--index <target>` 可选择非默认
+索引，`--at` 固定 UTC 参考时间以生成可复现的仪式记录。命令全程只读，不加载、创建或持久化
+任何私钥。
+
+JSON 报告验证 bootstrap 自签名、每一次连续 root 轮换的旧/新双阈值、四个顶层角色的独立
+canonical key、root/targets 至少 2-of-3、受限到期窗口、timestamp/snapshot/targets 链，
+以及 hash-prefixed index 和所有被引用 attestation target 的真实字节。报告同时写出排序后的
+public key IDs 与最终四份顶层 metadata SHA-256，使仪式记录能绑定被审计的精确字节。版本断层、角色复用
+密钥、弱阈值、重复 JSON key、路径逃逸、过旧/过长到期时间或字节不一致都会 fail closed。
+实际角色轮换或泄露恢复发布后，应从保留的旧 bootstrap root 再运行一次并保存报告。
+
+成功报告始终保留 `externalRequired`：本地审计不证明不同人员分别持钥、HSM 托管、HTTPS
+原子发布、在线 freshness 告警、有人见证的 compromise drill，也不证明 DSSE/SLSA identity
+或 predicate policy。报告必须和外部仪式记录一起保存，下游摘要不得删掉这些边界。
+
 ## 最低密钥策略
 
 四个顶层角色必须使用独立密钥。下面是部署基线，不替代组织自身的威胁分析：

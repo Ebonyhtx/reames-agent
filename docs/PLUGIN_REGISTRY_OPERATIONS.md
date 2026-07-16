@@ -30,6 +30,39 @@ index target; a user may configure another clean relative target path. Metadata
 and targets may use different HTTPS origins, but each request refuses a redirect
 to a different origin. Plain HTTP is accepted only on loopback for tests.
 
+## Read-only Operator Audit
+
+Before publication, audit an assembled repository with a bootstrap root obtained
+through a genuinely independent channel:
+
+```text
+reames-agent plugin registry audit ./repository \
+  --root /offline/reames-registry-root.json \
+  --at 2026-07-16T10:00:00Z
+```
+
+`--root` is mandatory: the resolved path must be outside the repository, and it
+cannot alias any file under `repository/metadata` through a hard link. `--index <target>` selects a non-default index; `--at` pins the UTC
+reference time for a reproducible ceremony record. The command is read-only and
+does not load, create, or persist private keys.
+
+The JSON report proves the bootstrap self-signature; every contiguous root
+rotation under both old and new thresholds; independent canonical keys for all
+top-level roles; a minimum 2-of-3 root and targets threshold; bounded expiry
+windows; the timestamp/snapshot/targets chain; and the hash-prefixed index plus
+every referenced attestation target. The report includes sorted public key IDs
+and SHA-256 digests for the final top-level metadata so ceremony records can
+bind the exact audited bytes. Any gap, key reuse, weak threshold,
+duplicate JSON key, path escape, stale/overlong expiry, or byte mismatch fails
+closed. Run it again from a retained bootstrap root after an actual role
+rotation or compromise-recovery publication.
+
+Successful output always contains `externalRequired`. A local report is not
+evidence of separate human key holders, HSM custody, atomic HTTPS publication,
+live freshness alerts, a witnessed compromise drill, or DSSE/SLSA identity and
+predicate policy. Preserve the report with the external ceremony record; do
+not remove those boundaries from downstream summaries.
+
 ## Minimum Key Policy
 
 Use independent keys for the four top-level roles. The following is a deployment

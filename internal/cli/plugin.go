@@ -67,7 +67,8 @@ func pluginUsage() {
 	  reames-agent plugin registry search [query]
 	  reames-agent plugin registry show <name>
 	  reames-agent plugin registry refresh
-	  reames-agent plugin registry digest <checkout> [subpath]`)
+	  reames-agent plugin registry digest <checkout> [subpath]
+	  reames-agent plugin registry audit <repository> --root <root.json> [--index <target>] [--at <RFC3339>]`)
 }
 
 func pluginInstallCommand(args []string) int {
@@ -318,7 +319,7 @@ func runInstallSourceJSON(body map[string]any) int {
 
 func pluginRegistryCommand(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: reames-agent plugin registry search [query] | show <name> | refresh | digest <checkout> [subpath]")
+		pluginRegistryUsage()
 		return 2
 	}
 	switch args[0] {
@@ -327,7 +328,7 @@ func pluginRegistryCommand(args []string) int {
 			fmt.Fprintln(os.Stderr, "plugin registry help accepts no arguments")
 			return 2
 		}
-		fmt.Fprintln(os.Stderr, "usage: reames-agent plugin registry search [query] | show <name> | refresh | digest <checkout> [subpath]")
+		pluginRegistryUsage()
 		return 0
 	case "search":
 		if len(args) > 2 {
@@ -349,6 +350,8 @@ func pluginRegistryCommand(args []string) int {
 			fmt.Fprintln(os.Stderr, "plugin registry digest requires a checkout and optional subpath")
 			return 2
 		}
+	case "audit":
+		return pluginRegistryAuditCommand(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown plugin registry command %q\n", args[0])
 		return 2
@@ -412,6 +415,120 @@ func pluginRegistryCommand(args []string) int {
 		return 0
 	}
 	return 2
+}
+
+func pluginRegistryUsage() {
+	fmt.Fprintln(os.Stderr, "usage: reames-agent plugin registry search [query] | show <name> | refresh | digest <checkout> [subpath] | audit <repository> --root <root.json> [--index <target>] [--at <RFC3339>]")
+}
+
+var auditPluginRegistry = pluginregistry.AuditRepository
+
+func pluginRegistryAuditCommand(args []string) int {
+	var repository, trustedRoot, indexTarget string
+	var referenceTime time.Time
+	var rootSet, indexSet, timeSet bool
+	for i := 0; i < len(args); i++ {
+		switch arg := args[i]; {
+		case arg == "--root":
+			if rootSet {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --root may be specified only once")
+				return 2
+			}
+			rootSet = true
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --root requires a value")
+				return 2
+			}
+			trustedRoot = args[i]
+		case strings.HasPrefix(arg, "--root="):
+			if rootSet {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --root may be specified only once")
+				return 2
+			}
+			rootSet = true
+			trustedRoot = strings.TrimPrefix(arg, "--root=")
+		case arg == "--index":
+			if indexSet {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --index may be specified only once")
+				return 2
+			}
+			indexSet = true
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --index requires a value")
+				return 2
+			}
+			indexTarget = args[i]
+		case strings.HasPrefix(arg, "--index="):
+			if indexSet {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --index may be specified only once")
+				return 2
+			}
+			indexSet = true
+			indexTarget = strings.TrimPrefix(arg, "--index=")
+		case arg == "--at":
+			if timeSet {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --at may be specified only once")
+				return 2
+			}
+			timeSet = true
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --at requires an RFC3339 value")
+				return 2
+			}
+			parsed, err := time.Parse(time.RFC3339, args[i])
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --at requires an RFC3339 value")
+				return 2
+			}
+			referenceTime = parsed
+		case strings.HasPrefix(arg, "--at="):
+			if timeSet {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --at may be specified only once")
+				return 2
+			}
+			timeSet = true
+			parsed, err := time.Parse(time.RFC3339, strings.TrimPrefix(arg, "--at="))
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "plugin registry audit --at requires an RFC3339 value")
+				return 2
+			}
+			referenceTime = parsed
+		case strings.HasPrefix(arg, "-"):
+			fmt.Fprintf(os.Stderr, "unknown plugin registry audit flag %q\n", arg)
+			return 2
+		default:
+			if repository != "" {
+				fmt.Fprintln(os.Stderr, "plugin registry audit requires exactly one repository directory")
+				return 2
+			}
+			repository = arg
+		}
+	}
+	if strings.TrimSpace(repository) == "" {
+		fmt.Fprintln(os.Stderr, "plugin registry audit requires exactly one repository directory")
+		return 2
+	}
+	if strings.TrimSpace(trustedRoot) == "" {
+		fmt.Fprintln(os.Stderr, "plugin registry audit requires --root from an out-of-band trusted source")
+		return 2
+	}
+	report, err := auditPluginRegistry(context.Background(), pluginregistry.AuditOptions{
+		RepositoryDir: repository, TrustedRootPath: trustedRoot, IndexTarget: indexTarget, ReferenceTime: referenceTime,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	body, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Println(string(body))
+	return 0
 }
 
 func pluginRegistryDependencies(strict bool) (*http.Client, *pluginregistry.Client, error) {

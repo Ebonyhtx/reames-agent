@@ -40,7 +40,12 @@ reames-agent plugin registry refresh
 reames-agent plugin registry search [查询词]
 reames-agent plugin registry show <插件名>
 reames-agent plugin registry digest <checkout> [subpath]
+reames-agent plugin registry audit <repository> --root <root.json> [--at <RFC3339>]
 ```
+
+只读 `audit` 命令面向 registry 运营者，不要求配置 endpoint。root 必须来自独立渠道；JSON
+报告验证生产 metadata 策略，同时明确保留仍需外部完成的密钥仪式、托管、endpoint、监控和
+DSSE/SLSA 证据。详见下方运维文档。
 
 插件名使用跨平台 ASCII 命名空间。仅 ASCII 大小写不同的名称视为同一别名，不能共存；
 尾点以及 `CON`、`AUX`、`COM1` 等 Windows 设备名（包括带扩展名的形式）会在物化任何

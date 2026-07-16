@@ -121,6 +121,7 @@
 | [M5 插件生命周期信任审计](audits/2026-07-14-m5-plugin-lifecycle-trust.md) | schema v1、内容寻址 generation、两阶段生命周期、Desktop 审批/原生交互与旧运行时撤销边界 |
 | [M5 插件进程隔离与真实第三方 E2E 审计](audits/2026-07-15-m5-plugin-process-isolation.md) | package-owned Hook/MCP 最小环境、隔离后 child env、严格 OS sandbox、运行中撤销、真实 superpowers 固定 revision Windows E2E 与剩余边界 |
 | [M5 TUF 插件 Registry 信任链审计](audits/2026-07-16-m5-tuf-plugin-registry.md) | 带外 root、项目抗覆盖配置、TUF 轮换/回滚/冻结、签名 entry/apply 绑定、生命周期证据和运营边界 |
+| [M5 Registry 运维审计与轮换演练](audits/2026-07-16-m5-registry-operations-audit.md) | 只读生产策略审计、2-of-3 角色隔离、连续双阈值 root、完整 target 字节与 external-required 边界 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 
