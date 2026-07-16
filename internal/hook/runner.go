@@ -14,17 +14,23 @@ import (
 // (prompt/stop events) fire hooks through, so neither has to know how hooks load
 // or run. A nil *Runner is a valid no-op (no hooks configured).
 type Runner struct {
-	mu      sync.RWMutex
-	hooks   []ResolvedHook
-	cwd     string
-	spawner Spawner
-	notify  func(string) // surface a non-blocking (warn/error) hook message; may be nil
+	mu         sync.RWMutex
+	hooks      []ResolvedHook
+	cwd        string
+	spawner    Spawner
+	notify     func(string) // surface a non-blocking (warn/error) hook message; may be nil
+	active     map[string]map[uint64]context.CancelFunc
+	disabled   map[string]bool
+	nextActive uint64
 }
 
 // NewRunner builds a Runner. spawner nil uses DefaultSpawner; notify nil drops
 // non-blocking messages.
 func NewRunner(hooks []ResolvedHook, cwd string, spawner Spawner, notify func(string)) *Runner {
-	return &Runner{hooks: append([]ResolvedHook(nil), hooks...), cwd: cwd, spawner: spawner, notify: notify}
+	return &Runner{
+		hooks: append([]ResolvedHook(nil), hooks...), cwd: cwd, spawner: spawner, notify: notify,
+		active: map[string]map[uint64]context.CancelFunc{}, disabled: map[string]bool{},
+	}
 }
 
 // Hooks returns the resolved hooks (for `/hooks` listing).
@@ -52,7 +58,6 @@ func (r *Runner) DisablePlugin(pluginName string) int {
 		return 0
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	kept := r.hooks[:0]
 	removed := 0
 	for _, h := range r.hooks {
@@ -63,7 +68,60 @@ func (r *Runner) DisablePlugin(pluginName string) int {
 		kept = append(kept, h)
 	}
 	r.hooks = append([]ResolvedHook(nil), kept...)
+	if r.disabled == nil {
+		r.disabled = map[string]bool{}
+	}
+	r.disabled[pluginName] = true
+	active := r.active[pluginName]
+	delete(r.active, pluginName)
+	r.mu.Unlock()
+	for _, cancel := range active {
+		cancel()
+	}
 	return removed
+}
+
+func (r *Runner) run(ctx context.Context, payload Payload, hooks []ResolvedHook) Report {
+	base := r.spawner
+	if base == nil {
+		base = DefaultSpawner
+	}
+	spawner := func(spawnCtx context.Context, in SpawnInput) SpawnResult {
+		owner := strings.TrimSpace(in.PackagePolicy.Owner)
+		if owner == "" {
+			return base(spawnCtx, in)
+		}
+		ownedCtx, cancel := context.WithCancel(spawnCtx)
+		r.mu.Lock()
+		if r.disabled[owner] {
+			r.mu.Unlock()
+			cancel()
+			return SpawnResult{ExitCode: -1, SpawnErr: fmt.Errorf("plugin package %q was disabled before hook start", owner)}
+		}
+		r.nextActive++
+		id := r.nextActive
+		if r.active == nil {
+			r.active = map[string]map[uint64]context.CancelFunc{}
+		}
+		if r.active[owner] == nil {
+			r.active[owner] = map[uint64]context.CancelFunc{}
+		}
+		r.active[owner][id] = cancel
+		r.mu.Unlock()
+		defer func() {
+			cancel()
+			r.mu.Lock()
+			if active := r.active[owner]; active != nil {
+				delete(active, id)
+				if len(active) == 0 {
+					delete(r.active, owner)
+				}
+			}
+			r.mu.Unlock()
+		}()
+		return base(ownedCtx, in)
+	}
+	return Run(ctx, payload, hooks, spawner)
 }
 
 // Has reports whether any configured hook listens for the given event. Callers
@@ -89,7 +147,7 @@ func (r *Runner) PreToolUse(ctx context.Context, name string, args json.RawMessa
 	if len(hooks) == 0 {
 		return false, ""
 	}
-	rep := Run(ctx, Payload{Event: PreToolUse, Cwd: r.cwd, ToolName: name, ToolArgs: args}, hooks, r.spawner)
+	rep := r.run(ctx, Payload{Event: PreToolUse, Cwd: r.cwd, ToolName: name, ToolArgs: args}, hooks)
 	return r.handle(rep)
 }
 
@@ -100,7 +158,7 @@ func (r *Runner) PostToolUse(ctx context.Context, name string, args json.RawMess
 	if len(hooks) == 0 {
 		return
 	}
-	rep := Run(ctx, Payload{Event: PostToolUse, Cwd: r.cwd, ToolName: name, ToolArgs: args, ToolResult: result}, hooks, r.spawner)
+	rep := r.run(ctx, Payload{Event: PostToolUse, Cwd: r.cwd, ToolName: name, ToolArgs: args, ToolResult: result}, hooks)
 	r.handle(rep)
 }
 
@@ -111,7 +169,7 @@ func (r *Runner) PermissionRequest(ctx context.Context, name, subject string, ar
 	if len(hooks) == 0 {
 		return
 	}
-	rep := Run(ctx, Payload{Event: PermissionRequest, Cwd: r.cwd, ToolName: name, ToolArgs: args, Subject: subject}, hooks, r.spawner)
+	rep := r.run(ctx, Payload{Event: PermissionRequest, Cwd: r.cwd, ToolName: name, ToolArgs: args, Subject: subject}, hooks)
 	r.handle(rep)
 }
 
@@ -122,7 +180,7 @@ func (r *Runner) PromptSubmit(ctx context.Context, prompt string, turn int) (blo
 	if len(hooks) == 0 {
 		return false, ""
 	}
-	rep := Run(ctx, Payload{Event: UserPromptSubmit, Cwd: r.cwd, Prompt: prompt, Turn: turn}, hooks, r.spawner)
+	rep := r.run(ctx, Payload{Event: UserPromptSubmit, Cwd: r.cwd, Prompt: prompt, Turn: turn}, hooks)
 	return r.handle(rep)
 }
 
@@ -132,7 +190,7 @@ func (r *Runner) Stop(ctx context.Context, lastAssistant string, turn int) {
 	if len(hooks) == 0 {
 		return
 	}
-	rep := Run(ctx, Payload{Event: Stop, Cwd: r.cwd, LastAssistant: lastAssistant, Turn: turn}, hooks, r.spawner)
+	rep := r.run(ctx, Payload{Event: Stop, Cwd: r.cwd, LastAssistant: lastAssistant, Turn: turn}, hooks)
 	r.handle(rep)
 }
 
@@ -143,7 +201,7 @@ func (r *Runner) SessionStart(ctx context.Context) []string {
 	if len(hooks) == 0 {
 		return nil
 	}
-	rep := Run(ctx, Payload{Event: SessionStart, Cwd: r.cwd}, hooks, r.spawner)
+	rep := r.run(ctx, Payload{Event: SessionStart, Cwd: r.cwd}, hooks)
 	r.handle(rep)
 	return r.additionalContexts(rep)
 }
@@ -154,7 +212,7 @@ func (r *Runner) SessionEnd(ctx context.Context) {
 	if len(hooks) == 0 {
 		return
 	}
-	r.handle(Run(ctx, Payload{Event: SessionEnd, Cwd: r.cwd}, hooks, r.spawner))
+	r.handle(r.run(ctx, Payload{Event: SessionEnd, Cwd: r.cwd}, hooks))
 }
 
 // SubagentStop fires when a `task` sub-agent finishes. It can't block; last is
@@ -164,7 +222,7 @@ func (r *Runner) SubagentStop(ctx context.Context, last string) {
 	if len(hooks) == 0 {
 		return
 	}
-	r.handle(Run(ctx, Payload{Event: SubagentStop, Cwd: r.cwd, LastAssistant: last}, hooks, r.spawner))
+	r.handle(r.run(ctx, Payload{Event: SubagentStop, Cwd: r.cwd, LastAssistant: last}, hooks))
 }
 
 // Notification fires when the agent needs the user's attention (e.g. a pending
@@ -174,7 +232,7 @@ func (r *Runner) Notification(ctx context.Context, message string) {
 	if len(hooks) == 0 {
 		return
 	}
-	r.handle(Run(ctx, Payload{Event: Notification, Cwd: r.cwd, Message: message}, hooks, r.spawner))
+	r.handle(r.run(ctx, Payload{Event: Notification, Cwd: r.cwd, Message: message}, hooks))
 }
 
 // PostLLMCall fires after every model turn completes but before the
@@ -187,7 +245,7 @@ func (r *Runner) PostLLMCall(ctx context.Context, reasoning string, turn int) st
 	if !hasHook(hooks, PostLLMCall) {
 		return reasoning
 	}
-	rep := Run(ctx, Payload{Event: PostLLMCall, Cwd: r.cwd, Reasoning: reasoning, Turn: turn}, hooks, r.spawner)
+	rep := r.run(ctx, Payload{Event: PostLLMCall, Cwd: r.cwd, Reasoning: reasoning, Turn: turn}, hooks)
 	r.handle(rep)
 	for _, o := range rep.Outcomes {
 		if o.Decision == DecisionPass {
@@ -207,7 +265,7 @@ func (r *Runner) PreCompact(ctx context.Context, trigger string) string {
 	if len(hooks) == 0 {
 		return ""
 	}
-	rep := Run(ctx, Payload{Event: PreCompact, Cwd: r.cwd, Trigger: trigger}, hooks, r.spawner)
+	rep := r.run(ctx, Payload{Event: PreCompact, Cwd: r.cwd, Trigger: trigger}, hooks)
 	r.handle(rep)
 	var b strings.Builder
 	for _, o := range rep.Outcomes {

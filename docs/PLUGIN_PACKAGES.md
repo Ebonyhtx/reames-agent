@@ -319,9 +319,36 @@ Plugin hooks receive these environment variables:
 - `REAMES_AGENT_PLUGIN_ROOT`
 - `REAMES_AGENT_PLUGIN_NAME`
 - `REAMES_AGENT_PLUGIN_VERSION`
+- `REAMES_AGENT_PLUGIN_STATE`
 - `REAMES_AGENT_HOME`
 - `REAMES_AGENT_WORKSPACE_ROOT`
 - `CLAUDE_PROJECT_DIR`
+
+`REAMES_AGENT_PLUGIN_STATE` is a generation-independent writable directory at
+`plugins/<name>/state`; the portable child environment points temporary files
+at its `tmp/` child, while the Windows native backend replaces TEMP/TMP with an
+even narrower per-command sandbox temp. Installed-package
+Hook and stdio MCP processes do not inherit the full Reames Agent environment.
+They receive only OS startup variables, manifest-declared variables, and the
+trusted fields above. They run in a fail-closed OS sandbox with writes limited
+to the workspace/state/temp roots and known credential paths blocked from read.
+After Linux installs its private `/tmp` overlay, it re-exposes only the
+immutable generation root and exact helper file read-only. This keeps isolated
+temporary-home installs executable without broadening write access.
+Manifest environment names and values are kept out of the sandbox wrapper argv.
+A hidden helper restores the encoded child environment only after confinement,
+clears the transport variable before exec, and fails closed if the payload or
+host dispatch route is missing. Encoding is not encryption or protection from
+a privileged local debugger/process dump; the plugin child is explicitly
+granted these values.
+On Windows, verified absolute shebang hooks can use Git Bash so extensionless
+Codex hooks remain portable.
+
+This policy applies to installed package contributions, not user-authored
+global/project hooks, user MCP entries, or LSP servers. Package processes
+currently have network access because the v1 permission vocabulary does not
+separate network capability, and Reames Agent does not yet promise uniform hard
+CPU/RSS quotas across all platforms.
 
 ## Desktop Backend Methods
 

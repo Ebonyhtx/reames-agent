@@ -25,13 +25,17 @@ import (
 	"reames-agent/internal/sandbox"
 )
 
-// runWindowsSandboxHelperIfRequested reports whether argv (os.Args-shaped, so
-// argv[0] is the program name) asks this process to act as the hidden Windows
-// sandbox helper, and runs it when so. Split from main so tests can pin that
-// the desktop binary keeps the helper route the sandbox wrapper depends on.
-func runWindowsSandboxHelperIfRequested(argv []string) (int, bool) {
-	if len(argv) > 1 && argv[1] == sandbox.WindowsHelperCommand {
-		return sandbox.RunWindowsSandboxHelper(argv[2:], os.Stdin, os.Stdout, os.Stderr), true
+// runSandboxHelperIfRequested reports whether argv (os.Args-shaped, so argv[0]
+// is the program name) asks this process to act as a hidden sandbox helper.
+// Split from main so tests can pin both package child-exec and Windows routes.
+func runSandboxHelperIfRequested(argv []string) (int, bool) {
+	if len(argv) > 1 {
+		switch argv[1] {
+		case sandbox.ChildExecHelperCommand:
+			return sandbox.RunChildExecHelper(argv[2:], os.Stdin, os.Stdout, os.Stderr), true
+		case sandbox.WindowsHelperCommand:
+			return sandbox.RunWindowsSandboxHelper(argv[2:], os.Stdin, os.Stdout, os.Stderr), true
+		}
 	}
 	return 0, false
 }
@@ -175,12 +179,12 @@ func linuxWebviewGpuPolicy(pattern string) linux.WebviewGpuPolicy {
 }
 
 func main() {
-	// The Windows bash sandbox relaunches the current executable as a hidden
-	// helper process. Dispatch it before any Wails or single-instance setup:
-	// otherwise every sandboxed command starts a second GUI instance that
+	// Sandboxed package processes and Windows bash relaunch this executable as
+	// hidden helpers. Dispatch before any Wails or single-instance setup:
+	// otherwise a sandboxed command can start a second GUI instance that
 	// forwards to the running app and exits 0 with no output, so bash silently
 	// returns empty on Windows (#6051, #6067, #6072).
-	if code, ok := runWindowsSandboxHelperIfRequested(os.Args); ok {
+	if code, ok := runSandboxHelperIfRequested(os.Args); ok {
 		os.Exit(code)
 	}
 	sandbox.RegisterHelperDispatch()

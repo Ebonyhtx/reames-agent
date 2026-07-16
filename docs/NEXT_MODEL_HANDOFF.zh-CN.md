@@ -1,6 +1,6 @@
 # 下一位模型接手交接文档
 
-日期：2026-07-15
+日期：2026-07-16
 
 仓库：`F:\reames-agent`
 
@@ -33,14 +33,14 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
 ## 当前基线
 
 - M0、M1、M2、M3、M4 已按各自路线图门槛关闭；当前已验证远端基线为
-  `e9de895 fix: preserve partial stream recovery transcript`。该提交的 CI
-  `29378573077` 8/8、CodeQL `29378573116` 3/3、Desktop candidate
-  `29378899444` 三平台全绿。当前提交和远端状态仍必须以 `git log`、`git status` 和
+  `92e15e7 feat: unify structured source approvals`。该提交的 CI
+  `29386016928` 8/8、CodeQL `29386016898` 3/3 全绿；最近完整 Desktop candidate
+  `29378899444` 仍是三平台全绿。当前提交和远端状态必须以 `git log`、`git status` 和
   GitHub Actions 为准。
-- M5 进行中。第一批已收口 plugin manifest、内容身份、权限授权、两阶段生命周期、
-  Desktop 自动化审批和旧 generation 运行时撤销；真实 Chromium、源码 production Wails
-  与已安装 Windows candidate 均已有分层证据，但不关闭进程隔离、registry 签名、真实
-  第三方 E2E 与发布链。
+- M5 进行中。已收口 plugin manifest、内容身份、权限授权、两阶段生命周期、Desktop
+  自动化审批、旧 generation 运行时撤销、package-owned Hook/MCP 进程隔离与一条真实固定
+  revision 第三方 E2E；真实 Chromium、源码 production Wails 与已安装 Windows candidate
+  均已有分层证据。仍未关闭运营 registry、签名/provenance、密钥轮换与公开发布信任链。
 - candidate `29378899444` 的 Windows interaction/accessibility/native/plugin 四份 JSON
   均通过，`boundary_changes=[]`、`errors=[]`；installer/executable SHA-256 分别为
   `779706C1FA70D172912527E9130C4D9FDEFC1AD5C40885EF7BB719445438DF09` 和
@@ -87,8 +87,17 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
   异步 build，重新枚举当前 controller，精确断开旧插件 MCP、按
   `REAMES_AGENT_PLUGIN_NAME` 移除旧 Hook，并暂停旧 controller 的 Skill 入口到重建或
   新会话。同名用户 MCP 不受影响。
-- 已经运行的 Hook/子进程不会被此 controller 内撤销强杀；Hook/MCP/插件进程 OS sandbox
-  和故障隔离仍未完成。
+- package-owned Hook/MCP 现携带 owner/root/state/home/workspace policy，使用 core-only
+  wrapper env + 显式 child env、独立 state/tmp、严格 OS sandbox 和敏感 read barrier；
+  manifest 环境原始键值不进入 wrapper argv；隐藏 helper 只在隔离边界内恢复并清除编码
+  child env，payload 缺失/损坏或宿主漏注册 dispatch 时 fail closed。运行中 Hook 会登记
+  owner cancel，disable/update/rollback/
+  uninstall 可回收进程树并用 disabled 标记阻断 snapshot 后 late start；MCP Remove 继续关闭
+  transport。用户手工 Hook/MCP 与 LSP 不自动迁移到该策略。
+- Windows package-owned 无扩展名 shebang Hook 会使用经过 WSL 排除的 Git Bash；真实
+  `obra/superpowers@d72560e462a74e10d161b7f993d5fc3282bfa1e2` 已在隔离 home 中完成
+  unsigned 固定 revision copy install、精确 `hooks.context/hooks.execute/skills.load` 授权、
+  完整性验证和原生 sandbox SessionStart E2E，`hookCount=2`、`contextCount=2`、无 notice。
 
 ### 跨宿主结构化审批
 
@@ -101,7 +110,8 @@ docs/audits/2026-07-09-reference-feature-gap-map.md
   拦截；无结构化审批能力及 headless apply 的宿主零预览、零执行 fail closed。
 - Desktop、Bubble Tea CLI、Bot、Serve/event wire 与 ACP 消费同一计划；pending snapshot
   和 replay 保留完整字段，结构化批准后 PreToolUse hooks 仍可阻断。
-- 本批 33 个受跟踪文件已通过 root build/vet/internal 全测、M5 四包 race、Desktop
+- 本批 43 个交付文件（33 个既有文件修改、10 个新增文件）已通过 root
+  build/vet/internal 全测、七个高风险包 race、Desktop
   vet/full test、前端 `test:all`/production build/bundle budget、基线与合同、119 项 Python
   合同（2 skipped）、真实 Chrome plugin smoke、实际 upstream scan、品牌残留 0 和六目标
   `CGO_ENABLED=0` 交叉编译。这些结果是本地证据；提交、push 与远端 CI/CodeQL 状态必须
@@ -152,16 +162,21 @@ Node upstream reconciliation、实际 upstream scan，以及六目标 `CGO_ENABL
 聚焦回归同时覆盖 partial transcript 成功提交和注入提交失败后的 fail-closed 回滚；
 `git diff --check` 通过；其远端 CI/CodeQL/candidate 现已由上述 `e9de895` runs 关闭。
 
-当前跨宿主审批批次已重新通过 root build/vet/internal 全测、M5 四包 race、Desktop
-vet/full test、前端 `test:all`/production build/bundle budget、合同与 upstream checks、
-真实 Chrome smoke 和六目标 `CGO_ENABLED=0` 交叉编译。提交前仍需完成最终差异审查、
-`git diff --check` 和显式暂存；这些结果不替代 push 后的新远端 CI/CodeQL。
+当前进程隔离批次已重新通过 root build/vet/internal 全测，hook/control/plugin/pluginpkg/
+installsource/processpolicy/sandbox 七包 race，Desktop build/vet/full test，前端
+`test:all`/production build/bundle budget，文档/公开/部署/发布/工具合同，119 项 Python
+合同（2 skipped）、Node upstream reconciliation、真实 Chrome smoke、六目标 CLI 与
+Linux/macOS 四包 16 个测试二进制 `CGO_ENABLED=0` 交叉编译。Windows 原生 re-exec E2E
+确认显式 child env 在隔离内可用、保留变量已清除；Linux 单元合同确认私有 `/tmp` 后只读
+重挂 generation/helper。提交前仍需最终差异审查、显式暂存与干净 clone；这些本地结果不
+替代 push 后的新远端 CI/CodeQL。
 
 ## 未关闭边界
 
-- Hook/MCP/插件进程 OS sandbox、资源限制、崩溃和恶意进程隔离。
+- package process 当前允许网络，且无跨三平台统一硬 CPU/RSS 配额；用户手工 Hook/MCP
+  与 LSP 仍是高权限未自动隔离进程。
 - 真实运营 registry、签名、provenance、密钥轮换和公开可信发布链。
-- 至少一个真实第三方插件 E2E 和干净 clone；关闭 M5 时最新提交必须远端全绿。
+- 最终候选干净 clone；关闭 M5 时最新提交必须远端 CI/CodeQL 全绿。
 - `bash`、MCP、外部 API 和后台 opaque side effect 仍无任意副作用 exactly-once。
 
 ## 下一执行顺序
@@ -169,7 +184,7 @@ vet/full test、前端 `test:all`/production build/bundle budget、合同与 ups
 1. 核对当前分支、提交和远端状态；若本批尚未 push，显式暂存受跟踪文件后集中
    commit/push 一次，若已 push 则不要为回填静态 run ID 重复推送。
 2. 守候最新 CI/CodeQL；若失败，从日志根因修复而不是重跑掩盖。
-3. 推进插件进程隔离、真实第三方插件 E2E 和运营 registry 信任链。
+3. 完成最终候选干净 clone；随后推进运营 registry、签名/provenance 和密钥轮换。
 4. 外部环境到位时并行关闭 M6 云节点/IM 和公开签名发布证据。
 
 长期 GOAL 尚未完成；M5 本批的本地合同不得扩大为插件生态或整个项目完成。

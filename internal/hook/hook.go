@@ -29,6 +29,8 @@ import (
 	"reames-agent/internal/config"
 	"reames-agent/internal/pluginpkg"
 	"reames-agent/internal/proc"
+	"reames-agent/internal/processpolicy"
+	"reames-agent/internal/sandbox"
 )
 
 // Event is a point in the agent loop a hook can fire at.
@@ -120,9 +122,10 @@ type Settings struct {
 // ResolvedHook is a loaded hook with its origin baked in.
 type ResolvedHook struct {
 	HookConfig
-	Event  Event
-	Scope  Scope
-	Source string // absolute path to the settings.json it came from
+	Event         Event
+	Scope         Scope
+	Source        string // absolute path to the settings.json it came from
+	PackagePolicy processpolicy.PackagePolicy
 }
 
 func (h ResolvedHook) timeout() time.Duration {
@@ -271,6 +274,7 @@ func appendPluginHooks(out *[]ResolvedHook, reamesAgentHomeDir, projectRoot stri
 				env := cloneEnv(h.Env)
 				env["REAMES_AGENT_PLUGIN_ROOT"] = pkg.Root
 				env["REAMES_AGENT_PLUGIN_NAME"] = item.Installed.Name
+				env["REAMES_AGENT_PLUGIN_STATE"] = pluginpkg.RuntimeStateDir(reamesAgentHomeDir, item.Installed.Name)
 				env["REAMES_AGENT_HOME"] = reamesAgentHomeDir
 				env["REAMES_AGENT_WORKSPACE_ROOT"] = projectRoot
 				env["CLAUDE_PROJECT_DIR"] = projectRoot
@@ -290,6 +294,14 @@ func appendPluginHooks(out *[]ResolvedHook, reamesAgentHomeDir, projectRoot stri
 					Event:  event,
 					Scope:  ScopePlugin,
 					Source: filepath.Join(pkg.Root, pluginpkg.ManifestPath(pkg.ManifestKind)),
+					PackagePolicy: processpolicy.PackagePolicy{
+						Owner:         item.Installed.Name,
+						PackageRoot:   pkg.Root,
+						StateRoot:     pluginpkg.RuntimeStateDir(reamesAgentHomeDir, item.Installed.Name),
+						WorkspaceRoot: projectRoot,
+						HostHome:      reamesAgentHomeDir,
+						Network:       true,
+					},
 				})
 			}
 		}
@@ -441,11 +453,12 @@ func decideOutcome(event Event, r SpawnResult) Decision {
 
 // SpawnInput / SpawnResult / Spawner are the test seam around the real spawn.
 type SpawnInput struct {
-	Command string
-	Cwd     string
-	Env     map[string]string
-	Stdin   string
-	Timeout time.Duration
+	Command       string
+	Cwd           string
+	Env           map[string]string
+	Stdin         string
+	Timeout       time.Duration
+	PackagePolicy processpolicy.PackagePolicy
 }
 
 type SpawnResult struct {
@@ -485,7 +498,7 @@ func Run(ctx context.Context, payload Payload, hooks []ResolvedHook, spawner Spa
 		}
 		timeout := h.timeout()
 		start := time.Now()
-		r := runResolvedHook(ctx, h, SpawnInput{Command: h.Command, Cwd: cwd, Env: h.Env, Stdin: stdin, Timeout: timeout}, spawner)
+		r := runResolvedHook(ctx, h, SpawnInput{Command: h.Command, Cwd: cwd, Env: h.Env, Stdin: stdin, Timeout: timeout, PackagePolicy: h.PackagePolicy}, spawner)
 		decision := decideOutcome(event, r)
 		report.Outcomes = append(report.Outcomes, Outcome{
 			Hook:      h,
@@ -547,20 +560,22 @@ func DefaultSpawner(ctx context.Context, in SpawnInput) SpawnResult {
 	cctx, cancel := context.WithTimeout(ctx, in.Timeout)
 	defer cancel()
 
-	cmd := spawnCommand(cctx, in.Command)
+	var cmd *exec.Cmd
+	if in.PackagePolicy.Enabled() {
+		childEnv := in.PackagePolicy.ChildEnvironment(in.Env)
+		argv, hostEnv, err := in.PackagePolicy.WrapCommand(packageSpawnCommandArgs(in), childEnv, in.Cwd, true)
+		if err != nil {
+			return SpawnResult{ExitCode: -1, SpawnErr: err}
+		}
+		cmd = exec.CommandContext(cctx, argv[0], argv[1:]...)
+		cmd.Env = hostEnv
+	} else {
+		cmd = spawnCommand(cctx, in.Command)
+	}
 	proc.HideWindow(cmd)
 	cmd.Dir = in.Cwd
-	if len(in.Env) > 0 {
-		env := os.Environ()
-		keys := make([]string, 0, len(in.Env))
-		for k := range in.Env {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			env = append(env, k+"="+in.Env[k])
-		}
-		cmd.Env = env
+	if !in.PackagePolicy.Enabled() && len(in.Env) > 0 {
+		cmd.Env = processpolicy.MergeEnvironment(os.Environ(), in.Env)
 	}
 	cmd.Stdin = strings.NewReader(in.Stdin)
 	var outBuf, errBuf cappedBuffer
@@ -570,12 +585,33 @@ func DefaultSpawner(ctx context.Context, in SpawnInput) SpawnResult {
 	// shell is killed on timeout/cancel.
 	cmd.WaitDelay = 500 * time.Millisecond
 
-	err := cmd.Run()
+	job, err := proc.StartTracked(cmd)
+	if err == nil {
+		done := make(chan error, 1)
+		go func() { done <- cmd.Wait() }()
+		select {
+		case err = <-done:
+		case <-cctx.Done():
+			proc.KillTracked(cmd, job)
+			job = 0
+			err = <-done
+		}
+		if job != 0 {
+			// A hook is one-shot. Reap descendants even when the direct command
+			// exited successfully so background children cannot outlive it.
+			proc.KillTracked(cmd, job)
+		}
+	}
 	res := SpawnResult{
 		ExitCode:  -1,
 		Stdout:    strings.TrimSpace(outBuf.String()),
 		Stderr:    strings.TrimSpace(errBuf.String()),
 		Truncated: outBuf.truncated || errBuf.truncated,
+	}
+	if in.PackagePolicy.Enabled() {
+		redactions := processpolicy.SensitiveValues(in.Env)
+		res.Stdout = processpolicy.RedactValues(res.Stdout, redactions)
+		res.Stderr = processpolicy.RedactValues(res.Stderr, redactions)
 	}
 	switch {
 	case cctx.Err() == context.DeadlineExceeded:
@@ -609,16 +645,48 @@ func DefaultSpawner(ctx context.Context, in SpawnInput) SpawnResult {
 // verbatim — normalizeStaticNodeEval's rendering escapes $ and backticks, so
 // even repaired commands re-entering here behave identically under sh -c.
 func spawnCommand(ctx context.Context, command string) *exec.Cmd {
+	args := spawnCommandArgs(command)
+	return exec.CommandContext(ctx, args[0], args[1:]...)
+}
+
+func spawnCommandArgs(command string) []string {
 	if node, flag, script, ok := repairableNodeEvalArgs(command); ok {
-		return exec.CommandContext(ctx, node, flag, script)
+		return []string{node, flag, script}
 	}
 	if runtime.GOOS == "windows" {
 		if node, flag, script, ok := directNodeEvalArgs(command); ok {
-			return exec.CommandContext(ctx, node, flag, script)
+			return []string{node, flag, script}
 		}
 	}
 	name, args := shellInvocation(command)
-	return exec.CommandContext(ctx, name, args...)
+	return append([]string{name}, args...)
+}
+
+func packageSpawnCommandArgs(in SpawnInput) []string {
+	if runtime.GOOS != "windows" || !in.PackagePolicy.Enabled() || !filepath.IsAbs(in.Command) {
+		return spawnCommandArgs(in.Command)
+	}
+	info, err := os.Stat(in.Command)
+	if err != nil || info.IsDir() {
+		return spawnCommandArgs(in.Command)
+	}
+	f, err := os.Open(in.Command)
+	if err != nil {
+		return spawnCommandArgs(in.Command)
+	}
+	defer f.Close()
+	buf := make([]byte, 256)
+	n, _ := f.Read(buf)
+	first, _, _ := strings.Cut(strings.ReplaceAll(string(buf[:n]), "\r\n", "\n"), "\n")
+	first = strings.ToLower(strings.TrimSpace(first))
+	if !strings.HasPrefix(first, "#!") || (!strings.Contains(first, "bash") && !strings.HasSuffix(first, "/sh")) {
+		return spawnCommandArgs(in.Command)
+	}
+	sh := sandbox.ResolveShell("bash", "", nil)
+	if sh.Kind != sandbox.ShellBash {
+		return spawnCommandArgs(in.Command)
+	}
+	return []string{sh.Path, in.Command}
 }
 
 func shellInvocation(command string) (string, []string) {

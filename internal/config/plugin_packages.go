@@ -45,12 +45,15 @@ func mergeInstalledPluginPackages(cfg *Config, root string) []string {
 				Type:         srv.Type,
 				Command:      pluginPackageCommand(pkg.Root, srv.Command),
 				Args:         append([]string(nil), srv.Args...),
-				Env:          pluginPackageEnv(item.Installed, pkg.Root, srv.Env),
+				Env:          pluginPackageEnv(reamesAgentHome, item.Installed, pkg.Root, srv.Env),
 				URL:          strings.TrimSpace(srv.URL),
 				Headers:      cloneStringMap(srv.Headers),
 				AutoStart:    srv.AutoStart,
 				Tier:         srv.Tier,
 				packageOwner: item.Installed.Name,
+				packageRoot:  pkg.Root,
+				packageState: pluginpkg.RuntimeStateDir(reamesAgentHome, item.Installed.Name),
+				packageHome:  reamesAgentHome,
 			}
 			cfg.Plugins = append(cfg.Plugins, entry)
 		}
@@ -66,13 +69,14 @@ func pluginPackageCommand(root, command string) string {
 	return filepath.Join(root, filepath.FromSlash(command))
 }
 
-func pluginPackageEnv(installed pluginpkg.InstalledPlugin, root string, env map[string]string) map[string]string {
+func pluginPackageEnv(reamesAgentHome string, installed pluginpkg.InstalledPlugin, root string, env map[string]string) map[string]string {
 	out := cloneStringMap(env)
 	if out == nil {
 		out = map[string]string{}
 	}
 	out["REAMES_AGENT_PLUGIN_ROOT"] = root
 	out["REAMES_AGENT_PLUGIN_NAME"] = installed.Name
+	out["REAMES_AGENT_PLUGIN_STATE"] = pluginpkg.RuntimeStateDir(reamesAgentHome, installed.Name)
 	if installed.Version != "" {
 		out["REAMES_AGENT_PLUGIN_VERSION"] = installed.Version
 	}

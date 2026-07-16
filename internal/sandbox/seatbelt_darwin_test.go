@@ -32,7 +32,7 @@ func TestSbplString(t *testing.T) {
 // --- writeAllowDirs ---
 
 func TestWriteAllowDirsDeduplication(t *testing.T) {
-	dirs := writeAllowDirs([]string{"/tmp", "/tmp", "/tmp"})
+	dirs := writeAllowDirs([]string{"/tmp", "/tmp", "/tmp"}, false)
 	seen := map[string]bool{}
 	for _, d := range dirs {
 		if seen[d] {
@@ -44,7 +44,7 @@ func TestWriteAllowDirsDeduplication(t *testing.T) {
 
 func TestWriteAllowDirsIncludesRoots(t *testing.T) {
 	root := t.TempDir()
-	dirs := writeAllowDirs([]string{root})
+	dirs := writeAllowDirs([]string{root}, false)
 	found := false
 	for _, d := range dirs {
 		real, _ := filepath.EvalSymlinks(root)
@@ -59,7 +59,7 @@ func TestWriteAllowDirsIncludesRoots(t *testing.T) {
 }
 
 func TestWriteAllowDirsIncludesTemp(t *testing.T) {
-	dirs := writeAllowDirs(nil)
+	dirs := writeAllowDirs(nil, false)
 	tmpDir := os.TempDir()
 	realTmp, _ := filepath.EvalSymlinks(tmpDir)
 	found := false
@@ -75,7 +75,7 @@ func TestWriteAllowDirsIncludesTemp(t *testing.T) {
 }
 
 func TestWriteAllowDirsSkipsEmpty(t *testing.T) {
-	dirs := writeAllowDirs([]string{"", "", ""})
+	dirs := writeAllowDirs([]string{"", "", ""}, false)
 	for _, d := range dirs {
 		if d == "" {
 			t.Error("writeAllowDirs should skip empty strings")
@@ -85,7 +85,7 @@ func TestWriteAllowDirsSkipsEmpty(t *testing.T) {
 
 func TestWriteAllowDirsNoDuplicates(t *testing.T) {
 	roots := []string{"/tmp", "/private/tmp", os.TempDir()}
-	dirs := writeAllowDirs(roots)
+	dirs := writeAllowDirs(roots, false)
 	seen := map[string]bool{}
 	for _, d := range dirs {
 		if seen[d] {
@@ -169,6 +169,48 @@ func TestProfileNetworkAndRoots(t *testing.T) {
 	}
 	if strings.Contains(without, "deny file-read") {
 		t.Error("profile should not contain file-read rules when forbid-read is empty")
+	}
+}
+
+func TestStrictProfileOmitsUserToolchainCachesAndDeniesFiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cache := filepath.Join(home, ".cache")
+	if err := os.Mkdir(cache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(home, ".netrc")
+	if err := os.WriteFile(secret, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profile := seatbeltProfile(Spec{Mode: "enforce", Strict: true, ForbidReadPaths: []string{secret}})
+	if strings.Contains(profile, `(subpath "`+cache+`")`) {
+		t.Fatalf("strict profile exposed user cache for writes:\n%s", profile)
+	}
+	if !strings.Contains(profile, `(deny file-read* (literal "`+secret+`"))`) {
+		t.Fatalf("strict profile missing file barrier:\n%s", profile)
+	}
+}
+
+func TestCommandArgsWithOptionsUsesInSandboxChildExec(t *testing.T) {
+	if !Available() {
+		t.Skip("sandbox-exec not available")
+	}
+	RegisterHelperDispatch()
+	argv, wrapped := CommandArgsWithOptions(Spec{Mode: "enforce", Strict: true, Network: true}, []string{"/usr/bin/true"}, CommandOptions{
+		Writable: true, Env: []string{"PATH=/usr/bin", "PLUGIN_TOKEN=explicit"}, Dir: "/tmp",
+	})
+	if !wrapped {
+		t.Fatal("enforced command should be wrapped")
+	}
+	joined := strings.Join(argv, "\x00")
+	for _, leaked := range []string{"PLUGIN_TOKEN", "explicit"} {
+		if strings.Contains(joined, leaked) {
+			t.Fatalf("sandbox wrapper argv exposed child environment %q: %v", leaked, argv)
+		}
+	}
+	if !strings.Contains(joined, ChildExecHelperCommand+"\x00--\x00/usr/bin/true") {
+		t.Fatalf("in-sandbox child helper missing: %v", argv)
 	}
 }
 

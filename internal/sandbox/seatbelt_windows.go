@@ -13,8 +13,10 @@ import (
 )
 
 type windowsSandboxPayload struct {
-	Spec     Spec `json:"spec"`
-	Writable bool `json:"writable"`
+	Spec             Spec   `json:"spec"`
+	Writable         bool   `json:"writable"`
+	ChildEnvironment bool   `json:"childEnvironment,omitempty"`
+	Dir              string `json:"dir,omitempty"`
 }
 
 // Command wraps the shell invocation in Reames Agent's hidden Windows sandbox
@@ -27,10 +29,21 @@ func Command(spec Spec, sh Shell, command string) ([]string, bool) {
 // CommandArgs is like Command but accepts the command as raw argv instead of a
 // shell command string.
 func CommandArgs(spec Spec, args []string) ([]string, bool) {
-	return windowsSandboxCommand(spec, args, false)
+	return CommandArgsWithOptions(spec, args, CommandOptions{})
+}
+
+// CommandArgsWithOptions passes only non-secret launch policy through argv.
+// The child environment rides in the reserved helper environment variable and
+// is applied to the confined child rather than the trusted helper process.
+func CommandArgsWithOptions(spec Spec, args []string, opts CommandOptions) ([]string, bool) {
+	return windowsSandboxCommandWithOptions(spec, args, opts)
 }
 
 func windowsSandboxCommand(spec Spec, args []string, writable bool) ([]string, bool) {
+	return windowsSandboxCommandWithOptions(spec, args, CommandOptions{Writable: writable})
+}
+
+func windowsSandboxCommandWithOptions(spec Spec, args []string, opts CommandOptions) ([]string, bool) {
 	// Mirror the darwin/linux wrappers: when the backend (or this binary's
 	// helper dispatch) is unavailable, return the argv unwrapped so the bash
 	// tool takes its explicit fail-closed / escape-approval path instead of
@@ -42,7 +55,9 @@ func windowsSandboxCommand(spec Spec, args []string, writable bool) ([]string, b
 	if err != nil || exe == "" {
 		return args, false
 	}
-	payload, err := encodeWindowsSandboxPayload(windowsSandboxPayload{Spec: spec, Writable: writable})
+	payload, err := encodeWindowsSandboxPayload(windowsSandboxPayload{
+		Spec: spec, Writable: opts.Writable, ChildEnvironment: opts.Env != nil, Dir: opts.Dir,
+	})
 	if err != nil {
 		return args, false
 	}
@@ -104,10 +119,24 @@ func RunWindowsSandboxHelper(args []string, stdin *os.File, stdout *os.File, std
 		fmt.Fprintln(stderr, "windows sandbox command is required")
 		return 2
 	}
+	var childEnv []string
+	if payload.ChildEnvironment {
+		childEnv, err = takeChildEnvironment(true)
+		if err != nil {
+			fmt.Fprintln(stderr, WindowsSandboxFailureMarker(args[0]), "windows sandbox:", err)
+			return 126
+		}
+	} else {
+		// Never propagate a caller-planted internal payload into an ordinary
+		// interactive sandbox command.
+		_, _ = takeChildEnvironment(false)
+	}
 	result, err := winsandbox.Run(convertWindowsSandboxSpec(payload.Spec, payload.Writable), child, winsandbox.RunOptions{
 		Stdin:  stdin,
 		Stdout: stdout,
 		Stderr: stderr,
+		Env:    childEnv,
+		Dir:    payload.Dir,
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, WindowsSandboxFailureMarker(args[0]), "windows sandbox:", err)
@@ -117,9 +146,11 @@ func RunWindowsSandboxHelper(args []string, stdin *os.File, stdout *os.File, std
 }
 
 func convertWindowsSandboxSpec(spec Spec, writable bool) winsandbox.Spec {
+	forbidden := append([]string(nil), spec.ForbidReadRoots...)
+	forbidden = append(forbidden, spec.ForbidReadPaths...)
 	return winsandbox.Spec{
 		WritableRoots:   append([]string(nil), spec.WriteRoots...),
-		ForbidReadRoots: append([]string(nil), spec.ForbidReadRoots...),
+		ForbidReadRoots: forbidden,
 		Network:         spec.Network,
 		Writable:        writable,
 		TempPrefix:      "reamesAgent-sandbox-",

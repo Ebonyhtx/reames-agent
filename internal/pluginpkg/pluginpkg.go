@@ -223,6 +223,13 @@ func InstallRoot(reamesAgentHome, name string) string {
 	return filepath.Join(PluginsDir(reamesAgentHome), name)
 }
 
+// RuntimeStateDir is the writable, generation-independent state root for one
+// installed plugin package. It intentionally sits beside versions/ rather than
+// inside an immutable content-addressed generation.
+func RuntimeStateDir(reamesAgentHome, name string) string {
+	return filepath.Join(InstallRoot(reamesAgentHome, name), "state")
+}
+
 func LoadState(reamesAgentHome string) (State, error) {
 	var st State
 	b, err := os.ReadFile(StatePath(reamesAgentHome))

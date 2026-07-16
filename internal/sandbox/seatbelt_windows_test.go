@@ -3,6 +3,7 @@
 package sandbox
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,11 +66,38 @@ func TestWindowsCommandArgsWrapsReadOnly(t *testing.T) {
 	}
 }
 
+func TestWindowsCommandArgsWithOptionsKeepsChildEnvOutOfArgv(t *testing.T) {
+	RegisterHelperDispatch()
+	if !winsandbox.Available() {
+		t.Skip("windows sandbox APIs unavailable")
+	}
+	cmd, wrapped := CommandArgsWithOptions(Spec{Mode: "enforce", WriteRoots: []string{`C:\work`}, Network: true, Strict: true}, []string{`C:\tools\plugin.exe`, "serve"}, CommandOptions{
+		Writable: true, Env: []string{`PATH=C:\Windows\System32`, "PLUGIN_TOKEN=explicit"}, Dir: `C:\work`,
+	})
+	if !wrapped {
+		t.Fatal("windows package command should be wrapped")
+	}
+	payload, err := decodeWindowsSandboxPayload(cmd[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !payload.Writable || !payload.ChildEnvironment || payload.Dir != `C:\work` {
+		t.Fatalf("child options not preserved: %+v", payload)
+	}
+	joined := strings.Join(cmd, "\n")
+	for _, leaked := range []string{"PLUGIN_TOKEN", "explicit"} {
+		if strings.Contains(joined, leaked) {
+			t.Fatalf("windows wrapper argv exposed child environment %q: %v", leaked, cmd)
+		}
+	}
+}
+
 func TestConvertWindowsSandboxSpec(t *testing.T) {
 	spec := Spec{
 		Mode:            "enforce",
 		WriteRoots:      []string{`C:\work`},
 		ForbidReadRoots: []string{`C:\work\secret`},
+		ForbidReadPaths: []string{`C:\work\.env`},
 		Network:         true,
 	}
 	got := convertWindowsSandboxSpec(spec, true)
@@ -79,7 +107,7 @@ func TestConvertWindowsSandboxSpec(t *testing.T) {
 	if len(got.WritableRoots) != 1 || got.WritableRoots[0] != spec.WriteRoots[0] {
 		t.Fatalf("converted writable roots = %v", got.WritableRoots)
 	}
-	if len(got.ForbidReadRoots) != 1 || got.ForbidReadRoots[0] != spec.ForbidReadRoots[0] {
+	if len(got.ForbidReadRoots) != 2 || got.ForbidReadRoots[0] != spec.ForbidReadRoots[0] || got.ForbidReadRoots[1] != spec.ForbidReadPaths[0] {
 		t.Fatalf("converted forbid roots = %v", got.ForbidReadRoots)
 	}
 
@@ -152,6 +180,87 @@ func TestRunWindowsSandboxHelperRunsExternalSandbox(t *testing.T) {
 	}
 	if _, err := os.Stat(outsideFile); err == nil {
 		t.Fatalf("outside write unexpectedly succeeded: %s", outsideFile)
+	}
+}
+
+func TestRunWindowsSandboxHelperAppliesChildEnvironmentAndDir(t *testing.T) {
+	RegisterHelperDispatch()
+	if !Available() {
+		t.Skip("windows sandbox APIs unavailable")
+	}
+	sh := powershellArgvForWindowsSandboxTest(t, "")
+	if sh == nil {
+		t.Skip("PowerShell unavailable")
+	}
+	workspace := t.TempDir()
+	marker := filepath.Join(workspace, "env-dir.txt")
+	env := []string{"PLUGIN_TOKEN=explicit"}
+	for _, key := range []string{"PATH", "PATHEXT", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP", "USERPROFILE"} {
+		if value := os.Getenv(key); value != "" {
+			env = append(env, key+"="+value)
+		}
+	}
+	payload, err := encodeWindowsSandboxPayload(windowsSandboxPayload{
+		Spec:             Spec{Mode: "enforce", WriteRoots: []string{workspace}, Network: true, Strict: true},
+		Writable:         true,
+		ChildEnvironment: true,
+		Dir:              workspace,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedEnv, err := encodeChildEnvironment(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(childEnvironmentVariable, encodedEnv)
+	script := "$ErrorActionPreference='Stop'; " +
+		"if ($env:PLUGIN_TOKEN -ne 'explicit') { exit 7 }; " +
+		"Set-Content -LiteralPath 'env-dir.txt' -Value ok"
+	helperArgs := append([]string{payload, "--"}, append(sh, script)...)
+	if code := RunWindowsSandboxHelper(helperArgs, os.Stdin, os.Stdout, os.Stderr); code != 0 {
+		t.Fatalf("helper exit code = %d, want 0", code)
+	}
+	if body, err := os.ReadFile(marker); err != nil || !strings.Contains(string(body), "ok") {
+		t.Fatalf("child environment/cwd marker = %q err=%v", body, err)
+	}
+}
+
+func TestRunWindowsSandboxHelperFailsClosedWithoutChildEnvironment(t *testing.T) {
+	previous, existed := os.LookupEnv(childEnvironmentVariable)
+	_ = os.Unsetenv(childEnvironmentVariable)
+	t.Cleanup(func() {
+		if existed {
+			_ = os.Setenv(childEnvironmentVariable, previous)
+		} else {
+			_ = os.Unsetenv(childEnvironmentVariable)
+		}
+	})
+	payload, err := encodeWindowsSandboxPayload(windowsSandboxPayload{
+		Spec:             Spec{Mode: "enforce", Network: true},
+		Writable:         true,
+		ChildEnvironment: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := os.CreateTemp(t.TempDir(), "sandbox-stderr-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stderr.Close()
+	if code := RunWindowsSandboxHelper([]string{payload, "--", "cmd"}, os.Stdin, os.Stdout, stderr); code != 126 {
+		t.Fatalf("missing child environment exit code = %d, want 126", code)
+	}
+	if _, err := stderr.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := string(body); !strings.Contains(text, WindowsSandboxFailureMarker(payload)) || !strings.Contains(text, "environment is missing") {
+		t.Fatalf("missing child environment diagnostic = %q", text)
 	}
 }
 

@@ -283,9 +283,26 @@ Reames Agent 当前没有已运营的默认插件 registry。Registry URL 必须
 - `REAMES_AGENT_PLUGIN_ROOT`
 - `REAMES_AGENT_PLUGIN_NAME`
 - `REAMES_AGENT_PLUGIN_VERSION`
+- `REAMES_AGENT_PLUGIN_STATE`
 - `REAMES_AGENT_HOME`
 - `REAMES_AGENT_WORKSPACE_ROOT`
 - `CLAUDE_PROJECT_DIR`
+
+`REAMES_AGENT_PLUGIN_STATE` 是 `plugins/<name>/state` 下与 generation 无关的可写目录。
+通用 child 环境把临时文件指向其 `tmp/` 子目录；Windows 原生 backend 会进一步把
+TEMP/TMP 替换为每次命令独立的 sandbox temp。已安装包贡献的 Hook 和 stdio MCP 不继承 Reames Agent
+完整环境，只接收 OS 启动核心变量、manifest 显式变量和上面的可信字段；它们在 fail-closed
+OS sandbox 中运行，写入限制在 workspace/state/temp，已知凭据路径会被阻止读取。Linux 的私有
+`/tmp` overlay 会把不可变 generation root 与精确 helper 文件只读重挂，兼容位于临时隔离
+home 的安装，同时不扩大写权限。包装器 argv 不携带 manifest 环境变量名或值；隐藏 helper
+只在进入隔离边界后恢复编码的 child 环境，并在 `exec` 前清除传递变量。payload 缺失、损坏或
+宿主未注册 helper 时 fail closed。
+该编码不是加密，也不承诺防护同机高权限调试器或进程转储；插件 child 本来就被显式授予这些值。
+Windows 对已验证 generation 内的绝对 shebang Hook 可使用 Git Bash，使无扩展名 Codex Hook 保持可用。
+
+该策略只适用于已安装插件包，不自动改变用户手写的全局/项目 Hook、用户 MCP 或 LSP。
+由于 v1 权限还没有独立 network capability，package process 当前允许网络；项目也尚未承诺
+跨平台统一的硬 CPU/RSS 配额。
 
 ## 桌面端后端方法
 

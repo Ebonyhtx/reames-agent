@@ -309,6 +309,43 @@ func TestLifecycleRollbackStateWriteFailureKeepsCurrent(t *testing.T) {
 	}
 }
 
+func TestRuntimeStateSurvivesGenerationChangesAndUninstallRemovesIt(t *testing.T) {
+	home := t.TempDir()
+	source := newNativePluginFixture(t, "runtime-state", "1.0.0", []string{PermissionSkillsLoad})
+	first := installFixture(t, home, source, "runtime-state", false)
+	if err := Enable(home, EnableRequest{
+		Name: first.Installed.Name, ExpectedDigest: first.Installed.Digest, GrantedPermissions: first.Installed.Permissions,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	state := RuntimeStateDir(home, "runtime-state")
+	if err := os.MkdirAll(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(state, "index.json")
+	if err := os.WriteFile(marker, []byte("persistent"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	writeNativePluginManifest(t, filepath.Join(source, NativeManifest), "runtime-state", "2.0.0", []string{PermissionSkillsLoad})
+	installFixture(t, home, source, "runtime-state", true)
+	if body, err := os.ReadFile(marker); err != nil || string(body) != "persistent" {
+		t.Fatalf("runtime state after update = %q err=%v", body, err)
+	}
+	if _, _, err := Rollback(home, "runtime-state"); err != nil {
+		t.Fatal(err)
+	}
+	if body, err := os.ReadFile(marker); err != nil || string(body) != "persistent" {
+		t.Fatalf("runtime state after rollback = %q err=%v", body, err)
+	}
+	if _, _, found, err := Uninstall(home, "runtime-state"); err != nil || !found {
+		t.Fatalf("uninstall found=%t err=%v", found, err)
+	}
+	if _, err := os.Stat(state); !os.IsNotExist(err) {
+		t.Fatalf("runtime state survived uninstall: %v", err)
+	}
+}
+
 func TestLifecycleUninstallStateFailureKeepsContentAndState(t *testing.T) {
 	home := t.TempDir()
 	source := newNativePluginFixture(t, "remove-state-fail", "1.0.0", []string{PermissionSkillsLoad})

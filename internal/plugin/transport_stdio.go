@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"reames-agent/internal/proc"
+	"reames-agent/internal/processpolicy"
 )
 
 const closeWaitBudget = 5 * time.Second
@@ -34,6 +35,7 @@ type stdioTransport struct {
 	stdin  io.WriteCloser
 	stdout *bufio.Reader
 	stderr *tailBuffer
+	redact []string
 
 	callMu sync.Mutex // one in-flight request/response at a time over the shared pipe
 
@@ -66,18 +68,34 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 		}
 	}()
 	env := mergeEnv(os.Environ(), s.Env)
-	exe, env, err := resolveStdioExecutable(ctx, s, env)
+	if s.PackagePolicy.Enabled() {
+		env = s.PackagePolicy.ChildEnvironment(s.Env)
+	}
+	exe, env, err := resolveStdioExecutableWithShellPath(ctx, s, env, !s.PackagePolicy.Enabled())
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, exe, s.Args...)
+	argv := append([]string{exe}, s.Args...)
+	dir := s.Dir
+	if s.PackagePolicy.Enabled() && strings.TrimSpace(dir) == "" {
+		dir = s.PackagePolicy.PackageRoot
+	}
+	if s.PackagePolicy.Enabled() {
+		var hostEnv []string
+		argv, hostEnv, err = s.PackagePolicy.WrapCommand(argv, env, dir, true)
+		if err != nil {
+			return nil, fmt.Errorf("stdio plugin %q: %w", s.Name, err)
+		}
+		env = hostEnv
+	}
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	proc.HideWindow(cmd)
 	if s.LowPriority {
 		proc.LowPriority(cmd)
 	}
 	cmd.Env = env
-	if s.Dir != "" {
-		cmd.Dir = s.Dir // pin cwd-aware servers (e.g. CodeGraph) to the project root
+	if dir != "" {
+		cmd.Dir = dir // pin cwd-aware servers (e.g. CodeGraph) to the project root
 	}
 	stderr := &tailBuffer{limit: 16 * 1024}
 	cmd.Stderr = stderr
@@ -107,6 +125,7 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 		stdin:       stdin,
 		stdout:      bufio.NewReader(stdout),
 		stderr:      stderr,
+		redact:      processpolicy.SensitiveValues(s.Env),
 		pending:     map[int]chan rpcResponse{},
 		releaseSlot: releaseSlot,
 	}
@@ -171,10 +190,16 @@ func cachedShellPATH(probe func(context.Context) string) func(context.Context) s
 }
 
 func resolveStdioExecutable(ctx context.Context, s Spec, env []string) (string, []string, error) {
+	return resolveStdioExecutableWithShellPath(ctx, s, env, true)
+}
+
+func resolveStdioExecutableWithShellPath(ctx context.Context, s Spec, env []string, enrichShellPath bool) (string, []string, error) {
 	// Unconditionally enrich PATH with the user's shell PATH so every
 	// subprocess—including wrapper scripts that invoke npx, uvx, etc.—
 	// inherits the expected tool locations even under a GUI launch.
-	env = enrichStdioShellPATH(ctx, env)
+	if enrichShellPath {
+		env = enrichStdioShellPATH(ctx, env)
+	}
 
 	if hasPathSeparator(s.Command) {
 		return s.Command, env, nil
@@ -559,7 +584,7 @@ func (t *stdioTransport) withStderr(err error) error {
 	// close), and this path runs with callMu held — an unbounded wait here
 	// would wedge every future call on this transport.
 	waitWithBudget(t.wait, closeWaitBudget)
-	msg := t.stderr.String()
+	msg := processpolicy.RedactValues(t.stderr.String(), t.redact)
 	if msg == "" {
 		return err
 	}

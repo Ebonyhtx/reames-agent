@@ -42,6 +42,7 @@ import (
 	"reames-agent/internal/permission"
 	"reames-agent/internal/planmode"
 	"reames-agent/internal/plugin"
+	"reames-agent/internal/processpolicy"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/skill"
@@ -1700,6 +1701,14 @@ func pluginSpecFromEntryWithOptions(e config.PluginEntry, workspaceRoot string, 
 		CallTimeout:        secondsDuration(e.CallTimeoutSeconds),
 		ToolTimeouts:       toolTimeoutDurations(e.ToolTimeoutSeconds),
 		ReadOnlyToolNames:  trustedRawReadOnlyToolNames(e.TrustedReadOnlyTools),
+		PackagePolicy: processpolicy.PackagePolicy{
+			Owner:         e.PluginPackageOwner(),
+			PackageRoot:   e.PluginPackageRoot(),
+			StateRoot:     e.PluginPackageStateDir(),
+			WorkspaceRoot: workspaceRoot,
+			HostHome:      e.PluginPackageHome(),
+			Network:       true,
+		},
 	}, workspaceRoot)
 }
 

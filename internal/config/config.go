@@ -1444,6 +1444,9 @@ type PluginEntry struct {
 	Tier         string `toml:"tier"`
 	expansionEnv map[string]string
 	packageOwner string
+	packageRoot  string
+	packageState string
+	packageHome  string
 }
 
 // PluginPackageOwner reports the installed plugin package that contributed
@@ -1451,6 +1454,17 @@ type PluginEntry struct {
 func (e PluginEntry) PluginPackageOwner() string {
 	return e.packageOwner
 }
+
+// PluginPackageRoot reports the immutable installed generation that contributed
+// this MCP entry. It is runtime-only and never rendered to user config.
+func (e PluginEntry) PluginPackageRoot() string { return e.packageRoot }
+
+// PluginPackageStateDir reports the managed writable state directory for the
+// contributing package. It lives outside the immutable generation.
+func (e PluginEntry) PluginPackageStateDir() string { return e.packageState }
+
+// PluginPackageHome reports the Reames Agent home that owns the package state.
+func (e PluginEntry) PluginPackageHome() string { return e.packageHome }
 
 func (e PluginEntry) ShouldAutoStart() bool {
 	return e.AutoStart == nil || *e.AutoStart

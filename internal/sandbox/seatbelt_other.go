@@ -31,11 +31,25 @@ func Command(spec Spec, sh Shell, command string) ([]string, bool) {
 // prefix without shell interpretation — suitable for direct binary invocations
 // like ripgrep that don't need a shell wrapper.
 func CommandArgs(spec Spec, args []string) ([]string, bool) {
+	return CommandArgsWithOptions(spec, args, CommandOptions{})
+}
+
+// CommandArgsWithOptions confines raw argv and installs child-only environment
+// and cwd settings inside bubblewrap. This prevents a less-trusted child's
+// LD_PRELOAD/NODE_OPTIONS-style variables from affecting the bwrap wrapper.
+func CommandArgsWithOptions(spec Spec, args []string, opts CommandOptions) ([]string, bool) {
 	if !spec.Enforce() {
 		return args, false
 	}
+	if opts.Env != nil && !helperDispatchRegistered.Load() {
+		return args, false
+	}
 	if bwrap, err := exec.LookPath("bwrap"); err == nil {
-		argv := append([]string{bwrap}, bwrapArgsForArgs(spec, args)...)
+		child, err := childExecCommand(args, opts.Env)
+		if err != nil {
+			return args, false
+		}
+		argv := append([]string{bwrap}, bwrapArgsForArgs(spec, child, opts)...)
 		return argv, true
 	}
 	return args, false
@@ -67,11 +81,19 @@ func bwrapArgs(spec Spec, sh Shell, command string) []string {
 	for _, root := range spec.WriteRoots {
 		args = append(args, "--bind", root, root)
 	}
-	for _, root := range linuxWriteDirs() {
-		args = append(args, "--bind", root, root)
+	for _, root := range spec.ReadRoots {
+		args = append(args, "--ro-bind", root, root)
+	}
+	if !spec.Strict {
+		for _, root := range linuxWriteDirs() {
+			args = append(args, "--bind", root, root)
+		}
 	}
 	for _, root := range spec.ForbidReadRoots {
 		args = append(args, "--tmpfs", root)
+	}
+	for _, path := range spec.ForbidReadPaths {
+		args = append(args, "--ro-bind", "/dev/null", path)
 	}
 	return append(args, sh.argv(command)...)
 }
@@ -79,9 +101,13 @@ func bwrapArgs(spec Spec, sh Shell, command string) []string {
 // bwrapArgsForArgs is like bwrapArgs but accepts raw argv instead of a shell
 // command string. It builds the same sandbox prefix and appends the caller's
 // argv directly — no shell interpreter wrapping.
-func bwrapArgsForArgs(spec Spec, args []string) []string {
+func bwrapArgsForArgs(spec Spec, args []string, opts CommandOptions) []string {
 	out := []string{
 		"--unshare-net", // deny network by default
+		"--unshare-pid",
+		"--unshare-ipc",
+		"--unshare-uts",
+		"--die-with-parent",
 		"--ro-bind", "/", "/",
 		"--dev", "/dev",
 		"--proc", "/proc",
@@ -94,11 +120,29 @@ func bwrapArgsForArgs(spec Spec, args []string) []string {
 	for _, root := range spec.WriteRoots {
 		out = append(out, "--bind", root, root)
 	}
-	for _, root := range linuxWriteDirs() {
-		out = append(out, "--bind", root, root)
+	for _, root := range spec.ReadRoots {
+		out = append(out, "--ro-bind", root, root)
+	}
+	if !spec.Strict {
+		for _, root := range linuxWriteDirs() {
+			out = append(out, "--bind", root, root)
+		}
+	}
+	if opts.Env != nil && len(args) > 0 {
+		// /tmp is private in strict package sandboxes. Re-expose only the
+		// trusted helper file so go-test/go-run or a deliberately temporary
+		// installation cannot disappear behind that overlay. The exact-file
+		// read-only mount comes after writable roots so it cannot be replaced.
+		out = append(out, "--ro-bind", args[0], args[0])
 	}
 	for _, root := range spec.ForbidReadRoots {
 		out = append(out, "--tmpfs", root)
+	}
+	for _, path := range spec.ForbidReadPaths {
+		out = append(out, "--ro-bind", "/dev/null", path)
+	}
+	if opts.Dir != "" {
+		out = append(out, "--chdir", opts.Dir)
 	}
 	return append(out, args...)
 }

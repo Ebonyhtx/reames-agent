@@ -50,6 +50,13 @@ func TestMergeInstalledPluginPackagesTracksMCPOwnershipAndPreservesCollision(t *
 	if cfg.Plugins[1].Name != "package-only" || cfg.Plugins[1].PluginPackageOwner() != "owner-pack" {
 		t.Fatalf("package ownership missing: %+v", cfg.Plugins[1])
 	}
+	if cfg.Plugins[1].PluginPackageRoot() == "" || cfg.Plugins[1].PluginPackageHome() != reamesHome {
+		t.Fatalf("package process roots missing: %+v", cfg.Plugins[1])
+	}
+	wantState := pluginpkg.RuntimeStateDir(reamesHome, "owner-pack")
+	if cfg.Plugins[1].PluginPackageStateDir() != wantState || cfg.Plugins[1].Env["REAMES_AGENT_PLUGIN_STATE"] != wantState {
+		t.Fatalf("package state root = %q env=%q, want %q", cfg.Plugins[1].PluginPackageStateDir(), cfg.Plugins[1].Env["REAMES_AGENT_PLUGIN_STATE"], wantState)
+	}
 }
 
 func TestLoadMergesVerifiedPluginSkillRootsAndMCP(t *testing.T) {
@@ -91,6 +98,9 @@ func TestLoadMergesVerifiedPluginSkillRootsAndMCP(t *testing.T) {
 	}
 	if cfg.Plugins[0].Command != filepath.Join(root, "bin", "helper") {
 		t.Fatalf("plugin command = %q", cfg.Plugins[0].Command)
+	}
+	if cfg.Plugins[0].PluginPackageRoot() != root || cfg.Plugins[0].PluginPackageStateDir() != pluginpkg.RuntimeStateDir(reamesHome, "superpowers") {
+		t.Fatalf("plugin package policy roots missing: %+v", cfg.Plugins[0])
 	}
 }
 

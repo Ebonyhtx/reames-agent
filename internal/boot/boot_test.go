@@ -27,6 +27,7 @@ import (
 	"reames-agent/internal/memory"
 	"reames-agent/internal/netclient"
 	"reames-agent/internal/plugin"
+	"reames-agent/internal/pluginpkg"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/tool"
@@ -3055,6 +3056,45 @@ func TestPluginSpecsForRootPinsCodeGraphToWorkspace(t *testing.T) {
 	}
 	if specs[0].Dir != "/workspace" {
 		t.Fatalf("codegraph Dir = %q, want workspace root", specs[0].Dir)
+	}
+}
+
+func TestPluginSpecsCarryInstalledPackageProcessPolicy(t *testing.T) {
+	home := t.TempDir()
+	workspace := t.TempDir()
+	t.Setenv("REAMES_AGENT_HOME", home)
+	source := filepath.Join(t.TempDir(), "owned")
+	manifest := filepath.Join(source, pluginpkg.NativeManifest)
+	if err := os.MkdirAll(filepath.Join(source, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifest, []byte(`{"schemaVersion":1,"name":"owned","version":"1.0.0","mcpServers":{"helper":{"command":"bin/helper"}},"permissions":["mcp.stdio"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "bin", "helper"), []byte("helper"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installed, err := pluginpkg.Install(home, pluginpkg.InstallRequest{Name: "owned", Source: source, SourceRoot: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pluginpkg.Enable(home, pluginpkg.EnableRequest{
+		Name: installed.Installed.Name, ExpectedDigest: installed.Installed.Digest, GrantedPermissions: installed.Installed.Permissions,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadForRoot(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	specs := PluginSpecsForRoot(cfg.Plugins, workspace)
+	if len(specs) != 1 {
+		t.Fatalf("plugin specs = %+v", specs)
+	}
+	policy := specs[0].PackagePolicy
+	wantRoot := pluginpkg.ResolveRoot(home, installed.Installed.Root)
+	if policy.Owner != "owned" || policy.PackageRoot != wantRoot || policy.StateRoot != pluginpkg.RuntimeStateDir(home, "owned") || policy.WorkspaceRoot != workspace || policy.HostHome != home || !policy.Network {
+		t.Fatalf("package process policy = %+v", policy)
 	}
 }
 

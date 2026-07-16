@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"reames-agent/internal/event"
+	"reames-agent/internal/processpolicy"
 	"reames-agent/internal/tool"
 )
 
@@ -81,6 +82,10 @@ type Spec struct {
 	// LowPriority runs a stdio subprocess below normal scheduling priority, for
 	// background indexers that must not starve the user's machine.
 	LowPriority bool
+	// PackagePolicy is non-zero only for MCP servers contributed by an installed
+	// plugin package. User-authored MCP config intentionally keeps its existing
+	// compatibility behavior.
+	PackagePolicy processpolicy.PackagePolicy
 }
 
 // transport carries JSON-RPC messages to and from one MCP server. call sends a

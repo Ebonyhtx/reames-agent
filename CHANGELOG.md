@@ -13,6 +13,7 @@
 
 ### Security / Governance
 
+- Isolated installed-package Hook/MCP processes behind a fail-closed OS sandbox with core-only wrapper environments, post-confinement child-environment restoration that keeps manifest secrets out of wrapper argv, managed state/temp roots, sensitive-path read barriers, bounded/redacted diagnostics, process-tree cancellation, and active Hook revocation. Missing helper payloads or dispatch routes fail closed. Added Windows shebang compatibility for verified package hooks and validated a pinned unsigned `obra/superpowers` install/enable/SessionStart flow in the native Windows sandbox.
 - Added exact-plan structured approval for model-driven `install_source` apply calls across Controller, Desktop, CLI, Bot, Serve/event wire, and ACP. Planning remains invocation-level read-only; apply requires a fresh human decision that YOLO, auto mode, Guardian, plan execution windows, grants, and headless autonomy cannot replace. Unsupported and headless hosts fail closed before preview or mutation, and MCP URL/command/args/environment/header details are structurally redacted before display or persistence.
 - Added public-readiness gates for ownership, release safety, deployment docs, and attribution.
 - Restored CodeQL workflow for Go, JavaScript/TypeScript, and GitHub Actions analysis.

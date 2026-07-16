@@ -118,6 +118,7 @@
 | [M4 Rooted Writer 与 Durable Child Effects 审计](audits/2026-07-14-m4-rooted-writers-child-effects.md) | `os.Root` built-in writer/checkpoint restore、multi-file rollback、child mutation intent、journal cursor 与 crash/replay/branch 边界 |
 | [M4 跨资源恢复事务收官审计](audits/2026-07-14-m4-cross-resource-recovery-transaction.md) | visible/synthetic turn commit anchor、Rewind 两阶段 journal、断电重放、原子替换 fail-closed 与 M4 完成边界 |
 | [M5 插件生命周期信任审计](audits/2026-07-14-m5-plugin-lifecycle-trust.md) | schema v1、内容寻址 generation、两阶段生命周期、Desktop 审批/原生交互与旧运行时撤销边界 |
+| [M5 插件进程隔离与真实第三方 E2E 审计](audits/2026-07-15-m5-plugin-process-isolation.md) | package-owned Hook/MCP 最小环境、隔离后 child env、严格 OS sandbox、运行中撤销、真实 superpowers 固定 revision Windows E2E 与剩余边界 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 

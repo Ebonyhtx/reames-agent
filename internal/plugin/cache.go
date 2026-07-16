@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"reames-agent/internal/config"
+	"reames-agent/internal/fileutil"
 	"reames-agent/internal/tool"
 )
 
@@ -84,6 +85,10 @@ func SpecFingerprint(s Spec) string {
 	writeField(h, "command", s.Command)
 	writeField(h, "url", s.URL)
 	writeField(h, "dir", s.Dir)
+	writeField(h, "package_owner", s.PackagePolicy.Owner)
+	writeField(h, "package_root", s.PackagePolicy.PackageRoot)
+	writeField(h, "package_state", s.PackagePolicy.StateRoot)
+	writeField(h, "package_workspace", s.PackagePolicy.WorkspaceRoot)
 	for _, a := range s.Args {
 		writeField(h, "arg", a)
 	}
@@ -133,11 +138,6 @@ func SaveCachedSchema(name string, cs CachedSchema) error {
 	if p == "" {
 		return nil
 	}
-	dir := filepath.Dir(p)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		slog.Debug("plugin cache: mkdir", "name", name, "err", err)
-		return err
-	}
 	cs.Version = cacheVersion
 	if cs.LastValidated.IsZero() {
 		cs.LastValidated = time.Now().UTC()
@@ -147,26 +147,8 @@ func SaveCachedSchema(name string, cs CachedSchema) error {
 		slog.Debug("plugin cache: marshal", "name", name, "err", err)
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".mcp-*.tmp")
-	if err != nil {
-		slog.Debug("plugin cache: tempfile", "name", name, "err", err)
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		slog.Debug("plugin cache: write", "name", name, "err", err)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		slog.Debug("plugin cache: close", "name", name, "err", err)
-		return err
-	}
-	if err := os.Rename(tmpPath, p); err != nil {
-		os.Remove(tmpPath)
-		slog.Debug("plugin cache: rename", "name", name, "err", err)
+	if err := fileutil.AtomicWriteFile(p, b, 0o644); err != nil {
+		slog.Debug("plugin cache: atomic write", "name", name, "err", err)
 		return err
 	}
 	return nil

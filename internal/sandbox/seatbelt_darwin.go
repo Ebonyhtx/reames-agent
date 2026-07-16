@@ -24,10 +24,23 @@ func Command(spec Spec, sh Shell, command string) ([]string, bool) {
 // without shell interpretation — suitable for direct binary invocations like
 // ripgrep that don't need a shell wrapper.
 func CommandArgs(spec Spec, args []string) ([]string, bool) {
+	return CommandArgsWithOptions(spec, args, CommandOptions{})
+}
+
+// CommandArgsWithOptions confines raw argv while installing the child-only
+// environment after sandbox-exec has crossed the confinement boundary.
+func CommandArgsWithOptions(spec Spec, args []string, opts CommandOptions) ([]string, bool) {
 	if !spec.Enforce() || !Available() {
 		return args, false
 	}
-	return append([]string{"sandbox-exec", "-p", seatbeltProfile(spec)}, args...), true
+	if opts.Env != nil && !helperDispatchRegistered.Load() {
+		return args, false
+	}
+	child, err := childExecCommand(args, opts.Env)
+	if err != nil {
+		return args, false
+	}
+	return append([]string{"sandbox-exec", "-p", seatbeltProfile(spec)}, child...), true
 }
 
 // Available reports whether sandbox-exec is on PATH (it ships with macOS).
@@ -47,7 +60,7 @@ func Available() bool {
 func seatbeltProfile(spec Spec) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(allow default)\n(deny file-write*)\n(allow file-write*\n")
-	for _, p := range writeAllowDirs(spec.WriteRoots) {
+	for _, p := range writeAllowDirs(spec.WriteRoots, spec.Strict) {
 		fmt.Fprintf(&b, "    (subpath %s)\n", sbplString(p))
 	}
 	b.WriteString(")\n")
@@ -56,6 +69,9 @@ func seatbeltProfile(spec Spec) string {
 	// rule; (allow default) above keeps reads working everywhere else.
 	for _, p := range forbidReadDirs(spec.ForbidReadRoots) {
 		fmt.Fprintf(&b, "(deny file-read* (subpath %s))\n", sbplString(p))
+	}
+	for _, p := range forbidReadFiles(spec.ForbidReadPaths) {
+		fmt.Fprintf(&b, "(deny file-read* (literal %s))\n", sbplString(p))
 	}
 	if !spec.Network {
 		b.WriteString("(deny network*)\n")
@@ -67,10 +83,13 @@ func seatbeltProfile(spec Spec) string {
 // sandbox permits writes to: the caller's roots plus temp dirs, /dev, and the
 // common toolchain caches under $HOME. Symlinks are resolved because macOS's
 // /tmp and $TMPDIR live under /private, which is the path Seatbelt matches.
-func writeAllowDirs(roots []string) []string {
+func writeAllowDirs(roots []string, strict bool) []string {
 	dirs := append([]string{}, roots...)
-	dirs = append(dirs, "/dev", "/tmp", "/private/tmp", "/private/var/folders", os.TempDir())
-	if home, err := os.UserHomeDir(); err == nil {
+	dirs = append(dirs, "/dev")
+	if !strict {
+		dirs = append(dirs, "/tmp", "/private/tmp", "/private/var/folders", os.TempDir())
+	}
+	if home, err := os.UserHomeDir(); err == nil && !strict {
 		// go build/test → Library/Caches + go; pip/etc → .cache; npm/cargo too.
 		for _, sub := range []string{"Library/Caches", ".cache", ".npm", ".cargo", "go"} {
 			dirs = append(dirs, filepath.Join(home, sub))
@@ -83,6 +102,28 @@ func writeAllowDirs(roots []string) []string {
 			continue
 		}
 		abs, err := filepath.Abs(d)
+		if err != nil {
+			continue
+		}
+		if real, err := filepath.EvalSymlinks(abs); err == nil {
+			abs = real
+		}
+		if !seen[abs] {
+			seen[abs] = true
+			out = append(out, abs)
+		}
+	}
+	return out
+}
+
+func forbidReadFiles(paths []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		abs, err := filepath.Abs(path)
 		if err != nil {
 			continue
 		}

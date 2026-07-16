@@ -3,10 +3,14 @@ package hook
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"reames-agent/internal/processpolicy"
 )
 
 // --- Runner construction ---
@@ -384,8 +388,9 @@ func TestRunnerDisablePluginRevokesOnlyOwnedHooks(t *testing.T) {
 				Command: "echo " + name,
 				Env:     map[string]string{"REAMES_AGENT_PLUGIN_NAME": name},
 			},
-			Event: PostToolUse,
-			Scope: ScopePlugin,
+			Event:         PostToolUse,
+			Scope:         ScopePlugin,
+			PackagePolicy: processpolicy.PackagePolicy{Owner: name},
 		}
 	}
 	runner := NewRunner([]ResolvedHook{
@@ -408,6 +413,70 @@ func TestRunnerDisablePluginRevokesOnlyOwnedHooks(t *testing.T) {
 	}
 	if removed := runner.DisablePlugin("alpha"); removed != 0 {
 		t.Fatalf("second DisablePlugin removed %d hooks, want 0", removed)
+	}
+}
+
+func TestRunnerDisablePluginCancelsRunningOwnedHook(t *testing.T) {
+	started := make(chan struct{})
+	finished := make(chan struct{})
+	spawner := func(ctx context.Context, in SpawnInput) SpawnResult {
+		if in.PackagePolicy.Owner != "alpha" {
+			return SpawnResult{ExitCode: -1, SpawnErr: fmt.Errorf("missing package policy: %+v", in.PackagePolicy)}
+		}
+		close(started)
+		<-ctx.Done()
+		close(finished)
+		return SpawnResult{ExitCode: -1, SpawnErr: ctx.Err()}
+	}
+	runner := NewRunner([]ResolvedHook{{
+		HookConfig: HookConfig{Command: "wait", Env: map[string]string{"REAMES_AGENT_PLUGIN_NAME": "alpha"}},
+		Event:      PostToolUse, Scope: ScopePlugin, PackagePolicy: processpolicy.PackagePolicy{Owner: "alpha"},
+	}}, t.TempDir(), spawner, nil)
+
+	done := make(chan struct{})
+	go func() {
+		runner.PostToolUse(context.Background(), "read_file", nil, "ok")
+		close(done)
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("owned hook did not start")
+	}
+	if removed := runner.DisablePlugin("alpha"); removed != 1 {
+		t.Fatalf("DisablePlugin removed %d hooks, want 1", removed)
+	}
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("running owned hook was not cancelled")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("hook event did not return after cancellation")
+	}
+}
+
+func TestRunnerDisablePluginClosesSnapshotStartRace(t *testing.T) {
+	called := false
+	runner := NewRunner(nil, t.TempDir(), func(context.Context, SpawnInput) SpawnResult {
+		called = true
+		return SpawnResult{ExitCode: 0}
+	}, nil)
+	hook := ResolvedHook{
+		HookConfig: HookConfig{Command: "late", Env: map[string]string{"REAMES_AGENT_PLUGIN_NAME": "alpha"}},
+		Event:      PostToolUse, Scope: ScopePlugin, PackagePolicy: processpolicy.PackagePolicy{Owner: "alpha"},
+	}
+	runner.hooks = []ResolvedHook{hook}
+	snapshot := runner.Hooks()
+	runner.DisablePlugin("alpha")
+	report := runner.run(context.Background(), Payload{Event: PostToolUse, Cwd: runner.cwd, ToolName: "read_file"}, snapshot)
+	if called {
+		t.Fatal("snapshot taken before disable started a revoked plugin hook")
+	}
+	if len(report.Outcomes) != 1 || report.Outcomes[0].Decision != DecisionError || !strings.Contains(report.Outcomes[0].Stderr, "disabled before hook start") {
+		t.Fatalf("late-start report = %+v", report)
 	}
 }
 

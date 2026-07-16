@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/processpolicy"
+	"reames-agent/internal/sandbox"
 )
 
 func writeSettings(t *testing.T, dir, json string) {
@@ -209,6 +211,10 @@ func TestLoadIncludesPluginSessionStartHook(t *testing.T) {
 	}
 	if got[0].Env["REAMES_AGENT_PLUGIN_NAME"] != "superpowers" || got[0].Env["REAMES_AGENT_WORKSPACE_ROOT"] != "/workspace" {
 		t.Fatalf("plugin env = %#v", got[0].Env)
+	}
+	wantState := pluginpkg.RuntimeStateDir(reamesAgentHome, "superpowers")
+	if got[0].Env["REAMES_AGENT_PLUGIN_STATE"] != wantState || got[0].PackagePolicy.Owner != "superpowers" || got[0].PackagePolicy.PackageRoot != root || got[0].PackagePolicy.StateRoot != wantState || got[0].PackagePolicy.HostHome != reamesAgentHome {
+		t.Fatalf("plugin process policy = %+v env=%#v", got[0].PackagePolicy, got[0].Env)
 	}
 	if got[1].Scope != ScopeGlobal {
 		t.Fatalf("second hook = %+v, want global", got[1])
@@ -582,6 +588,54 @@ func TestDefaultSpawnerOutputCap(t *testing.T) {
 	if len(r.Stdout) > outputCapBytes {
 		t.Errorf("captured output %d exceeds cap %d", len(r.Stdout), outputCapBytes)
 	}
+}
+
+func TestDefaultSpawnerTimeoutReapsDescendant(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell")
+	}
+	marker := filepath.Join(t.TempDir(), "descendant-survived")
+	command := "(sleep 1; printf leaked > " + shellQuoteForHookTest(marker) + ") & wait"
+	r := DefaultSpawner(context.Background(), SpawnInput{Command: command, Timeout: 100 * time.Millisecond})
+	if !r.TimedOut {
+		t.Fatalf("expected timeout, got %+v", r)
+	}
+	time.Sleep(1200 * time.Millisecond)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("hook descendant survived timeout: stat err=%v", err)
+	}
+}
+
+func TestPackageSpawnCommandArgsUsesBashForWindowsShebang(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-specific shebang compatibility")
+	}
+	sh := sandbox.ResolveShell("bash", "", nil)
+	if sh.Kind != sandbox.ShellBash {
+		t.Skip("Git Bash unavailable")
+	}
+	dir := filepath.Join(t.TempDir(), "plugin with spaces")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "session-start-codex")
+	if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\nprintf ok\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	args := packageSpawnCommandArgs(SpawnInput{
+		Command: script, PackagePolicy: processpolicy.PackagePolicy{Owner: "third-party"},
+	})
+	if len(args) != 2 || args[0] != sh.Path || args[1] != script {
+		t.Fatalf("package shebang argv = %v, want [%q %q]", args, sh.Path, script)
+	}
+	unowned := packageSpawnCommandArgs(SpawnInput{Command: script})
+	if len(unowned) < 2 || strings.EqualFold(unowned[0], sh.Path) {
+		t.Fatalf("user/global hook unexpectedly used package-only shebang path: %v", unowned)
+	}
+}
+
+func shellQuoteForHookTest(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 // TestWellFormedNodeEvalKeepsShellSemantics pins the execution contract for

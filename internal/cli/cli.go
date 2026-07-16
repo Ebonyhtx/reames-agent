@@ -44,9 +44,12 @@ var (
 
 // Run is the CLI entry point; it returns a process exit code.
 func Run(args []string, version string) int {
-	// This binary routes the hidden Windows sandbox helper subcommand below;
-	// registering that fact is what lets sandbox.Available() report true.
+	// Route trusted sandbox helpers before config, UI, or normal subcommands.
+	// Registration also lets the Windows backend report itself available.
 	sandbox.RegisterHelperDispatch()
+	if len(args) > 0 && args[0] == sandbox.ChildExecHelperCommand {
+		return sandbox.RunChildExecHelper(args[1:], os.Stdin, os.Stdout, os.Stderr)
+	}
 	if len(args) > 0 && args[0] == sandbox.WindowsHelperCommand {
 		return sandbox.RunWindowsSandboxHelper(args[1:], os.Stdin, os.Stdout, os.Stderr)
 	}

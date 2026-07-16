@@ -6,21 +6,21 @@ import (
 	"reames-agent/internal/sandbox"
 )
 
-// The Windows bash sandbox relaunches os.Executable() with
-// sandbox.WindowsHelperCommand as argv[1]. If the desktop binary loses this
-// route, every sandboxed command on Windows starts a second GUI instance and
-// returns empty output (#6051, #6067, #6072). These tests pin the route.
+// Sandbox wrappers relaunch os.Executable() with a hidden helper as argv[1]. If
+// the desktop binary loses either route, package or Windows bash commands can
+// start a second GUI instance. These tests pin both routes.
 
-func TestWindowsSandboxHelperRouteRecognized(t *testing.T) {
-	// argv[2:] is empty, so the helper rejects it with a usage error — the
-	// point here is only that the route matched (ok == true) and the process
-	// would exit instead of booting the GUI.
-	code, ok := runWindowsSandboxHelperIfRequested([]string{"reamesAgent-desktop", sandbox.WindowsHelperCommand})
-	if !ok {
-		t.Fatal("helper subcommand not routed; sandboxed commands would boot a second GUI instance")
-	}
-	if code == 0 {
-		t.Fatalf("helper with no payload should fail with a usage error, got exit code %d", code)
+func TestSandboxHelperRoutesRecognized(t *testing.T) {
+	for _, helper := range []string{sandbox.ChildExecHelperCommand, sandbox.WindowsHelperCommand} {
+		// argv[2:] is empty, so each helper rejects it. The point is only that
+		// the route matched and would exit instead of booting the GUI.
+		code, ok := runSandboxHelperIfRequested([]string{"reamesAgent-desktop", helper})
+		if !ok {
+			t.Fatalf("helper %q not routed; sandboxed commands would boot a second GUI instance", helper)
+		}
+		if code == 0 {
+			t.Fatalf("helper %q with no payload should fail, got exit code %d", helper, code)
+		}
 	}
 }
 
@@ -30,7 +30,7 @@ func TestWindowsSandboxHelperRouteIgnoresNormalLaunch(t *testing.T) {
 		{"reamesAgent-desktop", "--some-flag"},
 		{"reamesAgent-desktop", "not-the-helper", sandbox.WindowsHelperCommand},
 	} {
-		if _, ok := runWindowsSandboxHelperIfRequested(argv); ok {
+		if _, ok := runSandboxHelperIfRequested(argv); ok {
 			t.Fatalf("argv %v should not be treated as a helper launch", argv)
 		}
 	}

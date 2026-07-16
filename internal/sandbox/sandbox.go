@@ -27,8 +27,8 @@ import (
 // public commands.
 const WindowsHelperCommand = "__reamesAgent_windows_sandbox"
 
-// helperDispatchRegistered records that this binary's entry point routes
-// WindowsHelperCommand to RunWindowsSandboxHelper. The Windows wrapper
+// helperDispatchRegistered records that this binary's entry point routes the
+// hidden sandbox helper commands before normal CLI/Desktop startup. The Windows wrapper
 // relaunches os.Executable() as the sandbox helper, so a host binary without
 // that route swallows every sandboxed command: a Wails desktop build, for
 // example, would start a second GUI instance that forwards to the running app
@@ -38,9 +38,9 @@ const WindowsHelperCommand = "__reamesAgent_windows_sandbox"
 var helperDispatchRegistered atomic.Bool
 
 // RegisterHelperDispatch declares that the current binary's entry point routes
-// WindowsHelperCommand to RunWindowsSandboxHelper before any other startup
-// work. Every main() that can host the bash tool must add the route and call
-// this; on Windows, enforce mode fails closed without it.
+// ChildExecHelperCommand and WindowsHelperCommand before any other startup
+// work. Every main() that can host package processes or the bash tool must add
+// both routes and call this; on Windows, enforce mode fails closed without it.
 func RegisterHelperDispatch() { helperDispatchRegistered.Store(true) }
 
 const windowsSandboxFailureMarkerPrefix = "__reamesAgent_windows_sandbox_failure__:"
@@ -71,15 +71,31 @@ type Spec struct {
 	// plus any configured extras). Platforms may add command-scoped temp/cache
 	// roots so builds and package managers keep working without broad writes.
 	WriteRoots []string
+	// ReadRoots are trusted directories that must remain readable after a
+	// platform installs private filesystem overlays. Linux uses this to
+	// re-expose an immutable package generation when it lives below /tmp;
+	// reads elsewhere are already allowed by the base profile.
+	ReadRoots []string
 	// ForbidReadRoots are directories the command may not read from when
 	// confined. The OS sandbox denies access to these paths (macOS Seatbelt
 	// deny file-read* rules, Linux bubblewrap --tmpfs overlays); on other
 	// platforms the in-process tools enforce this instead.
 	ForbidReadRoots []string
+	// ForbidReadPaths are individual files that a confined command must not
+	// read. Keeping files separate from ForbidReadRoots lets Linux hide them
+	// with file bind mounts while directory roots continue to use tmpfs
+	// overlays. Windows combines both lists because its deny-ACE backend
+	// handles files and directories uniformly.
+	ForbidReadPaths []string
 	// Network allows network egress from inside the sandbox. Off blocks it so a
 	// command cannot exfiltrate or fetch; many dev commands (module/package
 	// downloads) need it, so it defaults on at the config layer.
 	Network bool
+	// Strict removes the user-level toolchain cache write exceptions that the
+	// interactive bash tool needs. Package-owned Hook/MCP processes set this so
+	// only their explicit state/workspace roots and command temp directory are
+	// writable.
+	Strict bool
 	// Shell is the interpreter the bash tool runs under. A zero value (empty
 	// Path) means the tool resolves one itself; the composition root sets it from
 	// [tools.shell] so the configured choice rides along with the spec.
@@ -91,6 +107,15 @@ type Spec struct {
 	// tool passes a longer budget for background jobs, which nobody is blocked
 	// on. Other platforms ignore it. WINDOWS_SANDBOX_LOCK_MS overrides both.
 	WindowsLockWait time.Duration
+}
+
+// CommandOptions carries child-only process settings for CommandArgsWithOptions.
+// The sandbox wrapper itself must be launched with a separately filtered host
+// environment; Env is installed only after the confinement boundary is active.
+type CommandOptions struct {
+	Writable bool
+	Env      []string
+	Dir      string
 }
 
 // Enforce reports whether the spec asks for confinement.
