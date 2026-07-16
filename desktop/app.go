@@ -8521,7 +8521,7 @@ type MemoryView struct {
 // writableScopes are the quick-add targets the panel offers, broad → specific.
 var writableScopes = []memory.Scope{memory.ScopeUser, memory.ScopeProject, memory.ScopeLocal}
 
-// Memory returns the loaded memory for the panel: the REASONIX.md hierarchy,
+// Memory returns the loaded memory for the panel: the AGENTS.md hierarchy,
 // active/archived auto-memories, and the writable scopes. Read-only; mutations
 // go through Remember / SaveDoc.
 func (a *App) Memory() MemoryView {

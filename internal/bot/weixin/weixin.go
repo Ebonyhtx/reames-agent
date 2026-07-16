@@ -1,5 +1,5 @@
 // Package weixin 实现微信 iLink Bot 适配器。
-// 参考 Hermes Agent 的 weixin adapter：
+// 参考 Hermes 项目的 weixin adapter 机制：
 // - getupdates 长轮询
 // - sendmessage / sendtyping
 // - context_token 持久化

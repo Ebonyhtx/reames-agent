@@ -1,6 +1,6 @@
 # 下一位模型接手交接文档
 
-日期：2026-07-16
+日期：2026-07-17
 
 仓库：`F:\reames-agent`
 
@@ -19,32 +19,28 @@
 单元/合同测试、localhost fixture、真实浏览器、原生 Desktop、远端 candidate 和真实
 Provider/IM/云节点证据必须分层表述，不能互相冒充。
 
-## 工作树保护
+## 工作树纪律
 
-截至本页更新时，以下未跟踪路径属于用户或其他会话，禁止修改、暂存或提交：
-
-```text
-.agents/
-artifacts/
-docs/audits/2026-07-09-reference-feature-gap-map.md
-```
-
-始终使用显式 `git add -- <paths>`，禁止 `git add .` 和 `git add -A`。每次开始工作先重新
-执行 `git status --short --branch`，以当前工作树为准。
+每次开始工作先执行 `git status --short --branch`，区分 tracked 改动、生成产物和用户文件。
+大批删除或清理必须使用显式路径和 clean clone 复验，不使用宽泛 `git clean -fdX`；提交前
+确认只有当前批次文件进入索引。
 
 ## 已验证基线
 
 - M0、M1、M2、M3、M4 已按路线图门槛关闭。
-- 最新功能基线为 `9295f8b feat: audit plugin registry operations`。普通 CI
-  `29510215514` 的 8 个 jobs 与 CodeQL `29510215449` 的 Go、JavaScript/TypeScript、
-  Actions 3 个 jobs 全绿，且对应的 head SHA 均为
-  `9295f8bbb8163bc7a32f233a1a7f0f9fb54b6e8c`。
+- 清洁前的最新已验证基线为 `6ec436c docs: sync registry delivery evidence`。普通 CI
+  `29512788563` 的 8 个 jobs 与 CodeQL `29512788531` 的 Go、JavaScript/TypeScript、
+  Actions 3 个 jobs 全绿。当前 HEAD 与远端状态必须以 Git/GitHub Actions 为准。
 - 同批 workflow 已迁移到 Node.js 24 action majors；上述远端日志未再出现 Node.js 20
   弃用告警。public-readiness 合同扫描 `.yml/.yaml`，拒绝旧 major、未知 ref 和未经审计的
   commit pin。
 - 最近完整 Desktop candidate `29378899444` 仍为三平台全绿；Windows 安装后 interaction、
   accessibility、native 和 plugin lifecycle 四条 smoke 均通过，且
   `boundary_changes=[]`、`errors=[]`。
+- 初始迁移中隔离的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package、
+  `site/` 和 `workers/` 已完成依赖审计并从当前树删除；Git 历史和
+  `F:\code-reference\Hermes` 保留参考。public-readiness 会阻止 legacy 根目录和运行品牌回归，
+  详见 `docs/audits/2026-07-17-repository-cleanup.md`。
 
 ## M5 当前边界
 

@@ -16,6 +16,108 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+LEGACY_ROOTS = {
+    ".plans",
+    ".signpath",
+    "acp_adapter",
+    "acp_registry",
+    "agent",
+    "apps",
+    "assets",
+    "cron",
+    "datagen-config-examples",
+    "docker",
+    "gateway",
+    "hooks",
+    "infographic",
+    "locales",
+    "nix",
+    "npm",
+    "optional-mcps",
+    "optional-skills",
+    "packaging",
+    "plans",
+    "plugins",
+    "providers",
+    "reames_cli",
+    "site",
+    "skills",
+    "tests",
+    "tools",
+    "tui_gateway",
+    "ui-tui",
+    "workers",
+}
+
+LEGACY_ROOT_FILES = {
+    ".hadolint.yaml",
+    ".mailmap",
+    "INTEGRATION_REFERENCE.md",
+    "MANIFEST.in",
+    "README.ur-pk.md",
+    "REAMES_AGENT.md",
+    "batch_runner.py",
+    "cli-config.yaml.example",
+    "cli.py",
+    "constraints-termux.txt",
+    "flake.lock",
+    "flake.nix",
+    "hermes",
+    "install.ps1",
+    "mcp_serve.py",
+    "mini_swe_runner.py",
+    "model_tools.py",
+    "package-lock.json",
+    "package.json",
+    "prod_test",
+    "pyproject.toml",
+    "reames",
+    "reames-setup.py",
+    "reames_bootstrap.py",
+    "reames_constants.py",
+    "reames_logging.py",
+    "reames_state.py",
+    "reames_time.py",
+    "run_agent.py",
+    "setup.py",
+    "toolset_distributions.py",
+    "toolsets.py",
+    "trajectory_compressor.py",
+    "utils.py",
+    "uv.lock",
+}
+
+LEGACY_WORKFLOWS = {
+    ".github/workflows/deploy-accounts-worker.yml",
+    ".github/workflows/deploy-crash-worker.yml",
+    ".github/workflows/deploy-forum-worker.yml",
+    ".github/workflows/pages.yml",
+}
+
+ACTIVE_BRAND_ROOTS = (
+    ".github/",
+    "cmd/",
+    "deploy/",
+    "desktop/",
+    "internal/",
+    "scripts/",
+)
+
+ACTIVE_BRAND_EXEMPT = {
+    "scripts/check_deploy_contracts.py",
+    "scripts/check_public_readiness.py",
+    "scripts/test_check_public_readiness.py",
+}
+
+INHERITED_RUNTIME_TOKENS = (
+    "Hermes Agent",
+    "HERMES_",
+    ".hermes",
+    "Nous Research",
+    "NousResearch/hermes-agent",
+    "hermes-agent.nousresearch",
+)
+
 
 def read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
@@ -24,6 +126,37 @@ def read(rel: str) -> str:
 def require(condition: bool, message: str, failures: list[str]) -> None:
     if not condition:
         failures.append(message)
+
+
+def legacy_path_failure(rel: str) -> str | None:
+    normalized = rel.replace("\\", "/").strip("/")
+    top = normalized.split("/", 1)[0]
+    if top in LEGACY_ROOTS:
+        return f"{normalized} belongs to the removed legacy Hermes/Python tree."
+    if normalized in LEGACY_ROOT_FILES:
+        return f"{normalized} is removed legacy root metadata or an obsolete entry point."
+    if normalized in LEGACY_WORKFLOWS:
+        return f"{normalized} is an obsolete legacy deployment workflow."
+    return None
+
+
+def brand_failures_for_text(rel: str, text: str) -> list[str]:
+    normalized = rel.replace("\\", "/")
+    if normalized in ACTIVE_BRAND_EXEMPT or not normalized.startswith(ACTIVE_BRAND_ROOTS):
+        return []
+
+    failures: list[str] = []
+    for token in INHERITED_RUNTIME_TOKENS:
+        if token in text:
+            failures.append(f"{normalized} contains inherited runtime brand token {token!r}.")
+
+    if normalized.endswith(".go"):
+        compatibility_only = re.sub(r"REASONIX(?:\.local)?\.md", "", text, flags=re.IGNORECASE)
+        if re.search(r"reasonix", compatibility_only, flags=re.IGNORECASE):
+            failures.append(
+                f"{normalized} contains Reasonix branding outside the audited REASONIX.md compatibility filename."
+            )
+    return failures
 
 
 def check_required_files(failures: list[str]) -> None:
@@ -95,15 +228,10 @@ def check_release_and_deploy_controls(failures: list[str]) -> None:
     require("不会发布任何内容" in releasing, "docs/RELEASING.md must state tag pushes do not publish.", failures)
     require("不向 npm、Homebrew、Cloudflare R2" in releasing, "docs/RELEASING.md must keep production publish targets disabled.", failures)
 
-    for rel in [
-        ".github/workflows/deploy-accounts-worker.yml",
-        ".github/workflows/deploy-crash-worker.yml",
-        ".github/workflows/deploy-forum-worker.yml",
-        ".github/workflows/pages.yml",
-    ]:
-        workflow = read(rel)
-        require("workflow_dispatch" not in workflow, f"{rel} must not expose manual production deployment.", failures)
-        require("branches: [main-v2]" in workflow, f"{rel} must not auto-deploy from the current main branch.", failures)
+    for rel in sorted(LEGACY_WORKFLOWS):
+        require(not (ROOT / rel).exists(), f"{rel} must stay removed with its unowned legacy service.", failures)
+    for rel in ["site", "workers"]:
+        require(not (ROOT / rel).exists(), f"{rel}/ must stay removed from the current product repository.", failures)
 
     deploy = read("docs/DEPLOY.md")
     require("sk-xxx" not in deploy, "docs/DEPLOY.md must not use sk-xxx style API-key examples.", failures)
@@ -183,14 +311,26 @@ def check_brand_env_regressions(failures: list[str]) -> None:
         require("REASONIX_BOT_CONTROL_TOKEN" not in text, f"{rel} must use REAMES_AGENT_BOT_CONTROL_TOKEN.", failures)
 
 
-def check_root_package_metadata(failures: list[str]) -> None:
-    package = read("package.json")
-    package_lock = read("package-lock.json")
-    for rel, text in [("package.json", package), ("package-lock.json", package_lock)]:
-        require('"name": "reames-agent"' in text, f"{rel} root package metadata must use the Reames package name.", failures)
-        require("NousResearch/Hermes-Agent" not in text, f"{rel} root package metadata must not link the inherited Hermes repository.", failures)
-    require("python run_agent.py" not in package, "package.json postinstall must not advertise the inherited Python runtime.", failures)
-    require("scripts/install.sh" in package, "package.json postinstall should point users to the current Reames installer surface.", failures)
+def check_legacy_tree_and_brand(failures: list[str]) -> None:
+    try:
+        tracked = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        failures.append(f"could not enumerate tracked files with git ls-files: {exc}")
+        return
+
+    for rel in tracked:
+        failure = legacy_path_failure(rel)
+        if failure:
+            failures.append(failure)
+            continue
+        normalized = rel.replace("\\", "/")
+        if not normalized.startswith(ACTIVE_BRAND_ROOTS):
+            continue
+        path = ROOT / normalized
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        failures.extend(brand_failures_for_text(normalized, text))
 
 
 def check_tracked_artifacts(failures: list[str]) -> None:
@@ -337,6 +477,7 @@ def check_script_surface(failures: list[str]) -> None:
     allowed_legacy_mentions = {
         "scripts/check_public_readiness.py",
         "scripts/check_deploy_contracts.py",
+        "scripts/test_check_public_readiness.py",
     }
     forbidden_tokens = [
         "HERMES_HOME",
@@ -368,7 +509,7 @@ def main() -> int:
         check_codeql_workflow(failures)
         check_workflow_action_runtimes(failures)
         check_brand_env_regressions(failures)
-        check_root_package_metadata(failures)
+        check_legacy_tree_and_brand(failures)
         check_tracked_artifacts(failures)
         check_telemetry_boundaries(failures)
         check_installers(failures)

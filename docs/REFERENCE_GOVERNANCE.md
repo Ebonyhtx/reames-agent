@@ -1,7 +1,7 @@
 # Reames Agent 源流与参考项目治理
 
 > 状态：当前项目来源、上游跟踪和参考吸收的权威说明
-> 更新：2026-07-09
+> 更新：2026-07-17
 
 ## 1. 项目源流
 
@@ -35,6 +35,10 @@ Reasonix 是持续跟进的主上游，不是一次性参考。但 Reames Agent 
 - 不整套复制另一个项目的 runtime、UI 或依赖体系；
 - 每次吸收都要先证明 Reames Agent 当前确有缺口；
 - 实现应落入 Reames Agent 的统一控制面和测试体系。
+
+初始迁移中曾临时保留的 Hermes/Python/Electron/TUI/插件/测试快照已于
+2026-07-17 从当前树删除；Git 历史负责追溯，`F:\code-reference\Hermes` 负责后续机制研究。
+任何参考项目都不得再以整套 runtime、UI、依赖体系或测试树形式回到主分支。
 
 ### Reames Lite
 

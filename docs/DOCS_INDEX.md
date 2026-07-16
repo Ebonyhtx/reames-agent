@@ -63,6 +63,8 @@
 | [首次上游审查](audits/2026-07-09-upstream-review.md) | Upstream Watch 建立时的差异快照 |
 | [Desktop candidate governance audit](audits/2026-07-09-desktop-candidate-governance.md) | 三平台 Desktop candidate workflow、artifact smoke 与发布边界证据 |
 | [Legacy tree quarantine audit](audits/2026-07-09-legacy-tree-quarantine.md) | 旧 Python/Hermes 树的短期隔离规则和后续迁移队列 |
+| [参考项目功能差异与吸收清单](audits/2026-07-09-reference-feature-gap-map.md) | 2026-07-09 的跨参考项目证据化差异快照；当前优先级仍以发展计划为准 |
+| [仓库 legacy tree 清洁收口审计](audits/2026-07-17-repository-cleanup.md) | 删除旧 Hermes/Python/Electron/TUI/worker 树、保留边界与 public-readiness 防回归证据 |
 | [Script surface cleanup audit](audits/2026-07-09-script-surface-cleanup.md) | 公开脚本入口清理、旧运行时脚本删除和防回归门禁 |
 | [Telemetry and feedback boundary audit](audits/2026-07-09-telemetry-feedback-boundary.md) | 遥测/反馈默认关闭、自托管边界和公开门禁证据 |
 | [Self-hosted feedback collector audit](audits/2026-07-10-feedback-collector.md) | `internal/feedback`、`serve` 本地反馈收集、脱敏、去重和 JSONL 账本证据 |

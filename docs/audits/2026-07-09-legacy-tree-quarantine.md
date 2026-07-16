@@ -2,6 +2,9 @@
 
 Date: 2026-07-09
 
+> 状态：历史决策，已由 `2026-07-17-repository-cleanup.md` 关闭。下述“短期不删除”仅描述
+> 当时迁移阶段，不再代表当前仓库策略。
+
 ## 背景
 
 `scripts/` 公开入口清理后，仓库根目录仍保留一整套继承自 Hermes/Python 时代的历史代码树。它们包含有价值的机制参考，例如多渠道 gateway、旧 TUI、skills、browser tools、Python tests 和旧打包元数据；但当前 Reames Agent 的权威产品路径已经迁移到 Go runtime：

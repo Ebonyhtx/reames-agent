@@ -2,7 +2,7 @@
 
 > 状态：当前唯一执行路线
 >
-> 更新：2026-07-16
+> 更新：2026-07-17
 >
 > 规划方式：先关闭真实用户闭环，再扩展能力面
 
@@ -58,6 +58,7 @@
 - [x] 将 updater 迁移到当前 GitHub 仓库，并默认关闭无项目自有服务的遥测、指标和崩溃上传。
 - [x] 将 Docker、compose、systemd、部署命令和 `serve.token_env` 纳入 CI 部署契约检查。
 - [x] 建立公开仓库前门禁：公开说明、所有权、许可证/NOTICE、生产发布禁用和遗留 worker 手动部署隔离。
+- [x] 在完成运行引用、发布依赖和替代实现审计后，删除隔离的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package 元数据及 `site/`、`workers/`；建立 public-readiness legacy-tree/品牌棘轮，参考实现只保留于 Git 历史和外部参考仓库。
 - [x] 公开仓库后恢复 CodeQL workflow，覆盖 Go、JavaScript/TypeScript 和 GitHub Actions，并完成远端全绿核验。
 - [x] 明确版本号来源、变更日志和发布签名策略，并纳入 CI 发布契约检查。
 - [x] 为安装器补显式 release artifact 模式和 `SHA256SUMS` 校验 dry-run 契约，但默认仍保持 source 构建，避免 pre-stable 阶段误导为稳定发布（见 `audits/2026-07-09-installer-release-mode.md`）。

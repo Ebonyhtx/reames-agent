@@ -1,5 +1,5 @@
 // Package qq 实现 QQ 官方 Bot API v2 适配器。
-// 参考 Hermes Agent 的 qqbot adapter 实现：
+// 参考 Hermes 项目的 qqbot adapter 机制：
 // - app token 获取与刷新
 // - WebSocket gateway 连接、heartbeat、resume
 // - REST API 回复消息

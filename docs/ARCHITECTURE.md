@@ -2,7 +2,7 @@
 
 > 创建：2026-07-08
 >
-> 更新：2026-07-14
+> 更新：2026-07-17
 >
 > 基座：DeepSeek Reasonix main-v2，Go 1.25+，MIT License
 
@@ -22,7 +22,7 @@ internal/
   config/         # TOML 配置加载
   plugin/         # MCP 插件宿主（stdio + HTTP）
   skill/          # Playbook 技能系统
-  memory/         # 层级化记忆（REAMES_AGENT.md 等）
+  memory/         # 层级化记忆（默认 AGENTS.md，兼容旧 REASONIX.md）
   memorycompiler/ # Memory v5 执行编译器
   hook/           # 生命周期 Hooks
   sandbox/        # OS 沙箱（macOS/Windows/Linux）
@@ -37,8 +37,8 @@ internal/
 desktop/          # Wails v2 桌面应用
   app.go          # Go 后端（Wails 绑定）
   frontend/       # React 19 + Vite 8 + Zustand 前端
-site/             # Astro 文档站点
-workers/          # Cloudflare Workers（accounts, crash-report, forum）
+docs/             # 当前产品、架构、用户、运维和审计文档
+deploy/           # Docker/systemd/反向代理等自托管部署资产
 ```
 
 ## 二、核心架构

@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://reames-agent.io/sitemap-index.xml

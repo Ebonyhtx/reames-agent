@@ -359,7 +359,7 @@ func CacheDir() string {
 }
 
 // MemoryUserDir returns the Reames Agent user state root (…/reames-agent), under which
-// the user-global REASONIX.md and the per-project auto-memory store live. Empty
+// the user-global instruction documents and per-project auto-memory store live. Empty
 // when the user state dir can't be resolved, which disables user-scoped memory.
 func MemoryUserDir() string {
 	return userSupportDir()

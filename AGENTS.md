@@ -35,8 +35,6 @@ internal/
 desktop/          # Wails v2 桌面应用
   app.go          # Go 后端（Wails 绑定）
   frontend/       # React 19 + Vite 8 + Zustand 前端
-site/             # Astro 文档站点（遗留，非核心产品）
-workers/          # Cloudflare Workers（遗留，非核心产品）
 docs/             # 项目方向、发展计划、架构、用户与运维文档
 ```
 
@@ -66,8 +64,8 @@ go test ./internal/crypto/... ./internal/trust/... ./internal/cron/... \
 # 交叉编译
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/reames-agent-linux-amd64 ./cmd/reames-agent
 
-# 品牌残留检查（必须为 0）
-grep -rn 'reasonix\|Reasonix' --include='*.go' -l | grep -v 'reames-agent' | wc -l
+# 公开、品牌和 legacy-tree 清洁棘轮
+python scripts/check_public_readiness.py
 
 # 工具契约验证
 go test ./internal/tool -run TestBuiltinToolContractDocumentation -v
@@ -107,6 +105,7 @@ python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
 ## 当前状态
 
 - 产品方向以 `docs/PROJECT.md` 为准，执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
-- 当前处于 M0“基线可信”：核心、Desktop、前端本地基线已恢复，等待远端 CI 和干净 clone/发布验证。
-- 下一里程碑是 M1“真实任务闭环”：真实 API、原生 Desktop、工具审批、文件变更和会话恢复。
+- M0、M1、M2、M3、M4 已按路线图门槛关闭；M5 所有可由仓库、clean clone 和 CI/CodeQL 验证的事项已收口。
+- 当前唯一未关闭的 M5 项是需要真实运营主体的公开 registry 密钥仪式、生产 endpoint、实际轮换/compromise drill 与 provenance policy，保持 `external-blocked`。
+- 主分支只保留 Go/Wails 产品；旧 Hermes/Python/Electron/TUI/plugin/test/package 树已删除，参考机制只从 `F:\code-reference` 按治理规则吸收。
 - 已有 24 个内置工具和 6 目标交叉编译；完成声明必须以测试、真实交互或发布证据为准。

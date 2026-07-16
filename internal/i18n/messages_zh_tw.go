@@ -266,7 +266,7 @@ var ChineseTraditional = Messages{
 	ListMcpHeader:       "MCP 伺服器",
 	ListMcpNone:         "未連線 MCP 伺服器 — 在 reames-agent.toml（[[plugins]]）或專案 .mcp.json 中新增",
 
-	MemoryNone:             "還沒有載入任何記憶 — 輸入 “/remember 內容” 可快速記錄，也可以在專案根目錄建立 REASONIX.md",
+	MemoryNone:             "還沒有載入任何記憶 — 輸入 “/remember 內容” 可快速記錄，也可以在專案根目錄建立 AGENTS.md",
 	MemoryLoaded:           "當前已載入的記憶：",
 	MemorySavedHeader:      "  已記錄的條目（用 “/forget <name>” 刪除）：",
 	MemoryStoredUnderFmt:   "  存放於 %s",

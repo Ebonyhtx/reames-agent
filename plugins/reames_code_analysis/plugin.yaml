@@ -1,5 +1,0 @@
-name: reames-code-analysis
-display_name: reames-code-analysis
-version: 1.0.0
-description: "Code analysis tools — complexity, duplicates, dependencies, refactoring"
-hooks: []

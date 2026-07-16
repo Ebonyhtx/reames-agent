@@ -1,5 +1,5 @@
 // Package feishu 实现飞书自建应用 Bot 适配器。
-// 参考 Hermes Agent 的 feishu adapter：
+// 参考 Hermes 项目的 feishu adapter 机制：
 // - 长连接 WebSocket（默认）或 Webhook 模式
 // - @mention gating
 // - open_id / user_id / union_id 映射

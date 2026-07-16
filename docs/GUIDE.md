@@ -635,7 +635,7 @@ another branch. **Custom commands** are Markdown files under `.reames-agent/comm
 `/review`, a subdirectory namespaces it (`git/commit.md` → `/git:commit`). The
 body is a prompt template; invoking the command sends it as a turn.
 
-`/memory` lists both memory documents (`REASONIX.md` / `AGENTS.md`) and saved
+`/memory` lists both memory documents (`AGENTS.md` / legacy `REASONIX.md`) and saved
 auto-memory facts. During agent turns, the read-only `history` and `memory`
 tools let the model retrieve prior session decisions, compacted-history
 archives, and saved facts on demand instead of injecting that dynamic state into
@@ -750,7 +750,7 @@ Workers and subagents may explore independently, but the orchestrator owns the
 canonical state files. Completion requires a requirement-by-requirement evidence
 audit against `task_spec.md`; a passing narrow check is not treated as proof of a
 broad requirement. Dynamic run state stays in `.reames-agent/autoresearch/...`, not
-in `REASONIX.md`, `AGENTS.md`, project memory, tool schemas, or the cache-stable
+in `AGENTS.md`, legacy `REASONIX.md`, project memory, tool schemas, or the cache-stable
 system prompt. Public publishing, destructive operations, credentials, payments,
 and external notifications still follow the normal approval, privacy, and cache
 gates.
@@ -777,7 +777,7 @@ separate cache-stable sessions) is a one-line edit afterwards — set
 planner_model = "deepseek-pro"   # used as the low-frequency planner
 ```
 
-The planner sees loaded `REASONIX.md` / `AGENTS.md` memory and a small read-only
+The planner sees loaded `AGENTS.md` / legacy `REASONIX.md` memory and a small read-only
 research tool set, so it can inspect relevant files before handing a plan to the
 executor. Writer and workflow tools remain executor-only. `max_steps` limits the
 executor; `planner_max_steps` limits only the planner, and either can be set to

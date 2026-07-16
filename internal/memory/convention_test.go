@@ -64,3 +64,14 @@ func TestDocPathPrefersExisting(t *testing.T) {
 		t.Errorf("should append to the existing CLAUDE.md, got %s", got)
 	}
 }
+
+func TestDocPathPrefersAgentsOverLegacyDoc(t *testing.T) {
+	proj := t.TempDir()
+	mustWrite(t, filepath.Join(proj, "AGENTS.md"), "current guidance")
+	mustWrite(t, filepath.Join(proj, "REASONIX.md"), "legacy guidance")
+
+	set := Load(Options{CWD: proj})
+	if got := set.DocPath(ScopeProject); filepath.Base(got) != "AGENTS.md" {
+		t.Errorf("AGENTS.md should win when current and legacy docs coexist, got %s", got)
+	}
+}

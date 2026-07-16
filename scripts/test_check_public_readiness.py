@@ -55,5 +55,56 @@ class WorkflowActionRuntimeTests(unittest.TestCase):
             self.assertEqual([], failures)
 
 
+class LegacyTreeAndBrandTests(unittest.TestCase):
+    def test_rejects_removed_legacy_paths(self):
+        for rel in [
+            "agent/runtime.py",
+            "apps/desktop/package.json",
+            "site/package.json",
+            "workers/forum/wrangler.toml",
+            "pyproject.toml",
+            "REAMES_AGENT.md",
+            ".github/workflows/pages.yml",
+        ]:
+            self.assertIsNotNone(readiness.legacy_path_failure(rel), rel)
+
+        for rel in [
+            "internal/agent/agent.go",
+            "desktop/frontend/package.json",
+            "docs/PROJECT.md",
+            ".github/workflows/ci.yml",
+        ]:
+            self.assertIsNone(readiness.legacy_path_failure(rel), rel)
+
+    def test_reasonix_filename_compatibility_is_narrow(self):
+        self.assertEqual(
+            [],
+            readiness.brand_failures_for_text(
+                "internal/memory/doc.go",
+                'var names = []string{"AGENTS.md", "REASONIX.md", "REASONIX.local.md"}',
+            ),
+        )
+        failures = readiness.brand_failures_for_text(
+            "internal/i18n/messages_en.go",
+            'const label = "Reasonix Agent"',
+        )
+        self.assertEqual(1, len(failures), failures)
+
+    def test_rejects_hermes_runtime_brand_in_active_surfaces(self):
+        failures = readiness.brand_failures_for_text(
+            "desktop/app.go",
+            'const home = "HERMES_HOME" // Hermes Agent by Nous Research',
+        )
+        self.assertEqual(3, len(failures), failures)
+
+        self.assertEqual(
+            [],
+            readiness.brand_failures_for_text(
+                "docs/audits/2026-07-17-repository-cleanup.md",
+                "Historical Hermes Agent source was removed.",
+            ),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,0 @@
-name: reames-git
-display_name: reames-git
-version: 1.0.0
-description: "Git development workflow tools — clone, commit, branch, PR, review, log, status"
-hooks: []

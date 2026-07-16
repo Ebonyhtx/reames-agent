@@ -1,5 +1,5 @@
 // Package bot 实现 Reames Agent 多渠道 IM bot 消息网关，支持 QQ、飞书、微信。
-// 架构参考 Hermes Agent 的 gateway/adapter/session 模式。
+// 架构参考 Hermes 项目的 gateway/adapter/session 模式。
 package bot
 
 import "context"

@@ -302,7 +302,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		}
 	}
 
-	// Persistent memory (REASONIX.md / AGENTS.md hierarchy + auto-memory index)
+	// Persistent memory (AGENTS.md / legacy REASONIX.md hierarchy + auto-memory index)
 	// folds into the system prompt exactly here, once: it becomes part of the
 	// durable, cache-stable prefix every turn reuses, so memory costs nothing per
 	// turn. Mid-session changes never touch this prefix — they ride the

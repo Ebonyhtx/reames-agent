@@ -33,7 +33,7 @@ actionable.`
 const executorHandoffMarker = "Reames Agent executor handoff"
 
 // PlannerPromptWithContext appends cache-stable standing context, such as loaded
-// REASONIX.md / AGENTS.md memory, to the planner's smaller system prompt.
+// AGENTS.md / legacy REASONIX.md memory, to the planner's smaller system prompt.
 func PlannerPromptWithContext(context string) string {
 	context = strings.TrimSpace(context)
 	if context == "" {

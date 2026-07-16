@@ -2,7 +2,7 @@
 
 > 状态：当前产品方向的权威说明
 >
-> 更新：2026-07-16
+> 更新：2026-07-17
 
 ## 一句话定位
 
@@ -52,7 +52,7 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 - M4 Agent 可靠性已按路线图门槛关闭：所有 Goal completion 统一通过 Todo/project checks，v2 sidecar 持久化 Goal/Plan/Todo、最小 root 项目检查引用和 child journal cursor；委派树共享预算，可写 child receipt/checkpoint 归并给祖先，持久 subagent 在 Provider/tool/compaction 边界保存 transcript 并以 `interrupted` + `continue_from` 显式恢复。Previewable built-in writer/checkpoint restore 使用 `os.Root` resolve-beneath I/O；每个 visible/synthetic turn 都有独立恢复 checkpoint，in-flight commit anchor 让冷启动在“完整提交则保留、否则 workspace/runtime/transcript 一起回滚”之间 fail closed。Conversation/RewindBoth 另有 `prepared -> resources_applied` journal，checkpoint 只在资源提交后退休。`AtomicWriteFile` 已移除 Windows 原地复制降级，跨设备 rename fail closed，并补 write-through/父目录同步。该完成声明严格限于可预览文件 writer 与会话本地资源：完整 evidence/预算仍非跨进程账本，child-only bash 不是 durable root proof，shell/MCP/external API 和后台 opaque side effect 不具备逐文件门禁或 exactly-once，ACL/xattr/硬链接身份也不恢复。
 - M5 插件生命周期信任机制已进入跨宿主验收：原生 schema v1、精确权限、不可变 generation、默认禁用、`preview/planId/apply`、跨进程状态锁和 `os.Root` 受管路径已有故障注入与完整生命周期测试。Desktop、CLI、Bot、Serve/event wire 和 ACP 共用 fresh-human 结构化审批；generation 变化或禁用会原子阻止新 work 起跑，串行 rebuild，并撤销旧 MCP/Hook/Skill runtime。package-owned Hook/MCP 使用最小环境、独立 state/tmp、严格 OS sandbox、敏感读取阻断和进程树回收；真实 `obra/superpowers@d72560e462a74e10d161b7f993d5fc3282bfa1e2` 已完成 Windows sandbox E2E。commit `13016c6` 加入无默认 endpoint/TOFU 的官方 `go-tuf/v2` registry client，绑定 full commit、canonical tree digest、manifest 权限和 provenance assertion。commit `9295f8b` 又加入显式带外 root 的只读生产策略审计，验证连续 root 旧/新双阈值、角色 key 隔离、到期窗口和完整 metadata/index/attestation 字节，并在成功报告中保留人员仪式、HSM、endpoint/monitor 与 DSSE/SLSA policy 等 `externalRequired`。该提交的 clean clone、本地全量门禁、普通 CI `29510215514` 8/8 与 CodeQL `29510215449` 3/3 全绿，Node.js 24 action majors 的远端日志不再出现 Node.js 20 弃用告警。该事实仍不等于 M5 完成：直接 GitHub 未签名，真实运营公开 registry、生产密钥仪式/实际轮换/compromise drill、DSSE/SLSA policy verifier 和跨平台统一硬 CPU/RSS 配额仍未关闭。
 - 当前最大风险不是“缺功能”，而是插件供应链、远程入口与云节点运维加固、真实 IM 回环及生产签名链尚未完全闭环；统一 control 边界和 Desktop 日用化门槛已关闭并有远端 CI/CodeQL/candidate 证据，transport 对 `agent/provider/tool` 的生产直连为零，版本化 command/event/display DTO、prompt metadata、会话持久化/复制、Desktop session-store、ACP/CLI 装配和终端渲染路径已收口。
-- `site/`、`workers/` 等遗留产品面仍需按运行引用、发布依赖和替代实现逐批判断，不能一次性盲删。
+- 继承自早期迁移的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package 元数据以及 `site/`、`workers/` 已在完成运行引用和替代实现审计后从当前树删除；参考机制只保留在 Git 历史和 `F:\code-reference`，不得重新整套 vendor。
 
 代码与测试驱动的初始接管结论见 [audits/2026-07-09-takeover.md](audits/2026-07-09-takeover.md)。
 
