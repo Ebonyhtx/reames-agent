@@ -461,6 +461,50 @@ export interface CheckpointMeta {
   canConversation?: boolean;
 }
 
+export interface SubagentDeliveryChange {
+  path: string;
+  kind: "create" | "modify" | "delete" | string;
+  old_text: string;
+  new_text: string;
+  added: number;
+  removed: number;
+  diff: string;
+  binary: boolean;
+}
+
+export interface SubagentDeliveryView {
+  ref: string;
+  kind: string;
+  name: string;
+  status: string;
+  workspace: {
+    mode: string;
+    sourceRoot: string;
+    executionRoot: string;
+    worktreeRoot?: string;
+    repoRoot?: string;
+    branch?: string;
+    baseHead?: string;
+    prefix?: string;
+    sourceDirty?: boolean;
+  };
+  delivery: {
+    status: string;
+    commit?: string;
+    head?: string;
+    patchDigest?: string;
+    files?: Array<{ path: string; kind: string; added?: number; removed?: number; binary?: boolean }>;
+    commits?: Array<{ hash: string; subject: string }>;
+    tests?: Array<{ command: string; success: boolean }>;
+    lastError?: string;
+    updatedAt?: string;
+    sourceDirty?: boolean;
+    registered?: boolean;
+    worktreeLive?: boolean;
+  };
+  changes?: SubagentDeliveryChange[];
+}
+
 // SessionMeta is one saved session for the history panel.
 export interface SessionMeta {
   path: string;
@@ -743,6 +787,7 @@ export interface ServerView {
   resources: number;
   hasTools?: boolean;
   error?: string;
+  requiresReverification?: boolean;
   toolList?: MCPToolView[];
   trustedReadOnlyTools?: string[];
   trustState?: "workspace" | "session" | "changed" | "untrusted" | string;

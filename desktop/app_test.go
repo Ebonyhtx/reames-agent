@@ -7083,7 +7083,7 @@ func TestReverifyMCPServerRecoversIdentityDriftAndPreservesSelectedReaders(t *te
 	var changed bool
 	for _, server := range app.MCPServers() {
 		if server.Name == "github" {
-			changed = server.Status == "failed" && server.IdentityChanged && server.TrustState == "changed"
+			changed = server.Status == "failed" && server.RequiresReverification && server.IdentityChanged && server.TrustState == "changed"
 		}
 	}
 	if !changed {

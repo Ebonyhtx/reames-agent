@@ -29,6 +29,7 @@ import (
 	"reames-agent/internal/sandbox"
 	"reames-agent/internal/shellparse"
 	"reames-agent/internal/tool"
+	"reames-agent/internal/workspacelease"
 )
 
 // maxToolOutputBytes caps a single tool result before it goes into the model's
@@ -329,6 +330,11 @@ type Agent struct {
 	// run_in_background, task run_in_background, bash_output/kill_shell/wait) can
 	// reach it. nil leaves those tools to degrade gracefully.
 	jobs *jobs.Manager
+
+	// workspaceLease serializes mutations across processes that target the same
+	// physical workspace. Acquisition is lazy, so readers remain concurrent.
+	workspaceLease *workspacelease.Owner
+	workspaceRoot  string
 
 	// sessionSync persists a crash-recovery point for isolated sub-agent
 	// transcripts. Root sessions use Controller autosave and leave it nil.
@@ -942,6 +948,16 @@ type Options struct {
 	// Jobs is the session's background-job manager (nil disables background tools).
 	Jobs *jobs.Manager
 
+	// WorkspaceLease serializes mutations across sessions and processes that
+	// target the same workspace. nil is permitted for direct unit construction;
+	// boot supplies it for every real workspace session.
+	WorkspaceLease *workspacelease.Owner
+
+	// WorkspaceRoot is the physical workspace this runtime's tools resolve
+	// against. It is carried through tool-call contexts for nested delegation and
+	// delivery authorization.
+	WorkspaceRoot string
+
 	// SessionSync persists isolated/sub-agent transcripts at safe round and
 	// compaction boundaries. Root sessions normally leave it nil because the
 	// Controller owns their autosave lifecycle.
@@ -1064,6 +1080,8 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 		sandboxEscapeApprover:    sandboxEscapeApprover,
 		hooks:                    hooks,
 		jobs:                     opts.Jobs,
+		workspaceLease:           opts.WorkspaceLease,
+		workspaceRoot:            strings.TrimSpace(opts.WorkspaceRoot),
 		sessionSync:              opts.SessionSync,
 		evidence:                 evidence.NewLedger(),
 		projectChecks:            append([]instruction.VerifyCheck(nil), opts.ProjectChecks...),
@@ -1137,6 +1155,11 @@ func (a *Agent) withinBudget(step int) bool {
 }
 
 func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
+	ctx = WithWorkspaceRoot(ctx, a.workspaceRoot)
+	if a.workspaceLease != nil {
+		a.workspaceLease.BeginRun()
+		defer a.workspaceLease.EndRun()
+	}
 	defer a.clearSteerQueue()
 	a.steerMu.Lock()
 	a.steerConsumed = false
@@ -3003,6 +3026,18 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 			}
 		}
 	}
+	// Acquire after authorization but before hooks: hooks are user shell code and
+	// may mutate the workspace themselves. The lease is lazy and re-entrant for
+	// this runtime's descendant agents.
+	if !callReadOnly && a.workspaceLease != nil {
+		if err := a.workspaceLease.AcquireWrite(ctx); err != nil {
+			return toolOutcome{
+				output:  fmt.Sprintf("blocked: the workspace did not become available for writing: %v", err),
+				blocked: true,
+				errMsg:  "blocked: workspace write lease unavailable",
+			}
+		}
+	}
 	// PreToolUse hooks run after permission is granted but before the call: a
 	// gating hook (exit 2) refuses it, surfaced to the model like a gate denial.
 	if a.hooks != nil {
@@ -3071,6 +3106,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 		}
 	}
 	cctx := withCallContext(ctx, call.ID, a.sink, a.asker, a.planMode.Load())
+	cctx = withToolRegistry(cctx, a.tools)
 	cctx = WithSubagentDepth(cctx, a.subagentDepth)
 	if a.evidence != nil {
 		cctx = evidence.WithLedger(cctx, a.evidence)

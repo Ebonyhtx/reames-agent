@@ -65,6 +65,11 @@ session, memory, skill, subagent, LSP, install, and slash-command tools below:
 `read_only_task`, `read_session`, `read_skill`, `remember`, `research`,
 `review`, `run_skill`, `security_review`, `slash_command`, `task`.
 
+Writer subagents also expose `subagent_delivery_preview` and
+`subagent_delivery`: the first projects the isolated branch/worktree, files,
+commits and test evidence without mutation; the second applies, merges, rolls
+back or rejects that delivery through the shared Controller boundary.
+
 `internal/boot.TestBootToolContractMatchesProviderVisibleSurface` verifies the
 actual boot registry contract against the provider request, including read-only
 flags and canonical schemas.
@@ -76,6 +81,9 @@ and the connector used to enable optional sources on demand:
 
 `ask`, `connect_tool_source`, `forget`, `history`, `list_sessions`, `memory`,
 `read_session`, `remember`, `slash_command`.
+
+`subagent_delivery_preview` and `subagent_delivery` remain available in economy
+mode so an existing isolated delivery can still be inspected and resolved.
 
 Core built-in tools such as `bash`, `read_file`, `grep`, file writers, job tools,
 and `todo_write` remain available in economy mode and are listed in the built-in

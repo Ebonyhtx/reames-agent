@@ -8782,6 +8782,164 @@ body > .mermaid-diagram--fullscreen {
   flex-direction: column;
   gap: 4px;
 }
+.workspace-deliveries {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.workspace-deliveries__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.workspace-delivery {
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-soft);
+}
+.workspace-delivery__head {
+  --wails-draggable: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.workspace-delivery__head:hover {
+  background: var(--sidebar-hover);
+}
+.workspace-delivery__identity {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.workspace-delivery__branch,
+.workspace-delivery__ref {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-delivery__branch {
+  font-size: 12px;
+  font-weight: 620;
+}
+.workspace-delivery__ref {
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.workspace-delivery__status {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--fg-dim);
+  font-size: 10.5px;
+}
+.workspace-delivery__status--ready,
+.workspace-delivery__status--applied,
+.workspace-delivery__status--merged {
+  border-color: color-mix(in srgb, var(--ok) 42%, var(--border-soft));
+  color: var(--ok);
+}
+.workspace-delivery__status--failed,
+.workspace-delivery__status--lost,
+.workspace-delivery__status--orphaned {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border-soft));
+  color: var(--danger);
+}
+.workspace-delivery__status--interrupted {
+  border-color: color-mix(in srgb, var(--warn) 42%, var(--border-soft));
+  color: var(--warn);
+}
+.workspace-delivery__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg);
+}
+.workspace-delivery__metrics,
+.workspace-delivery__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.workspace-delivery__metrics {
+  color: var(--fg-faint);
+  font-size: 11px;
+}
+.workspace-delivery__files,
+.workspace-delivery__tests {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.workspace-delivery__file,
+.workspace-delivery__test {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+.workspace-delivery__file > span:nth-child(2),
+.workspace-delivery__test code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-delivery__test--ok > span {
+  color: var(--ok);
+}
+.workspace-delivery__test--failed > span {
+  color: var(--danger);
+}
+.workspace-delivery__tally {
+  margin-left: auto;
+  color: var(--fg-faint);
+  font-family: var(--mono);
+}
+.workspace-delivery__actions button {
+  --wails-draggable: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 27px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--bg-soft);
+  color: var(--fg);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.workspace-delivery__actions button:hover:not(:disabled) {
+  border-color: var(--fg-faint);
+  background: var(--bg-elev-2);
+}
+.workspace-delivery__actions button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+.workspace-delivery__actions .workspace-delivery__reject {
+  color: var(--danger);
+}
 .workspace-git-history {
   display: flex;
   flex-direction: column;
@@ -24527,10 +24685,25 @@ body > .mermaid-diagram--fullscreen {
   .app .workspace-panel-resizer,
   :root[data-theme-style] .app .workspace-panel-resizer,
   .app .context-inspector,
-  :root[data-theme-style] .app .context-inspector,
-  .app .workbench-dock,
-  :root[data-theme-style] .app .workbench-dock {
+  :root[data-theme-style] .app .context-inspector {
     display: none !important;
+  }
+
+  .app .workbench-dock--compact,
+  :root[data-theme-style] .app .workbench-dock--compact {
+    position: absolute;
+    inset: calc(var(--app-chrome-height) + var(--topicbar-height)) 0 0;
+    z-index: var(--z-workspace-float);
+    display: flex !important;
+    grid-column: 1 !important;
+    grid-row: 1 / -1 !important;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    padding-bottom: var(--statusbar-height);
+    border-top: 1px solid var(--border-soft);
+    border-left: 0;
+    box-shadow: 0 -8px 24px rgba(20, 22, 28, 0.08);
   }
 
   .app .chat-pane,

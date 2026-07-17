@@ -54,6 +54,7 @@ import (
 	"reames-agent/internal/skill"
 	"reames-agent/internal/store"
 	"reames-agent/internal/tool"
+	"reames-agent/internal/workspacelease"
 )
 
 // ErrTurnRunning reports that a caller tried to start a second foreground turn
@@ -173,7 +174,8 @@ type Controller struct {
 	// path refs, the working directory for user "!" shell commands and custom
 	// command discovery, and the guard root for checkpoint restore writes. It is
 	// surfaced to frontends via WorkspaceRoot().
-	workspaceRoot string
+	workspaceRoot  string
+	workspaceLease *workspacelease.Owner
 
 	// externalFolderRefs maps session-generated @ tokens to user-dropped
 	// directories outside workspaceRoot. It is intentionally per-controller:
@@ -395,6 +397,7 @@ type Options struct {
 	// WorkspaceRoot is the project root checkpoint restores are confined to ("" =
 	// no confinement). Frontends pass the cwd they launched the session in.
 	WorkspaceRoot          string
+	WorkspaceLease         *workspacelease.Owner
 	ExternalFolderToolRefs externalFolderToolRefs
 	AutoPlan               string
 	// ResponseLanguage controls final-answer language preference. Empty/auto
@@ -487,6 +490,7 @@ func New(opts Options) *Controller {
 		mcp:                               newMcpManager(opts.Host, opts.Registry, pluginCtx, opts.MCPTrustManager),
 		pluginMCPOwners:                   clonePluginMCPOwners(opts.PluginMCPOwners),
 		workspaceRoot:                     opts.WorkspaceRoot,
+		workspaceLease:                    opts.WorkspaceLease,
 		externalFolderToolRefs:            opts.ExternalFolderToolRefs,
 		approval:                          newApprovalManager(opts.Policy, ToolApprovalAsk, opts.ApprovalTimeout),
 	}
@@ -971,6 +975,45 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			if err := c.Rewind(turn, scope); err != nil {
 				c.notice(err.Error())
 			}
+			return
+		case "/deliveries":
+			views, err := c.SubagentDeliveries()
+			if err != nil {
+				c.notice(err.Error())
+				return
+			}
+			if len(views) == 0 {
+				c.notice("no isolated subagent deliveries for this session")
+				return
+			}
+			data, _ := json.MarshalIndent(views, "", "  ")
+			c.notice(string(data))
+			return
+		case "/delivery":
+			if len(fields) != 3 {
+				c.notice("usage: /delivery <apply|merge|rollback|reject|preview> <sa_ref>")
+				return
+			}
+			op, ref := fields[1], fields[2]
+			if op == "preview" {
+				view, err := c.SubagentDelivery(ref)
+				if err != nil {
+					c.notice(err.Error())
+					return
+				}
+				data, _ := json.MarshalIndent(view, "", "  ")
+				c.notice(string(data))
+				return
+			}
+			go func() {
+				view, err := c.MutateSubagentDelivery(context.Background(), ref, op)
+				if err != nil {
+					c.notice("delivery " + op + " failed: " + err.Error())
+					return
+				}
+				data, _ := json.MarshalIndent(view, "", "  ")
+				c.notice(string(data))
+			}()
 			return
 		case "/plan-exec":
 			c.applyPlanExec(trimmed, display)
@@ -2330,7 +2373,7 @@ func removeSessionArtifacts(path string) error {
 			return err
 		}
 	}
-	if err := agent.DeleteSubagentsByParent(filepath.Dir(path), agent.BranchID(path)); err != nil {
+	if err := agent.DeleteSubagentsByParentWithWorktrees(context.Background(), filepath.Dir(path), agent.BranchID(path), config.ManagedWorktreeDir()); err != nil {
 		return err
 	}
 	if err := agent.ClearCleanupPending(path); err != nil {

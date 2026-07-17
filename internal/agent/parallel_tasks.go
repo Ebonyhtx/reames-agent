@@ -185,7 +185,8 @@ func (p *ParallelTasksTool) Execute(ctx context.Context, args json.RawMessage) (
 			}
 
 			sess := NewSession(DefaultReadOnlyTaskSystemPrompt)
-			output, runErr := p.taskTool.runSubSession(ctx, t.Prompt, subReg, nested, max, prov, pricing, ctxWin, sess, childDepth, nil)
+			workspaceRoot := WorkspaceRootFromContext(ctx, p.taskTool.workspaceRoot)
+			output, runErr := p.taskTool.runSubSession(ctx, t.Prompt, subReg, nested, max, prov, pricing, ctxWin, sess, childDepth, nil, workspaceRoot, nil)
 
 			if ctx.Err() != nil && runErr == nil {
 				runErr = ctx.Err()

@@ -658,15 +658,26 @@ The four `subagent_max_*` values apply to one complete delegation tree,
 including nested task/skill children, parallel siblings, and compaction calls.
 Concurrency counts active Provider streams rather than child lifetimes. Usage
 received before a terminal stream error is still charged to the tree. Writable
-children propagate only structured read/write/command receipts, immediate
-parent tool-call provenance, and previewed pre-edit callbacks to ancestor
-Agents; child model text, tool output, transcript, Todo, and `complete_step`
-state remain local. Successful verification must follow the child write.
-Failed/cancelled previewed writers establish an uncertain mutation boundary.
-Turn generations and turn-scoped checkpoint callbacks reject late background
-effects after a newer turn starts. These ledgers and bridges are process-local,
-not durable proof or crash-resume state; `bash` cannot provide per-file
-checkpoints because its targets cannot be previewed statically.
+children in product composition require a persisted parent session and an
+independent Git branch/worktree. Their workspace built-ins are rebound to the
+child execution root; MCP, LSP, memory mutation, and source-root live services
+are not inherited. Non-Git writer delegation fails closed, while read-only
+task/skill children keep the shared lightweight path. Child model text, tool
+output, transcript, Todo, and `complete_step` remain local. Isolated mutations
+stay in the child journal and do not invalidate parent evidence until the parent
+explicitly accepts the delivery.
+
+Completed writers expose one durable delivery through `control.Controller`:
+preview derives files, commits and patch digest from Git; `apply` stages a
+three-way patch, `merge` creates a no-fast-forward commit, `rollback` requires
+an exact post-state match, and `reject` removes only a managed worktree/branch.
+Acceptance persists an `applying`/`merging` intent before source mutation.
+Restart recovery returns an unchanged source to `ready`, proves a completed
+merge from its parents, or marks an unprovable post-apply state
+`acceptance_interrupted` and refuses automatic overwrite. Moving a Desktop
+session to trash retains deliveries; permanent purge rejects them first.
+Turn-scoped bridges and the delegation budget remain process-local, and opaque
+shell/MCP/external side effects still do not provide exactly-once semantics.
 
 `[ui].cursor_shape` is normalized to `underline`, `block`, or `bar`; empty or
 unknown values fall back to `underline`. It applies to the Bubble Tea CLI/TUI

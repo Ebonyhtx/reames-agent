@@ -127,9 +127,10 @@ Reasonix 从初始跟踪点之后新增 133 个提交，值得优先审查的候
 
 ## 6. 2026-07-17 上游再同步
 
-Reasonix `main-v2` 已审查至 `9b54b9f8937b9878d9052833bff4ab99ba7638de`，相对原 reviewed
-点新增 525 个提交（392 个非 merge）。本轮直接采用 MCP schema 隔离、保存凭据的环境/读取
-保护、credential-free cache identity、Anthropic usage 合并和 MiMo schema dialect；Reames
+Reasonix `main-v2` 已审查至 `099879592742ddeb25b312347b4c37316e8b76f9`，相对原 reviewed
+点累计 664 个提交（490 个非 merge）。本轮直接采用 MCP schema 隔离、保存凭据的环境/读取
+保护、credential-free cache identity、Anthropic usage 合并、MiMo schema dialect，以及身份漂移
+失败的类型化 re-verification 投影；Reames
 适配、测试、拒绝项和后续门槛见
 [`audits/2026-07-17-reasonix-upstream-sync.md`](audits/2026-07-17-reasonix-upstream-sync.md)。
 
@@ -138,8 +139,8 @@ Reasonix `main-v2` 已审查至 `9b54b9f8937b9878d9052833bff4ab99ba7638de`，相
 
 1. Reasonix 的 MCP identity receipt/launcher lock 已按 Reames control/security 边界完成 M5 P0，
    见 [`audits/2026-07-17-m5-mcp-identity-trust.md`](audits/2026-07-17-m5-mcp-identity-trust.md)；
-2. Reasonix + MiMo 的 workspace lease/worktree 进入 M4 持续加固 P1；
-3. Reasonix offline Guard/Safe Mode 进入 P2，必须复用现有恢复事务。
+2. Reasonix + MiMo 的 workspace lease/worktree 已按 Reames Controller、durable child journal 与 Windows 路径边界关闭 M4 持续加固 P1，见 `audits/2026-07-17-m4-writer-worktree-isolation.md`；
+3. 下一内部阶段转为 Reasonix offline Guard/Safe Mode P2，必须复用现有恢复事务。
 
 其他 UI、主题、发布、遥测、Python/Electron runtime 和参考项目依赖体系不进入 Reames 主树。
 正式 reviewed SHA 保存在 `docs/upstreams/upstreams.lock.json`；`artifacts/upstream-watch/` 仍只

@@ -100,7 +100,8 @@ func TestInterruptedTaskContinueInjectsRecoveryContext(t *testing.T) {
 		WithTranscripts(store, t.TempDir(), "base-model", "base-effort")
 
 	subReg := task.buildSubReg(nil, 1)
-	run, err := task.prepareTranscriptRun(subReg, "", "", "parent-session", "root-call", "", "")
+	root := task.workspaceRoot
+	run, err := task.prepareTranscriptRun(subReg, "", "", "parent-session", "root-call", "", "", root, SubagentWorkspace{Mode: SubagentWorkspaceSharedReadOnly, SourceRoot: root, ExecutionRoot: root})
 	if err != nil {
 		t.Fatalf("prepareTranscriptRun: %v", err)
 	}

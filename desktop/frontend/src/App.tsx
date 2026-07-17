@@ -138,7 +138,13 @@ import {
 } from "./lib/theme";
 import { applyTextSize, DEFAULT_TEXT_SIZE, getTextSize, nextTextSize } from "./lib/textSize";
 import { useViewportHeightVar, useWindowStatePersistence } from "./lib/windowState";
-import { availableWorkspacePanelWidth, resolveLiveWorkspacePanelWidth, resolveWorkspacePanelWidth, workspacePanelAriaMinWidth } from "./lib/workspaceLayout";
+import {
+  availableWorkspacePanelWidth,
+  resolveLiveWorkspacePanelWidth,
+  resolveWorkspacePanelPresentation,
+  resolveWorkspacePanelWidth,
+  workspacePanelAriaMinWidth,
+} from "./lib/workspaceLayout";
 import { createRafResizeUpdater } from "./lib/resizeDrag";
 import { useGlobalShortcut } from "./lib/keyboardShortcuts";
 import { topicShortcutIndexFromEvent, useTopicShortcuts, type TopicShortcutEntry } from "./lib/topicShortcuts";
@@ -1287,10 +1293,19 @@ export default function App() {
   });
 
   const storedWorkspacePanelRenderWidth = workspacePanelMaximized ? preferredWorkspacePanelWidth : resolvedWorkspacePanelWidth;
-  const workspacePanelRenderWidth = liveWorkspacePanelRenderWidth ?? storedWorkspacePanelRenderWidth;
-  const workspacePanelRenderable =
-    workspacePanelOpen && (workspacePanelMaximized || workspacePanelRenderWidth >= RIGHT_DOCK_MIN_RENDER_WIDTH);
-  const workspacePanelGridOpen = workspacePanelRenderable && !workspacePanelMaximized;
+  const dockedWorkspacePanelRenderWidth = liveWorkspacePanelRenderWidth ?? storedWorkspacePanelRenderWidth;
+  const {
+    compact: compactWorkspacePanel,
+    renderWidth: workspacePanelRenderWidth,
+    renderable: workspacePanelRenderable,
+    gridOpen: workspacePanelGridOpen,
+  } = resolveWorkspacePanelPresentation({
+    viewportWidth,
+    open: workspacePanelOpen,
+    maximized: workspacePanelMaximized,
+    dockedWidth: dockedWorkspacePanelRenderWidth,
+    minRenderWidth: RIGHT_DOCK_MIN_RENDER_WIDTH,
+  });
   const resolveLiveWorkspacePanelRenderWidth = useCallback(
     (preferredWidth: number, nextSidebarWidth = sidebarWidth) =>
       resolveLiveWorkspacePanelWidth({
@@ -3641,6 +3656,7 @@ export default function App() {
             className={[
               "workbench-dock",
               `workbench-dock--${rightDockMode}`,
+              compactWorkspacePanel ? "workbench-dock--compact" : "",
             ].join(" ")}
             aria-label={t("rightDock.workbench")}
           >
@@ -3703,6 +3719,7 @@ export default function App() {
                     tabId={activeTabId}
                     cwd={state.meta?.cwd}
                     maximized={workspacePanelMaximized}
+                    compact={compactWorkspacePanel}
                     panelWidth={workspacePanelRenderWidth}
                     onClose={() => setWorkspacePanel(false)}
                     onToggleMaximized={() => {

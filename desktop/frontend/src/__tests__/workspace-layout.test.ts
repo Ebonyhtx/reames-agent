@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   availableWorkspacePanelWidth,
   resolveLiveWorkspacePanelWidth,
+  resolveWorkspacePanelPresentation,
   resolveWorkspacePanelWidth,
   workspacePanelAriaMinWidth,
 } from "../lib/workspaceLayout";
@@ -14,6 +15,7 @@ let passed = 0;
 let failed = 0;
 const testDir = dirname(fileURLToPath(import.meta.url));
 const appSource = readFileSync(resolve(testDir, "../App.tsx"), "utf8");
+const stylesSource = readFileSync(resolve(testDir, "../styles.css"), "utf8");
 
 function eq(a: unknown, b: unknown, label: string) {
   if (a === b) {
@@ -91,6 +93,40 @@ const narrowRendered = resolveWorkspacePanelWidth({
 eq(narrowAvailable, 228, "very narrow viewports may leave less than the nominal dock minimum");
 eq(narrowRendered, 228, "very narrow dock still stays inside the viewport");
 eq(workspacePanelAriaMinWidth(PREVIEW_MIN_WIDTH, narrowRendered), 228, "ARIA minimum follows constrained rendered width");
+
+const compactPresentation = resolveWorkspacePanelPresentation({
+  viewportWidth: 800,
+  open: true,
+  maximized: false,
+  dockedWidth: 0,
+  minRenderWidth: 280,
+});
+eq(compactPresentation.compact, true, "820px-and-below viewports use the compact workspace presentation");
+eq(compactPresentation.renderable, true, "compact workspace remains renderable when no dock column fits");
+eq(compactPresentation.gridOpen, false, "compact workspace does not reserve a grid column");
+eq(compactPresentation.renderWidth, 800, "compact workspace reports the actual viewport width to its content");
+
+const desktopPresentation = resolveWorkspacePanelPresentation({
+  viewportWidth: 821,
+  open: true,
+  maximized: false,
+  dockedWidth: 279,
+  minRenderWidth: 280,
+});
+eq(desktopPresentation.compact, false, "viewport above the compact breakpoint keeps dock semantics");
+eq(desktopPresentation.renderable, false, "desktop dock still fails closed when its minimum render width is unavailable");
+
+const compactCSS = stylesSource.slice(stylesSource.lastIndexOf("@media (max-width: 820px)"));
+eq(
+  /\.app \.workbench-dock--compact,[\s\S]*?position: absolute;[\s\S]*?display: flex !important;/.test(compactCSS),
+  true,
+  "compact workspace is projected as a visible overlay",
+);
+eq(
+  /\.app \.workbench-dock,[\s\S]*?display: none !important;/.test(compactCSS),
+  false,
+  "compact breakpoint no longer hides every workspace dock",
+);
 
 eq(
   resolveWorkspacePanelWidth({

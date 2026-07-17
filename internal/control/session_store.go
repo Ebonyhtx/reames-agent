@@ -1,12 +1,14 @@
 package control
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"time"
 
 	"reames-agent/internal/agent"
+	"reames-agent/internal/config"
 )
 
 // ErrSessionLeaseHeld is the stable control-layer ownership conflict used by
@@ -76,9 +78,16 @@ func MarkSessionCleanupPending(path, operation string) error {
 // ClearSessionCleanupPending removes a delayed-cleanup marker.
 func ClearSessionCleanupPending(path string) error { return agent.ClearCleanupPending(path) }
 
-// DeleteSessionSubagents removes persisted sub-agent records owned by session.
+// DeleteSessionSubagents permanently rejects managed writer worktrees before
+// removing persisted sub-agent records owned by session.
 func DeleteSessionSubagents(sessionDir, sessionPath string) error {
-	return agent.DeleteSubagentsByParent(sessionDir, agent.BranchID(sessionPath))
+	return agent.DeleteSubagentsByParentWithWorktrees(context.Background(), sessionDir, agent.BranchID(sessionPath), config.ManagedWorktreeDir())
+}
+
+// DeleteTrashedSessionSubagents permanently rejects managed writer worktrees
+// represented by metadata inside a validated desktop trash item.
+func DeleteTrashedSessionSubagents(itemDir string) error {
+	return agent.DeleteSubagentsInDirWithWorktrees(context.Background(), filepath.Join(itemDir, "subagents"), config.ManagedWorktreeDir())
 }
 
 // IsSessionLeaseHeld classifies the stable cross-runtime ownership conflict

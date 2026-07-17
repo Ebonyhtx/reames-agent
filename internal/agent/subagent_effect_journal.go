@@ -431,6 +431,11 @@ func (s *SubagentStore) RecoverSubagentEffects(parentSession, workspaceRoot stri
 		if strings.TrimSpace(meta.ParentSession) != parentSession {
 			continue
 		}
+		if meta.Workspace.Mode == SubagentWorkspaceGitWorktree {
+			// Isolated child mutations are not source-workspace effects. The
+			// delivery apply/merge tool records the eventual real mutation.
+			continue
+		}
 		journal, err := s.loadEffectJournal(ref)
 		if err != nil {
 			return nil, err
@@ -472,4 +477,31 @@ func (s *SubagentStore) RecoverSubagentEffects(parentSession, workspaceRoot stri
 		}
 	}
 	return recovered, nil
+}
+
+func (s *SubagentStore) deliveryTests(ref string) []SubagentDeliveryTest {
+	if s == nil || !validSubagentRef(ref) {
+		return nil
+	}
+	journal, err := s.loadEffectJournal(ref)
+	if err != nil {
+		return nil
+	}
+	var tests []SubagentDeliveryTest
+	seen := map[string]bool{}
+	for _, event := range journal.Events {
+		if event.Phase != subagentEffectPhaseReceipt || strings.TrimSpace(event.Receipt.Command) == "" {
+			continue
+		}
+		key := event.Receipt.Command + "\x00" + fmt.Sprint(event.Receipt.Success)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		tests = append(tests, SubagentDeliveryTest{Command: event.Receipt.Command, Success: event.Receipt.Success})
+	}
+	if len(tests) > 32 {
+		tests = append([]SubagentDeliveryTest(nil), tests[len(tests)-32:]...)
+	}
+	return tests
 }

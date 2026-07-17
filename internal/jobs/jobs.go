@@ -136,10 +136,11 @@ type Job struct {
 
 // Manager is the session's background-job table. It is safe for concurrent use.
 type Manager struct {
-	sink   event.Sink
-	root   context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	sink       event.Sink
+	root       context.Context
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	onJobStart func(done <-chan struct{})
 
 	mu           sync.Mutex
 	seq          int
@@ -182,6 +183,13 @@ func WithTeardownGrace(d time.Duration) Option {
 			m.teardownGrace = d
 		}
 	}
+}
+
+// WithJobStartObserver observes every registered background job before its
+// goroutine starts. Workspace leasing uses this to retain a writer lease until
+// the job reaches a terminal state.
+func WithJobStartObserver(observer func(done <-chan struct{})) Option {
+	return func(m *Manager) { m.onJobStart = observer }
 }
 
 // TeardownGrace reports the manager's configured close/destroy wait window.
@@ -309,6 +317,9 @@ func (m *Manager) startForSession(parentSession, kind, label, recoveryRef string
 	m.jobs[key] = j
 	m.order = append(m.order, key)
 	m.mu.Unlock()
+	if m.onJobStart != nil {
+		m.onJobStart(j.done)
+	}
 
 	m.emitIfActive(parentSession, event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: startedText(kind, id, label)})
 

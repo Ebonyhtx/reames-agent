@@ -1948,6 +1948,51 @@ func (a *App) CheckpointsForTab(tabID string) []CheckpointMeta {
 	return out
 }
 
+// SubagentDeliveries returns isolated writer-child deliveries for the active
+// tab. The same Controller projection backs serve and CLI slash commands.
+func (a *App) SubagentDeliveries() ([]control.SubagentDeliveryView, error) {
+	return a.SubagentDeliveriesForTab("")
+}
+
+func (a *App) SubagentDeliveriesForTab(tabID string) ([]control.SubagentDeliveryView, error) {
+	a.mu.RLock()
+	var ctrl control.SessionAPI
+	if tab := a.tabByIDLocked(tabID); tab != nil {
+		ctrl = tab.Ctrl
+	}
+	a.mu.RUnlock()
+	if ctrl == nil {
+		return []control.SubagentDeliveryView{}, nil
+	}
+	return ctrl.SubagentDeliveries()
+}
+
+func (a *App) PreviewSubagentDelivery(tabID, ref string) (control.SubagentDeliveryView, error) {
+	a.mu.RLock()
+	var ctrl control.SessionAPI
+	if tab := a.tabByIDLocked(tabID); tab != nil {
+		ctrl = tab.Ctrl
+	}
+	a.mu.RUnlock()
+	if ctrl == nil {
+		return control.SubagentDeliveryView{}, control.ErrSubagentDeliveryUnavailable
+	}
+	return ctrl.SubagentDelivery(ref)
+}
+
+func (a *App) MutateSubagentDelivery(tabID, ref, op string) (control.SubagentDeliveryView, error) {
+	a.mu.RLock()
+	var ctrl control.SessionAPI
+	if tab := a.tabByIDLocked(tabID); tab != nil {
+		ctrl = tab.Ctrl
+	}
+	a.mu.RUnlock()
+	if ctrl == nil {
+		return control.SubagentDeliveryView{}, control.ErrSubagentDeliveryUnavailable
+	}
+	return ctrl.MutateSubagentDelivery(context.Background(), ref, op)
+}
+
 func insertCheckpointFilePreview(preview []string, path string, limit int) []string {
 	if limit <= 0 || path == "" {
 		return preview
@@ -5698,34 +5743,35 @@ type SkillsSettingsView struct {
 // the connection error), "initializing" (background startup in progress), or
 // "disabled".
 type ServerView struct {
-	Name                 string     `json:"name"`
-	Transport            string     `json:"transport"`
-	Status               string     `json:"status"`
-	StartIntent          string     `json:"startIntent,omitempty"`
-	RuntimeState         string     `json:"runtimeState,omitempty"`
-	BuiltIn              bool       `json:"builtIn,omitempty"`
-	Configured           bool       `json:"configured,omitempty"`
-	AutoStart            bool       `json:"autoStart"`
-	Tier                 string     `json:"tier,omitempty"`
-	Command              string     `json:"command,omitempty"`
-	Args                 []string   `json:"args,omitempty"`
-	URL                  string     `json:"url,omitempty"`
-	EnvKeys              []string   `json:"envKeys,omitempty"`
-	HeaderKeys           []string   `json:"headerKeys,omitempty"`
-	Tools                int        `json:"tools"`
-	Prompts              int        `json:"prompts"`
-	Resources            int        `json:"resources"`
-	HasTools             bool       `json:"hasTools,omitempty"`
-	Error                string     `json:"error,omitempty"`
-	ToolList             []ToolView `json:"toolList,omitempty"`
-	TrustedReadOnlyTools []string   `json:"trustedReadOnlyTools,omitempty"`
-	TrustState           string     `json:"trustState,omitempty"`
-	IdentityChanged      bool       `json:"identityChanged,omitempty"`
-	ChangedTools         []string   `json:"changedTools,omitempty"`
-	TrustError           string     `json:"trustError,omitempty"`
-	AuthStatus           string     `json:"authStatus,omitempty"`
-	AuthURL              string     `json:"authUrl,omitempty"`
-	AuthConfigured       bool       `json:"authConfigured,omitempty"`
+	Name                   string     `json:"name"`
+	Transport              string     `json:"transport"`
+	Status                 string     `json:"status"`
+	StartIntent            string     `json:"startIntent,omitempty"`
+	RuntimeState           string     `json:"runtimeState,omitempty"`
+	BuiltIn                bool       `json:"builtIn,omitempty"`
+	Configured             bool       `json:"configured,omitempty"`
+	AutoStart              bool       `json:"autoStart"`
+	Tier                   string     `json:"tier,omitempty"`
+	Command                string     `json:"command,omitempty"`
+	Args                   []string   `json:"args,omitempty"`
+	URL                    string     `json:"url,omitempty"`
+	EnvKeys                []string   `json:"envKeys,omitempty"`
+	HeaderKeys             []string   `json:"headerKeys,omitempty"`
+	Tools                  int        `json:"tools"`
+	Prompts                int        `json:"prompts"`
+	Resources              int        `json:"resources"`
+	HasTools               bool       `json:"hasTools,omitempty"`
+	Error                  string     `json:"error,omitempty"`
+	RequiresReverification bool       `json:"requiresReverification,omitempty"`
+	ToolList               []ToolView `json:"toolList,omitempty"`
+	TrustedReadOnlyTools   []string   `json:"trustedReadOnlyTools,omitempty"`
+	TrustState             string     `json:"trustState,omitempty"`
+	IdentityChanged        bool       `json:"identityChanged,omitempty"`
+	ChangedTools           []string   `json:"changedTools,omitempty"`
+	TrustError             string     `json:"trustError,omitempty"`
+	AuthStatus             string     `json:"authStatus,omitempty"`
+	AuthURL                string     `json:"authUrl,omitempty"`
+	AuthConfigured         bool       `json:"authConfigured,omitempty"`
 }
 
 type ToolView struct {
@@ -5884,8 +5930,9 @@ func (a *App) mcpServersView() []ServerView {
 			seen[f.Name] = true
 			view := ServerView{
 				Name: f.Name, Transport: f.Transport, Status: "failed", RuntimeState: "issue", Error: f.Error,
+				RequiresReverification: f.RequiresReverification,
 			}
-			if strings.Contains(strings.ToLower(f.Error), "identity changed") {
+			if f.RequiresReverification {
 				view.TrustState = "changed"
 				view.IdentityChanged = true
 			}
@@ -7008,7 +7055,11 @@ func findMCPServerView(ctrl control.SessionAPI, name string) (ServerView, bool) 
 	}
 	for _, f := range ctrl.Host().Failures() {
 		if f.Name == name {
-			return ServerView{Name: f.Name, Transport: f.Transport, Status: "failed", Error: f.Error}, true
+			return ServerView{
+				Name: f.Name, Transport: f.Transport, Status: "failed", Error: f.Error,
+				RequiresReverification: f.RequiresReverification,
+				IdentityChanged:        f.RequiresReverification,
+			}, true
 		}
 	}
 	return ServerView{}, false

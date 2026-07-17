@@ -1,3 +1,34 @@
+export const COMPACT_WORKSPACE_MAX_WIDTH = 820;
+
+export function resolveWorkspacePanelPresentation({
+  viewportWidth,
+  open,
+  maximized,
+  dockedWidth,
+  minRenderWidth,
+}: {
+  viewportWidth: number;
+  open: boolean;
+  maximized: boolean;
+  dockedWidth: number;
+  minRenderWidth: number;
+}): {
+  compact: boolean;
+  renderWidth: number;
+  renderable: boolean;
+  gridOpen: boolean;
+} {
+  const compact = viewportWidth <= COMPACT_WORKSPACE_MAX_WIDTH;
+  const renderWidth = compact ? Math.max(0, viewportWidth) : dockedWidth;
+  const renderable = open && (compact || maximized || renderWidth >= minRenderWidth);
+  return {
+    compact,
+    renderWidth,
+    renderable,
+    gridOpen: renderable && !compact && !maximized,
+  };
+}
+
 export function availableWorkspacePanelWidth({
   viewportWidth,
   sidebarCollapsed,

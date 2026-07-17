@@ -1,12 +1,12 @@
 {
   "version": 2,
-  "updated_at": "2026-07-16T23:59:33Z",
+  "updated_at": "2026-07-17T06:37:21Z",
   "upstreams": {
     "reasonix": {
       "branch": "main-v2",
       "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-      "reviewed": "9b54b9f8937b9878d9052833bff4ab99ba7638de",
-      "latest_seen": "9b54b9f8937b9878d9052833bff4ab99ba7638de"
+      "reviewed": "099879592742ddeb25b312347b4c37316e8b76f9",
+      "latest_seen": "099879592742ddeb25b312347b4c37316e8b76f9"
     },
     "hermes": {
       "branch": "main",

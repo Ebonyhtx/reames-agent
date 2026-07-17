@@ -304,6 +304,28 @@ func SessionDir() string {
 	return filepath.Join(dir, "sessions")
 }
 
+// WorkspaceLeaseDir stores cross-process workspace writer locks outside user
+// repositories. Empty means writer leasing is unavailable and callers must
+// fail closed for mutation-capable runtimes.
+func WorkspaceLeaseDir() string {
+	dir := userSupportDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "workspace-leases")
+}
+
+// ManagedWorktreeDir stores durable subagent worktrees outside source
+// repositories. Worktrees are retained until their delivery is applied,
+// merged, rejected, or safely reclaimed after a crash.
+func ManagedWorktreeDir() string {
+	dir := userSupportDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "worktrees")
+}
+
 // ProjectSessionDir is the per-workspace session directory the desktop sidebar
 // lists: <state root>/projects/<slug>/sessions. Empty when either the state root
 // or workspaceRoot doesn't resolve.

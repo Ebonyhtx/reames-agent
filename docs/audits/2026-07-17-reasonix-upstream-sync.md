@@ -4,7 +4,7 @@
 
 本轮将 DeepSeek Reasonix `main-v2` 从 Reames 已审查点
 `07c65c22226e4886004215168230e1e1edad734b` 审查到
-`9b54b9f8937b9878d9052833bff4ab99ba7638de`。该区间包含 525 个提交、392 个非 merge
+`099879592742ddeb25b312347b4c37316e8b76f9`。该区间包含 664 个提交、490 个非 merge
 提交，覆盖 `desktop-v1.17.10` 至 `desktop-v1.17.14` 附近的安全、Provider、MCP、恢复、
 Desktop 和交付机制变化。
 
@@ -17,13 +17,14 @@ Desktop 和交付机制变化。
 - Anthropic 兼容流的累计 usage 合并；
 - 仅对官方 MiMo 端点进行 draft 2020-12 tuple schema 转换；
 - CLI 与 Desktop 显示具体 MCP schema 故障，不让单个坏工具拖垮整个 server；
+- 身份漂移启动失败携带类型化 re-verification 标记，Desktop 不再解析错误字符串或提供无效重试；
 - Windows 上游扫描显式使用 UTF-8，避免中文提交标题触发 GBK 解码崩溃。
 
-下一阶段不继续横向堆 UI 功能。内部优先级确定为：
+本轮审查形成的内部优先级及当前状态为：
 
-1. MCP server/tool 的身份绑定 trust receipt 与可变 launcher 精确锁定；
-2. 可写子代理的 workspace lease、独立 worktree、回收与交付投影；
-3. 在现有 updater/recovery 事务之上评估离线 Guard 与 Safe Mode；
+1. MCP server/tool 的 identity-bound trust receipt 与可变 launcher 精确锁定已关闭；
+2. 可写子代理的 workspace lease、独立 worktree、回收与交付投影已关闭；
+3. 下一步在现有 updater/recovery 事务之上评估离线 Guard 与 Safe Mode；
 4. 最后再吸收历史消息时间、外部打开器、Subagent profile 等体验项。
 
 ## 上游证据
@@ -32,8 +33,8 @@ Reasonix 本地镜像：`F:\code-reference\DeepSeek-Reasonix`
 
 ```text
 reviewed: 07c65c22226e4886004215168230e1e1edad734b
-latest:   9b54b9f8937b9878d9052833bff4ab99ba7638de
-commits:  525 total / 392 non-merge
+latest:   099879592742ddeb25b312347b4c37316e8b76f9
+commits:  664 total / 490 non-merge
 tag:      desktop-v1.17.14 / v1.17.14 vicinity
 ```
 
@@ -48,10 +49,11 @@ tag:      desktop-v1.17.14 / v1.17.14 vicinity
 | `f5179b4d` | Anthropic 兼容流累计 usage | 采用，按非负累计计数取最大值防重复计数 |
 | `db44434d`..`18d4ed9e` | MiMo 专用 JSON Schema 方言转换 | 采用；未知 dialect 和非 MiMo Provider 保持原始字节 |
 | `3212786e`..`60fc21f9` | MCP identity、trust receipt、launcher pin | 已在后续 M5 P0 按 Reames 边界完成，见 `2026-07-17-m5-mcp-identity-trust.md` |
-| `03b39a65` | workspace lease、worktree、并发 writer 隔离 | 延后为下一 P1；Reames 只有 session lease 和 child-effect journal，没有可写 child worktree |
+| `03b39a65` / `bfb0bf4d` / `9a5011ce` | workspace lease、worktree、并发 writer、Windows long-path/checkout hardening | 已按 Reames Controller、durable journal、跨进程锁和交付事务关闭 P1，见 `2026-07-17-m4-writer-worktree-isolation.md` |
 | `3baf0b3c` / `1b9ff514` | 离线 Guard、Safe Mode、恢复锁 | 暂缓；先完成 identity trust 和 worktree 隔离，再接入现有 updater/recovery 事务 |
 | `656e983d` 等 | CLI/Desktop Subagent profiles | 暂缓；Reames 已有 model/effort/skill profile 基础，先避免形成第二套配置模型 |
 | `9b54b9f8` / `0afcea40` | 外部打开器、面板偏好、历史消息时间 | 体验候选；不高于当前安全与并发 writer 风险 |
+| `09987959` | 身份漂移失败显式标记 re-verification，避免 Desktop 误显示普通 Retry | 采用类型化 failure marker；复用 Reames 现有 `ReverifyMCPServer` Controller 流程 |
 
 ## 已采用实现
 
@@ -159,21 +161,22 @@ Reames 全局 `.env` 在存在时同时加入模型读取和 Bash OS sandbox 的
 4. 可变 npm/npx/uvx/git launcher 固定 exact version/content，凭据轮换不改变 identity；
 5. cache、lazy connect、plan mode、read-only subagent 和普通执行共享同一评估结果。
 
-### P1：可写 child workspace isolation
+### P1：可写 child workspace isolation（已关闭）
 
-目标不是新增一个后台任务系统，而是给现有 `task`/Skill/Subagent 补齐：workspace lease、独立 worktree、
-可见的 branch/worktree 身份、取消与崩溃回收、父会话交付/合并策略，以及 Windows 可移植锁测试。
+现有 `task`/Skill/Subagent 已补齐 workspace lease、独立 worktree、可见的 branch/worktree 身份、
+取消与崩溃回收、父会话交付/合并事务，以及 Windows 可移植锁、long-path 与 junction identity 测试。
+详细完成证据和 ambiguous apply 边界见 `2026-07-17-m4-writer-worktree-isolation.md`。
 Hermes `f08b1f34456d` 的统一 worktree dialog 只作为创建/打开/交付的 Desktop UX 参考，不引入其
 Electron gateway 或 compute-host runtime。
 
 ### P2：离线恢复入口
 
-只有在 P0/P1 关闭后，再评估独立 Guard、Safe Mode 工具面、crash-loop 计数和 updater rollback lock；
+P0/P1 已关闭，下一阶段评估独立 Guard、Safe Mode 工具面、crash-loop 计数和 updater rollback lock；
 必须复用 Reames 现有 recovery transaction，不能建立第二套不相容的恢复状态机。
 
 ## 验证
 
-本批在提交前至少执行：
+本批已执行：
 
 ```powershell
 python -m unittest scripts.test_check_upstreams -v
@@ -186,6 +189,10 @@ go build ./...
 go vet ./...
 go test ./internal/... -count=1 -timeout 300s
 ```
+
+Reasonix 后续单提交 `09987959` 的类型化 re-verification 标记另有 plugin/Desktop/前端 focused
+回归，并已包含在 writer worktree 批次的全量、race、clean-clone 与生产前端门禁中。完整结果见
+`2026-07-17-m4-writer-worktree-isolation.md`。
 
 `artifacts/upstream-watch/` 是本地审查产物，不纳入 Git；正式接受点由
 `docs/upstreams/upstreams.lock.json` 保存。

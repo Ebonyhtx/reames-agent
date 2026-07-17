@@ -183,6 +183,14 @@ type Status interface {
 	EvidenceSnapshot() evidence.Snapshot
 }
 
+// DeliveryControl exposes isolated writer-subagent deliveries through the same
+// transport-neutral Controller boundary used by every frontend.
+type DeliveryControl interface {
+	SubagentDeliveries() ([]SubagentDeliveryView, error)
+	SubagentDelivery(ref string) (SubagentDeliveryView, error)
+	MutateSubagentDelivery(ctx context.Context, ref, op string) (SubagentDeliveryView, error)
+}
+
 // SessionPersistence covers snapshotting a session and tearing down its on-disk
 // state.
 type SessionPersistence interface {
@@ -228,6 +236,7 @@ type SessionAPI interface {
 	MemoryControl
 	Capabilities
 	Status
+	DeliveryControl
 	SessionPersistence
 	Input
 	Settings
@@ -245,6 +254,7 @@ var (
 	_ MemoryControl        = (*Controller)(nil)
 	_ Capabilities         = (*Controller)(nil)
 	_ Status               = (*Controller)(nil)
+	_ DeliveryControl      = (*Controller)(nil)
 	_ SessionPersistence   = (*Controller)(nil)
 	_ Input                = (*Controller)(nil)
 	_ Settings             = (*Controller)(nil)

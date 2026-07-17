@@ -17,11 +17,14 @@ import {
   FolderTree,
   FolderX,
   GitBranch,
+  GitMerge,
   Maximize2,
   MessageSquarePlus,
   Minimize2,
   RefreshCw,
+  RotateCcw,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { asArray } from "../lib/array";
@@ -40,7 +43,7 @@ import { createRafResizeUpdater } from "../lib/resizeDrag";
 import { closeWorkspacePreviewTab } from "../lib/workspacePreviewTabs";
 import { shouldScrollWorkspaceTreeSelection } from "../lib/workspaceTreeReveal";
 import { mergeWorkspaceSearchResults } from "../lib/workspaceTreeSearch";
-import type { DirEntry, FilePreview, GitCommitView, GitCommitDetailView, WorkspaceChangesView } from "../lib/types";
+import type { DirEntry, FilePreview, GitCommitView, GitCommitDetailView, SubagentDeliveryView, WorkspaceChangesView } from "../lib/types";
 import { formatWorkspaceReference, WORKSPACE_REF_DRAG_TYPE } from "../lib/workspaceDrag";
 import { cleanGitDiff } from "../lib/diff";
 import { CodeViewer } from "./CodeViewer";
@@ -201,6 +204,7 @@ export function WorkspacePanel({
   tabId,
   cwd,
   maximized,
+  compact = false,
   panelWidth,
   onClose,
   onToggleMaximized,
@@ -220,6 +224,7 @@ export function WorkspacePanel({
   tabId?: string;
   cwd?: string;
   maximized: boolean;
+  compact?: boolean;
   panelWidth?: number;
   onClose: () => void;
   onToggleMaximized: () => void;
@@ -249,6 +254,10 @@ export function WorkspacePanel({
   const [viewMode, setViewMode] = useState<"files" | "changed">(initialViewMode);
   const [gitHistory, setGitHistory] = useState<GitCommitView[]>([]);
   const [workspaceChanges, setWorkspaceChanges] = useState<WorkspaceChangesView | null>(null);
+  const [deliveries, setDeliveries] = useState<SubagentDeliveryView[]>([]);
+  const [expandedDelivery, setExpandedDelivery] = useState<string | null>(null);
+  const [deliveryPending, setDeliveryPending] = useState<string | null>(null);
+  const [deliveryError, setDeliveryError] = useState("");
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
   const [commitDetail, setCommitDetail] = useState<GitCommitDetailView | null>(null);
@@ -336,6 +345,53 @@ export function WorkspacePanel({
       }
     }
   }, [tabId]);
+
+  const loadDeliveries = useCallback(async () => {
+    const targetTabId = tabId ?? "";
+    const result = await app.SubagentDeliveriesForTab(targetTabId).catch((): SubagentDeliveryView[] => []);
+    if (lastWorkspaceTabIdRef.current === targetTabId) setDeliveries(asArray(result));
+  }, [tabId]);
+
+  const mutateDelivery = useCallback(async (delivery: SubagentDeliveryView, op: "apply" | "merge" | "rollback" | "reject") => {
+    if ((op === "reject" || op === "rollback") && !(await app.ConfirmAction({
+      title: t(op === "reject" ? "workspace.deliveryReject" : "workspace.deliveryRollback"),
+      message: delivery.workspace.branch || delivery.ref,
+      detail: t(op === "reject" ? "workspace.deliveryRejectDetail" : "workspace.deliveryRollbackDetail"),
+      confirmLabel: t(op === "reject" ? "workspace.deliveryReject" : "workspace.deliveryRollback"),
+      cancelLabel: t("common.cancel"),
+      destructive: op === "reject",
+    }).catch(() => false))) return;
+    setDeliveryPending(delivery.ref + ":" + op);
+    setDeliveryError("");
+    try {
+      await app.MutateSubagentDelivery(tabId ?? "", delivery.ref, op);
+      await Promise.all([loadDeliveries(), loadWorkspaceChanges(), loadGitHistory()]);
+    } catch (err) {
+      setDeliveryError(String((err as { message?: string })?.message ?? err));
+    } finally {
+      setDeliveryPending(null);
+    }
+  }, [loadDeliveries, loadGitHistory, loadWorkspaceChanges, t, tabId]);
+
+  const deliveryStatusLabel = useCallback((status: string) => {
+    switch (status) {
+      case "active": return t("workspace.deliveryStatus.active");
+      case "ready": return t("workspace.deliveryStatus.ready");
+	  case "applying": return t("workspace.deliveryStatus.applying");
+	  case "merging": return t("workspace.deliveryStatus.merging");
+	  case "acceptance_interrupted": return t("workspace.deliveryStatus.acceptanceInterrupted");
+      case "empty": return t("workspace.deliveryStatus.empty");
+      case "failed": return t("workspace.deliveryStatus.failed");
+      case "interrupted": return t("workspace.deliveryStatus.interrupted");
+      case "applied": return t("workspace.deliveryStatus.applied");
+      case "merged": return t("workspace.deliveryStatus.merged");
+      case "rejected": return t("workspace.deliveryStatus.rejected");
+      case "rolled_back": return t("workspace.deliveryStatus.rolled_back");
+      case "lost": return t("workspace.deliveryStatus.lost");
+      case "orphaned": return t("workspace.deliveryStatus.orphaned");
+      default: return status;
+    }
+  }, [t]);
 
   const toggleCommit = useCallback((hash: string) => {
     setExpandedCommit((prev) => {
@@ -443,6 +499,9 @@ export function WorkspacePanel({
     gitHistoryRequestIdRef.current += 1;
     commitDetailRequestIdRef.current += 1;
     setWorkspaceChanges(null);
+    setDeliveries([]);
+    setExpandedDelivery(null);
+    setDeliveryError("");
     setGitHistory([]);
     setExpandedCommit(null);
     setCommitDetail(null);
@@ -616,17 +675,19 @@ export function WorkspacePanel({
     if (viewMode === "changed") {
       void loadGitHistory();
       void loadWorkspaceChanges();
+      void loadDeliveries();
     }
-  }, [selectedPath, viewMode, loadGitHistory, loadWorkspaceChanges, open]);
+  }, [selectedPath, viewMode, loadDeliveries, loadGitHistory, loadWorkspaceChanges, open]);
 
   useEffect(() => {
     if (!open || !refreshKey) return;
     if (viewMode === "changed") {
       void loadGitHistory();
       void loadWorkspaceChanges();
+      void loadDeliveries();
     }
     openDirsRef.current.forEach((dir) => void loadDir(dir));
-  }, [loadGitHistory, loadWorkspaceChanges, loadDir, open, refreshKey, viewMode]);
+  }, [loadDeliveries, loadGitHistory, loadWorkspaceChanges, loadDir, open, refreshKey, viewMode]);
 
   useEffect(() => {
     if (!selectionMenu && !treeMenu) return;
@@ -654,12 +715,13 @@ export function WorkspacePanel({
     if (viewMode === "changed") {
       void loadGitHistory();
       void loadWorkspaceChanges();
+      void loadDeliveries();
       return;
     }
     onFileTreeRefresh?.();
     const dirs = Array.from(openDirsRef.current);
     dirs.forEach((dir) => void loadDir(dir));
-  }, [loadGitHistory, loadWorkspaceChanges, loadDir, onFileTreeRefresh, viewMode]);
+  }, [loadDeliveries, loadGitHistory, loadWorkspaceChanges, loadDir, onFileTreeRefresh, viewMode]);
 
   const refreshSelected = useCallback(() => {
     if (!selectedPath) return;
@@ -1216,11 +1278,13 @@ export function WorkspacePanel({
           </div>
 
           <div className="workspace-preview__window-actions">
-            <Tooltip label={maximized ? t("workspace.restore") : t("workspace.maximize")}>
-              <button className="workspace-iconbtn" onClick={onToggleMaximized}>
-                {maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-              </button>
-            </Tooltip>
+            {!compact && (
+              <Tooltip label={maximized ? t("workspace.restore") : t("workspace.maximize")}>
+                <button className="workspace-iconbtn" onClick={onToggleMaximized}>
+                  {maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                </button>
+              </Tooltip>
+            )}
             {selectedPath && (
               <Tooltip label={t("workspace.closePreview")}>
                 <button className="workspace-iconbtn" onClick={closePreviewArea}>
@@ -1359,6 +1423,99 @@ export function WorkspacePanel({
             </div>
           ) : viewMode === "changed" && !selectedPath ? (
             <div className="workspace-git-history">
+              {deliveries.length > 0 && (
+                <section className="workspace-deliveries" aria-label={t("workspace.deliveries")}>
+                  <div className="workspace-change-scope__head">
+                    <span className="workspace-change-scope__title">{t("workspace.deliveries")}</span>
+                    <span className="workspace-change-scope__meta">{deliveries.length}</span>
+                  </div>
+                  {deliveryError && <div className="workspace-note workspace-note--warning" role="status">{deliveryError}</div>}
+                  <div className="workspace-deliveries__list">
+                    {deliveries.map((delivery) => {
+                      const openDelivery = expandedDelivery === delivery.ref;
+                      const status = delivery.delivery.status || delivery.status;
+                      const pending = deliveryPending?.startsWith(delivery.ref + ":") ?? false;
+                      const canAccept = status === "ready";
+                      const canRollback = status === "applied" || status === "merged";
+					  const acceptancePending = status === "applying" || status === "merging" || status === "acceptance_interrupted";
+                      const canReject = !canRollback && !acceptancePending && status !== "rejected" && status !== "lost" && status !== "orphaned";
+                      return (
+                        <article className="workspace-delivery" key={delivery.ref}>
+                          <button
+                            type="button"
+                            className="workspace-delivery__head"
+                            aria-expanded={openDelivery}
+                            onClick={() => setExpandedDelivery(openDelivery ? null : delivery.ref)}
+                          >
+                            {openDelivery ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            <GitBranch size={14} />
+                            <span className="workspace-delivery__identity">
+                              <span className="workspace-delivery__branch">{delivery.workspace.branch || delivery.ref}</span>
+                              <span className="workspace-delivery__ref">{delivery.ref}</span>
+                            </span>
+                            <span className={`workspace-delivery__status workspace-delivery__status--${status}`}>{deliveryStatusLabel(status)}</span>
+                          </button>
+                          {openDelivery && (
+                            <div className="workspace-delivery__body">
+                              <div className="workspace-delivery__metrics">
+                                <span>{t("workspace.deliveryFiles", { count: delivery.delivery.files?.length ?? 0 })}</span>
+                                <span>{t("workspace.deliveryCommits", { count: delivery.delivery.commits?.length ?? 0 })}</span>
+                                <span>{t("workspace.deliveryTests", { count: delivery.delivery.tests?.length ?? 0 })}</span>
+                              </div>
+                              {delivery.delivery.sourceDirty && <div className="workspace-note workspace-note--warning">{t("workspace.deliveryDirtySource")}</div>}
+                              {delivery.delivery.lastError && <div className="workspace-note workspace-note--warning">{delivery.delivery.lastError}</div>}
+                              {(delivery.changes?.length ?? 0) > 0 && (
+                                <div className="workspace-delivery__files">
+                                  {delivery.changes?.map((change) => (
+                                    <div className="workspace-delivery__file" key={change.path}>
+                                      <FileText size={13} />
+                                      <span>{change.path}</span>
+                                      <span className="workspace-change__badge workspace-change__badge--git">{change.kind}</span>
+                                      {!change.binary && <span className="workspace-delivery__tally">+{change.added} / -{change.removed}</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {(delivery.delivery.tests?.length ?? 0) > 0 && (
+                                <div className="workspace-delivery__tests">
+                                  {delivery.delivery.tests?.map((test, index) => (
+                                    <div className={`workspace-delivery__test${test.success ? " workspace-delivery__test--ok" : " workspace-delivery__test--failed"}`} key={`${test.command}-${index}`}>
+                                      <span aria-hidden="true">{test.success ? "OK" : "ERR"}</span>
+                                      <code>{test.command}</code>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="workspace-delivery__actions">
+                                {canAccept && (
+                                  <>
+                                    <button type="button" disabled={pending} onClick={() => void mutateDelivery(delivery, "apply")}>
+                                      <FileText size={13} /> {t("workspace.deliveryApply")}
+                                    </button>
+                                    <button type="button" disabled={pending} onClick={() => void mutateDelivery(delivery, "merge")}>
+                                      <GitMerge size={13} /> {t("workspace.deliveryMerge")}
+                                    </button>
+                                  </>
+                                )}
+                                {canRollback && (
+                                  <button type="button" disabled={pending} onClick={() => void mutateDelivery(delivery, "rollback")}>
+                                    <RotateCcw size={13} /> {t("workspace.deliveryRollback")}
+                                  </button>
+                                )}
+                                {canReject && (
+                                  <button className="workspace-delivery__reject" type="button" disabled={pending} onClick={() => void mutateDelivery(delivery, "reject")}>
+                                    <Trash2 size={13} /> {t("workspace.deliveryReject")}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
               {workspaceGitWarning && (
                 <div className="workspace-note workspace-note--warning" role="status">
                   {workspaceGitWarning}

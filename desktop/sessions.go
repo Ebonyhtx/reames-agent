@@ -581,6 +581,9 @@ func purgeTrashedSessionFile(dir, path string) error {
 	if err != nil {
 		return err
 	}
+	if err := control.DeleteTrashedSessionSubagents(itemDir); err != nil {
+		return fmt.Errorf("remove trashed session subagent worktrees: %w", err)
+	}
 	if err := os.RemoveAll(itemDir); err != nil {
 		return err
 	}

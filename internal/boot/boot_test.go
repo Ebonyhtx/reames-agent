@@ -981,7 +981,7 @@ func (p *headlessTaskTestProvider) Stream(context.Context, provider.Request) (<-
 	var chunks []provider.Chunk
 	switch call {
 	case 0:
-		chunks = []provider.Chunk{{Type: provider.ChunkToolCall, ToolCall: &provider.ToolCall{ID: "task-1", Name: "task", Arguments: `{"prompt":"find callers"}`}}}
+		chunks = []provider.Chunk{{Type: provider.ChunkToolCall, ToolCall: &provider.ToolCall{ID: "task-1", Name: "task", Arguments: `{"prompt":"find callers","tools":["read_file"]}`}}}
 	case 1:
 		chunks = []provider.Chunk{{Type: provider.ChunkText, Text: "subagent answer"}, {Type: provider.ChunkDone}}
 	default:
@@ -1463,6 +1463,8 @@ func defaultFullBootToolNames() []string {
 		"run_skill",
 		"security_review",
 		"slash_command",
+		"subagent_delivery",
+		"subagent_delivery_preview",
 		"task",
 		"todo_write",
 		"wait",
@@ -1495,6 +1497,8 @@ func economyBootToolNames() []string {
 		"read_session",
 		"remember",
 		"slash_command",
+		"subagent_delivery",
+		"subagent_delivery_preview",
 		"todo_write",
 		"wait",
 		"write_file",
@@ -1561,6 +1565,8 @@ command = "reamesAgent-missing-mockmcp"
 		"read_session",
 		"remember",
 		"slash_command",
+		"subagent_delivery",
+		"subagent_delivery_preview",
 		"todo_write",
 		"wait",
 		"write_file",

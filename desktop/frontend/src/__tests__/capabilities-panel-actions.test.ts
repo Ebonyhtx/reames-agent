@@ -304,7 +304,8 @@ console.log("capabilities panel identity drift recovery");
     tools: 0,
     prompts: 0,
     resources: 0,
-    identityChanged: true,
+    requiresReverification: true,
+    identityChanged: false,
     trustState: "changed",
     error: "MCP server \"github\" identity changed; blocked before process startup",
   };
@@ -360,7 +361,7 @@ console.log("capabilities panel identity drift recovery");
     await flush();
   });
   await waitFor("identity reverify call", () => reverifyCalls === 1);
-  ok(reconnectCalls === 0, "identity recovery never bypasses explicit re-verification through reconnect");
+  ok(reconnectCalls === 0, "typed identity recovery never bypasses explicit re-verification through reconnect");
 
   await act(async () => {
     root.unmount();

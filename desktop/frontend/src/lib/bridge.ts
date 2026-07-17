@@ -69,6 +69,7 @@ import type {
   GitCommitView,
   GitCommitDetailView,
   WorkspaceView,
+  SubagentDeliveryView,
 } from "./types";
 
 // AppBindings is derived from the Wails-generated Go → TS method signatures, so
@@ -151,6 +152,10 @@ export interface AppBindings {
   HistoryCheckpointTurnsForTab(tabID: string): Promise<number[]>;
   Checkpoints(): Promise<CheckpointMeta[]>;
   CheckpointsForTab(tabID: string): Promise<CheckpointMeta[]>;
+  SubagentDeliveries(): Promise<SubagentDeliveryView[]>;
+  SubagentDeliveriesForTab(tabID: string): Promise<SubagentDeliveryView[]>;
+  PreviewSubagentDelivery(tabID: string, ref: string): Promise<SubagentDeliveryView>;
+  MutateSubagentDelivery(tabID: string, ref: string, op: string): Promise<SubagentDeliveryView>;
   Rewind(turn: number, scope: string): Promise<void>;
   Fork(turn: number): Promise<TabMeta>;
   SummarizeFrom(turn: number): Promise<void>;

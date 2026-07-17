@@ -1553,6 +1553,18 @@ export function makeMockApp(): AppBindings {
     async CheckpointsForTab() {
       return this.Checkpoints();
     },
+    async SubagentDeliveries() {
+      return [];
+    },
+    async SubagentDeliveriesForTab() {
+      return this.SubagentDeliveries();
+    },
+    async PreviewSubagentDelivery(_tabID, ref) {
+      throw new Error(`subagent delivery ${ref} is unavailable in the browser mock`);
+    },
+    async MutateSubagentDelivery(_tabID, ref) {
+      throw new Error(`subagent delivery ${ref} is unavailable in the browser mock`);
+    },
     async Rewind() {},
     async Fork() {
       const active = mockTabs.find((tab) => tab.active) ?? mockTabs[0];

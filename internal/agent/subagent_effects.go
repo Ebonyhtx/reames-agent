@@ -26,6 +26,7 @@ type SubagentEffects struct {
 	ledgers      []subagentEffectLedger
 	preEditHooks []PreEditHook
 	parentCallID string
+	isolated     bool
 }
 
 // WithSubagentEffects carries an immutable ancestor bridge into a child runner.
@@ -99,6 +100,7 @@ func (e *SubagentEffects) withJournal(run *SubagentRun) (*SubagentEffects, error
 		ledgers:      append([]subagentEffectLedger(nil), e.ledgers...),
 		preEditHooks: append([]PreEditHook(nil), e.preEditHooks...),
 		parentCallID: e.parentCallID,
+		isolated:     e.isolated,
 	}
 	for _, target := range clone.ledgers {
 		if target.journal != nil {
@@ -131,6 +133,30 @@ func (e *SubagentEffects) withJournal(run *SubagentRun) (*SubagentEffects, error
 	return clone, nil
 }
 
+// isolatedWorkspaceEffects keeps the durable child audit journal but suppresses
+// ancestor checkpoints and evidence forwarding while mutations remain inside a
+// delivery worktree. The later apply/merge tool records the real source change.
+func (e *SubagentEffects) isolatedWorkspaceEffects() *SubagentEffects {
+	if e == nil {
+		return nil
+	}
+	clone := &SubagentEffects{
+		ledgers:      append([]subagentEffectLedger(nil), e.ledgers...),
+		parentCallID: e.parentCallID,
+		isolated:     true,
+	}
+	for i := range clone.ledgers {
+		clone.ledgers[i].observer = nil
+	}
+	return clone
+}
+
+// IsolateSubagentEffects keeps only the durable audit journal side of a child
+// effects bridge while the child operates in a separate worktree.
+func IsolateSubagentEffects(e *SubagentEffects) *SubagentEffects {
+	return e.isolatedWorkspaceEffects()
+}
+
 // BindSubagentEffectJournal attaches the outermost persisted subagent ref to an
 // ancestor effects bridge. Task and writer-capable skill runners share this
 // boundary; read-only and ephemeral subagents do not create a journal.
@@ -142,7 +168,7 @@ func BindSubagentEffectJournal(effects *SubagentEffects, run *SubagentRun) (*Sub
 }
 
 func (e *SubagentEffects) snapshot(change diff.Change) error {
-	if e == nil {
+	if e == nil || e.isolated {
 		return nil
 	}
 	var snapshotErr error
@@ -192,6 +218,9 @@ func (e *SubagentEffects) record(receipt evidence.Receipt, depth int) error {
 				return err
 			}
 		}
+	}
+	if e.isolated {
+		return nil
 	}
 	for _, target := range e.ledgers {
 		forwarded := receipt

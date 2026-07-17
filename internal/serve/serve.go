@@ -322,6 +322,9 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /sessions", s.sessions)
 	mux.HandleFunc("GET /skills", s.skills)
 	mux.HandleFunc("GET /todos", s.todos)
+	mux.HandleFunc("GET /deliveries", s.deliveries)
+	mux.HandleFunc("GET /delivery", s.deliveryPreview)
+	mux.HandleFunc("POST /delivery", s.deliveryMutate)
 	mux.HandleFunc("POST /delete-session", s.deleteSession)
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /ready", s.ready)
@@ -331,6 +334,54 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("POST /api/feedback/draft", s.feedbackDraft)
 	mux.HandleFunc("GET /ws", s.wsEvents)
 	return logMiddleware(s.auth.middleware(csrfGuard(mux)))
+}
+
+func (s *Server) deliveries(w http.ResponseWriter, _ *http.Request) {
+	views, err := s.ctl().SubagentDeliveries()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, views)
+}
+
+func (s *Server) deliveryPreview(w http.ResponseWriter, r *http.Request) {
+	ref := strings.TrimSpace(r.URL.Query().Get("ref"))
+	if ref == "" {
+		http.Error(w, "ref required", http.StatusBadRequest)
+		return
+	}
+	view, err := s.ctl().SubagentDelivery(ref)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, view)
+}
+
+func (s *Server) deliveryMutate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Ref string `json:"ref"`
+		Op  string `json:"op"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.Ref) == "" || strings.TrimSpace(req.Op) == "" {
+		http.Error(w, "ref and op required", http.StatusBadRequest)
+		return
+	}
+	view, err := s.ctl().MutateSubagentDelivery(r.Context(), req.Ref, req.Op)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, control.ErrRuntimeMutationBusy) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, view)
 }
 
 // csrfGuard rejects state-changing requests that don't carry a JSON content type.

@@ -1,11 +1,15 @@
 package agent
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"reames-agent/internal/proc"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/tool"
 )
@@ -573,6 +577,82 @@ func TestSubagentStoreRejectsConcurrentContinue(t *testing.T) {
 	if _, err := store.PrepareContinue(run.Ref, spec); err == nil || !strings.Contains(err.Error(), "already running") {
 		t.Fatalf("second PrepareContinue error = %v, want lock error", err)
 	}
+}
+
+func TestSubagentStoreCrossProcessReferenceLock(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSubagentStore(dir)
+	run, err := store.PrepareFresh(testSubagentSpec(t, "review"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveCompleted(run); err != nil {
+		run.Release()
+		t.Fatal(err)
+	}
+	run.Release()
+	ready := filepath.Join(t.TempDir(), "ready")
+	release := filepath.Join(t.TempDir(), "release")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSubagentStoreCrossProcessLockHelper$")
+	proc.HideWindow(cmd)
+	cmd.Env = append(os.Environ(),
+		"REAMES_SUBAGENT_LOCK_HELPER=1",
+		"REAMES_SUBAGENT_LOCK_DIR="+dir,
+		"REAMES_SUBAGENT_LOCK_REF="+run.Ref,
+		"REAMES_SUBAGENT_LOCK_READY="+ready,
+		"REAMES_SUBAGENT_LOCK_RELEASE="+release,
+	)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(ready); err != nil {
+		_ = os.WriteFile(release, nil, 0o600)
+		_ = cmd.Wait()
+		t.Fatalf("lock helper did not become ready: %v", err)
+	}
+	if _, err := store.PrepareContinue(run.Ref, testSubagentSpec(t, "review")); err == nil || !strings.Contains(err.Error(), "another process") {
+		_ = os.WriteFile(release, nil, 0o600)
+		_ = cmd.Wait()
+		t.Fatalf("cross-process continuation error = %v", err)
+	}
+	if err := os.WriteFile(release, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("lock helper: %v", err)
+	}
+}
+
+func TestSubagentStoreCrossProcessLockHelper(t *testing.T) {
+	if os.Getenv("REAMES_SUBAGENT_LOCK_HELPER") != "1" {
+		return
+	}
+	store := NewSubagentStore(os.Getenv("REAMES_SUBAGENT_LOCK_DIR"))
+	release, err := store.lock(os.Getenv("REAMES_SUBAGENT_LOCK_REF"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if err := os.WriteFile(os.Getenv("REAMES_SUBAGENT_LOCK_READY"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(os.Getenv("REAMES_SUBAGENT_LOCK_RELEASE")); err == nil {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for parent release")
 }
 
 func TestSubagentStoreSaveFailedPersistsTranscriptAndRejectsReuse(t *testing.T) {

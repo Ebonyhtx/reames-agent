@@ -45,9 +45,9 @@ type TranscriptMemoryCitation struct {
 // composition and referenced-context payloads removed; model input remains only
 // in the runtime session.
 type TranscriptMessage struct {
-	Index           int                        `json:"index"`
-	Role            TranscriptRole             `json:"role"`
-	Content         string                     `json:"content,omitempty"`
+	Index   int            `json:"index"`
+	Role    TranscriptRole `json:"role"`
+	Content string         `json:"content,omitempty"`
 	// DisplayKey and ReplayText are local adapter metadata. DisplayKey hashes
 	// the original runtime content, so neither field may cross JSON transports.
 	DisplayKey      string                     `json:"-"`

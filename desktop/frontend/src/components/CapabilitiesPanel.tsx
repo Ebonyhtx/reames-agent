@@ -749,7 +749,7 @@ function FailedServersNotice({
   const [bulkOpen, setBulkOpen] = useState(false);
   const groups = useMemo(() => failureGroups(servers, t), [servers, t]);
   const removableFailures = useMemo(() => servers.filter(canBulkRemoveFailure), [servers]);
-  const retryNames = useMemo(() => servers.filter((s) => !s.identityChanged).map((s) => s.name), [servers]);
+  const retryNames = useMemo(() => servers.filter((s) => !requiresMCPReverification(s)).map((s) => s.name), [servers]);
   return (
     <div className="cap-failures" role="region" aria-label={t("caps.failureTitle", { failed: servers.length })}>
       <div className="cap-failures__head">
@@ -812,12 +812,12 @@ function FailedServersNotice({
                 </div>
               </div>
               <div className="cap-failure__actions">
-                {s.identityChanged && (
+                {requiresMCPReverification(s) && (
                   <button className="btn btn--small" disabled={busy} onClick={() => onReverify(s.name)}>
                     {t("caps.reverifyIdentity")}
                   </button>
                 )}
-                {!s.identityChanged && (
+                {!requiresMCPReverification(s) && (
                   <button className="btn btn--small" disabled={busy} onClick={handlePrimaryAction}>
                     {actionLabel}
                   </button>
@@ -1456,6 +1456,10 @@ function canBulkRemoveFailure(server: ServerView): boolean {
 
 function retryableAvailableServerNames(servers: ServerView[]): string[] {
   return servers.filter(mcpServerRetryableFromAvailableList).map((s) => s.name);
+}
+
+function requiresMCPReverification(server: ServerView): boolean {
+  return Boolean(server.requiresReverification || server.identityChanged);
 }
 
 function serverActionLabel(s: ServerView, t: ReturnType<typeof useT>): string {

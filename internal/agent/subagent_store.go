@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -17,6 +18,7 @@ import (
 	"reames-agent/internal/fileutil"
 	"reames-agent/internal/store"
 	"reames-agent/internal/tool"
+	"reames-agent/internal/worktree"
 )
 
 type SubagentStatus string
@@ -31,21 +33,23 @@ const (
 // SubagentMeta is the sidecar for a persisted sub-agent transcript. It captures
 // the execution identity that must stay stable for continuation/fork.
 type SubagentMeta struct {
-	Ref              string         `json:"ref"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	UpdatedAt        time.Time      `json:"updatedAt"`
-	Status           SubagentStatus `json:"status"`
-	Kind             string         `json:"kind"` // task | skill
-	Name             string         `json:"name"`
-	WorkspaceRoot    string         `json:"workspaceRoot"`
-	ParentSession    string         `json:"parentSession,omitempty"`
-	ParentToolCallID string         `json:"parentToolCallId,omitempty"`
-	ForkedFrom       string         `json:"forkedFrom,omitempty"`
-	SystemPromptHash string         `json:"systemPromptHash"`
-	ToolScope        []string       `json:"toolScope"`
-	ToolSchemaHash   string         `json:"toolSchemaHash"`
-	Model            string         `json:"model"`
-	Effort           string         `json:"effort"`
+	Ref              string            `json:"ref"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	UpdatedAt        time.Time         `json:"updatedAt"`
+	Status           SubagentStatus    `json:"status"`
+	Kind             string            `json:"kind"` // task | skill
+	Name             string            `json:"name"`
+	WorkspaceRoot    string            `json:"workspaceRoot"`
+	ParentSession    string            `json:"parentSession,omitempty"`
+	ParentToolCallID string            `json:"parentToolCallId,omitempty"`
+	ForkedFrom       string            `json:"forkedFrom,omitempty"`
+	SystemPromptHash string            `json:"systemPromptHash"`
+	ToolScope        []string          `json:"toolScope"`
+	ToolSchemaHash   string            `json:"toolSchemaHash"`
+	Model            string            `json:"model"`
+	Effort           string            `json:"effort"`
+	Workspace        SubagentWorkspace `json:"workspace,omitempty"`
+	Delivery         SubagentDelivery  `json:"delivery,omitempty"`
 }
 
 // SubagentSpec describes the current invocation identity.
@@ -59,6 +63,7 @@ type SubagentSpec struct {
 	Registry         *tool.Registry
 	Model            string
 	Effort           string
+	Workspace        SubagentWorkspace
 }
 
 // SubagentRun is a prepared transcript run. Call Release exactly once.
@@ -111,6 +116,8 @@ type SubagentStore struct {
 	locked      map[string]bool
 	effectsMu   sync.Mutex
 	effectWrite func(string, []byte, os.FileMode) error
+	metaWrite   func(string, []byte, os.FileMode) error
+	workspace   *SubagentWorkspaceCoordinator
 }
 
 func NewSubagentStore(dir string) *SubagentStore {
@@ -118,6 +125,13 @@ func NewSubagentStore(dir string) *SubagentStore {
 		return nil
 	}
 	return &SubagentStore{dir: dir, locked: map[string]bool{}}
+}
+
+func (s *SubagentStore) WithWorkspaceCoordinator(coordinator *SubagentWorkspaceCoordinator) *SubagentStore {
+	if s != nil {
+		s.workspace = coordinator
+	}
+	return s
 }
 
 // WithDestroyedChecker makes saves for destroyed parent sessions no-op. This is
@@ -187,6 +201,53 @@ func DeleteSubagentsByParent(sessionDir, parentSession string) error {
 	if err != nil {
 		return err
 	}
+	return deleteSubagentArtifacts(artifacts)
+}
+
+// DeleteSubagentsByParentWithWorktrees permanently rejects every managed
+// writer workspace before removing its recovery metadata. If Git cleanup
+// fails, metadata is retained so a later cleanup pass can retry safely.
+func DeleteSubagentsByParentWithWorktrees(ctx context.Context, sessionDir, parentSession, managedRoot string) error {
+	artifacts, err := ListSubagentsByParent(sessionDir, parentSession)
+	if err != nil {
+		return err
+	}
+	if err := removeSubagentWorktrees(ctx, artifacts, managedRoot); err != nil {
+		return err
+	}
+	return deleteSubagentArtifacts(artifacts)
+}
+
+// DeleteSubagentsInDirWithWorktrees permanently removes all valid subagent
+// records in dir. It is used only after a transport has validated an isolated
+// trash item directory.
+func DeleteSubagentsInDirWithWorktrees(ctx context.Context, dir, managedRoot string) error {
+	artifacts, err := listAllSubagentsInDir(dir)
+	if err != nil {
+		return err
+	}
+	if err := removeSubagentWorktrees(ctx, artifacts, managedRoot); err != nil {
+		return err
+	}
+	return deleteSubagentArtifacts(artifacts)
+}
+
+func removeSubagentWorktrees(ctx context.Context, artifacts []SubagentArtifact, managedRoot string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for _, artifact := range artifacts {
+		if artifact.Meta.Workspace.Mode != SubagentWorkspaceGitWorktree {
+			continue
+		}
+		if err := worktree.Remove(ctx, artifact.Meta.Workspace.assignment(), managedRoot); err != nil {
+			return fmt.Errorf("remove subagent worktree %q: %w", artifact.Ref, err)
+		}
+	}
+	return nil
+}
+
+func deleteSubagentArtifacts(artifacts []SubagentArtifact) error {
 	for _, artifact := range artifacts {
 		paths := []string{artifact.SessionPath, artifact.MetaPath, artifact.EffectPath}
 		// Sub-agent saves are single-file today, but sweep transcript sidecars
@@ -203,6 +264,46 @@ func DeleteSubagentsByParent(sessionDir, parentSession string) error {
 		}
 	}
 	return nil
+}
+
+func listAllSubagentsInDir(dir string) ([]SubagentArtifact, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	artifacts := make([]SubagentArtifact, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".meta.json") {
+			continue
+		}
+		ref := strings.TrimSuffix(entry.Name(), ".meta.json")
+		if !validSubagentRef(ref) {
+			continue
+		}
+		metaPath := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(metaPath)
+		if err != nil {
+			return nil, err
+		}
+		var meta SubagentMeta
+		if err := json.Unmarshal(data, &meta); err != nil {
+			return nil, fmt.Errorf("decode subagent metadata %q: %w", ref, err)
+		}
+		if meta.Ref != ref {
+			return nil, fmt.Errorf("subagent metadata %q declares ref %q", ref, meta.Ref)
+		}
+		artifacts = append(artifacts, SubagentArtifact{
+			Ref:         ref,
+			SessionPath: filepath.Join(dir, ref+".jsonl"),
+			MetaPath:    metaPath,
+			EffectPath:  filepath.Join(dir, ref+".effects.json"),
+			Meta:        meta,
+		})
+	}
+	return artifacts, nil
 }
 
 // CleanupStaleRunning marks persisted running sub-agents as interrupted. It is
@@ -236,8 +337,17 @@ func (s *SubagentStore) CleanupStaleRunning() (int, error) {
 		if meta.Status != SubagentRunning {
 			continue
 		}
+		// Git writers need the coordinator to reconcile the managed worktree and
+		// derive a recovery manifest. Boot attaches it after constructing the
+		// workspace-bound registry, so leave these refs running until that pass.
+		if meta.Workspace.Mode == SubagentWorkspaceGitWorktree && s.workspace == nil {
+			continue
+		}
 		meta.Status = SubagentInterrupted
 		meta.UpdatedAt = now
+		if s.workspace != nil {
+			_ = s.workspace.reconcile(&meta)
+		}
 		if err := s.saveMeta(meta); err != nil {
 			return cleaned, err
 		}
@@ -567,12 +677,41 @@ func (s *SubagentStore) MarkRunning(run *SubagentRun) error {
 	return s.SaveRunning(run)
 }
 
+// AbortFreshPreparation removes a newly allocated run that never began model
+// execution. It must not be used for continuations because those records and
+// worktrees are durable recovery state owned by an earlier run.
+func (s *SubagentStore) AbortFreshPreparation(run *SubagentRun) error {
+	if s == nil || run == nil || run.Ref == "" {
+		return nil
+	}
+	if run.Meta.Workspace.Mode == SubagentWorkspaceGitWorktree {
+		if s.workspace == nil {
+			return fmt.Errorf("abort fresh subagent %q: workspace manager is unavailable", run.Ref)
+		}
+		if err := worktree.Remove(context.Background(), run.Meta.Workspace.assignment(), s.workspace.managedRoot); err != nil {
+			return fmt.Errorf("abort fresh subagent worktree %q: %w", run.Ref, err)
+		}
+	}
+	return deleteSubagentArtifacts([]SubagentArtifact{{
+		Ref:         run.Ref,
+		SessionPath: s.sessionPath(run.Ref),
+		MetaPath:    s.metaPath(run.Ref),
+		EffectPath:  s.effectPath(run.Ref),
+		Meta:        run.Meta,
+	}})
+}
+
 func (s *SubagentStore) SaveCompleted(run *SubagentRun) error {
 	if s == nil || run == nil || run.Ref == "" {
 		return nil
 	}
 	if s.parentDestroyed(run) {
 		return nil
+	}
+	if s.workspace != nil {
+		if err := s.workspace.seal(run); err != nil {
+			return fmt.Errorf("seal subagent delivery %q: %w", run.Ref, err)
+		}
 	}
 	if err := run.Session.Save(s.sessionPath(run.Ref)); err != nil {
 		return err
@@ -591,6 +730,10 @@ func (s *SubagentStore) SaveFailed(run *SubagentRun) error {
 	if s.parentDestroyed(run) {
 		return nil
 	}
+	var workspaceErr error
+	if s.workspace != nil {
+		workspaceErr = s.workspace.failed(run, false)
+	}
 	var sessionErr error
 	if run.Session != nil {
 		sessionErr = run.Session.Save(s.sessionPath(run.Ref))
@@ -599,7 +742,7 @@ func (s *SubagentStore) SaveFailed(run *SubagentRun) error {
 	meta.Status = SubagentFailed
 	meta.UpdatedAt = time.Now().UTC()
 	run.Meta = meta
-	return errors.Join(sessionErr, s.saveMeta(meta))
+	return errors.Join(workspaceErr, sessionErr, s.saveMeta(meta))
 }
 
 // SaveInterrupted persists the latest safe transcript and publishes an
@@ -611,6 +754,10 @@ func (s *SubagentStore) SaveInterrupted(run *SubagentRun) error {
 	if s.parentDestroyed(run) {
 		return nil
 	}
+	var workspaceErr error
+	if s.workspace != nil {
+		workspaceErr = s.workspace.failed(run, true)
+	}
 	var sessionErr error
 	if run.Session != nil {
 		sessionErr = run.Session.Save(s.sessionPath(run.Ref))
@@ -619,7 +766,7 @@ func (s *SubagentStore) SaveInterrupted(run *SubagentRun) error {
 	meta.Status = SubagentInterrupted
 	meta.UpdatedAt = time.Now().UTC()
 	run.Meta = meta
-	return errors.Join(sessionErr, s.saveMeta(meta))
+	return errors.Join(workspaceErr, sessionErr, s.saveMeta(meta))
 }
 
 func (s *SubagentStore) LoadMeta(ref string) (SubagentMeta, error) {
@@ -654,6 +801,12 @@ func metaFromSpec(ref string, status SubagentStatus, created, updated time.Time,
 		ToolSchemaHash:   schemaHash,
 		Model:            strings.TrimSpace(spec.Model),
 		Effort:           strings.TrimSpace(spec.Effort),
+		Workspace:        spec.Workspace,
+		Delivery: SubagentDelivery{
+			Status:      SubagentDeliveryActive,
+			UpdatedAt:   updated,
+			SourceDirty: spec.Workspace.SourceDirty,
+		},
 	}
 }
 
@@ -688,6 +841,8 @@ func validateMeta(meta SubagentMeta, spec SubagentSpec, allowInterrupted bool) e
 		return fmt.Errorf("subagent reference %q uses different tool schemas", meta.Ref)
 	case meta.Model != want.Model || meta.Effort != want.Effort:
 		return fmt.Errorf("subagent reference %q uses model/effort %q/%q, current run would use %q/%q", meta.Ref, meta.Model, meta.Effort, want.Model, want.Effort)
+	case meta.Workspace.Mode != want.Workspace.Mode || meta.Workspace.SourceRoot != want.Workspace.SourceRoot || meta.Workspace.ExecutionRoot != want.Workspace.ExecutionRoot || meta.Workspace.WorktreeRoot != want.Workspace.WorktreeRoot || meta.Workspace.Branch != want.Workspace.Branch || meta.Workspace.BaseHead != want.Workspace.BaseHead:
+		return fmt.Errorf("subagent reference %q uses a different workspace assignment", meta.Ref)
 	}
 	return nil
 }
@@ -772,7 +927,21 @@ func (s *SubagentStore) lock(ref string) (func(), error) {
 		return nil, fmt.Errorf("subagent reference %q is already running; retry after it finishes", ref)
 	}
 	s.locked[ref] = true
+	lockDir := filepath.Join(s.dir, ".locks")
+	if err := os.MkdirAll(lockDir, 0o700); err != nil {
+		delete(s.locked, ref)
+		return nil, err
+	}
+	releaseFile, err := tryLockSubagentFile(filepath.Join(lockDir, ref+".lock"))
+	if err != nil {
+		delete(s.locked, ref)
+		if errors.Is(err, errSubagentLockHeld) {
+			return nil, fmt.Errorf("subagent reference %q is already running in another process", ref)
+		}
+		return nil, err
+	}
 	return func() {
+		releaseFile()
 		s.mu.Lock()
 		delete(s.locked, ref)
 		s.mu.Unlock()
@@ -799,7 +968,11 @@ func (s *SubagentStore) saveMeta(meta SubagentMeta) error {
 		return err
 	}
 	data = append(data, '\n')
-	return fileutil.AtomicWriteFile(s.metaPath(meta.Ref), data, 0o600)
+	write := s.metaWrite
+	if write == nil {
+		write = fileutil.AtomicWriteFile
+	}
+	return write(s.metaPath(meta.Ref), data, 0o600)
 }
 
 func (s *SubagentStore) parentDestroyed(run *SubagentRun) bool {

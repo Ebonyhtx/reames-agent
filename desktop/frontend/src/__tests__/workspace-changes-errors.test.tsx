@@ -7,7 +7,7 @@ import { createRoot } from "react-dom/client";
 import { WorkspacePanel } from "../components/WorkspacePanel";
 import { LocaleProvider } from "../lib/i18n";
 import type { AppBindings } from "../lib/bridge";
-import type { DirEntry, WorkspaceChangesView } from "../lib/types";
+import type { DirEntry, SubagentDeliveryView, WorkspaceChangesView } from "../lib/types";
 
 let passed = 0;
 let failed = 0;
@@ -67,7 +67,7 @@ function installDom() {
   return dom;
 }
 
-async function renderWorkspace(changes: WorkspaceChangesView) {
+async function renderWorkspace(changes: WorkspaceChangesView, methods: Partial<AppBindings> = {}) {
   const dom = installDom();
   window.go = {
     main: {
@@ -75,6 +75,8 @@ async function renderWorkspace(changes: WorkspaceChangesView) {
         ListDir: async () => [],
         WorkspaceGitHistory: async () => [],
         WorkspaceChanges: async () => changes,
+        SubagentDeliveriesForTab: async () => [],
+        ...methods,
       } as Partial<AppBindings> as AppBindings,
     },
   };
@@ -209,6 +211,96 @@ console.log("\nworkspace changes git errors");
 
   ok(calls.filter((dir) => dir === "src/").length === 2, "workspace file tree revalidates cached directories for repeated file-list requests");
 
+  await act(async () => {
+    root.unmount();
+  });
+  dom.window.close();
+}
+
+{
+  const delivery: SubagentDeliveryView = {
+    ref: "sa_delivery",
+    kind: "task",
+    name: "task",
+    status: "completed",
+    workspace: {
+      mode: "git_worktree",
+      sourceRoot: "/repo",
+      executionRoot: "/state/worktree",
+      branch: "reames/subagent-delivery",
+    },
+    delivery: {
+      status: "ready",
+      files: [{ path: "src/delivery.ts", kind: "create", added: 2 }],
+      commits: [{ hash: "abc123", subject: "seal" }],
+      tests: [{ command: "pnpm test", success: true }],
+      worktreeLive: true,
+    },
+    changes: [{ path: "src/delivery.ts", kind: "create", old_text: "", new_text: "ok\n", added: 2, removed: 0, diff: "+ok", binary: false }],
+  };
+  const mutations: string[] = [];
+  const { dom, root } = await renderWorkspace(
+    { files: [], gitAvailable: true },
+    {
+      SubagentDeliveriesForTab: async () => [delivery],
+      MutateSubagentDelivery: async (_tab, _ref, op) => {
+        mutations.push(op);
+        return { ...delivery, delivery: { ...delivery.delivery, status: "applied" } };
+      },
+    },
+  );
+  await waitFor("delivery lane", () => document.body.textContent?.includes("reames/subagent-delivery") === true);
+  const header = document.querySelector<HTMLButtonElement>(".workspace-delivery__head");
+  await act(async () => {
+    header?.click();
+    await flushPromises();
+  });
+  ok(document.body.textContent?.includes("src/delivery.ts") === true, "delivery expansion shows changed files");
+  ok(document.body.textContent?.includes("pnpm test") === true, "delivery expansion shows test evidence");
+  const apply = Array.from(document.querySelectorAll<HTMLButtonElement>(".workspace-delivery__actions button")).find((button) => button.textContent?.includes("Apply"));
+  await act(async () => {
+    apply?.click();
+    await flushPromises();
+  });
+  await waitFor("delivery apply", () => mutations.includes("apply"));
+  ok(mutations.includes("apply"), "delivery apply uses the shared desktop binding");
+  await act(async () => {
+    root.unmount();
+  });
+  dom.window.close();
+}
+
+{
+  const interrupted: SubagentDeliveryView = {
+    ref: "sa_acceptance_interrupted",
+    kind: "task",
+    name: "task",
+    status: "completed",
+    workspace: {
+      mode: "git_worktree",
+      sourceRoot: "/repo",
+      executionRoot: "/state/worktree",
+      branch: "reames/subagent-acceptance-interrupted",
+    },
+    delivery: {
+      status: "acceptance_interrupted",
+      lastError: "inspect Git state manually",
+      worktreeLive: true,
+    },
+  };
+  const { dom, root } = await renderWorkspace(
+    { files: [], gitAvailable: true },
+    { SubagentDeliveriesForTab: async () => [interrupted] },
+  );
+  await waitFor("acceptance interrupted lane", () => document.body.textContent?.includes("reames/subagent-acceptance-interrupted") === true);
+  const header = document.querySelector<HTMLButtonElement>(".workspace-delivery__head");
+  await act(async () => {
+    header?.click();
+    await flushPromises();
+  });
+  ok(document.body.textContent?.includes("Acceptance interrupted") === true, "acceptance interruption has a localized status");
+  ok(document.body.textContent?.includes("inspect Git state manually") === true, "acceptance interruption surfaces recovery guidance");
+  ok(document.querySelectorAll(".workspace-delivery__actions button").length === 0, "acceptance interruption exposes no automatic source mutation action");
   await act(async () => {
     root.unmount();
   });

@@ -53,6 +53,27 @@ func TestTaskToolReturnsSubAgentFinalAnswer(t *testing.T) {
 	}
 }
 
+func TestNestedTaskUsesInvokingRegistryWithoutCapabilityEscalation(t *testing.T) {
+	prov := &mockProvider{name: "nested", chunks: []provider.Chunk{{Type: provider.ChunkText, Text: "done"}, {Type: provider.ChunkDone}}}
+	full := tool.NewRegistry()
+	full.Add(subagentRegistryTool{name: "read_file", readOnly: true})
+	full.Add(subagentRegistryTool{name: "write_file", readOnly: false})
+	task := newTestTaskTool(t, prov, full, "sys", "", "", nil).WithMaxSubagentDepth(2)
+	full.Add(task)
+	reduced := tool.NewRegistry()
+	reduced.Add(subagentRegistryTool{name: "read_file", readOnly: true})
+	reduced.Add(task)
+	ctx := withToolRegistry(WithSubagentDepth(testTaskContext(), 1), reduced)
+	if _, err := task.Execute(ctx, []byte(`{"prompt":"inspect with inherited scope"}`)); err != nil {
+		t.Fatal(err)
+	}
+	for _, schema := range prov.lastReq.Tools {
+		if schema.Name == "write_file" {
+			t.Fatalf("nested task regained root-only writer; tools=%v", toolSchemaNames(prov.lastReq.Tools))
+		}
+	}
+}
+
 func TestTaskToolInjectsWorkspaceContextIntoSubagentPrompt(t *testing.T) {
 	sub := &mockProvider{name: "sub", chunks: []provider.Chunk{
 		{Type: provider.ChunkText, Text: "answer"},

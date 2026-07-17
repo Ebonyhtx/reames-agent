@@ -51,6 +51,7 @@ import (
 	"reames-agent/internal/tool"
 	"reames-agent/internal/tool/builtin"
 	"reames-agent/internal/tool/sessiontool"
+	"reames-agent/internal/workspacelease"
 )
 
 // ErrUnknownModel is returned by Build when the configured model can't be
@@ -299,7 +300,16 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	if !opts.RequireKey && entry.RequiresAPIKey() && entry.APIKey() == "" {
 		sink.Emit(event.Event{Kind: event.Notice, Text: fmt.Sprintf("model %q is selected but its API key %s is not set — requests will fail until you set it", modelName, entry.APIKeyEnv)})
 	}
-	jm := jobs.NewManager(sink, jobs.WithStalledWarningAfter(time.Duration(cfg.BackgroundJobStalledWarningSeconds())*time.Second))
+	workspaceLease, err := workspacelease.New(root, config.WorkspaceLeaseDir(), func() {
+		sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "waiting for another Reames Agent session to release this workspace for writing"})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("initialize workspace writer lease: %w", err)
+	}
+	jm := jobs.NewManager(sink,
+		jobs.WithStalledWarningAfter(time.Duration(cfg.BackgroundJobStalledWarningSeconds())*time.Second),
+		jobs.WithJobStartObserver(workspaceLease.RetainUntil),
+	)
 	sessionDir := opts.SessionDir
 	if sessionDir == "" {
 		sessionDir = config.SessionDir()
@@ -641,6 +651,63 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	if subagentStore != nil {
 		subagentStore.WithDestroyedChecker(jm.IsDestroying)
 	}
+	workspaceRegistryFactory := func(parent *tool.Registry, names []string, childDepth, maxDepth int, executionRoot string) (*tool.Registry, error) {
+		executionRoot = strings.TrimSpace(executionRoot)
+		if executionRoot == "" {
+			return nil, fmt.Errorf("child execution workspace is empty")
+		}
+		if st, statErr := os.Stat(executionRoot); statErr != nil || !st.IsDir() {
+			return nil, fmt.Errorf("child execution workspace is unavailable: %w", statErr)
+		}
+		sub := agent.SubagentToolRegistryForDepth(parent, names, childDepth, maxDepth)
+		childBashSpec := bashSpec
+		childBashSpec.WriteRoots = cfg.WriteRootsForRoot(executionRoot)
+		for _, tl := range (builtin.Workspace{
+			Dir:             executionRoot,
+			WriteRoots:      cfg.WriteRootsForRoot(executionRoot),
+			ForbidReadRoots: readPolicy.AllPaths,
+			Bash:            childBashSpec,
+			BashTimeout:     bashTimeout,
+			Search:          searchSpec,
+			ProxySpec:       proxySpec,
+			ReadPaths:       readPathResolver,
+			SessionGuard:    sessionGuard,
+		}).Tools() {
+			if _, ok := sub.Get(tl.Name()); ok {
+				sub.Add(tl)
+			}
+		}
+		// These tools capture source-root state or live services and cannot be
+		// safely rebound to a child worktree. Exclude them rather than letting a
+		// child silently inspect or mutate the parent's workspace.
+		for _, name := range sub.Names() {
+			if strings.HasPrefix(name, "mcp__") || strings.HasPrefix(name, "lsp_") {
+				sub.Remove(name)
+			}
+		}
+		for _, name := range []string{"memory", "remember", "forget", "history", "list_sessions", "read_session", "connect_tool_source"} {
+			sub.Remove(name)
+		}
+		if _, ok := sub.Get("subagent_delivery_preview"); ok {
+			sub.Add(agent.NewSubagentDeliveryPreviewTool(subagentStore, executionRoot))
+		}
+		if _, ok := sub.Get("subagent_delivery"); ok {
+			sub.Add(agent.NewSubagentDeliveryTool(subagentStore, executionRoot))
+		}
+		return sub, nil
+	}
+	workspaceCoordinator := agent.NewSubagentWorkspaceCoordinator(config.ManagedWorktreeDir(), config.WorkspaceLeaseDir(), workspaceRegistryFactory)
+	if subagentStore != nil {
+		subagentStore.WithWorkspaceCoordinator(workspaceCoordinator)
+		if _, err := subagentStore.CleanupStaleRunning(); err != nil {
+			return nil, fmt.Errorf("reconcile stale writer subagents: %w", err)
+		}
+		if _, err := subagentStore.ReconcilePendingDeliveries(); err != nil {
+			return nil, fmt.Errorf("reconcile pending subagent deliveries: %w", err)
+		}
+		reg.Add(agent.NewSubagentDeliveryPreviewTool(subagentStore, root))
+		reg.Add(agent.NewSubagentDeliveryTool(subagentStore, root))
+	}
 
 	// Permission policy gates every tool call. The headless gate (no Approver)
 	// resolves ordinary "ask" decisions to allow — preserving `reames-agent run`
@@ -718,7 +785,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			WithTranscripts(subagentStore, root, modelName, entry.Effort).
 			WithTranscriptIdentityResolver(subagentIdentity).
 			WithMaxSubagentDepth(maxSubagentDepth).
-			WithDelegationLimits(delegationLimits)
+			WithDelegationLimits(delegationLimits).
+			WithWorkspaceCoordinator(workspaceCoordinator)
 	}
 	addTaskTool := func() string {
 		if taskToolAdded {
@@ -779,7 +847,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		if strings.TrimSpace(runOpts.ContinueFrom) != "" || strings.TrimSpace(runOpts.ForkFrom) != "" {
 			return "", fmt.Errorf("read_only_skill does not support continue_from/fork_from")
 		}
-		sk = skill.WithCodeGraphTools(sk, skill.CodeGraphReadTools(reg))
+		activeReg := agent.ToolRegistryFromContext(sctx, reg)
+		sk = skill.WithCodeGraphTools(sk, skill.CodeGraphReadTools(activeReg))
 		prov, price, ctxWin := execProv, entry.Price, entry.ContextWindow
 		modelRef := subagentModelRef(cfg, sk)
 		effortRef := subagentEffortRef(cfg, sk)
@@ -794,7 +863,16 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		if childDepth > maxSubagentDepth {
 			return "", fmt.Errorf("subagent delegation depth limit reached (max_subagent_depth=%d)", maxSubagentDepth)
 		}
-		subReg := agent.ReadOnlySubagentToolRegistryForDepth(reg, sk.AllowedTools, childDepth, maxSubagentDepth)
+		sourceRoot := agent.WorkspaceRootFromContext(sctx, root)
+		boundReg := agent.SubagentToolRegistryForDepth(activeReg, sk.AllowedTools, childDepth, maxSubagentDepth)
+		if workspaceCoordinator != nil {
+			var bindErr error
+			boundReg, bindErr = workspaceCoordinator.Registry(activeReg, sk.AllowedTools, childDepth, maxSubagentDepth, workspaceCoordinator.SharedReadOnly(sourceRoot))
+			if bindErr != nil {
+				return "", fmt.Errorf("bind read-only skill tools to workspace: %w", bindErr)
+			}
+		}
+		subReg := agent.ReadOnlySubagentToolRegistryForDepth(boundReg, nil, childDepth, maxSubagentDepth)
 		if subReg.Len() == 0 {
 			return "", fmt.Errorf("read_only_skill: skill %q has no read-only tools available", sk.Name)
 		}
@@ -827,6 +905,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			MaxSubagentDepth:    maxSubagentDepth,
 			DelegationLedger:    ledger,
 			SubagentEffects:     effects,
+			WorkspaceRoot:       sourceRoot,
 		}, agent.NestedSink(sctx, event.Discard))
 	}
 	// Writer-capable subagent skills reuse the sub-agent machinery via this
@@ -835,7 +914,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	// per-skill model, and resumable transcripts when the parent session supports
 	// them. Its tool activity nests under the invoking call, like `task`.
 	skillRunner := func(sctx context.Context, sk skill.Skill, task string, runOpts skill.SubagentRunOptions) (string, error) {
-		sk = skill.WithCodeGraphTools(sk, skill.CodeGraphReadTools(reg))
+		activeReg := agent.ToolRegistryFromContext(sctx, reg)
+		sk = skill.WithCodeGraphTools(sk, skill.CodeGraphReadTools(activeReg))
 		prov, price, ctxWin := execProv, entry.Price, entry.ContextWindow
 		modelRef := subagentModelRef(cfg, sk)
 		effortRef := subagentEffortRef(cfg, sk)
@@ -850,7 +930,6 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		if childDepth > maxSubagentDepth {
 			return "", fmt.Errorf("subagent delegation depth limit reached (max_subagent_depth=%d)", maxSubagentDepth)
 		}
-		subReg := agent.SubagentToolRegistryForDepth(reg, sk.AllowedTools, childDepth, maxSubagentDepth)
 		continueFrom := strings.TrimSpace(runOpts.ContinueFrom)
 		legacyForkFrom := strings.TrimSpace(runOpts.ForkFrom)
 		if continueFrom != "" && legacyForkFrom != "" {
@@ -858,6 +937,64 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		}
 		parentID, _, _, _ := agent.CallContext(sctx)
 		parentSession := agent.ParentSession(sctx)
+		sourceRoot := agent.WorkspaceRootFromContext(sctx, root)
+		baseReg := agent.SubagentToolRegistryForDepth(activeReg, sk.AllowedTools, childDepth, maxSubagentDepth)
+		builtinReadOnlySkill := sk.Scope == skill.ScopeBuiltin && (sk.Name == "explore" || sk.Name == "research" || sk.Name == "review" || sk.Name == "security-review")
+		if builtinReadOnlySkill {
+			baseReg = agent.ReadOnlySubagentToolRegistryForDepth(baseReg, nil, childDepth, maxSubagentDepth)
+		}
+		writer := agent.RegistryCanWrite(baseReg)
+		workspace := agent.SubagentWorkspace{Mode: agent.SubagentWorkspaceSharedReadOnly, SourceRoot: sourceRoot, ExecutionRoot: sourceRoot}
+		if workspaceCoordinator != nil {
+			workspace = workspaceCoordinator.SharedReadOnly(sourceRoot)
+		}
+		var childWorkspaceLease *workspacelease.Owner
+		freshWriterWorkspace := false
+		if writer && workspaceCoordinator != nil {
+			if strings.TrimSpace(parentSession) == "" {
+				return "", fmt.Errorf("writer subagent skill %q requires a persisted parent session so its isolated delivery can be accepted", sk.Name)
+			}
+			lookupRef := continueFrom
+			if lookupRef == "" {
+				lookupRef = legacyForkFrom
+			}
+			if lookupRef != "" {
+				meta, loadErr := subagentStore.LoadMeta(lookupRef)
+				if loadErr != nil {
+					return "", loadErr
+				}
+				if meta.Workspace.Mode != agent.SubagentWorkspaceGitWorktree {
+					return "", fmt.Errorf("subagent reference %q predates isolated writer workspaces; start a fresh run", lookupRef)
+				}
+				if agent.DeliveryBlocksContinuation(meta.Delivery.Status) {
+					return "", fmt.Errorf("subagent delivery %q is already %s; start a fresh run", lookupRef, meta.Delivery.Status)
+				}
+				workspace = meta.Workspace
+				childWorkspaceLease, err = workspaceCoordinator.Resume(meta)
+				if err != nil {
+					return "", fmt.Errorf("resume subagent skill workspace %q: %w", lookupRef, err)
+				}
+			} else {
+				workspace, childWorkspaceLease, err = workspaceCoordinator.CreateWriter(sctx, sourceRoot)
+				if err != nil {
+					return "", err
+				}
+				freshWriterWorkspace = true
+			}
+		}
+		subReg := baseReg
+		if workspaceCoordinator != nil {
+			subReg, err = workspaceCoordinator.Registry(activeReg, sk.AllowedTools, childDepth, maxSubagentDepth, workspace)
+			if err != nil {
+				if freshWriterWorkspace {
+					workspaceCoordinator.RejectPreparation(workspace)
+				}
+				return "", fmt.Errorf("bind subagent skill tools to workspace: %w", err)
+			}
+		}
+		if builtinReadOnlySkill {
+			subReg = agent.ReadOnlySubagentToolRegistryForDepth(subReg, nil, childDepth, maxSubagentDepth)
+		}
 		var run *agent.SubagentRun
 		if subagentStore == nil || parentSession == "" {
 			// Headless runs (e.g. `reames-agent run`) have no persistent session to
@@ -873,13 +1010,14 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			spec := agent.SubagentSpec{
 				Kind:             "skill",
 				Name:             sk.Name,
-				WorkspaceRoot:    root,
+				WorkspaceRoot:    sourceRoot,
 				ParentSession:    parentSession,
 				ParentToolCallID: parentID,
 				SystemPrompt:     sk.Body,
 				Registry:         subReg,
 				Model:            identityModel,
 				Effort:           identityEffort,
+				Workspace:        workspace,
 			}
 			var prepErr error
 			if continueFrom != "" {
@@ -890,10 +1028,22 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 				run, prepErr = subagentStore.PrepareFresh(spec)
 			}
 			if prepErr != nil {
+				if freshWriterWorkspace {
+					workspaceCoordinator.RejectPreparation(workspace)
+				}
 				return "", prepErr
 			}
 		}
 		defer run.Release()
+		abortBeforeExecution := func(cause error) error {
+			var cleanupErr error
+			if freshWriterWorkspace {
+				cleanupErr = subagentStore.AbortFreshPreparation(run)
+			} else {
+				cleanupErr = subagentStore.SaveInterrupted(run)
+			}
+			return errors.Join(cause, cleanupErr)
+		}
 		steps := maxSteps
 		if steps > 0 {
 			if steps /= 2; steps < 5 {
@@ -903,14 +1053,17 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		runCtx, ledger, cleanup := agent.EnsureDelegationLedger(sctx, delegationLimits)
 		defer cleanup()
 		effects, _ := agent.SubagentEffectsFromContext(sctx)
+		if workspace.Mode == agent.SubagentWorkspaceGitWorktree {
+			effects = agent.IsolateSubagentEffects(effects)
+		}
 		var sessionSync agent.SessionSync
 		if run.Ref != "" {
 			if err := subagentStore.MarkRunning(run); err != nil {
-				return "", fmt.Errorf("persist subagent skill start %q: %w", run.Ref, err)
+				return "", abortBeforeExecution(fmt.Errorf("persist subagent skill start %q: %w", run.Ref, err))
 			}
 			bound, err := agent.BindSubagentEffectJournal(effects, run)
 			if err != nil {
-				return "", errors.Join(fmt.Errorf("persist subagent skill effect journal %q: %w", run.Ref, err), subagentStore.SaveFailed(run))
+				return "", abortBeforeExecution(fmt.Errorf("persist subagent skill effect journal %q: %w", run.Ref, err))
 			}
 			effects = bound
 			runCtx = agent.WithSubagentEffects(runCtx, effects)
@@ -937,8 +1090,13 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 			DelegationLedger:  ledger,
 			SubagentEffects:   effects,
 			SessionSync:       sessionSync,
+			WorkspaceRoot:     workspace.ExecutionRoot,
+			WorkspaceLease:    childWorkspaceLease,
 		}, agent.NestedSink(sctx, event.Discard))
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return "", errors.Join(err, subagentStore.SaveInterrupted(run))
+			}
 			return "", errors.Join(err, subagentStore.SaveFailed(run))
 		}
 		if err := subagentStore.SaveCompleted(run); err != nil {
@@ -1164,6 +1322,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		Gate:                               headlessGate,
 		Hooks:                              hookRunner,
 		Jobs:                               jm,
+		WorkspaceLease:                     workspaceLease,
+		WorkspaceRoot:                      root,
 		ProjectChecks:                      projectChecks,
 		ContextWindow:                      entry.ContextWindow,
 		SoftCompactRatio:                   cfg.Agent.SoftCompactRatio,
@@ -1262,6 +1422,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		PluginCtx:              ctx,
 		PluginMCPOwners:        pluginPackageMCPOwners,
 		WorkspaceRoot:          root,
+		WorkspaceLease:         workspaceLease,
 		ExternalFolderToolRefs: readPathResolver,
 		AutoPlan:               cfg.Agent.AutoPlan,
 		ResponseLanguage:       cfg.ResponseLanguage(),
