@@ -87,7 +87,13 @@ def read_utf8(path: Path, failures: list[str]) -> str:
 
 def tracked_files(pattern: str) -> list[Path]:
     try:
-        out = subprocess.check_output(["git", "ls-files", pattern], cwd=ROOT, text=True)
+        # Include staged and untracked non-ignored files so a pre-commit local
+        # check cannot miss a newly-created audit that CI will see after commit.
+        out = subprocess.check_output(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "--", pattern],
+            cwd=ROOT,
+            text=True,
+        )
     except (OSError, subprocess.CalledProcessError):
         return []
     return [ROOT / rel for rel in out.splitlines() if rel.strip()]

@@ -160,6 +160,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Test documentation contract discovery
+        run: python -m unittest scripts.test_check_docs_contracts -v
       - name: Validate documentation contracts
         run: python scripts/check_docs_contracts.py
       - name: Validate public repository gates
