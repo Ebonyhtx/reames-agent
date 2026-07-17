@@ -28,15 +28,15 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
 ## 已验证基线
 
 - M0、M1、M2、M3、M4 已按路线图门槛关闭。
-- 本批前远端 `main` 为 `bc40db5 feat: isolate writer subagents in managed worktrees`；当前 P2
-  Guard/Safe Mode、Reasonix session reliability 与文档改动尚未提交，必须先以工作树和本批最终
-  全量验证为准，不能沿用更早 CI 结果冒充当前 HEAD。
+- 本批前本地/远端 `main` 为 `8ee3639 feat: add offline guard and safe mode recovery`；当前 P3
+  Recovery Center、三平台 recovery smoke、Reasonix reasoning-only stop、发布棘轮和文档改动尚未
+  提交，必须先以工作树和本批最终全量验证为准，不能沿用更早 CI 结果冒充当前 HEAD。
 - 同批 workflow 已迁移到 Node.js 24 action majors；上述远端日志未再出现 Node.js 20
   弃用告警。public-readiness 合同扫描 `.yml/.yaml`，拒绝旧 major、未知 ref 和未经审计的
   commit pin。
-- 最近完整 Desktop candidate `29378899444` 仍为三平台全绿；Windows 安装后 interaction、
-  accessibility、native 和 plugin lifecycle 四条 smoke 均通过，且
-  `boundary_changes=[]`、`errors=[]`。
+- 最近已提交基线的 Desktop candidate 仍不包含当前 recovery smoke；本批最新本地 Windows Wails
+  Desktop + Guard 的真实 recovery smoke 已通过，但 Linux/macOS/Windows 远端 candidate 必须在
+  单次 push 后重新运行，不能把本地结果外推为三平台证据。
 - 初始迁移中隔离的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package、
   `site/` 和 `workers/` 已完成依赖审计并从当前树删除；Git 历史和
   `F:\code-reference\Hermes` 保留参考。public-readiness 会阻止 legacy 根目录和运行品牌回归，
@@ -63,7 +63,7 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
   reverify 和共享 Host sibling registry 刷新，见
 `docs/audits/2026-07-17-m5-mcp-identity-trust.md`。
 
-## P1/P2 当前边界
+## P1/P2/P3 当前边界
 
 - P1 writer worktree isolation 已完成：writer-capable task/Skill/Subagent 使用独立
   `reames/subagent-*` branch/worktree、workspace/ref 跨进程锁和父会话统一交付事务；ambiguous
@@ -77,20 +77,25 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
 - `control.Controller.RecoveryStatus()`、Serve `/api/recovery`、Desktop `GetRecoveryStatus()`、
   Guard check 与 `gateway recovery-status` 共用同一报告；`gateway run` 在加载普通 runtime 前执行
   credential-free preflight。
-- Reasonix 已审查到 `c966d0279629`，采用 `dae65e25` 的 stalled error-body deadline、verified
-  snapshot fast path、damaged event-log salvage 和 last-click-wins；不直接跟随删除 Memory Compiler。
-  Hermes/Codex/MiMo/Claude/Kimi/Scream Code 均逐项审查并显式接受到 lock 中记录的 SHA；没有使用
-  `--accept-all`。Codex runtime projection 仅作为 P3 Recovery Center 参考，其他最新增量无采用项。
+- P3 Recovery Center 已实现：普通模式经 Controller、Safe Mode 直接经同一 `repair.ExecuteAction`，
+  支持配置修复/快照恢复/精确 undo/验证更新回滚/派生状态重建/插件禁用；stale transaction identity
+  会被拒绝，Go/Wails 边界统一脱敏，Frontend 请求序号保证最后操作优先，组件保持 lazy chunk。
+- 三平台 Desktop candidate 已接入安装后 recovery smoke；脚本和本地 Windows 真实运行已通过，远端
+  candidate 尚待本批 push。签名/notarization、公开 release 升级失败和断电点回滚仍为 external-blocked。
+- Reasonix 已审查并接受到 lock 当前 SHA：`7f00d2c2` Theme Pack V2 只形成 P4 分层设计；`d3cfa5c2`
+  reasoning-only `finish_reason=stop` 已按 Provider capability 吸收；`3637d0f0` 的生产发布 workflow 不
+  继承，只转化为 Reames 全 workflow 发布写权限棘轮。Kimi 权限文案准确性已转化为三语合同；
+  Hermes/Codex/MiMo 最新机制均已分类，没有使用 `--accept-all` 或引入第二套 runtime。
 
 权威设计、运维与证据见 `docs/RECOVERY.zh-CN.md` 和
 `docs/audits/2026-07-17-p2-offline-guard-safe-mode.md`。
 
-本批本地门禁已经覆盖 root build/vet/internal 全测、Desktop build/vet/full test、前端
-`test:all`/production build/bundle budget、126 项 Python 合同（2 skipped）、文档/公开/部署/
-发布/Desktop artifact 合同、actionlint、恢复相关 Root 与 Desktop race、六目标 CLI + Guard
-`CGO_ENABLED=0` 交叉编译；`git diff --check` 与 tracked 生成物检查均干净。`--no-local` clean clone
-又从空 Frontend `node_modules` 重跑 Root/Desktop/Frontend/合同并保持 tracked clean；当前只剩单次
-push 后的远端 CI/CodeQL 与安装态 candidate 证据。详细证据见：
+当前本地门禁已通过：Root build/vet/internal 全测；Desktop build/vet/full test；Frontend
+`test:all`/production build/bundle budget；恢复/Provider/Agent/Controller/插件/Gateway 与 Desktop 定向
+race；六目标 CLI + Guard `CGO_ENABLED=0`；133 项 Python 合同（2 项平台跳过）、Node、工具文档、
+docs/deploy/release/public、actionlint 与 shell syntax；最新本地 Windows recovery smoke。localized initial
+JS 为 999,829 / 1,000,000 bytes。当前只剩首次大提交后的 `--no-local` clean clone、最终 upstream
+快照与单次 push 后远端 CI/CodeQL/Desktop candidate。
 
 - `docs/audits/2026-07-14-m5-plugin-lifecycle-trust.md`
 - `docs/audits/2026-07-15-m5-plugin-process-isolation.md`
@@ -113,11 +118,12 @@ push 后的远端 CI/CodeQL 与安装态 candidate 证据。详细证据见：
 
 ## 下一执行顺序
 
-1. 完成当前 P2 的 root/Desktop/frontend/race/六目标/合同/clean-clone 全量验证，清理生成产物，
+1. 完成当前 P3 的 root/Desktop/frontend/race/六目标/合同/clean-clone 全量验证，清理生成产物，
    形成一个大提交并单次 push；随后等待普通 CI、CodeQL 和必要的 Desktop candidate，失败则在同一
    批次修复，不用碎片 push 消耗 CI。
-2. P3 优先建立低噪音 Desktop Recovery Center，并用真实三平台签名安装包补升级失败、crash-loop
-   自动回滚、Safe Mode 和恢复动作 smoke；继续只投影 `repair.Report`，不新增状态机。
+2. 远端全绿后打开 P4“受控 Theme Pack”：先不可执行 manifest、semantic token allowlist、ZIP/path/
+   symlink/图片限制、内容寻址原子存储，再做按需 Gallery、select != apply、可撤销预览和 Safe Mode
+   Graphite 回退，最后只加入 Reames 原创/许可证明确的官方资产。
 3. 若生产 registry 的人员、密钥、域名和对象存储条件到位，按双语 runbook 执行真实仪式、
    发布、轮换和 compromise drill，并独立归档证据；未到位时保持明确阻塞，不降低门槛。
 4. 取得干净云节点、真实 IM 应用或签名设施后，关闭 M6 的 logout/reboot、Gateway recovery

@@ -76,13 +76,13 @@ func InspectAndRepairConfig(opts ConfigOptions) (ConfigReport, error) {
 		opts.Now = time.Now
 	}
 	root := strings.TrimSpace(opts.Root)
-	project := "reames-agent.toml"
-	if root != "" && root != "." {
-		project = filepath.Join(filepath.Clean(root), project)
-	}
-	items := []struct{ scope, path string }{
-		{scope: "global", path: config.UserConfigPath()},
-		{scope: "project", path: project},
+	items := []struct{ scope, path string }{{scope: "global", path: config.UserConfigPath()}}
+	if root != "" {
+		project := "reames-agent.toml"
+		if root != "." {
+			project = filepath.Join(filepath.Clean(root), project)
+		}
+		items = append(items, struct{ scope, path string }{scope: "project", path: project})
 	}
 	report := ConfigReport{Checks: make([]ConfigCheck, 0, len(items)), Applied: []string{}}
 	tx := newRepairTransaction(opts.Now())

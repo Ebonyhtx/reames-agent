@@ -642,6 +642,25 @@ type Provider interface {
 	Stream(ctx context.Context, req Request) (<-chan Chunk, error)
 }
 
+// ToolCallReasoningPolicy is implemented by providers whose active protocol
+// requires DeepSeek-style reasoning_content replay on assistant tool-call
+// turns. The same capability also lets the agent narrowly honour a DeepSeek
+// reasoning-only stop without weakening empty-answer recovery for other
+// OpenAI-compatible endpoints.
+type ToolCallReasoningPolicy interface {
+	RequiresToolCallReasoning() bool
+}
+
+// RequiresToolCallReasoning reports whether p is currently using the
+// DeepSeek thinking protocol with thinking enabled.
+func RequiresToolCallReasoning(p Provider) bool {
+	if nilutil.IsNil(p) {
+		return false
+	}
+	policy, ok := p.(ToolCallReasoningPolicy)
+	return ok && policy.RequiresToolCallReasoning()
+}
+
 // Config is a resolved provider instance configuration.
 type Config struct {
 	Name    string         // instance name, e.g. "deepseek"

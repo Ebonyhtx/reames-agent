@@ -14,6 +14,12 @@
 - 不创建 GitHub Release；
 - 只允许手动运行不含发布权限的候选工件构建。
 
+`scripts/check_release_contracts.py` 会扫描全部 workflow，而不只检查已知候选文件：当前只允许
+`release-candidate.yml` 这一份 release 命名 workflow，并拒绝任何 workflow 新增
+`contents/packages/id-token: write`、`gh release create`、`npm publish`、非 snapshot GoReleaser 或
+常见 GitHub Release action。Reasonix 最新的集中发布审批机制只作为此棘轮的设计信号；在 Reames
+拥有签名、域名、package registry 和受保护 environment 之前，不引入其 production release workflow。
+
 ## CLI 候选工件
 
 Actions → **Release candidate** → **Run workflow**。
@@ -57,7 +63,7 @@ Wails Desktop；Linux deb 和 macOS dmg 的关键容器结构也必须符合 `sc
 
 同一 workflow 随后在原生 runner 上执行安装/启动 smoke：Linux 安装实际 `.deb` 并在 Xvfb 中要求可见窗口；macOS 挂载实际 `.dmg`、复制和校验 universal `.app` 后启动；Windows 静默安装实际 NSIS、验证 per-user 注册与 update helper、检查窗口消息泵，再运行截图无关的 UIA 交互链路、严格 InvokePattern 可访问性链路和真实 Go 后端插件生命周期，最后静默卸载。
 
-`scripts/smoke_desktop_candidate.py`、`scripts/smoke_desktop_native.py`、`scripts/smoke_desktop_interaction.py`、`scripts/smoke_desktop_accessibility.py` 与 `scripts/smoke_desktop_plugin_lifecycle.py` 都使用隔离 home 并检查默认状态边界。Linux/macOS candidate 必须在 10 秒内连续三次观察到隔离 Desktop 状态就绪，Linux 还必须同时保持可见 X11 窗口；macOS 当前不把状态 readiness 冒充窗口可见性。Windows 托管 runner 的首次安装 candidate 使用 20 秒观察窗，强制 15 秒冷启动和 6 秒同 HOME warm relaunch 响应预算；本地源码 production smoke 仍保持更严格的 8/6 秒门槛。Windows 交互 smoke 还使用仅监听 `127.0.0.1`、不含 API key 的确定性 OpenAI 兼容端点，验证新建项目会话、输入/发送、canonical 事件账本持久化、本地长命令停止，以及关闭重启后的工作区和会话恢复；可访问性 smoke 严格使用 UIA InvokePattern，验证主界面/对话日志语义、跳转焦点、设置 dialog、背景从辅助技术树隔离和 opener 恢复，不允许坐标点击回退。插件 smoke 使用本地合成 schema v1 包，经 UIA 验证 stale plan 拒绝、默认禁用、精确授权、内容 digest 更新与恢复、doctor、两阶段移除和安装根清理，不读取真实凭据。workflow 会随候选 artifact 上传 artifact/executable SHA-256、`desktop-*-native-smoke.json`、`desktop-*-interaction-smoke.json`、`desktop-*-accessibility-smoke.json` 和 `desktop-*-plugin-lifecycle-smoke.json`。这些自动证据仍不能替代真实第三方插件、NVDA/Narrator 实际听感、Windows High Contrast、签名发布或真实公网模型 E2E；真实 Provider 证据单独审计。
+`scripts/smoke_desktop_candidate.py`、`scripts/smoke_desktop_native.py`、`scripts/smoke_desktop_interaction.py`、`scripts/smoke_desktop_accessibility.py`、`scripts/smoke_desktop_plugin_lifecycle.py` 与 `scripts/smoke_desktop_recovery.py` 都使用隔离 home 并检查默认状态边界。Linux/macOS candidate 必须在 10 秒内连续三次观察到隔离 Desktop 状态就绪，Linux 还必须同时保持可见 X11 窗口；macOS 当前不把状态 readiness 冒充窗口可见性。Windows 托管 runner 的首次安装 candidate 使用 20 秒观察窗，强制 15 秒冷启动和 6 秒同 HOME warm relaunch 响应预算；本地源码 production smoke 仍保持更严格的 8/6 秒门槛。Windows 交互 smoke 还使用仅监听 `127.0.0.1`、不含 API key 的确定性 OpenAI 兼容端点，验证新建项目会话、输入/发送、canonical 事件账本持久化、本地长命令停止，以及关闭重启后的工作区和会话恢复；可访问性 smoke 严格使用 UIA InvokePattern，验证主界面/对话日志语义、跳转焦点、设置 dialog、背景从辅助技术树隔离和 opener 恢复，不允许坐标点击回退。插件 smoke 使用本地合成 schema v1 包，经 UIA 验证 stale plan 拒绝、默认禁用、精确授权、内容 digest 更新与恢复、doctor、两阶段移除和安装根清理，不读取真实凭据。三平台 recovery smoke 使用安装后的 Guard 强制启动 recovery-only Safe Mode，验证损坏的 `config.toml` 和合成 `.env` 字节不变、配置隔离后可按同一 repair transaction 精确撤销、tabs/projects/window/zoom 派生状态只被 quarantine，并以最终无 error finding 的 Guard 报告收口。workflow 会随候选 artifact 上传 artifact/executable/Guard SHA-256、`desktop-*-native-smoke.json`、`desktop-*-interaction-smoke.json`、`desktop-*-accessibility-smoke.json`、`desktop-*-plugin-lifecycle-smoke.json` 和 `desktop-*-recovery-smoke.json`。这些自动证据仍不能替代真实第三方插件、NVDA/Narrator 实际听感、Windows High Contrast、真实签名/notarization 安装包、公开 release 升级失败或断电点回滚；真实 Provider 与生产签名链证据单独审计。
 
 ## 版本号来源
 

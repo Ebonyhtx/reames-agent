@@ -143,6 +143,43 @@ current/previous binary hashes, session-store readability, plugin-state counts,
 and actionable findings. Missing optional files are not automatically errors;
 invalid metadata, invalid config, or unreadable plugin state is.
 
+## Desktop Recovery Center
+
+Desktop renders the shared report through a lazy-loaded Recovery Center. In
+normal mode it can be opened from the topic bar; when Safe Mode is requested it
+becomes the recovery-only shell and the ordinary sidebar, workspace dock,
+composer, updater, and session UI remain unavailable.
+
+The UI does not mutate files itself. It sends a bounded `repair.ActionRequest`
+through Desktop `RunRecoveryAction`; normal mode delegates to
+`control.Controller.RunRecoveryAction`, while Safe Mode calls the same
+`repair.ExecuteAction` directly without constructing a Controller or Agent.
+Supported operations are:
+
+- repair invalid global or explicitly selected project configuration;
+- restore a named healthy configuration snapshot;
+- undo the exact last repair transaction;
+- roll back only the exact pending update identity shown in the report;
+- quarantine/rebuild tabs, projects, window, zoom, or all derived Desktop state;
+- disable all managed plugins.
+
+Update rollback and repair undo carry the report-observed version, timestamp, or
+transaction ID. The executor rechecks that identity while holding the recovery
+action lock, so a stale tab cannot act on newer state. Each result includes a
+fresh report. Paths, installation/home/workspace locations, secret-like text,
+and action errors are redacted in Go before crossing the Wails boundary. The
+frontend uses a monotonic request sequence so late refreshes cannot overwrite a
+newer action result.
+
+The installed-candidate recovery smoke launches Guard with an isolated home and
+forces recovery-only Safe Mode to DOM-ready. It proves that damaged
+`config.toml` and a synthetic `.env` remain byte-identical during startup,
+executes config repair followed by exact undo, quarantines tabs/projects/window/
+zoom instead of deleting them, requires a final Guard report with no error
+finding, and checks that the default user-state boundary did not change. The
+latest local Windows Wails Desktop/Guard run passes; Linux/macOS/Windows CI
+candidate evidence is generated only after the corresponding workflow runs.
+
 ## Operator playbooks
 
 ### Desktop repeatedly fails to open
@@ -177,10 +214,12 @@ the preflight by copying service definitions or inventing a separate state file.
 ## Limits and required external evidence
 
 Local tests prove unit, race, fault-injection, cross-process locking, packaging
-contracts, cross-compilation, and real Guard/child process behavior. They do not
-prove power-loss atomicity below the filesystem guarantees, resistance to a
+contracts, cross-compilation, real Guard/child process behavior, and a local
+Windows installed-layout recovery smoke. Three-platform candidate smoke proves
+the same unsigned CI package contract when the remote workflow passes. Neither
+level proves power-loss atomicity below filesystem guarantees, resistance to a
 same-host administrator, a publicly signed release chain, notarization, or a
-real installed upgrade/rollback on every OS.
+real public-release upgrade/rollback on every OS.
 
 Production claims still require signed release provenance and installed
 Windows/macOS/Linux drills, including crash-loop rollback, installer failure,

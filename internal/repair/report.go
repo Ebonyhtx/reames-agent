@@ -51,6 +51,8 @@ type Report struct {
 	SafeModeRecommended bool               `json:"safeModeRecommended"`
 	Startup             StartupState       `json:"startup"`
 	Config              ConfigReport       `json:"config"`
+	ConfigSnapshots     []ConfigSnapshot   `json:"configSnapshots"`
+	LastRepair          *RepairTransaction `json:"lastRepair,omitempty"`
 	PendingUpdate       *UpdateTransaction `json:"pendingUpdate,omitempty"`
 	Binaries            []BinaryStatus     `json:"binaries"`
 	Sessions            []StoreStatus      `json:"sessions"`
@@ -72,6 +74,7 @@ func Inspect(opts InspectOptions) (Report, error) {
 		SchemaVersion:     1,
 		GeneratedAt:       opts.Now().UTC().Format(time.RFC3339Nano),
 		SafeModeRequested: config.SafeModeRequested(),
+		ConfigSnapshots:   []ConfigSnapshot{},
 		Binaries:          []BinaryStatus{},
 		Sessions:          []StoreStatus{},
 		Findings:          []Finding{},
@@ -89,6 +92,16 @@ func Inspect(opts InspectOptions) (Report, error) {
 		return report, err
 	}
 	report.Config = configReport
+	if snapshots, snapshotErr := ListConfigSnapshots(); snapshotErr != nil {
+		report.Findings = append(report.Findings, Finding{Severity: "error", Code: "config.snapshots_unreadable", Scope: "config", Message: snapshotErr.Error(), Action: "Keep Safe Mode active and inspect the repair snapshot directory."})
+	} else {
+		report.ConfigSnapshots = snapshots
+	}
+	if lastRepair, repairErr := ReadLastRepair(); repairErr == nil {
+		report.LastRepair = lastRepair
+	} else if !os.IsNotExist(repairErr) {
+		report.Findings = append(report.Findings, Finding{Severity: "error", Code: "config.repair_metadata_invalid", Scope: "config", Message: repairErr.Error(), Action: "Do not undo repairs until the recovery transaction is inspected."})
+	}
 	for _, check := range configReport.Checks {
 		if check.Exists && !check.Valid {
 			report.Findings = append(report.Findings, Finding{Severity: "error", Code: "config.invalid", Scope: check.Scope, Message: check.Error, Action: "Run reames-agent-guard repair; project config changes require --project."})

@@ -55,6 +55,9 @@ import type {
   SessionMeta,
   SessionRecoveryFailedEvent,
   SessionRecoveryEvent,
+  RecoveryActionRequest,
+  RecoveryActionResult,
+  RecoveryReport,
   SettingsView,
   SkillsSettingsView,
   SkillSuggestion,
@@ -104,6 +107,8 @@ interface DesktopWindowState {
 // to AppBindings, then run `pnpm typecheck` to verify.
 export interface AppBindings {
   Platform(): Promise<string>;
+  GetRecoveryStatus(): Promise<RecoveryReport>;
+  RunRecoveryAction(request: RecoveryActionRequest): Promise<RecoveryActionResult>;
   MinimiseMainWindow(): Promise<void>;
   ToggleMaximiseMainWindow(): Promise<void>;
   IsMainWindowMaximised(): Promise<boolean>;

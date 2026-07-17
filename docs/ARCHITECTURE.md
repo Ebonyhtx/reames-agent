@@ -72,6 +72,11 @@ deploy/           # Docker/systemd/反向代理等自托管部署资产
     └─────────┘ └────────────────┘
 ```
 
+Provider 方言能力通过小接口暴露，而不是由 Agent 猜测名称。当前
+`provider.ToolCallReasoningPolicy` 只标记启用了 thinking 的 DeepSeek 协议；因此
+reasoning stream 非空且 `finish_reason=stop`、普通 content 为空时可以尊重明确停止信号，其他
+OpenAI-compatible 网关仍保留空答案重试保护。
+
 ## 三、界面隔离目标与当前约束
 
 目标边界是所有界面层（CLI / Desktop / Web / IM / ACP）通过 `control.SessionAPI` 驱动运行时，并通过 `event.Sink` / `eventwire` 消费共享事件合同：
@@ -144,6 +149,13 @@ OS shortcut / bundle entry / .desktop
 pending update 完整安装单元、installer failure marker、current/previous binary 与 session/plugin
 inspection 都在该包内。`control.Controller.RecoveryStatus()`、Serve `/api/recovery`、Desktop
 `GetRecoveryStatus()`、Guard check 和 Gateway recovery-status 只返回同一 `repair.Report`。
+
+Desktop Recovery Center 仍遵守这一单一状态源：普通模式经
+`control.Controller.RunRecoveryAction()`，recovery-only Safe Mode 直接调用同一个
+`repair.ExecuteAction()`，两者都不复制状态机。动作仅允许配置 repair/restore/undo、已验证更新
+rollback、派生状态 rebuild 和 managed plugin disable；更新与 undo 必须携带上一报告观察到的精确
+identity，并在恢复锁内重验。Go/Wails 边界在返回前脱敏路径和密钥；前端 Recovery Center 按需加载，
+以 monotonic request sequence 保证刷新和并发操作最后操作优先，不把确认/错误/结果逻辑塞回首启图。
 
 自动二进制 mutation 必须持有 pending-update 跨进程锁，并证明 crash-loop、失败版本与 `toVersion`
 一致、目标属于当前安装目录、transaction identity 未变化且全部备份 SHA-256 有效。回滚先 staging

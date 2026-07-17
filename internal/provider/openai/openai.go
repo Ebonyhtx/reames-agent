@@ -236,6 +236,12 @@ type client struct {
 
 func (c *client) Name() string { return c.name }
 
+// RequiresToolCallReasoning exposes the resolved wire capability rather than
+// asking the agent loop to infer it from provider names or model strings.
+func (c *client) RequiresToolCallReasoning() bool {
+	return c != nil && c.deepseek && c.thinkingType != "disabled"
+}
+
 func (c *client) sendOpts() provider.SendOptions {
 	return provider.SendOptions{
 		Provider:   c.name,

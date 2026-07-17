@@ -10,6 +10,7 @@
 - Corrected idle-loop detection, required strict completion to follow an actual host self-check turn, and exposed current-turn evidence to Board without treating it as durable proof.
 - Added fail-closed background task recovery: persisted subagents save every provider/tool/compaction boundary, recoverable jobs publish running metadata before launch, stale running work reloads as an explicit `interrupted`/`continue_from` tombstone, and side-effecting tools are never replayed automatically. Unified tests cover compacted transcript continuation and explainable, disableable, deletable memory recall without dynamic system-prefix pollution.
 - Preserved the coherent partial transcript and runtime boundary after an exhausted provider stream recovery, so the Desktop Continue action sees the response it promises to keep; commit failures and non-stream errors still roll back fail closed.
+- Honored DeepSeek thinking-mode responses that explicitly stop after a non-empty reasoning stream but leave ordinary content empty, preventing redundant expensive retries while preserving the empty-answer guard for every other provider protocol.
 
 ### Security / Governance
 
@@ -27,6 +28,8 @@
 - Rebranded the private root Node workspace metadata from inherited Hermes links to Reames and added public-readiness gates against tracked build artifacts.
 - Added a manual native Desktop candidate workflow that builds short-lived Wails artifacts without publishing or signing.
 - Added public-readiness gates for telemetry/crash-reporting boundaries so feedback upload stays disabled until a Reames-owned endpoint exists.
+- Added an all-workflow release-surface ratchet: pre-stable Reames permits only the read-only snapshot candidate workflow and rejects production publishing permissions, GitHub Release actions, npm publishing, and non-snapshot GoReleaser commands.
+- Corrected Auto/YOLO/Full Access copy in English, Simplified Chinese, and Traditional Chinese so it promises automatic approval only for ordinary tools and explicitly retains deny, ask, plan, and fresh-trust prompts.
 
 ### Desktop
 
@@ -35,6 +38,7 @@
 - Added a structured plugin/source approval modal that displays operation, risk, target, MCP execution details, version/digest changes, trust, requested permissions, source revision, warnings, and enable state from the same exact plan used by every host.
 - Added true-modal background isolation, stable dialog identities, inherited opener restore chains, transcript accessibility semantics, and a strict Windows UIA accessibility smoke. Actual NVDA/Narrator listening and Windows High Contrast validation remain manual evidence.
 - Added real-Chromium and native Wails plugin lifecycle smoke coverage for stale-plan rejection, disabled-by-default install, exact permission approval, generation update/rollback, diagnostics, removal, and isolated-state cleanup; the installed Windows candidate now retains the native evidence artifact.
+- Added a lazy-loaded Desktop Recovery Center for normal and recovery-only Safe Mode, with redacted shared evidence and bounded config repair/restore/undo, verified update rollback, derived-state quarantine, and plugin-disable actions. Installed Linux/macOS/Windows candidates now run a credential-free recovery smoke; the latest local Windows Wails/Guard run passes, while signed public-release drills remain external evidence.
 
 ### Deployment
 
@@ -51,6 +55,7 @@
 ### Upstream
 
 - Kept upstream/reference tracking issue-driven; automatic discovery may propose review work but must not auto-merge upgrades.
+- Reviewed Reasonix Theme Pack V2 and retained its manifest/token/storage/preview safety mechanisms as the next staged direction without importing its branding, assets, marketplace, or production release infrastructure.
 
 ## v0.1.0 (2026-07-08)
 

@@ -1379,17 +1379,19 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 				continue
 			}
 			if !hasVisibleFinalAnswer(text) {
-				emptyFinalBlocks++
-				if emptyFinalBlocks >= maxEmptyFinalBlocks {
-					return fmt.Errorf("model finished without a visible final answer %d times", emptyFinalBlocks)
+				if !reasoningOnlyFinishHonoured(a.prov, usage, reasoning) {
+					emptyFinalBlocks++
+					if emptyFinalBlocks >= maxEmptyFinalBlocks {
+						return fmt.Errorf("model finished without a visible final answer %d times", emptyFinalBlocks)
+					}
+					a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: emptyFinalNotice(a.prov.Name(), usage, len(reasoning))})
+					a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage())})
+					a.maybeCompact(ctx, usage)
+					if err := a.syncSession(); err != nil {
+						return err
+					}
+					continue
 				}
-				a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: emptyFinalNotice(a.prov.Name(), usage, len(reasoning))})
-				a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage())})
-				a.maybeCompact(ctx, usage)
-				if err := a.syncSession(); err != nil {
-					return err
-				}
-				continue
 			}
 			if executorHandoff && !usedAnyTool && handoffNudges < maxExecutorHandoffNudges && shouldNudgeExecutorHandoff(input, text) {
 				handoffNudges++
@@ -2298,6 +2300,16 @@ Use your available tools now to carry out the task. If carrying out the planner'
 
 func hasVisibleFinalAnswer(text string) bool {
 	return strings.TrimSpace(text) != ""
+}
+
+// reasoningOnlyFinishHonoured accepts the narrow DeepSeek thinking-mode case
+// where the endpoint has explicitly stopped after streaming a non-empty
+// reasoning answer but leaves the ordinary content block empty. Other
+// providers keep the existing retry safety net.
+func reasoningOnlyFinishHonoured(p provider.Provider, usage *provider.Usage, reasoning string) bool {
+	return provider.RequiresToolCallReasoning(p) &&
+		usage != nil && usage.FinishReason == "stop" &&
+		strings.TrimSpace(reasoning) != ""
 }
 
 func emptyFinalRetryMessage() string {

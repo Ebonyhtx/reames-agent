@@ -582,6 +582,138 @@ export interface Meta {
   autoResearch?: AutoResearchCompactView;
 }
 
+export interface RecoveryFinding {
+  severity: "error" | "warning" | "info" | string;
+  code: string;
+  scope?: string;
+  message: string;
+  action?: string;
+}
+
+export interface RecoveryConfigCheck {
+  scope: string;
+  path: string;
+  exists: boolean;
+  valid: boolean;
+  error?: string;
+  snapshotPath?: string;
+}
+
+export interface RecoveryConfigSnapshot {
+  schemaVersion: number;
+  id: string;
+  path: string;
+  sha256: string;
+  sourcePath: string;
+  recordedAt: string;
+  version?: string;
+}
+
+export interface RecoveryRepairChange {
+  scope: string;
+  targetPath: string;
+  previousPath?: string;
+  missingBefore?: boolean;
+  undone?: boolean;
+}
+
+export interface RecoveryRepairTransaction {
+  schemaVersion: number;
+  id: string;
+  createdAt: string;
+  changes: RecoveryRepairChange[];
+  undone?: boolean;
+  undoneAt?: string;
+}
+
+export interface RecoveryUpdateFile {
+  targetPath: string;
+  backupPath?: string;
+  sha256?: string;
+  missingBefore?: boolean;
+}
+
+export interface RecoveryUpdateTransaction {
+  schemaVersion: number;
+  fromVersion?: string;
+  toVersion: string;
+  platform: string;
+  targetKind: string;
+  targetPath: string;
+  backupPath: string;
+  backupSha256?: string;
+  files?: RecoveryUpdateFile[];
+  createdAt: string;
+}
+
+export interface RecoveryBinaryStatus {
+  role: string;
+  path: string;
+  exists: boolean;
+  regular: boolean;
+  size?: number;
+  sha256?: string;
+  error?: string;
+}
+
+export interface RecoveryStoreStatus {
+  path: string;
+  exists: boolean;
+  fileCount?: number;
+  enabled?: number;
+  disabled?: number;
+  unreadable?: number;
+  error?: string;
+}
+
+export interface RecoveryReport {
+  schemaVersion: number;
+  generatedAt: string;
+  safeModeRequested: boolean;
+  safeModeRecommended: boolean;
+  startup: {
+    schemaVersion: number;
+    phase: string;
+    version?: string;
+    pid?: number;
+    safeMode?: boolean;
+    consecutiveFailures?: number;
+    windowStartedAt?: string;
+    startedAt?: string;
+    updatedAt?: string;
+    error?: string;
+  };
+  config: {
+    checks: RecoveryConfigCheck[];
+    applied: string[];
+    transaction?: RecoveryRepairTransaction;
+  };
+  configSnapshots: RecoveryConfigSnapshot[];
+  lastRepair?: RecoveryRepairTransaction;
+  pendingUpdate?: RecoveryUpdateTransaction;
+  binaries: RecoveryBinaryStatus[];
+  sessions: RecoveryStoreStatus[];
+  plugins: RecoveryStoreStatus;
+  findings: RecoveryFinding[];
+}
+
+export interface RecoveryActionRequest {
+  action: "repair-config" | "rollback-update" | "restore-config" | "undo-repair" | "rebuild-state" | "disable-plugins";
+  target?: string;
+  snapshotId?: string;
+  expectedRepairId?: string;
+  expectedUpdateVersion?: string;
+  expectedUpdateCreatedAt?: string;
+}
+
+export interface RecoveryActionResult {
+  action: RecoveryActionRequest["action"];
+  changed: boolean;
+  affected: string[];
+  transaction?: string;
+  report: RecoveryReport;
+}
+
 export type CollaborationMode = "normal" | "plan" | "goal";
 export type ToolApprovalMode = "ask" | "auto" | "yolo";
 export type TokenMode = "full" | "economy";

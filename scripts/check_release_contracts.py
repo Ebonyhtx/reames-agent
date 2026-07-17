@@ -30,6 +30,43 @@ def check_release_candidate_workflow(failures: list[str]) -> None:
         require(token not in workflow, f"release candidate workflow must not contain {token!r}.", failures)
 
 
+def check_release_workflow_surface(failures: list[str]) -> None:
+    """Keep production publishing absent until Reames owns its release chain.
+
+    Reasonix now centralizes release authorization across several publishing
+    workflows. Reames deliberately has the smaller pre-stable contract: one
+    read-only snapshot workflow and no production publisher at all. Scan every
+    workflow so a newly named file cannot bypass the candidate-specific checks.
+    """
+    workflow_dir = ROOT / ".github" / "workflows"
+    release_named = sorted(path.name for path in workflow_dir.glob("*release*.yml"))
+    require(
+        release_named == ["release-candidate.yml"],
+        f"only the read-only release-candidate workflow is allowed; found {release_named}.",
+        failures,
+    )
+
+    forbidden = [
+        "contents: write",
+        "packages: write",
+        "id-token: write",
+        "gh release create",
+        "npm publish",
+        "goreleaser release --clean",
+        "softprops/action-gh-release",
+        "ncipollo/release-action",
+        "actions/upload-release-asset",
+    ]
+    for path in sorted(workflow_dir.glob("*.yml")):
+        workflow = path.read_text(encoding="utf-8")
+        for token in forbidden:
+            require(
+                token not in workflow,
+                f"workflow {path.name} must not enable production publishing via {token!r}.",
+                failures,
+            )
+
+
 def check_desktop_candidate_workflow(failures: list[str]) -> None:
     workflow = read(".github/workflows/desktop-candidate.yml")
     require("workflow_dispatch:" in workflow, "desktop candidate must be manually triggered.", failures)
@@ -46,6 +83,16 @@ def check_desktop_candidate_workflow(failures: list[str]) -> None:
     require("scripts/smoke_desktop_candidate.py" in workflow, "desktop candidate must run the Linux/macOS native smoke script.", failures)
     require(workflow.count("--max-startup-seconds 10") == 2, "desktop candidate must enforce Linux and macOS readiness budgets.", failures)
     require("scripts/smoke_desktop_native.py" in workflow, "desktop candidate must run the Windows native smoke script.", failures)
+    require(workflow.count("scripts/smoke_desktop_recovery.py") == 3, "desktop candidate must run the installed recovery smoke on Linux, macOS, and Windows.", failures)
+    for token in [
+        "--guard /usr/bin/reames-agent-guard",
+        '--guard "$app/Contents/MacOS/reames-agent-guard"',
+        "--guard $guard",
+        "--out artifacts/desktop-linux-recovery-smoke.json",
+        "--out artifacts/desktop-darwin-recovery-smoke.json",
+        "--out artifacts/desktop-windows-recovery-smoke.json",
+    ]:
+        require(token in workflow, f"desktop candidate recovery smoke must retain {token!r}.", failures)
     require("--observation-seconds 20" in workflow, "desktop candidate must leave enough time to observe stable Windows readiness.", failures)
     require("--max-startup-seconds 15" in workflow and "--max-warm-startup-seconds 6" in workflow, "desktop candidate must enforce installed cold and same-home warm startup budgets.", failures)
     require("scripts/smoke_desktop_interaction.py" in workflow, "desktop candidate must run the Windows screenshot-free interaction smoke.", failures)
@@ -84,6 +131,7 @@ def check_desktop_candidate_workflow(failures: list[str]) -> None:
     require("artifacts/desktop-*-interaction-smoke.json" in workflow, "desktop candidate must upload Windows interaction evidence.", failures)
     require("artifacts/desktop-*-accessibility-smoke.json" in workflow, "desktop candidate must upload Windows accessibility evidence.", failures)
     require("artifacts/desktop-*-plugin-lifecycle-smoke.json" in workflow, "desktop candidate must upload Windows plugin lifecycle evidence.", failures)
+    require("artifacts/desktop-*-recovery-smoke.json" in workflow, "desktop candidate must upload three-platform recovery evidence.", failures)
     forbidden = [
         "gh release create",
         "GITHUB_TOKEN:",
@@ -152,6 +200,7 @@ def check_release_docs(failures: list[str]) -> None:
         "scripts/smoke_desktop_interaction.py",
         "scripts/smoke_desktop_accessibility.py",
         "scripts/smoke_desktop_plugin_lifecycle.py",
+        "scripts/smoke_desktop_recovery.py",
         "Sigstore/cosign",
         "OIDC keyless signing",
         "fail closed",
@@ -180,6 +229,7 @@ def check_release_docs(failures: list[str]) -> None:
 
 def main() -> int:
     failures: list[str] = []
+    check_release_workflow_surface(failures)
     check_release_candidate_workflow(failures)
     check_desktop_candidate_workflow(failures)
     check_goreleaser_contract(failures)

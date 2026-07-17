@@ -67,6 +67,7 @@ import {
   type Mode,
   modeHasPlan,
   type ProjectNode,
+  type RecoveryReport,
   type SessionMeta,
   type SettingsView,
   type TabMeta,
@@ -164,6 +165,7 @@ const ShortcutsCheatsheet = lazy(() => import("./components/ShortcutsCheatsheet"
 const TodoPanel = lazy(() => import("./components/TodoPanel").then((module) => ({ default: module.TodoPanel })));
 const UndoRewindBanner = lazy(() => import("./components/UndoRewindBanner").then((module) => ({ default: module.UndoRewindBanner })));
 const WorkspacePanel = lazy(() => import("./components/WorkspacePanel").then((module) => ({ default: module.WorkspacePanel })));
+const RecoveryCenter = lazy(() => import("./components/RecoveryCenter").then((module) => ({ default: module.RecoveryCenter })));
 
 const CHAT_MIN_WIDTH = 400;
 const CHAT_COMFORT_MIN_WIDTH = 560;
@@ -984,12 +986,38 @@ export default function App() {
   const paletteSessions = useOverlayStore((s) => s.paletteSessions);
   const setPaletteSessions = useOverlayStore((s) => s.setPaletteSessions);
   const { showToast } = useToast();
+  const [recoveryReport, setRecoveryReport] = useState<RecoveryReport | null>(null);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(true);
+  const [recoveryError, setRecoveryError] = useState("");
+  const recoveryRequestSeq = useRef(0);
   const [sidebarImConnections, setSidebarImConnections] = useState<SidebarImConnection[]>([]);
   const [imTopicSources, setImTopicSources] = useState<Record<string, SidebarImTopicSource>>({});
   const [sidebarImDetailConnectionId, setSidebarImDetailConnectionId] = useState("");
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
   const heartbeatOpen = useOverlayStore((s) => s.heartbeatOpen);
+
+  const refreshRecovery = useCallback(async () => {
+    const seq = ++recoveryRequestSeq.current;
+    setRecoveryLoading(true);
+    setRecoveryError("");
+    try {
+      const report = await app.GetRecoveryStatus();
+      if (seq !== recoveryRequestSeq.current) return;
+      setRecoveryReport(report);
+      if (report.safeModeRequested) setRecoveryOpen(true);
+    } catch (err) {
+      if (seq !== recoveryRequestSeq.current) return;
+      setRecoveryError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (seq === recoveryRequestSeq.current) setRecoveryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshRecovery();
+  }, [refreshRecovery]);
 
   useEffect(() => {
     if (paletteOpen) setPaletteLoaded(true);
@@ -1358,6 +1386,13 @@ export default function App() {
     return currentTabTurns > 0 ? currentTabTurns : activeTopicTurns ?? 0;
   }, [activeTopicTurns, state.checkpoints.length, state.items]);
   const startupSplashHold = !activeTabId && state.meta?.ready !== true && !state.meta?.startupErr;
+  const recoveryForced = recoveryReport?.safeModeRequested === true;
+  const recoveryVisible = recoveryForced || recoveryOpen;
+  const recoveryAttention = Boolean(recoveryReport && (
+    recoveryReport.safeModeRecommended
+    || recoveryReport.pendingUpdate
+    || recoveryReport.findings.some((finding) => finding.severity !== "info")
+  ));
   const activeComposerProfile = activeTabId ? composerProfilesByTab[activeTabId] : undefined;
   const backendActiveComposerProfile = useMemo(() => {
     if (state.meta) {
@@ -2890,7 +2925,7 @@ export default function App() {
   const workspacePanelResizeMinWidth = workspacePanelAriaMinWidth(workspacePanelMinWidth, workspacePanelRenderWidth);
   const workspacePanelMaxWidth = rightDockDetailActive ? RIGHT_DOCK_MAX_WIDTH : RIGHT_DOCK_TREE_MAX_WIDTH;
   const sidebarCreation = desktopLayoutStyle === "creation";
-  const topicbarTitle = sidebarImDetailConnection ? t("botDetail.title", { name: sidebarImDetailConnection.title }) : topicDisplayTitle(activeTab);
+  const topicbarTitle = recoveryForced ? t("recoveryCenter.open") : sidebarImDetailConnection ? t("botDetail.title", { name: sidebarImDetailConnection.title }) : topicDisplayTitle(activeTab);
   const topicbarWorkspaceLabel = sidebarImDetailConnection ? t("botDetail.subtitle") : activeTab ? tabWorkspaceTitle(activeTab) : "";
   const topicbarWorkspacePath = activeTab?.scope === "project" ? activeTab.workspaceRoot || state.meta?.cwd : "";
   const topicbarImSource = activeTab?.scope === "global" && activeTab.topicId ? imTopicSources[activeTab.topicId] : undefined;
@@ -2898,11 +2933,11 @@ export default function App() {
     ? sidebarImDetailConnection.platformLabel
     : topicbarImSource ? t("msg.fromIm", { source: topicbarImSource.label }) : "";
   const topicbarImSourcePlatform = sidebarImDetailConnection?.platform ?? topicbarImSource?.platform;
-  const topicbarSubtitleVisible = !sidebarCreation && Boolean(topicbarWorkspaceLabel || topicbarImSourceLabel);
+  const topicbarSubtitleVisible = !recoveryForced && !sidebarCreation && Boolean(topicbarWorkspaceLabel || topicbarImSourceLabel);
   const topicbarSubtitleTitle = sidebarImDetailConnection
     ? [topicbarWorkspaceLabel, topicbarImSourceLabel, sidebarImScopeLabel(sidebarImDetailConnection, t)].filter(Boolean).join(" · ")
     : [topicbarWorkspacePath || topicbarWorkspaceLabel, topicbarImSourceLabel].filter(Boolean).join(" · ");
-  const topicbarCanRename = !sidebarImDetailConnection && Boolean(activeTab?.topicId);
+  const topicbarCanRename = !recoveryForced && !sidebarImDetailConnection && Boolean(activeTab?.topicId);
   const topicbarTitleEditSize = Math.min(56, Math.max(4, topicTitleDraft.length || topicbarTitle.length || 1));
   const sidebarWorkbench = desktopLayoutStyle === "workbench";
   const windowsFramelessChrome = desktopPlatform === "windows";
@@ -2916,7 +2951,7 @@ export default function App() {
   }, [windowsFramelessChrome]);
   // Creation keeps the classic sidebar/chat structure while gating chrome tweaks
   // behind its own style flag so classic/workbench remain unchanged.
-  const appChromeHidden = sidebarWorkbench || sidebarCreation;
+  const appChromeHidden = recoveryForced || sidebarWorkbench || sidebarCreation;
   const workbenchChromeHidden = sidebarWorkbench;
   const sidebarClassName = [
     "sidebar",
@@ -2949,9 +2984,10 @@ export default function App() {
           sidebarCreation ? "layout--creation-chrome-hidden" : "",
           sidebarCollapsed ? "layout--sidebar-collapsed" : "",
           sidebarResizing ? "layout--resizing layout--sidebar-resizing" : "",
-          workspacePanelGridOpen ? "layout--workspace-open" : "",
-          workspacePanelOpen && workspacePanelMaximized ? "layout--workspace-maximized" : "",
-          workspacePanelResizing ? "layout--resizing layout--workspace-resizing" : "",
+          !recoveryForced && workspacePanelGridOpen ? "layout--workspace-open" : "",
+          !recoveryForced && workspacePanelOpen && workspacePanelMaximized ? "layout--workspace-maximized" : "",
+          !recoveryForced && workspacePanelResizing ? "layout--resizing layout--workspace-resizing" : "",
+          recoveryForced ? "layout--recovery" : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -2988,6 +3024,8 @@ export default function App() {
           {t("shortcuts.skipToComposer")}
         </a>
 
+        {!recoveryForced && (
+        <>
         <aside className={sidebarClassName} aria-label={t("sidebar.navigation")}>
           {sidebarWorkbench ? (
             <>
@@ -3247,11 +3285,13 @@ export default function App() {
             {sidebarCollapsed ? <PanelRight size={14} /> : <PanelLeft size={14} />}
           </button>
         )}
+        </>
+        )}
 
-        <section className={`chat-pane${sidebarCreation && !sessionHasContent ? " chat-pane--creation-empty" : ""}`}>
+        <section className={`chat-pane${sidebarCreation && !sessionHasContent ? " chat-pane--creation-empty" : ""}${recoveryForced ? " chat-pane--recovery" : ""}`}>
           <>
           <header className="topicbar">
-            {workbenchChromeHidden && (
+            {workbenchChromeHidden && !recoveryForced && (
               <Tooltip label={sidebarToggleTitle}>
                 <button
                   className={[
@@ -3307,7 +3347,7 @@ export default function App() {
                 ) : (
                   <h1 title={sidebarImDetailConnection ? topicbarTitle : topicTitle(activeTab)}>{topicbarTitle}</h1>
                 )}
-                {!sidebarCreation && (
+                {!sidebarCreation && !recoveryForced && (
                   <Tooltip label={t("topicBar.renameSession")}>
                     <button
                       className="topicbar__icon-btn"
@@ -3334,7 +3374,7 @@ export default function App() {
             </div>
             <div className="topicbar__spacer" />
             <div className="topicbar__actions">
-              {workbenchChromeHidden && (
+              {workbenchChromeHidden && !recoveryForced && (
                 <Tooltip label={workspacePanelRenderable ? t("rightDock.collapse") : t("rightDock.expand")}>
                   <button
                     className={[
@@ -3425,6 +3465,27 @@ export default function App() {
                   <CircleHelp size={14} />
                 </button>
               </Tooltip>
+              <Tooltip label={t("recoveryCenter.open")}>
+                <button
+                  className={[
+                    "topicbar__action-btn",
+                    "topicbar__action-btn--icon",
+                    "topicbar__action-btn--utility",
+                    "topicbar__recovery-control",
+                    recoveryVisible ? "topicbar__action-btn--active" : "",
+                  ].filter(Boolean).join(" ")}
+                  type="button"
+                  aria-label={t("recoveryCenter.open")}
+                  aria-pressed={recoveryVisible}
+                  onClick={() => {
+                    closeTransientOverlays();
+                    setRecoveryOpen(true);
+                    void refreshRecovery();
+                  }}
+                >
+                  <Activity size={14} />
+                </button>
+              </Tooltip>
               <Tooltip label={t("topicBar.command")}>
                 <button
                   className="topicbar__action-btn topicbar__action-btn--label topicbar__action-btn--accent"
@@ -3457,14 +3518,42 @@ export default function App() {
             </div>
           </header>
 
-          {state.meta?.startupErr && (
+          {state.meta?.startupErr && !recoveryForced && (
             <div className="banner banner--error">{t("topbar.startupError", { msg: state.meta.startupErr })}</div>
           )}
 
-          <UpdateBanner enabled={startupUpdateChecksEnabled === true} />
+          {recoveryAttention && !recoveryVisible && (
+            <div className="banner banner--warning banner--actionable" role="status">
+              <span className="banner__msg">{t("recoveryCenter.banner")}</span>
+              <span className="banner__spacer" />
+              <button className="btn btn--small" type="button" onClick={() => setRecoveryOpen(true)}>{t("recoveryCenter.open")}</button>
+            </div>
+          )}
+
+          <UpdateBanner enabled={startupUpdateChecksEnabled === true && !recoveryForced} />
 
           <main id="app-main" className="main">
-            {sidebarImDetailConnection ? (
+            {recoveryVisible ? (
+              <Suspense fallback={<div className="recovery-center__loading" role="status">{t("common.loading")}</div>}>
+                <RecoveryCenter
+                  report={recoveryReport}
+                  loading={recoveryLoading}
+                  error={recoveryError}
+                  forced={recoveryForced}
+                  cancelLabel={t("common.cancel")}
+                  onClose={() => setRecoveryOpen(false)}
+                  onRefresh={() => void refreshRecovery()}
+                  onReport={(report) => {
+                    // A completed mutation is newer than any refresh that was
+                    // already in flight. Advance the shared sequence so a late
+                    // read cannot overwrite the action's fresh report.
+                    recoveryRequestSeq.current += 1;
+                    setRecoveryError("");
+                    setRecoveryReport(report);
+                  }}
+                />
+              </Suspense>
+            ) : sidebarImDetailConnection ? (
               <SidebarImConnectionDetail
                 connection={sidebarImDetailConnection}
                 onClose={() => setSidebarImDetailConnectionId("")}
@@ -3502,7 +3591,7 @@ export default function App() {
             )}
           </main>
 
-          {!sidebarImDetailConnection && (
+          {!sidebarImDetailConnection && !recoveryVisible && (
           <footer className="footer" ref={footerRef}>
             {showTodos && (
               <Suspense fallback={null}>
@@ -3641,7 +3730,7 @@ export default function App() {
           </>
         </section>
 
-        {workspacePanelGridOpen && (
+        {!recoveryForced && workspacePanelGridOpen && (
           <button
             className="workspace-panel-resizer"
             type="button"
@@ -3657,7 +3746,7 @@ export default function App() {
           />
         )}
 
-        {workspacePanelRenderable && (
+        {!recoveryForced && workspacePanelRenderable && (
           <aside
             className={[
               "workbench-dock",

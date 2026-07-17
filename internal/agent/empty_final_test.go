@@ -97,6 +97,51 @@ func lastAssistantContent(s *Session) string {
 	return out
 }
 
+type deepseekThinkingProvider struct{ *scriptedProvider }
+
+func (deepseekThinkingProvider) RequiresToolCallReasoning() bool { return true }
+
+func TestRunHonoursDeepSeekReasoningOnlyStop(t *testing.T) {
+	prov := &scriptedProvider{name: "deepseek", turns: [][]provider.Chunk{{
+		{Type: provider.ChunkReasoning, Text: "The requested answer was completed in the reasoning stream."},
+		{Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: "stop", TotalTokens: 10}},
+		{Type: provider.ChunkDone},
+	}}}
+	a := New(deepseekThinkingProvider{prov}, tool.NewRegistry(), NewSession(""), Options{}, event.Discard)
+
+	if err := a.Run(context.Background(), "answer me"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if prov.call != 1 {
+		t.Fatalf("provider calls = %d, want 1 after an explicit DeepSeek stop", prov.call)
+	}
+	if sessionHasUserMessageContaining(a.session, "visible answer") {
+		t.Fatal("must not inject an empty-answer retry after an explicit DeepSeek reasoning stop")
+	}
+}
+
+func TestRunRetriesReasoningOnlyStopOutsideDeepSeekPolicy(t *testing.T) {
+	prov := &scriptedProvider{name: "gateway", turns: [][]provider.Chunk{
+		{
+			{Type: provider.ChunkReasoning, Text: "reasoning only"},
+			{Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: "stop", TotalTokens: 10}},
+			{Type: provider.ChunkDone},
+		},
+		{{Type: provider.ChunkText, Text: "visible reply"}, {Type: provider.ChunkDone}},
+	}}
+	a := New(prov, tool.NewRegistry(), NewSession(""), Options{}, event.Discard)
+
+	if err := a.Run(context.Background(), "answer me"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if prov.call != 2 {
+		t.Fatalf("provider calls = %d, want retry outside DeepSeek policy", prov.call)
+	}
+	if !sessionHasUserMessageContaining(a.session, "visible answer") {
+		t.Fatal("non-DeepSeek provider lost the empty-answer retry guard")
+	}
+}
+
 func BenchmarkHasVisibleFinalAnswer(b *testing.B) {
 	cases := []struct {
 		name string

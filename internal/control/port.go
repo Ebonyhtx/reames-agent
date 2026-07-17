@@ -184,10 +184,12 @@ type Status interface {
 	EvidenceSnapshot() evidence.Snapshot
 }
 
-// RecoveryControl projects the shared credential-free recovery report. It does
-// not mutate runtime state or create a second recovery state machine.
+// RecoveryControl projects and operates the shared credential-free recovery
+// state. Mutations remain bounded repair-package operations and do not create a
+// second recovery state machine or load the Agent runtime.
 type RecoveryControl interface {
 	RecoveryStatus() (repair.Report, error)
+	RunRecoveryAction(repair.ActionRequest) (repair.ActionResult, error)
 }
 
 // DeliveryControl exposes isolated writer-subagent deliveries through the same

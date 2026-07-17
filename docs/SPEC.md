@@ -96,6 +96,12 @@ type Config struct {
   single-`model` entries.
 - Streaming tool-call deltas are accumulated by index inside the provider; only
   complete `ToolCall`s are emitted.
+- Provider-specific wire behavior is exposed as a narrow optional capability,
+  not inferred from a display name. `ToolCallReasoningPolicy` is true only for
+  DeepSeek thinking protocol with thinking enabled. When that capability is
+  present, a non-empty reasoning stream followed by `finish_reason="stop"` and
+  empty ordinary content is an explicit terminal answer; the Agent must not
+  inject another empty-answer retry. All other providers retain the retry guard.
 
 ### 3.2 Tool + registry (`internal/tool`)
 
@@ -553,6 +559,29 @@ Controller, tool-registry, and Agent assembly while Safe Mode is active.
 `repair.Report`. `gateway run` performs this credential-free preflight before
 loading config, Providers, plugins, or channels, so OS services do not own a
 parallel recovery state machine.
+
+Recovery mutations use the same transport-independent control plane:
+
+```go
+type ActionRequest struct {
+    Action                  string
+    Target                  string
+    SnapshotID              string
+    ExpectedRepairID        string
+    ExpectedUpdateVersion   string
+    ExpectedUpdateCreatedAt string
+}
+```
+
+`repair.ExecuteAction` is the only executor. `control.Controller.RunRecoveryAction`
+and Desktop `RunRecoveryAction` delegate to it; recovery-only Safe Mode calls it
+directly without constructing a Controller. Supported actions are bounded to
+configuration repair, verified update rollback, snapshot restore, exact repair
+undo, derived Desktop-state rebuild, and disabling managed plugins. Identity-
+bearing actions compare the report-observed transaction identity under lock so
+stale UI cannot mutate a newer update or repair. Every successful action returns
+a fresh `repair.Report`; Desktop redacts paths and secret-like text before the
+result crosses the Wails boundary.
 
 ## 4. Data Types (`internal/provider`)
 

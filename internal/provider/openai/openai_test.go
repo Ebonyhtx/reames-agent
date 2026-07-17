@@ -959,6 +959,51 @@ func TestNewDeepSeekThinkingDefaultsAndValidation(t *testing.T) {
 	}
 }
 
+func TestDeepSeekToolCallReasoningCapability(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  provider.Config
+		want bool
+	}{
+		{
+			name: "official DeepSeek thinking",
+			cfg:  provider.Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4"},
+			want: true,
+		},
+		{
+			name: "explicit DeepSeek protocol",
+			cfg: provider.Config{Name: "gateway", BaseURL: "https://gateway.example/v1", Model: "deepseek-v4", Extra: map[string]any{
+				"reasoning_protocol": "deepseek",
+			}},
+			want: true,
+		},
+		{
+			name: "DeepSeek thinking disabled",
+			cfg: provider.Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4", Extra: map[string]any{
+				"thinking": "disabled",
+			}},
+			want: false,
+		},
+		{
+			name: "ordinary OpenAI-compatible endpoint",
+			cfg:  provider.Config{Name: "gateway", BaseURL: "https://gateway.example/v1", Model: "custom-model"},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := New(tt.cfg)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			if got := provider.RequiresToolCallReasoning(p); got != tt.want {
+				t.Fatalf("RequiresToolCallReasoning = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNewReadsEffortFromConfig(t *testing.T) {
 	p, err := New(provider.Config{
 		Name:    "mimo",

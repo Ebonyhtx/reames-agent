@@ -1104,6 +1104,12 @@ export function makeMockApp(): AppBindings {
       if (/Mac/i.test(ua)) return "darwin";
       return "linux";
     },
+    async GetRecoveryStatus() {
+      return (await import("./recoveryMock")).getMockRecoveryStatus();
+    },
+    async RunRecoveryAction(request) {
+      return (await import("./recoveryMock")).runMockRecoveryAction(request);
+    },
         async Submit(input) {
           cancelled = false;
       emitMockTurnStarted();

@@ -1,5 +1,9 @@
 // Run: tsx src/__tests__/tool-approval-mode.test.ts
 
+// Keep the user-visible permission contract in the same focused CI entry as
+// the runtime mode transition contract.
+import "./permission-mode-copy.test";
+
 import { restorableToolApprovalMode, toggleYoloToolApprovalMode } from "../lib/toolApprovalMode";
 
 let passed = 0;

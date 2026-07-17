@@ -8,6 +8,10 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The focused Recovery Center interaction contract shares this CI entry so the
+// long frontend test command does not need another independently maintained list.
+import "./recovery-center.test";
+
 import { en } from "../locales/en";
 import { zh } from "../locales/zh";
 import { zhTW } from "../locales/zh-TW";

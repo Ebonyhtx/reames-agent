@@ -2089,10 +2089,21 @@ a[href] {
 .layout--workspace-maximized.layout--sidebar-collapsed {
   grid-template-columns: 0px minmax(0, 1fr);
 }
+.layout.layout--recovery {
+  --sidebar-width: 0px;
+  --chrome-left-toggle-offset: 0px;
+  --chrome-right-toggle-offset: 0px;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
 .layout--workspace-maximized .chat-pane {
   display: none;
 }
 .layout--workspace-maximized .workspace-panel-resizer {
+  display: none;
+}
+
+.chat-pane--recovery .topicbar__actions > *:not(.topicbar__recovery-control) {
   display: none;
 }
 

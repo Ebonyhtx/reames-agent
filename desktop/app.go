@@ -405,11 +405,20 @@ func (a *App) Platform() string {
 
 // GetRecoveryStatus projects the shared offline Guard report to the desktop.
 func (a *App) GetRecoveryStatus() (repair.Report, error) {
+	display := a.recoveryDisplayOptions()
+	var (
+		report repair.Report
+		err    error
+	)
 	if ctrl := a.activeCtrl(); ctrl != nil {
-		return ctrl.RecoveryStatus()
+		report, err = ctrl.RecoveryStatus()
+	} else {
+		report, err = repair.Inspect(repair.InspectOptions{Root: display.Root, ExecutablePath: display.ExecutablePath})
 	}
-	executable, _ := os.Executable()
-	return repair.Inspect(repair.InspectOptions{Root: a.activeWorkspaceRoot(), ExecutablePath: executable})
+	if err != nil {
+		return repair.Report{}, fmt.Errorf("recovery status: %s", repair.RedactTextForDisplay(err.Error(), display))
+	}
+	return repair.RedactReportForDisplay(report, display), nil
 }
 
 // startup runs once the webview process is up, before the frontend can issue any
