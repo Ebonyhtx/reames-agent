@@ -125,6 +125,7 @@
 | [M5 TUF 插件 Registry 信任链审计](audits/2026-07-16-m5-tuf-plugin-registry.md) | 带外 root、项目抗覆盖配置、TUF 轮换/回滚/冻结、签名 entry/apply 绑定、生命周期证据和运营边界 |
 | [M5 Registry 运维审计与轮换演练](audits/2026-07-16-m5-registry-operations-audit.md) | 只读生产策略审计、2-of-3 角色隔离、连续双阈值 root、完整 target 字节与 external-required 边界 |
 | [Reasonix 与参考项目增量同步审计](audits/2026-07-17-reasonix-upstream-sync.md) | Reasonix 525 提交分类、MCP schema/凭据/Provider 采用证据、其他参考仓库增量与下一阶段 P0/P1 方向 |
+| [M5 MCP 身份绑定信任审计](audits/2026-07-17-m5-mcp-identity-trust.md) | Reasonix MCP identity receipt、capability drift、launcher exact lock、Desktop reverify 与 destructive fresh-human 闭环 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 

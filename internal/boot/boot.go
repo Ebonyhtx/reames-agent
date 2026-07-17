@@ -34,6 +34,7 @@ import (
 	"reames-agent/internal/instruction"
 	"reames-agent/internal/jobs"
 	"reames-agent/internal/lsp"
+	"reames-agent/internal/mcptrust"
 	"reames-agent/internal/memory"
 	"reames-agent/internal/memorycompiler"
 	"reames-agent/internal/migration"
@@ -158,24 +159,30 @@ type runtimeReadPolicy struct {
 }
 
 // runtimeForbidReadPolicy expands configured read denials and always adds the
-// Reames Agent credential file when it exists. Built-in readers receive the
-// combined list; OS sandboxes need files and directories separated so Linux
-// can mask a file with /dev/null rather than attempting a tmpfs mount on it.
+// Reames Agent credential and MCP trust state files, including before either is
+// first created. Built-in readers receive the combined list; OS sandboxes need
+// files and directories separated so Linux can mask a file with /dev/null.
 func runtimeForbidReadPolicy(cfg *config.Config, root string) runtimeReadPolicy {
 	if cfg == nil {
 		return runtimeReadPolicy{}
 	}
-	candidates := append([]string(nil), cfg.ForbidReadRootsForRoot(root)...)
-	if credentialPath := strings.TrimSpace(config.UserCredentialsPath()); credentialPath != "" {
-		if info, err := os.Stat(credentialPath); err == nil && !info.IsDir() {
-			candidates = append(candidates, credentialPath)
-		}
+	type candidatePath struct {
+		path string
+		file bool
 	}
+	candidates := make([]candidatePath, 0, len(cfg.ForbidReadRootsForRoot(root))+2)
+	for _, path := range cfg.ForbidReadRootsForRoot(root) {
+		candidates = append(candidates, candidatePath{path: path})
+	}
+	candidates = append(candidates,
+		candidatePath{path: config.UserCredentialsPath(), file: true},
+		candidatePath{path: mcptrust.StatePath(config.ReamesAgentHomeDir()), file: true},
+	)
 
 	var policy runtimeReadPolicy
 	seen := map[string]bool{}
-	for _, candidate := range candidates {
-		candidate = strings.TrimSpace(candidate)
+	for _, item := range candidates {
+		candidate := strings.TrimSpace(item.path)
 		if candidate == "" {
 			continue
 		}
@@ -195,7 +202,9 @@ func runtimeForbidReadPolicy(cfg *config.Config, root string) runtimeReadPolicy 
 		}
 		seen[key] = true
 		policy.AllPaths = append(policy.AllPaths, candidate)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+		if item.file {
+			policy.Files = append(policy.Files, candidate)
+		} else if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 			policy.Files = append(policy.Files, candidate)
 		} else {
 			policy.Directories = append(policy.Directories, candidate)
@@ -429,6 +438,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	pluginSpecOptions := PluginSpecOptions{
 		DefaultCallTimeout:   time.Duration(cfg.MCPCallTimeoutSeconds()) * time.Second,
 		PlanModeAllowedTools: cfg.Agent.PlanModeAllowedTools,
+		TrustManager:         mcptrust.ForWorkspace(config.ReamesAgentHomeDir(), root),
 	}
 	autoStartEntries := cfg.AutoStartPlugins()
 	eagerEntries, bgEntries := partitionByTier(autoStartEntries)
@@ -436,6 +446,14 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		applyPlanModeAllowedMCPToolTrust(applyKnownPluginOverrides(opts.ExtraPlugins, root), cfg.Agent.PlanModeAllowedTools),
 		pluginSpecOptions.DefaultCallTimeout,
 	)
+	for i := range extraSpecs {
+		if extraSpecs[i].TrustManager == nil {
+			extraSpecs[i].TrustManager = pluginSpecOptions.TrustManager
+		}
+		if strings.TrimSpace(extraSpecs[i].ConfigSource) == "" {
+			extraSpecs[i].ConfigSource = "session"
+		}
+	}
 	onDemandMCPSpecs := map[string]plugin.Spec{}
 	onDemandMCPNames := []string{}
 	if tokenEconomy {
@@ -1255,9 +1273,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		OnRemember: func(rule string) control.RememberResult {
 			return rememberPermissionRule(root, rule)
 		},
-		OnRememberMCPReadOnlyTrust: func(serverName, rawToolName string) control.MCPReadOnlyTrustResult {
-			return rememberMCPReadOnlyTrust(root, serverName, rawToolName)
-		},
+		MCPTrustManager: pluginSpecOptions.TrustManager,
 		OnRememberPlanModeReadOnlyCommand: func(prefix string) control.PlanModeReadOnlyCommandTrustResult {
 			return rememberPlanModeReadOnlyCommand(root, prefix)
 		},
@@ -1352,25 +1368,6 @@ func rememberPermissionConfigPath(workspaceRoot string) string {
 		path = "reames-agent.toml" // match Config.Save() fallback
 	}
 	return path
-}
-
-func rememberMCPReadOnlyTrust(workspaceRoot, serverName, rawToolName string) control.MCPReadOnlyTrustResult {
-	serverName = strings.TrimSpace(serverName)
-	rawToolName = strings.TrimSpace(rawToolName)
-	result := control.MCPReadOnlyTrustResult{Server: serverName, Tool: rawToolName}
-	_, changed, path, err := config.TrustPluginReadOnlyToolInSourceForRoot(workspaceRoot, serverName, rawToolName)
-	result.Path = path
-	if err != nil {
-		slog.Warn("persist MCP read-only trust", "server", serverName, "tool", rawToolName, "err", err)
-		result.Err = err
-		return result
-	}
-	if changed {
-		result.Saved = true
-		return result
-	}
-	result.CoveredBy = rawToolName
-	return result
 }
 
 func rememberPlanModeReadOnlyCommand(workspaceRoot, prefix string) control.PlanModeReadOnlyCommandTrustResult {
@@ -1734,6 +1731,7 @@ func PluginSpecsForRoot(entries []config.PluginEntry, workspaceRoot string) []pl
 type PluginSpecOptions struct {
 	DefaultCallTimeout   time.Duration
 	PlanModeAllowedTools []string
+	TrustManager         *mcptrust.Manager
 }
 
 // PluginSpecsForRootWithPlanModeAllowedTools also promotes model-visible MCP
@@ -1770,6 +1768,8 @@ func pluginSpecFromEntryWithOptions(e config.PluginEntry, workspaceRoot string, 
 		CallTimeout:        secondsDuration(e.CallTimeoutSeconds),
 		ToolTimeouts:       toolTimeoutDurations(e.ToolTimeoutSeconds),
 		ReadOnlyToolNames:  trustedRawReadOnlyToolNames(e.TrustedReadOnlyTools),
+		TrustManager:       opts.TrustManager,
+		ConfigSource:       e.PluginConfigSource(),
 		PackagePolicy: processpolicy.PackagePolicy{
 			Owner:         e.PluginPackageOwner(),
 			PackageRoot:   e.PluginPackageRoot(),
@@ -1878,7 +1878,7 @@ func planModeTrustedMCPServers(specs map[string]plugin.Spec) map[string]bool {
 	}
 	out := map[string]bool{}
 	for name, spec := range specs {
-		if len(spec.ReadOnlyToolNames) > 0 || len(spec.ReadOnlyModelToolNames) > 0 {
+		if plugin.HasStoredReaderSelection(spec) {
 			out[name] = true
 		}
 	}

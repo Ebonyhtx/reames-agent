@@ -2066,6 +2066,11 @@ export function makeMockApp(): AppBindings {
         s.name === name ? { ...s, status: "connected", tools: s.tools || 4 } : s,
       );
     },
+    async ReverifyMCPServer(name: string) {
+      capServers = capServers.map((server) => server.name === name
+        ? { ...server, status: "connected", trustState: "workspace", identityChanged: false, error: "" }
+        : server);
+    },
     async ClearMCPServerAuthentication(name: string) {
       capServers = capServers.map((s) =>
         s.name === name

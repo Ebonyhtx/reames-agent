@@ -5719,16 +5719,22 @@ type ServerView struct {
 	Error                string     `json:"error,omitempty"`
 	ToolList             []ToolView `json:"toolList,omitempty"`
 	TrustedReadOnlyTools []string   `json:"trustedReadOnlyTools,omitempty"`
+	TrustState           string     `json:"trustState,omitempty"`
+	IdentityChanged      bool       `json:"identityChanged,omitempty"`
+	ChangedTools         []string   `json:"changedTools,omitempty"`
+	TrustError           string     `json:"trustError,omitempty"`
 	AuthStatus           string     `json:"authStatus,omitempty"`
 	AuthURL              string     `json:"authUrl,omitempty"`
 	AuthConfigured       bool       `json:"authConfigured,omitempty"`
 }
 
 type ToolView struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	ReadOnlyHint bool   `json:"readOnlyHint,omitempty"`
-	SchemaError  string `json:"schemaError,omitempty"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	ReadOnlyHint    bool   `json:"readOnlyHint,omitempty"`
+	DestructiveHint bool   `json:"destructiveHint,omitempty"`
+	TrustedReader   bool   `json:"trustedReader,omitempty"`
+	SchemaError     string `json:"schemaError,omitempty"`
 }
 
 // SkillView is one discoverable skill for the drawer.
@@ -5863,18 +5869,25 @@ func (a *App) mcpServersView() []ServerView {
 			view := ServerView{
 				Name: s.Name, Transport: s.Transport, Status: "connected", RuntimeState: "ready",
 				Tools: s.Tools, Prompts: s.Prompts, Resources: s.Resources,
-				HasTools: s.HasTools,
-				ToolList: pluginToolsToView(s.ToolList),
+				HasTools:   s.HasTools,
+				ToolList:   pluginToolsToView(s.ToolList),
+				TrustState: string(s.TrustState), IdentityChanged: s.IdentityChanged,
+				ChangedTools: append([]string(nil), s.ChangedTools...), TrustError: s.TrustError,
 			}
 			if p, ok := configured[s.Name]; ok {
 				view = withPluginConfig(view, p)
 			}
+			view.TrustedReadOnlyTools = trustedPluginToolNames(s.ToolList)
 			out = append(out, view)
 		}
 		for _, f := range h.Failures() {
 			seen[f.Name] = true
 			view := ServerView{
 				Name: f.Name, Transport: f.Transport, Status: "failed", RuntimeState: "issue", Error: f.Error,
+			}
+			if strings.Contains(strings.ToLower(f.Error), "identity changed") {
+				view.TrustState = "changed"
+				view.IdentityChanged = true
 			}
 			if p, ok := configured[f.Name]; ok {
 				view = withPluginConfig(view, p)
@@ -6547,6 +6560,35 @@ func (a *App) ReconnectMCPServer(name string) error {
 	return nil
 }
 
+// ReverifyMCPServer explicitly accepts the current identity after a drift
+// failure, preserving only the receipt's previously selected reader names.
+func (a *App) ReverifyMCPServer(name string) error {
+	ctrl := a.activeCtrl()
+	if ctrl == nil {
+		return fmt.Errorf("no active session")
+	}
+	if controllerHasActiveRuntimeWork(ctrl) {
+		return rebuildControllerActiveWorkError("MCP server")
+	}
+	entry, found, err := a.desktopMCPServerForEdit(name)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no configured MCP server named %q", name)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := ctrl.ReverifyMCPServer(ctx, entry); err != nil {
+		recordMCPFailure(ctrl, entry, err)
+		return err
+	}
+	if host := ctrl.Host(); host != nil {
+		host.ClearFailure(name)
+	}
+	return nil
+}
+
 // ClearMCPServerAuthentication removes local auth-like config for one MCP and
 // clears the current session's cached connection failure. It does not remove the
 // server itself or try to sign the user out of the third-party browser session.
@@ -6580,45 +6622,17 @@ func (a *App) updateMCPServerTrustedReadOnlyTools(name string, update func([]str
 	if name == "" {
 		return fmt.Errorf("MCP server name is required")
 	}
-	updated, found, err := a.desktopMCPServerForEdit(name)
-	if err != nil {
-		return err
+	if !mcpConnected(ctrl, name) {
+		return fmt.Errorf("MCP server %q must be connected before reader trust can be changed", name)
 	}
-	if !found {
-		return fmt.Errorf("no configured MCP server named %q", name)
-	}
-	trusted := uniqueStrings(updated.TrustedReadOnlyTools)
+	trusted := uniqueStrings(ctrl.MCPTrustedReaderNames(name))
 	next := uniqueStrings(update(trusted))
 	if sameStringList(trusted, next) {
-		updated.TrustedReadOnlyTools = trusted
 		return nil
 	}
-	updated.TrustedReadOnlyTools = next
-	if err := a.saveDesktopMCPServer(updated); err != nil {
-		return err
-	}
-
-	a.mu.RLock()
-	tab := a.activeTabLocked()
-	sessionDisabled := false
-	if tab != nil {
-		_, sessionDisabled = tab.disabledMCP[name]
-	}
-	a.mu.RUnlock()
-	if !mcpConnected(ctrl, name) {
-		return nil
-	}
-	ctrl.DisconnectMCPServer(name)
-	if h := ctrl.Host(); h != nil {
-		h.ClearFailure(name)
-	}
-	if !sessionDisabled {
-		if _, err := ctrl.ConnectMCPServer(updated); err != nil {
-			recordMCPFailure(ctrl, updated, err)
-			return nil
-		}
-	}
-	return nil
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	return ctrl.SetMCPReaderTrust(ctx, name, "workspace", next)
 }
 
 // TrustMCPServerTool marks one raw MCP tool name as trusted read-only and
@@ -6633,8 +6647,8 @@ func (a *App) TrustMCPServerTool(name, toolName string) error {
 	})
 }
 
-// TrustMCPServerTools marks multiple raw MCP tool names as trusted read-only in
-// one config write and one live reconnect.
+// TrustMCPServerTools records multiple raw MCP reader names in one
+// identity-bound receipt update and one live reconnect when required.
 func (a *App) TrustMCPServerTools(name string, toolNames []string) error {
 	if len(uniqueStrings(toolNames)) == 0 {
 		return fmt.Errorf("at least one MCP tool name is required")
@@ -6644,8 +6658,8 @@ func (a *App) TrustMCPServerTools(name string, toolNames []string) error {
 	})
 }
 
-// UntrustMCPServerTool removes one raw MCP tool name from the trusted read-only
-// list and refreshes the live connection.
+// UntrustMCPServerTool removes one raw MCP tool name from the identity-bound
+// reader receipt and refreshes the live connection when required.
 func (a *App) UntrustMCPServerTool(name, toolName string) error {
 	toolName = strings.TrimSpace(toolName)
 	if toolName == "" {
@@ -6985,8 +6999,10 @@ func findMCPServerView(ctrl control.SessionAPI, name string) (ServerView, bool) 
 			return ServerView{
 				Name: s.Name, Transport: s.Transport, Status: "connected",
 				Tools: s.Tools, Prompts: s.Prompts, Resources: s.Resources,
-				HasTools: s.HasTools,
-				ToolList: pluginToolsToView(s.ToolList),
+				HasTools:   s.HasTools,
+				ToolList:   pluginToolsToView(s.ToolList),
+				TrustState: string(s.TrustState), IdentityChanged: s.IdentityChanged,
+				ChangedTools: append([]string(nil), s.ChangedTools...), TrustError: s.TrustError,
 			}, true
 		}
 	}
@@ -7005,9 +7021,21 @@ func pluginToolsToView(tools []plugin.ToolInfo) []ToolView {
 	out := make([]ToolView, 0, len(tools))
 	for _, t := range tools {
 		out = append(out, ToolView{
-			Name: t.Name, Description: t.Description, ReadOnlyHint: t.ReadOnlyHint, SchemaError: t.SchemaError,
+			Name: t.Name, Description: t.Description, ReadOnlyHint: t.ReadOnlyHint,
+			DestructiveHint: t.DestructiveHint, TrustedReader: t.TrustedReader, SchemaError: t.SchemaError,
 		})
 	}
+	return out
+}
+
+func trustedPluginToolNames(tools []plugin.ToolInfo) []string {
+	var out []string
+	for _, tool := range tools {
+		if tool.TrustedReader {
+			out = append(out, tool.Name)
+		}
+	}
+	sort.Strings(out)
 	return out
 }
 

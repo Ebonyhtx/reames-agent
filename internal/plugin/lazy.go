@@ -187,16 +187,18 @@ func (s *lazySpawn) trySwap() {
 // sees cached metadata (or a stub when no cache exists); Execute consults the
 // state machine, kicking off the handshake on first call.
 type lazyTool struct {
-	shared   *lazySpawn
-	name     string // namespaced "mcp__<server>__<tool>"
-	rawName  string // original server-local tool name, when cached
-	desc     string
-	schema   json.RawMessage
-	readOnly bool
-	// readOnlyTrusted mirrors remoteTool: true only for a first-party
-	// ReadOnlyToolNames override, so plan mode can tell trusted first-party
-	// read-only from an untrusted server readOnlyHint.
+	shared           *lazySpawn
+	name             string // namespaced "mcp__<server>__<tool>"
+	rawName          string // original server-local tool name, when cached
+	desc             string
+	schema           json.RawMessage
+	securityMu       sync.RWMutex
+	declaredReadOnly bool
+	readOnly         bool
+	// readOnlyTrusted mirrors remoteTool: true only when a matching local receipt
+	// (or isolated nil-manager compatibility path) grants reader authority.
 	readOnlyTrusted bool
+	destructive     bool
 	// hasCache true → schema is trusted, so Execute runs the handshake
 	// synchronously and forwards in one turn. false → schema is empty, so we
 	// can't honour the model's call; we kick the spawn async and ask for a
@@ -207,7 +209,11 @@ type lazyTool struct {
 
 func (lt *lazyTool) Name() string        { return lt.name }
 func (lt *lazyTool) Description() string { return lt.desc }
-func (lt *lazyTool) ReadOnly() bool      { return lt.readOnly }
+func (lt *lazyTool) ReadOnly() bool {
+	lt.securityMu.RLock()
+	defer lt.securityMu.RUnlock()
+	return lt.readOnly
+}
 func (lt *lazyTool) MCPServerName() string {
 	if lt.shared == nil {
 		return ""
@@ -216,10 +222,17 @@ func (lt *lazyTool) MCPServerName() string {
 }
 func (lt *lazyTool) MCPRawToolName() string { return lt.rawName }
 
-// PlanModeUntrustedReadOnly mirrors remoteTool: true when ReadOnly() is true only
-// from an untrusted server readOnlyHint, false for a first-party override.
+// PlanModeUntrustedReadOnly mirrors remoteTool: true for a declared external
+// reader that lacks receipt authority, even while ReadOnly() remains false.
 func (lt *lazyTool) PlanModeUntrustedReadOnly() bool {
-	return lt.readOnly && !lt.readOnlyTrusted
+	lt.securityMu.RLock()
+	defer lt.securityMu.RUnlock()
+	return (lt.declaredReadOnly || lt.readOnly) && !lt.readOnlyTrusted && !lt.destructive
+}
+func (lt *lazyTool) MCPDestructiveHint() bool {
+	lt.securityMu.RLock()
+	defer lt.securityMu.RUnlock()
+	return lt.destructive
 }
 func (lt *lazyTool) Schema() json.RawMessage {
 	if len(lt.schema) == 0 {
@@ -240,9 +253,13 @@ func (lt *lazyTool) Execute(ctx context.Context, args json.RawMessage) (string, 
 	switch sp.state {
 	case spawnReady:
 		real := sp.real[lt.name]
+		safetyErr := lt.reconcileLiveSafety(real)
 		sp.mu.Unlock()
 		if real == nil {
 			return "", fmt.Errorf("MCP server %q did not expose tool %q (the cached schema may be stale)", sp.spec.Name, lt.name)
+		}
+		if safetyErr != nil {
+			return "", safetyErr
 		}
 		return real.Execute(ctx, args)
 
@@ -317,9 +334,13 @@ func (lt *lazyTool) Execute(ctx context.Context, args json.RawMessage) (string, 
 					sp.trySwap()
 					r := sp.real[lt.name]
 					if r != nil {
+						safetyErr := lt.reconcileLiveSafety(r)
 						// Unlock before forwarding so the lock isn't held
 						// during Execute (matching the spawnReady pattern).
 						sp.mu.Unlock()
+						if safetyErr != nil {
+							return "", safetyErr
+						}
 						return r.Execute(ctx, args)
 					}
 				}
@@ -342,16 +363,45 @@ func (lt *lazyTool) Execute(ctx context.Context, args json.RawMessage) (string, 
 		sp.state = spawnReady
 		sp.trySwap()
 		r := sp.real[lt.name]
+		safetyErr := lt.reconcileLiveSafety(r)
 		if r == nil {
 			sp.mu.Unlock()
 			return "", fmt.Errorf("MCP server %q did not expose tool %q (the cached schema may be stale)", sp.spec.Name, lt.name)
 		}
 		sp.mu.Unlock()
+		if safetyErr != nil {
+			return "", safetyErr
+		}
 		return r.Execute(ctx, args)
 	}
 
 	sp.mu.Unlock()
 	return "", fmt.Errorf("deferred plugin %q in unexpected state", sp.spec.Name)
+}
+
+// reconcileLiveSafety prevents a cached trusted reader from dispatching after
+// the live handshake revoked that authority. Caller holds shared.mu.
+func (lt *lazyTool) reconcileLiveSafety(real tool.Tool) error {
+	remote, ok := real.(*remoteTool)
+	if !ok || remote == nil {
+		return nil
+	}
+	lt.securityMu.Lock()
+	defer lt.securityMu.Unlock()
+	wasTrusted := lt.readOnly && lt.readOnlyTrusted
+	wasDestructive := lt.destructive
+	declared, readOnly, trusted, destructive := remote.securitySnapshot()
+	lt.declaredReadOnly = declared
+	lt.readOnly = readOnly
+	lt.readOnlyTrusted = trusted
+	lt.destructive = destructive
+	if !wasDestructive && destructive {
+		return fmt.Errorf("MCP server %q changed tool %q to destructive after the cached snapshot; the call was blocked before dispatch and now requires a fresh human approval", lt.shared.spec.Name, lt.rawName)
+	}
+	if wasTrusted && (!readOnly || !trusted || destructive) {
+		return fmt.Errorf("MCP server %q changed tool %q after the cached trust snapshot; the call was blocked before dispatch — inspect and grant fresh trust before retrying", lt.shared.spec.Name, lt.rawName)
+	}
+	return nil
 }
 
 // LazyToolset returns the placeholder tools to register for one background spec.
@@ -370,6 +420,8 @@ func (lt *lazyTool) Execute(ctx context.Context, args json.RawMessage) (string, 
 // single Execute (use the controller's PluginCtx) — a turn-scoped ctx would
 // kill the stdio child between turns.
 func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, sessionCtx context.Context, kick bool) []tool.Tool {
+	lockedSpec, trustEval := evaluateCachedTrust(sessionCtx, spec, cs)
+	spec = lockedSpec
 	spawnCtx, cancel := context.WithCancel(sessionCtx)
 	host.registerDeferredCancel(cancel)
 	shared := &lazySpawn{
@@ -399,16 +451,19 @@ func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, se
 			if spec.StripRawPrefix != "" {
 				visibleName = strings.TrimPrefix(visibleName, spec.StripRawPrefix)
 			}
-			trusted := spec.toolReadOnlyTrusted(ct.Name, visibleName)
+			declared := cachedCapabilityOf(spec, ct).ReadOnly
+			trusted := trustEval.TrustedReaders[ct.Name]
 			out = append(out, &lazyTool{
-				shared:          shared,
-				name:            toolName(spec.Name, visibleName),
-				rawName:         ct.Name,
-				desc:            ct.Description,
-				schema:          ct.Schema,
-				readOnly:        spec.toolReadOnly(ct.Name, visibleName, ct.ReadOnly),
-				readOnlyTrusted: trusted,
-				hasCache:        true,
+				shared:           shared,
+				name:             toolName(spec.Name, visibleName),
+				rawName:          ct.Name,
+				desc:             ct.Description,
+				schema:           ct.Schema,
+				declaredReadOnly: declared,
+				readOnly:         trusted,
+				readOnlyTrusted:  trusted,
+				destructive:      ct.Destructive,
+				hasCache:         true,
 			})
 		}
 	}

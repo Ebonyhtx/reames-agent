@@ -186,9 +186,9 @@ var goWriteOrExecArgs = map[string]bool{
 // is fail-closed for untrusted tools: a tool whose ReadOnly() is false, or whose
 // ReadOnly() is asserted by an untrusted external source (an MCP server's
 // readOnlyHint, surfaced via Call.Untrusted), is refused unless it self-reports
-// plan-safe, is declared in plan_mode_allowed_tools, or is trusted by plugin
-// configuration before reaching this policy. A trustworthy ReadOnly()==true tool
-// — a built-in or a first-party/user MCP override — is allowed,
+// plan-safe, is declared in plan_mode_allowed_tools, or has identity-bound
+// reader authority before reaching this policy. A trustworthy ReadOnly()==true
+// tool — a built-in or receipt-backed MCP reader — is allowed,
 // EXCEPT one that self-reports PlanSafetyUnsafe (complete_step: read-only yet
 // post-approval only), which is refused regardless. The invariant
 // PlanSafe ⇒ ReadOnly is enforced: a writer that claims plan-safe is a wiring
@@ -214,7 +214,7 @@ func (p Policy) Decide(call Call) Decision {
 		return Decision{}
 	}
 	if call.ReadOnly && !call.Untrusted {
-		// Trusted: built-ins and first-party MCP overrides report a trustworthy
+		// Trusted: built-ins and receipt-backed MCP readers report a trustworthy
 		// ReadOnly()==true. A read-only tool that is nonetheless unsafe while
 		// planning is caught above via PlanSafetyUnsafe / knownBlockedTools.
 		return Decision{}
@@ -225,7 +225,7 @@ func (p Policy) Decide(call Call) Decision {
 	if call.ReadOnly && call.Untrusted {
 		return Decision{
 			Blocked: true,
-			Message: fmt.Sprintf("blocked: %q reports read-only, but that flag is self-reported by an untrusted external source (e.g. an MCP server's readOnlyHint). Interactive sessions can ask once and remember the decision; non-interactive sessions should pre-seed trusted_read_only_tools or declare the concrete tool in plan_mode_allowed_tools.", name),
+			Message: fmt.Sprintf("blocked: %q reports read-only, but that flag is self-reported by an untrusted external source (e.g. an MCP server's readOnlyHint). Interactive sessions can ask once and save an identity-bound receipt; non-interactive sessions must first establish that receipt in an interactive session or declare the concrete tool in plan_mode_allowed_tools. trusted_read_only_tools is only a one-time migration seed.", name),
 		}
 	}
 	return Decision{

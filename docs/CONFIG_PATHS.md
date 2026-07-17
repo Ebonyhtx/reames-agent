@@ -37,12 +37,18 @@ non-destructively when `<Reames Agent home>/.env` is missing them.
 | Global skills | `<Reames Agent home>/skills/` |
 | Global hooks | `<Reames Agent home>/settings.json` |
 | Hook trust store | `<Reames Agent home>/trust.json` |
+| MCP identity-bound reader trust | `<Reames Agent home>/mcp-security.json` |
 | Sessions | `<state root>/sessions/` |
 | Archives | `<state root>/archive/` |
 | Memory | `<state root>/memory/` and `<state root>/projects/` |
 
 `<state root>` defaults to `<Reames Agent home>`. It only differs when
 `REAMES_AGENT_STATE_HOME` is set.
+
+`mcp-security.json` is host-local security state, not project configuration. It
+binds reader decisions to the workspace, MCP transport/identity, launcher lock,
+and tool capability fingerprints. Reames Agent protects it from model-visible
+file and shell reads. Do not copy it between machines as a portable allowlist.
 
 The global user config is named `config.toml`. Project-local config files keep
 the name `reames-agent.toml`. If someone says "global reames-agent.toml", they usually

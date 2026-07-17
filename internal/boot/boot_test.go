@@ -24,6 +24,7 @@ import (
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
 	"reames-agent/internal/event"
+	"reames-agent/internal/mcptrust"
 	"reames-agent/internal/memory"
 	"reames-agent/internal/netclient"
 	"reames-agent/internal/plugin"
@@ -206,6 +207,10 @@ func TestRuntimeForbidReadPolicyProtectsCredentialFile(t *testing.T) {
 	}
 	if hasPath(policy.Directories, config.UserCredentialsPath()) {
 		t.Fatalf("credential file classified as a directory: %+v", policy)
+	}
+	trustPath := mcptrust.StatePath(config.ReamesAgentHomeDir())
+	if !hasPath(policy.AllPaths, trustPath) || !hasPath(policy.Files, trustPath) || hasPath(policy.Directories, trustPath) {
+		t.Fatalf("MCP trust state missing from protected file paths: %+v", policy)
 	}
 }
 

@@ -2752,6 +2752,53 @@ func TestGuardianCannotAutoAllowFreshHumanApprovalTools(t *testing.T) {
 	}
 }
 
+func TestDestructiveMCPApprovalNeverReusesSessionGrant(t *testing.T) {
+	approvals := make(chan event.Approval, 2)
+	c := New(Options{
+		Policy: permission.New("ask", nil, nil, nil),
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.ApprovalRequest {
+				approvals <- e.Approval
+			}
+		}),
+	})
+	toolName := "mcp__srv__delete"
+	// Simulate an older ordinary writer approval with a broad session grant.
+	// destructiveHint must still force a new per-call human decision.
+	c.approval.grantSession(toolName, toolName)
+
+	type result struct {
+		allow  bool
+		detail string
+		err    error
+	}
+	for call := 0; call < 2; call++ {
+		done := make(chan result, 1)
+		go func() {
+			allow, detail, err := gateApprover{c}.CheckFreshHumanApproval(context.Background(), toolName, json.RawMessage(`{"path":"x"}`), "destructive")
+			done <- result{allow: allow, detail: detail, err: err}
+		}()
+
+		var approval event.Approval
+		select {
+		case approval = <-approvals:
+		case got := <-done:
+			t.Fatalf("destructive call %d reused a session grant: %+v", call+1, got)
+		case <-time.After(2 * time.Second):
+			t.Fatalf("destructive call %d did not emit a fresh approval", call+1)
+		}
+		c.Approve(approval.ID, true, true, true)
+		select {
+		case got := <-done:
+			if got.err != nil || !got.allow || got.detail != "" {
+				t.Fatalf("destructive call %d approval = %+v", call+1, got)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("destructive call %d stayed blocked after approval", call+1)
+		}
+	}
+}
+
 func TestHeadlessGateRefusesFreshHumanApprovalTools(t *testing.T) {
 	gate := NewHeadlessPermissionGate(permission.New("ask", nil, nil, nil))
 
@@ -3054,11 +3101,9 @@ func TestApprovalPersistentBashPrefixRememberRule(t *testing.T) {
 	}
 }
 
-func TestPlanModeReadOnlyTrustApprovalPersistsMCPTrust(t *testing.T) {
+func TestPlanModeReadOnlyTrustApprovalGrantsSessionTrust(t *testing.T) {
 	ids := make(chan string, 2)
 	var approval event.Approval
-	var notices []string
-	var rememberedServer, rememberedTool string
 	prompts := 0
 	c := New(Options{
 		Sink: event.FuncSink(func(e event.Event) {
@@ -3067,18 +3112,11 @@ func TestPlanModeReadOnlyTrustApprovalPersistsMCPTrust(t *testing.T) {
 				approval = e.Approval
 				ids <- e.Approval.ID
 			}
-			if e.Kind == event.Notice {
-				notices = append(notices, e.Text)
-			}
 		}),
-		OnRememberMCPReadOnlyTrust: func(serverName, rawToolName string) MCPReadOnlyTrustResult {
-			rememberedServer, rememberedTool = serverName, rawToolName
-			return MCPReadOnlyTrustResult{Server: serverName, Tool: rawToolName, Path: "reames-agent.toml", Saved: true}
-		},
 	})
 
 	go func() {
-		c.Approve(<-ids, true, true, true)
+		c.Approve(<-ids, true, true, false)
 	}()
 	req := agent.PlanModeReadOnlyTrustRequest{
 		ToolName:    "mcp__github__issue_read",
@@ -3093,13 +3131,6 @@ func TestPlanModeReadOnlyTrustApprovalPersistsMCPTrust(t *testing.T) {
 	if approval.Tool != "mcp__github__issue_read" || !strings.Contains(approval.Subject, "github/issue/read") || !strings.Contains(approval.Reason, "read-only") {
 		t.Fatalf("approval = %+v, want MCP read-only trust prompt", approval)
 	}
-	if rememberedServer != "github" || rememberedTool != "issue/read" {
-		t.Fatalf("remembered MCP trust = %s/%s, want github/issue/read", rememberedServer, rememberedTool)
-	}
-	if len(notices) != 1 || !strings.Contains(notices[0], "github/issue/read") {
-		t.Fatalf("notices = %v, want MCP trust saved notice", notices)
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	allow, reason, err = planModeReadOnlyTrustApprover{c}.CheckPlanModeReadOnlyTrust(ctx, req)

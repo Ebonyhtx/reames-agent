@@ -204,6 +204,7 @@ export function CapabilitiesPanel({
                     expanded={expandedErrors}
                     onToggle={toggleError}
                     onRetry={(name) => void mutate(() => app.ReconnectMCPServer(name))}
+                    onReverify={(name) => void mutate(() => app.ReverifyMCPServer(name))}
                     onRetryMany={(names) => void mutate(() => Promise.allSettled(names.map((name) => app.ReconnectMCPServer(name))))}
                     onConfirmClearAuth={(name) => void mutate(() => app.ClearMCPServerAuthentication(name))}
                     onConfirm={(name) => void mutate(() => app.RemoveMCPServer(name))}
@@ -240,6 +241,7 @@ export function CapabilitiesPanel({
                       onCancelEdit={() => setEditing(null)}
                       onRetry={(name) => void mutate(() => app.ReconnectMCPServer(name))}
                       onReconnect={(name) => void mutate(() => app.ReconnectMCPServer(name))}
+                      onReverify={(name) => void mutate(() => app.ReverifyMCPServer(name))}
                       onConfirmClearAuth={(name) => void mutate(() => app.ClearMCPServerAuthentication(name))}
                       onTrustTool={(name, toolName) => void mutate(() => app.TrustMCPServerTool(name, toolName))}
                       onTrustTools={(name, toolNames) => void mutate(() => app.TrustMCPServerTools(name, toolNames))}
@@ -658,6 +660,7 @@ function ServerGroup({
   onCancelEdit,
   onRetry,
   onReconnect,
+  onReverify,
   onConfirmClearAuth,
   onTrustTool,
   onTrustTools,
@@ -677,6 +680,7 @@ function ServerGroup({
   onCancelEdit: () => void;
   onRetry: (name: string) => void;
   onReconnect: (name: string) => void;
+  onReverify: (name: string) => void;
   onConfirmClearAuth: (name: string) => void;
   onTrustTool: (name: string, toolName: string) => void;
   onTrustTools: (name: string, toolNames: string[]) => void;
@@ -702,6 +706,7 @@ function ServerGroup({
           onCancelEdit={onCancelEdit}
           onRetry={() => onRetry(s.name)}
           onReconnect={() => onReconnect(s.name)}
+          onReverify={() => onReverify(s.name)}
           onConfirmClearAuth={() => onConfirmClearAuth(s.name)}
           onTrustTool={(toolName) => onTrustTool(s.name, toolName)}
           onTrustTools={(toolNames) => onTrustTools(s.name, toolNames)}
@@ -722,6 +727,7 @@ function FailedServersNotice({
   busy,
   onToggle,
   onRetry,
+  onReverify,
   onRetryMany,
   onConfirmClearAuth,
   onConfirm,
@@ -732,6 +738,7 @@ function FailedServersNotice({
   busy: boolean;
   onToggle: (name: string) => void;
   onRetry: (name: string) => void;
+  onReverify: (name: string) => void;
   onRetryMany: (names: string[]) => void;
   onConfirmClearAuth: (name: string) => void;
   onConfirm: (name: string) => void;
@@ -742,7 +749,7 @@ function FailedServersNotice({
   const [bulkOpen, setBulkOpen] = useState(false);
   const groups = useMemo(() => failureGroups(servers, t), [servers, t]);
   const removableFailures = useMemo(() => servers.filter(canBulkRemoveFailure), [servers]);
-  const retryNames = useMemo(() => servers.map((s) => s.name), [servers]);
+  const retryNames = useMemo(() => servers.filter((s) => !s.identityChanged).map((s) => s.name), [servers]);
   return (
     <div className="cap-failures" role="region" aria-label={t("caps.failureTitle", { failed: servers.length })}>
       <div className="cap-failures__head">
@@ -805,9 +812,16 @@ function FailedServersNotice({
                 </div>
               </div>
               <div className="cap-failure__actions">
-                <button className="btn btn--small" disabled={busy} onClick={handlePrimaryAction}>
-                  {actionLabel}
-                </button>
+                {s.identityChanged && (
+                  <button className="btn btn--small" disabled={busy} onClick={() => onReverify(s.name)}>
+                    {t("caps.reverifyIdentity")}
+                  </button>
+                )}
+                {!s.identityChanged && (
+                  <button className="btn btn--small" disabled={busy} onClick={handlePrimaryAction}>
+                    {actionLabel}
+                  </button>
+                )}
                 {canClearAuth(s) && (
                   <InlineConfirmButton
                     label={t("caps.clearAuth")}
@@ -861,6 +875,7 @@ function ServerRow({
   onCancelEdit,
   onRetry,
   onReconnect,
+  onReverify,
   onConfirmClearAuth,
   onTrustTool,
   onTrustTools,
@@ -880,6 +895,7 @@ function ServerRow({
   onCancelEdit: () => void;
   onRetry: () => void;
   onReconnect: () => void;
+  onReverify: () => void;
   onConfirmClearAuth: () => void;
   onTrustTool: (toolName: string) => void;
   onTrustTools: (toolNames: string[]) => void;
@@ -970,6 +986,7 @@ function ServerRow({
           onConfirm={onConfirm}
           onConnectNow={onRetry}
           onReconnect={onReconnect}
+          onReverify={onReverify}
           onConfirmClearAuth={onConfirmClearAuth}
           onTrustTool={onTrustTool}
           onTrustTools={onTrustTools}
@@ -993,6 +1010,7 @@ function ServerDetails({
   onConfirm,
   onConnectNow,
   onReconnect,
+  onReverify,
   onConfirmClearAuth,
   onTrustTool,
   onTrustTools,
@@ -1010,6 +1028,7 @@ function ServerDetails({
   onConfirm: () => void;
   onConnectNow: () => void;
   onReconnect: () => void;
+  onReverify: () => void;
   onConfirmClearAuth: () => void;
   onTrustTool: (toolName: string) => void;
   onTrustTools: (toolNames: string[]) => void;
@@ -1033,7 +1052,8 @@ function ServerDetails({
   const trustedReadOnlyTools = s.trustedReadOnlyTools ?? [];
   const trustedReadOnlyToolNames = new Set(trustedReadOnlyTools);
   const canTrustTool = s.configured && !s.builtIn;
-  const reportedReadOnlyToolNames = (tools ?? []).filter((tool) => tool.readOnlyHint && !tool.schemaError).map((tool) => tool.name);
+  const trustChanged = s.trustState === "changed";
+  const reportedReadOnlyToolNames = (tools ?? []).filter((tool) => tool.readOnlyHint && !tool.destructiveHint && !tool.schemaError).map((tool) => tool.name);
   const bulkTrustToolNames = reportedReadOnlyToolNames.filter((name) => !trustedReadOnlyToolNames.has(name));
   if (editing && canEditConfig) {
     return (
@@ -1083,6 +1103,18 @@ function ServerDetails({
             <span className="cap-detail__code">{trustedReadOnlyTools.join(", ")}</span>
           </div>
         )}
+        {trustChanged && (s.changedTools?.length ?? 0) > 0 && (
+          <div className="cap-detail cap-detail--wide">
+            <span className="cap-detail__label">{t("caps.changedTools")}</span>
+            <span className="cap-detail__code">{s.changedTools?.join(", ")}</span>
+          </div>
+        )}
+        {s.trustError && (
+          <div className="cap-detail cap-detail--wide">
+            <span className="cap-detail__label">{t("caps.trustError")}</span>
+            <span className="cap-detail__code">{s.trustError}</span>
+          </div>
+        )}
       </div>
       <div className="cap-detail-actions">
         {canConnectNow && (
@@ -1093,6 +1125,11 @@ function ServerDetails({
         {canReconnect && (
           <button className="btn btn--small" disabled={busy} onClick={onReconnect}>
             {t("caps.reconnect")}
+          </button>
+        )}
+        {trustChanged && (
+          <button className="btn btn--small" disabled={busy} onClick={onReverify}>
+            {s.identityChanged ? t("caps.reverifyIdentity") : t("caps.reverifyTrust")}
           </button>
         )}
         {canShowTools && (
@@ -1143,16 +1180,17 @@ function ServerDetails({
             <div className="cap-tool-list__title">{t("caps.tools")}</div>
             {tools.map((tool) => {
               const trusted = trustedReadOnlyToolNames.has(tool.name);
-              const unavailable = Boolean(tool.schemaError);
+              const unavailable = Boolean(tool.schemaError || tool.destructiveHint);
+              const eligibleReader = Boolean(tool.readOnlyHint && !unavailable);
               return (
                 <div className={`cap-tool${unavailable ? " cap-tool--unavailable" : ""}`} key={tool.name}>
                   <div className="cap-tool__name">{tool.name}</div>
                   <div className="cap-tool__desc">
-                    <span>{unavailable ? tool.schemaError : tool.description}</span>
+                    <span>{tool.schemaError ? tool.schemaError : tool.description}</span>
                     {unavailable ? (
                       <span className="cap-tool-hint cap-tool-hint--error" title={tool.schemaError}>
                         <CircleAlert aria-hidden size={11} strokeWidth={2.2} />
-                        {t("caps.toolUnavailable")}
+                        {tool.destructiveHint ? t("caps.destructiveTool") : t("caps.toolUnavailable")}
                       </span>
                     ) : tool.readOnlyHint ? (
                       <span className="cap-tool-hint" title={t("caps.reportedReadOnlyTitle")}>
@@ -1161,7 +1199,7 @@ function ServerDetails({
                     ) : null}
                   </div>
                   <div className="cap-tool__action">
-                    {!unavailable && canTrustTool ? (
+                    {eligibleReader && canTrustTool ? (
                       trusted ? (
                         <div className="cap-tool-trust-stack">
                           <span className="cap-tool-trust cap-tool-trust--trusted" title={t("caps.trustedReadOnlyTitle")}>
@@ -2635,6 +2673,7 @@ export function MCPServersSettingsPage() {
 						busy={actionBusy}
 						onToggle={toggleError}
 						onRetry={(name) => void mutate(() => app.ReconnectMCPServer(name))}
+						onReverify={(name) => void mutate(() => app.ReverifyMCPServer(name))}
 						onRetryMany={(names) => void mutate(() => Promise.allSettled(names.map((name) => app.ReconnectMCPServer(name))))}
 					onConfirmClearAuth={(name) => void mutate(() => app.ClearMCPServerAuthentication(name))}
 					onConfirm={(name) => void mutate(() => app.RemoveMCPServer(name))}
@@ -2671,6 +2710,7 @@ export function MCPServersSettingsPage() {
 						onCancelEdit={() => setEditing(null)}
 						onRetry={(name) => void mutate(() => app.ReconnectMCPServer(name))}
 						onReconnect={(name) => void mutate(() => app.ReconnectMCPServer(name))}
+						onReverify={(name) => void mutate(() => app.ReverifyMCPServer(name))}
 						onConfirmClearAuth={(name) => void mutate(() => app.ClearMCPServerAuthentication(name))}
 						onTrustTool={(name, toolName) => void mutate(() => app.TrustMCPServerTool(name, toolName))}
 						onTrustTools={(name, toolNames) => void mutate(() => app.TrustMCPServerTools(name, toolNames))}

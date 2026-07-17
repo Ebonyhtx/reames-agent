@@ -28,8 +28,8 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
 ## 已验证基线
 
 - M0、M1、M2、M3、M4 已按路线图门槛关闭。
-- 清洁前的最新已验证基线为 `6ec436c docs: sync registry delivery evidence`。普通 CI
-  `29512788563` 的 8 个 jobs 与 CodeQL `29512788531` 的 Go、JavaScript/TypeScript、
+- 本批前的最新已验证基线为 `cc7ffe3 fix: absorb Reasonix security and provider updates`。普通 CI
+  `29528150975` 的 8 个 jobs 与 CodeQL `29528150998` 的 Go、JavaScript/TypeScript、
   Actions 3 个 jobs 全绿。当前 HEAD 与远端状态必须以 Git/GitHub Actions 为准。
 - 同批 workflow 已迁移到 Node.js 24 action majors；上述远端日志未再出现 Node.js 20
   弃用告警。public-readiness 合同扫描 `.yml/.yaml`，拒绝旧 major、未知 ref 和未经审计的
@@ -58,6 +58,10 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
 - 只读 `plugin registry audit` 从显式带外 root 重放连续 root 轮换，验证旧/新双阈值、角色
   key 隔离、到期窗口和完整 metadata/index/attestation 字节；成功 JSON 保留 public key ID、
   SHA-256 与 `externalRequired` 边界。
+- Reasonix MCP identity P0 已按 Reames 边界收口：宿主本地 receipt、identity/capability drift、
+  mutable launcher exact content lock、legacy seed 单次迁移、destructive fresh-human、Desktop
+  reverify 和共享 Host sibling registry 刷新，见
+  `docs/audits/2026-07-17-m5-mcp-identity-trust.md`。
 
 本地门禁已经覆盖 root build/vet/internal 全测、Desktop build/vet/full test、前端
 `test:all`/production build/bundle budget、121 项 Python 合同（2 skipped）、文档/公开/部署/
@@ -68,6 +72,7 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
 - `docs/audits/2026-07-15-m5-plugin-process-isolation.md`
 - `docs/audits/2026-07-16-m5-tuf-plugin-registry.md`
 - `docs/audits/2026-07-16-m5-registry-operations-audit.md`
+- `docs/audits/2026-07-17-m5-mcp-identity-trust.md`
 
 ## 未关闭边界
 
@@ -76,17 +81,18 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
   monitor、实际密钥轮换/compromise drill，以及声明 builder identity/SLSA level 时的独立
   DSSE/SLSA policy verifier，均不能由合成密钥或 localhost 冒充。
 - package process 当前允许网络，且没有跨三平台统一硬 CPU/RSS 配额；用户手工 Hook/MCP
-  与 LSP 仍是高权限进程。
+  与 LSP 仍是高权限进程。这是持续威胁模型限制，不把它误写成生产 registry 已完成或重新
+  打开已验收的 M5 仓库内合同。
 - M6 的 linger-enabled logout/reboot、干净云节点、真实飞书/QQ/微信回环和公开签名 release
   仍为 `external-blocked`。
 - `bash`、MCP、外部 API 和后台 opaque side effect 不具备任意副作用 exactly-once。
 
 ## 下一执行顺序
 
-1. 若生产 registry 的人员、密钥、域名和对象存储条件到位，按双语 runbook 执行真实仪式、
+1. 进入 P1：给现有可写 `task`/Skill/Subagent 增加 workspace lease、独立 worktree、
+   取消/崩溃回收和父会话交付，不建立第二套 Agent runtime。
+2. 若生产 registry 的人员、密钥、域名和对象存储条件到位，按双语 runbook 执行真实仪式、
    发布、轮换和 compromise drill，并独立归档证据；未到位时保持明确阻塞，不降低门槛。
-2. 外部条件未到位期间，继续从 `docs/DEVELOPMENT_PLAN.md` 选择不依赖真实凭据的最高价值
-   工作，优先减少 M5/M6 的安全和恢复风险，不为扩充功能数量绕开当前边界。
 3. 取得干净云节点、真实 IM 应用或签名设施后，关闭 M6 的真实部署、回环和发布证据。
 
 长期 GOAL 只有在代码、测试、文档一致、`main` 与最新 CI/CodeQL 全绿，且最近里程碑的所有

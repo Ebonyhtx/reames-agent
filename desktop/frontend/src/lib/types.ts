@@ -745,6 +745,10 @@ export interface ServerView {
   error?: string;
   toolList?: MCPToolView[];
   trustedReadOnlyTools?: string[];
+  trustState?: "workspace" | "session" | "changed" | "untrusted" | string;
+  identityChanged?: boolean;
+  changedTools?: string[];
+  trustError?: string;
   authStatus?: "none" | "possible" | "required" | string;
   authUrl?: string;
   authConfigured?: boolean;
@@ -753,6 +757,8 @@ export interface MCPToolView {
   name: string;
   description: string;
   readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  trustedReader?: boolean;
   schemaError?: string;
 }
 export interface SkillView {

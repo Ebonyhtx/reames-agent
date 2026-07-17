@@ -129,9 +129,12 @@ For the full schema and every field's contract, see [`SPEC.md` §5](./SPEC.md#5-
 external tools Reames Agent cannot classify itself. For MCP/plugin tools, a concrete
 model-visible name such as `mcp__github__issue_read` also promotes that tool to a
 trusted read-only reader for planner and read-only research surfaces. Prefer the
-one-time MCP read-only trust prompt, or plugin-level `trusted_read_only_tools`
-when you want to pre-seed audited tools; keep `plan_mode_allowed_tools` as the
-compatibility escape valve. It never unlocks known blocked plan-mode tools such
+one-time MCP read-only trust prompt, which saves an identity-bound receipt in
+`<Reames Agent home>/mcp-security.json`. `trusted_read_only_tools` is only a
+legacy one-time migration seed: eligible raw names are imported after a live
+handshake, and later revocation is not undone by the old list. Keep
+`plan_mode_allowed_tools` as the compatibility escape valve. It never unlocks
+known blocked plan-mode tools such
 as `bash`, `task`, writers, installers, or memory mutation tools, and it never
 bypasses bash's plan-mode safety checks.
 
@@ -548,31 +551,35 @@ Reames Agent is an MCP client. A `[[plugins]]` entry's `type` selects the transp
 (Streamable HTTP) connects to a remote `url` with optional static `headers`
 (`${VAR}` / `${VAR:-default}` expanded from the environment, so tokens stay out
 of the file). Tools surface to the model as `mcp__<server>__<tool>`; a tool
-declaring MCP's `readOnlyHint: true` joins parallel dispatch and the permission
-reader-default, but planner / read-only research confirms third-party read-only
-hints before relying on them. In interactive sessions, approve the first trust
-prompt once, or choose the persistent option to remember the raw MCP tool name.
-This trust prompt is a user decision, so Auto/YOLO tool approval does not answer
-it; allowing for the session or persisting trust prevents repeat prompts for the
-same MCP tool.
+declaring MCP's `readOnlyHint: true` remains writer-posture until an
+identity-bound receipt matches its live server/tool capability. In interactive
+sessions, approve the first trust prompt once, or choose the persistent option
+to save a workspace receipt. This trust prompt is a user decision, so Auto/YOLO
+tool approval does not answer it; allowing for the session or persisting trust
+prevents repeat prompts for the same verified MCP tool.
 Advanced users can also pre-seed audited third-party readers on the plugin:
 
 ```toml
 [[plugins]]
 name = "github"
 command = "github-mcp"
-trusted_read_only_tools = ["issue_read", "pull_request_read"]
+trusted_read_only_tools = ["issue_read", "pull_request_read"] # legacy one-time migration seed
 ```
 
-The desktop MCP panel keeps this as an advanced management surface: expand a
-configured server and open its tools list, then use **Pre-trust read-only** or a
-per-tool **Pre-trust** button only when you want to approve tools before they are
-needed. Use **Untrust** to remove a remembered reader. The desktop writes the raw
-MCP tool names to `trusted_read_only_tools` in the owning config source: project
-`.mcp.json` servers are updated under
-`mcpServers.<server>.trusted_read_only_tools`, while ordinary Reames Agent plugins
-are updated in the user's Reames Agent config. Trust only side-effect-free readers;
-create/update/delete tools should remain untrusted.
+The desktop MCP panel is the management surface for the identity-bound receipt:
+expand a configured server and open its tools list, then use **Pre-trust
+read-only** or a per-tool **Pre-trust** button only for declared,
+non-destructive readers. Use **Untrust** to remove a remembered reader. Desktop
+and approval prompts write host-local `mcp-security.json`; they do not rewrite
+project `.mcp.json`, `reames-agent.toml`, or global `config.toml`. A receipt binds
+the workspace, server identity/launcher content, config-source category, and tool
+schema/safety metadata. Credential values are redacted from identity, but key
+names remain bound. Identity drift is blocked before process/network startup and
+requires **Reverify identity**; changed tools lose reader authority. Persistent
+remote trust requires HTTPS. Connected capability drift shows changed tool names
+and **Reverify trust**, which drops removed or newly unsafe selections. Tools
+marked destructive always require a fresh human approval and can never be
+reader-trusted.
 
 A server's **prompts** surface as `/mcp__<server>__<prompt>` slash commands
 (positional args after the command); its **resources** are pulled in by writing

@@ -33,9 +33,10 @@ func buildExamplePlugin(t *testing.T) string {
 
 // TestExamplePluginEndToEnd builds the real reference plugin and drives it
 // through StartAll over actual stdio pipes — the genuine end-to-end contract,
-// not a mock. It also asserts the readOnlyHint annotation flows through to
-// ReadOnly(), which is what lets plugin tools join parallel batches and the
-// permission reader-default.
+// not a mock. This isolated host has no trust manager, so it also locks the
+// backwards-compatible readOnlyHint behavior used by package-level tests;
+// product composition roots inject identity-bound trust and do not grant the
+// reader-default from the annotation alone.
 func TestExamplePluginEndToEnd(t *testing.T) {
 	if testing.Short() {
 		t.Skip("compiles a subprocess; skipped under -short")

@@ -1478,9 +1478,10 @@ type PluginEntry struct {
 	// from this server. Keys are server-local tool names, not model-visible
 	// mcp__server__tool names.
 	ToolTimeoutSeconds map[string]int `toml:"tool_timeout_seconds"`
-	// TrustedReadOnlyTools names raw MCP tool names that Reames Agent should treat as
-	// trusted read-only for planner / plan-mode / read-only research surfaces.
-	// Use this only for tools whose semantics are known to be side-effect free.
+	// TrustedReadOnlyTools is a legacy one-time migration seed. After the first
+	// successful live handshake, eligible raw names are imported into an
+	// identity-bound receipt in mcp-security.json; later UI/approval decisions do
+	// not rewrite this list, and a revoked receipt is not re-granted from it.
 	TrustedReadOnlyTools []string `toml:"trusted_read_only_tools"`
 	// AutoStart controls whether the server connects during session startup.
 	// Nil preserves historical behavior: configured servers start automatically.
@@ -1501,6 +1502,7 @@ type PluginEntry struct {
 	packageRoot  string
 	packageState string
 	packageHome  string
+	configSource string
 }
 
 // PluginPackageOwner reports the installed plugin package that contributed
@@ -1519,6 +1521,18 @@ func (e PluginEntry) PluginPackageStateDir() string { return e.packageState }
 
 // PluginPackageHome reports the Reames Agent home that owns the package state.
 func (e PluginEntry) PluginPackageHome() string { return e.packageHome }
+
+// PluginConfigSource reports the runtime-only origin bound into MCP trust
+// receipts. It never renders into user-authored TOML or JSON.
+func (e PluginEntry) PluginConfigSource() string {
+	if source := strings.TrimSpace(e.configSource); source != "" {
+		return source
+	}
+	if owner := strings.TrimSpace(e.packageOwner); owner != "" {
+		return "plugin_package:" + owner
+	}
+	return "toml"
+}
 
 func (e PluginEntry) ShouldAutoStart() bool {
 	return e.AutoStart == nil || *e.AutoStart

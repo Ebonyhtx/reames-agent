@@ -26,6 +26,7 @@ import (
 	"reames-agent/internal/control"
 	"reames-agent/internal/event"
 	"reames-agent/internal/jobs"
+	"reames-agent/internal/mcptrust"
 	"reames-agent/internal/memory"
 	"reames-agent/internal/plugin"
 	"reames-agent/internal/pluginpkg"
@@ -81,6 +82,54 @@ func desktopMCPHTTPServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 	}))
+}
+
+func TestDesktopMCPStdioHelper(t *testing.T) {
+	if os.Getenv("REAMES_DESKTOP_MCP_HELPER") != "1" {
+		return
+	}
+	defer os.Exit(0)
+	decoder := json.NewDecoder(os.Stdin)
+	encoder := json.NewEncoder(os.Stdout)
+	for {
+		var request struct {
+			ID     *int   `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := decoder.Decode(&request); err != nil {
+			return
+		}
+		if request.ID == nil {
+			continue
+		}
+		var result any
+		switch request.Method {
+		case "initialize":
+			result = map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "desktop-test", "version": "1"}}
+		case "tools/list":
+			names := []string{"pull_request_read", "issue_read", "search_issues", "codegraph_context"}
+			tools := make([]map[string]any, 0, len(names))
+			for _, name := range names {
+				tools = append(tools, map[string]any{
+					"name": name, "description": name,
+					"inputSchema": map[string]any{"type": "object"},
+					"annotations": map[string]any{"readOnlyHint": true},
+				})
+			}
+			result = map[string]any{"tools": tools}
+		default:
+			result = map[string]any{}
+		}
+		_ = encoder.Encode(map[string]any{"jsonrpc": "2.0", "id": *request.ID, "result": result})
+	}
+}
+
+func desktopMCPHelperEntry(name string) config.PluginEntry {
+	return config.PluginEntry{
+		Name: name, Command: os.Args[0],
+		Args: []string{"-test.run=TestDesktopMCPStdioHelper", "--"},
+		Env:  map[string]string{"REAMES_DESKTOP_MCP_HELPER": "1"},
+	}
 }
 
 // setTestCtrl creates a minimal workspace tab (if needed) and sets its
@@ -6897,23 +6946,27 @@ func TestUpdateMCPServerEditsProjectMCPJSONEntry(t *testing.T) {
 	}
 }
 
-func TestTrustMCPServerToolPersistsTrustedReadOnlyTools(t *testing.T) {
+func TestTrustMCPServerToolPersistsIdentityBoundReceipt(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "reames-agent.toml"), []byte(`
-[[plugins]]
-name = "github"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-github"]
-trusted_read_only_tools = ["pull_request_read"]
-`), 0o644); err != nil {
+	entry := desktopMCPHelperEntry("github")
+	cfg := config.Default()
+	if err := cfg.UpsertPlugin(entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.SaveTo(filepath.Join(dir, "reames-agent.toml")); err != nil {
 		t.Fatal(err)
 	}
 
 	app := NewApp()
-	app.setTestCtrl(control.New(control.Options{Host: plugin.NewHost()}), "")
+	manager := mcptrust.NewManager(filepath.Join(config.ReamesAgentHomeDir(), mcptrust.StateFilename), dir)
+	ctrl := control.New(control.Options{Host: plugin.NewHost(), Registry: tool.NewRegistry(), WorkspaceRoot: dir, MCPTrustManager: manager})
+	app.setTestCtrl(ctrl, "")
 	defer app.activeCtrl().Close()
+	if _, err := ctrl.ConnectMCPServer(entry); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := app.TrustMCPServerTool("github", " issue_read "); err != nil {
 		t.Fatalf("TrustMCPServerTool(github, issue_read): %v", err)
@@ -6924,23 +6977,27 @@ trusted_read_only_tools = ["pull_request_read"]
 	if err := app.TrustMCPServerTools("github", []string{" search_issues ", "issue_read", ""}); err != nil {
 		t.Fatalf("TrustMCPServerTools(github): %v", err)
 	}
-	if err := app.UntrustMCPServerTool("github", " pull_request_read "); err != nil {
-		t.Fatalf("UntrustMCPServerTool(github, pull_request_read): %v", err)
+	if err := app.UntrustMCPServerTool("github", " issue_read "); err != nil {
+		t.Fatalf("UntrustMCPServerTool(github, issue_read): %v", err)
 	}
-	cfg, err := config.LoadForRoot(dir)
+	loaded, err := config.LoadForRoot(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated, ok := findPluginEntry(cfg.Plugins, "github")
+	updated, ok := findPluginEntry(loaded.Plugins, "github")
 	if !ok {
-		t.Fatalf("github plugin missing: %+v", cfg.Plugins)
+		t.Fatalf("github plugin missing: %+v", loaded.Plugins)
 	}
-	if !reflect.DeepEqual(updated.TrustedReadOnlyTools, []string{"issue_read", "search_issues"}) {
-		t.Fatalf("trusted read-only tools = %+v", updated.TrustedReadOnlyTools)
+	if len(updated.TrustedReadOnlyTools) != 0 {
+		t.Fatalf("identity-bound trust leaked back into config raw-name aliases: %+v", updated.TrustedReadOnlyTools)
+	}
+	state, err := manager.Load()
+	if err != nil || len(state.Receipts) != 1 || state.Receipts[0].Source != mcptrust.SourceUser {
+		t.Fatalf("MCP trust state = %+v, err=%v", state, err)
 	}
 	for _, s := range app.MCPServers() {
 		if s.Name == "github" {
-			if !reflect.DeepEqual(s.TrustedReadOnlyTools, []string{"issue_read", "search_issues"}) {
+			if !reflect.DeepEqual(s.TrustedReadOnlyTools, []string{"search_issues"}) {
 				t.Fatalf("view trusted read-only tools = %+v", s.TrustedReadOnlyTools)
 			}
 			return
@@ -6949,21 +7006,25 @@ trusted_read_only_tools = ["pull_request_read"]
 	t.Fatalf("github MCP missing from view")
 }
 
-func TestTrustMCPServerToolPersistsProjectMCPJSONEntry(t *testing.T) {
+func TestTrustMCPServerToolDoesNotRewriteProjectMCPJSON(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	dir := robustTempDir(t)
 	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(`{
-  "mcpServers": {
-    "codegraph": { "command": "codegraph", "args": ["serve", "--mcp"] }
-  }
-}`), 0o644); err != nil {
+	entry := desktopMCPHelperEntry("codegraph")
+	doc := map[string]any{"mcpServers": map[string]any{"codegraph": map[string]any{"command": entry.Command, "args": entry.Args, "env": entry.Env}}}
+	body, _ := json.MarshalIndent(doc, "", "  ")
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), body, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	app := NewApp()
-	app.setTestCtrl(control.New(control.Options{Host: plugin.NewHost()}), "")
+	manager := mcptrust.NewManager(filepath.Join(config.ReamesAgentHomeDir(), mcptrust.StateFilename), dir)
+	ctrl := control.New(control.Options{Host: plugin.NewHost(), Registry: tool.NewRegistry(), WorkspaceRoot: dir, MCPTrustManager: manager})
+	app.setTestCtrl(ctrl, "")
 	defer app.activeCtrl().Close()
+	if _, err := ctrl.ConnectMCPServer(entry); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := app.TrustMCPServerTool("codegraph", "codegraph_context"); err != nil {
 		t.Fatalf("TrustMCPServerTool(.mcp.json codegraph): %v", err)
@@ -6973,24 +7034,114 @@ func TestTrustMCPServerToolPersistsProjectMCPJSONEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var doc struct {
+	var persisted struct {
 		MCPServers map[string]struct {
 			TrustedReadOnlyTools []string `json:"trusted_read_only_tools"`
 		} `json:"mcpServers"`
 	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
+	if err := json.Unmarshal(raw, &persisted); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(doc.MCPServers["codegraph"].TrustedReadOnlyTools, []string{"codegraph_context"}) {
-		t.Fatalf(".mcp.json trusted_read_only_tools = %+v", doc.MCPServers["codegraph"].TrustedReadOnlyTools)
+	if len(persisted.MCPServers["codegraph"].TrustedReadOnlyTools) != 0 {
+		t.Fatalf(".mcp.json was rewritten with raw-name trust: %+v", persisted.MCPServers["codegraph"].TrustedReadOnlyTools)
 	}
-	cfg, err := config.LoadForRoot(dir)
+	if got := ctrl.MCPTrustedReaderNames("codegraph"); !reflect.DeepEqual(got, []string{"codegraph_context"}) {
+		t.Fatalf("identity-bound trusted readers = %+v", got)
+	}
+}
+
+func TestReverifyMCPServerRecoversIdentityDriftAndPreservesSelectedReaders(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	dir := robustTempDir(t)
+	t.Chdir(dir)
+	entry := desktopMCPHelperEntry("github")
+	cfg := config.Default()
+	if err := cfg.UpsertPlugin(entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.SaveTo(filepath.Join(dir, "reames-agent.toml")); err != nil {
+		t.Fatal(err)
+	}
+	manager := mcptrust.NewManager(filepath.Join(config.ReamesAgentHomeDir(), mcptrust.StateFilename), dir)
+	ctrl := control.New(control.Options{Host: plugin.NewHost(), Registry: tool.NewRegistry(), WorkspaceRoot: dir, MCPTrustManager: manager})
+	app := NewApp()
+	app.setTestCtrl(ctrl, "")
+	defer ctrl.Close()
+	if _, err := ctrl.ConnectMCPServer(entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.TrustMCPServerTool("github", "issue_read"); err != nil {
+		t.Fatal(err)
+	}
+
+	changedArgs := append(append([]string(nil), entry.Args...), "identity-v2")
+	if err := app.UpdateMCPServer("github", MCPServerInput{
+		Name: "github", Transport: "stdio", Command: entry.Command, Args: changedArgs, Env: entry.Env,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var changed bool
+	for _, server := range app.MCPServers() {
+		if server.Name == "github" {
+			changed = server.Status == "failed" && server.IdentityChanged && server.TrustState == "changed"
+		}
+	}
+	if !changed {
+		t.Fatalf("identity drift was not projected as a reverify-required failure: %+v", app.MCPServers())
+	}
+	if err := app.ReverifyMCPServer("github"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ctrl.MCPTrustedReaderNames("github"); !reflect.DeepEqual(got, []string{"issue_read"}) {
+		t.Fatalf("trusted readers after identity reverify = %+v", got)
+	}
+	for _, server := range app.MCPServers() {
+		if server.Name == "github" && server.Status == "connected" && !server.IdentityChanged {
+			return
+		}
+	}
+	t.Fatalf("server did not reconnect after explicit identity reverify: %+v", app.MCPServers())
+}
+
+func TestReverifyMCPServerPreservesSessionOnlyTrustScope(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	dir := robustTempDir(t)
+	t.Chdir(dir)
+	entry := desktopMCPHelperEntry("github-session")
+	cfg := config.Default()
+	if err := cfg.UpsertPlugin(entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.SaveTo(filepath.Join(dir, "reames-agent.toml")); err != nil {
+		t.Fatal(err)
+	}
+	manager := mcptrust.NewManager(filepath.Join(config.ReamesAgentHomeDir(), mcptrust.StateFilename), dir)
+	ctrl := control.New(control.Options{Host: plugin.NewHost(), Registry: tool.NewRegistry(), WorkspaceRoot: dir, MCPTrustManager: manager})
+	app := NewApp()
+	app.setTestCtrl(ctrl, "")
+	defer ctrl.Close()
+	if _, err := ctrl.ConnectMCPServer(entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.SetMCPReaderTrust(context.Background(), entry.Name, "session", []string{"issue_read"}); err != nil {
+		t.Fatal(err)
+	}
+
+	changedArgs := append(append([]string(nil), entry.Args...), "identity-v2")
+	if err := app.UpdateMCPServer(entry.Name, MCPServerInput{
+		Name: entry.Name, Transport: "stdio", Command: entry.Command, Args: changedArgs, Env: entry.Env,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.ReverifyMCPServer(entry.Name); err != nil {
+		t.Fatal(err)
+	}
+	selected, scope, err := manager.SelectedReadersWithScope(entry.Name, "toml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated, ok := findPluginEntry(cfg.Plugins, "codegraph")
-	if !ok || !reflect.DeepEqual(updated.TrustedReadOnlyTools, []string{"codegraph_context"}) {
-		t.Fatalf("merged codegraph trusted_read_only_tools = %+v, found=%v", updated.TrustedReadOnlyTools, ok)
+	if scope != mcptrust.ScopeSession || !reflect.DeepEqual(selected, []string{"issue_read"}) {
+		t.Fatalf("reverified session selection = %v scope=%q", selected, scope)
 	}
 }
 

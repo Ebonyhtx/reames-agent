@@ -47,7 +47,7 @@ tag:      desktop-v1.17.14 / v1.17.14 vicinity
 | `f5179b4d` / `fad0933b` | 保存凭据不进入工具子进程或读取路径 | 按 `processpolicy` 重构采用，覆盖 Bash/Hook/LSP/MCP/探测/外部 helper |
 | `f5179b4d` | Anthropic 兼容流累计 usage | 采用，按非负累计计数取最大值防重复计数 |
 | `db44434d`..`18d4ed9e` | MiMo 专用 JSON Schema 方言转换 | 采用；未知 dialect 和非 MiMo Provider 保持原始字节 |
-| `3212786e`..`60fc21f9` | MCP identity、trust receipt、launcher pin | 延后为下一 P0；现有 raw-name trust 缺少 identity 绑定 |
+| `3212786e`..`60fc21f9` | MCP identity、trust receipt、launcher pin | 已在后续 M5 P0 按 Reames 边界完成，见 `2026-07-17-m5-mcp-identity-trust.md` |
 | `03b39a65` | workspace lease、worktree、并发 writer 隔离 | 延后为下一 P1；Reames 只有 session lease 和 child-effect journal，没有可写 child worktree |
 | `3baf0b3c` / `1b9ff514` | 离线 Guard、Safe Mode、恢复锁 | 暂缓；先完成 identity trust 和 worktree 隔离，再接入现有 updater/recovery 事务 |
 | `656e983d` 等 | CLI/Desktop Subagent profiles | 暂缓；Reames 已有 model/effort/skill profile 基础，先避免形成第二套配置模型 |
@@ -105,7 +105,8 @@ Reames 全局 `.env` 在存在时同时加入模型读取和 Bash OS sandbox 的
 - Reames 已有共享委派预算、持久化 Subagent transcript、child effect journal 和 checkpoint 回收；
   MiMo/Kimi 的基础 Goal/后台 child 生命周期只作为测试与交互参考。
 - Reames 已有签名 plugin registry、不可变 generation、package-owned Hook/MCP 严格沙箱和运行时撤销；
-  Reasonix MCP catalog 不直接替换该供应链，但其 user-MCP identity receipt 是明确缺口。
+  Reasonix MCP catalog 不直接替换该供应链。本审计当时确认的 user-MCP identity receipt 缺口
+  已由后续 `2026-07-17-m5-mcp-identity-trust.md` 关闭。
 
 ## 明确暂缓或拒绝
 
@@ -131,11 +132,25 @@ Reames 全局 `.env` 在存在时同时加入模型读取和 Bash OS sandbox 的
 | Claude Code | 本区间为 changelog/feed 更新 | 只保留版本信号 |
 | Kimi Code | interrupted tool-call closure、Goal deadline/continuation、transport facade | 对照 Reames M4 恢复测试；transport facade 不替代现有 control 边界 |
 
+### 同日补充增量：Hermes 与 Codex
+
+最终 deep scan 又发现两个参考仓库在本审计首轮锁点后更新。完成逐提交与相关源码审查后，
+接受 reviewed baseline，但不直接移植其 runtime：
+
+| 参考区间 | 主要变化 | Reames 分类 |
+|---|---|---|
+| Hermes `c387be08b96e` → `bd0021233734` | 大 transcript session switch：移除 `JSON.stringify` 深比较、降低 layout settle frame、延迟首屏重渲染；background session 状态投影；统一 worktree dialog；Honcho 外部 memory prefetch latency/fail-open；compute host turn isolation；auto-compression 后跟随 SessionDB stored-id rotation；PTY attach token 增加 session/profile scope；交互设置 dashboard 密码时解除 bundled basic-auth plugin deny-list；dashboard 拉起 gateway action 时移除 `_HERMES_GATEWAY` loop-guard 环境变量；中间仅含 JS formatter 的提交 | transcript 性能与 scoped session 状态为已等价/更强：Reames 已有 30-turn hot zone、warm/cold 分页、memo streaming isolation、1k/10k turn 合同与 privacy-safe benchmark；不复制 Electron/compute-host 第二 runtime。统一 worktree dialog 作为现有 P1 workspace lease/worktree 的交付 UX 参考。stored-id rotation 属于 Hermes“结束旧 SessionDB 记录并 fork continuation”的持久化模型；Reames compaction 在同一 session path 原地 rewrite，不存在该映射失配，真正发生 session path rotation/recovery 时已有 `sessionPathAfterSnapshot`、tab metadata reconciliation 与 hydration/session-path 合同。Reames serve 是“一台 server 绑定一个 controller/session、多个 tab 共享”，session 切换由 `bindMu` 与 lease 原子串行化，没有 PTY attach-token registry；password auth 是编译内置 `authGate`，不经过可被禁用的 plugin discovery；gateway service 直接调用 OS service manager，不从 dashboard 子进程递归启动同一 gateway，也没有等价 loop-guard sentinel。因此后四项均为架构不适用，不新增实现 |
+| Codex `71448a29e734` → `315195492c80` | Bedrock custom transport、current migration history 避免占 SQLite writer slot、approval payload structs、imported memory scope/provenance、thread originator forwarding、apply_patch 文案 | approval DTO、usage source 与 memory source/scope 已有等价边界；Reames 不使用 Codex SQLite migration/Bedrock managed credential 架构，当前无缺口证明，不新增路线图。保留“current state 不应产生无意义写锁”和外部 memory import provenance 为后续对应模块回归信号；纯文案变化拒绝移植 |
+
+接受这两个 reviewed SHA 只表示机制分类完成，不表示引入 Hermes Python/Electron runtime、Codex Rust
+依赖、Bedrock 产品面或第二套 compute host。
+
 ## 后续门槛
 
-### P0：identity-bound MCP trust
+### P0：identity-bound MCP trust（已关闭）
 
-完成前不得把 `trusted_read_only_tools` 视为跨配置变化的长期授权。目标证据：
+`audits/2026-07-17-m5-mcp-identity-trust.md` 已按以下证据关闭；
+`trusted_read_only_tools` 现在只是一轮 live handshake 的迁移输入，不是跨配置变化的长期授权：
 
 1. receipt 绑定 canonical transport、真实 executable/hash 或规范化 HTTPS endpoint、args、env/header 键名、
    package/launcher digest 与配置来源；
@@ -148,6 +163,8 @@ Reames 全局 `.env` 在存在时同时加入模型读取和 Bash OS sandbox 的
 
 目标不是新增一个后台任务系统，而是给现有 `task`/Skill/Subagent 补齐：workspace lease、独立 worktree、
 可见的 branch/worktree 身份、取消与崩溃回收、父会话交付/合并策略，以及 Windows 可移植锁测试。
+Hermes `f08b1f34456d` 的统一 worktree dialog 只作为创建/打开/交付的 Desktop UX 参考，不引入其
+Electron gateway 或 compute-host runtime。
 
 ### P2：离线恢复入口
 

@@ -17,6 +17,38 @@ type stubGate struct {
 	checked []string
 }
 
+type destructiveMCPTool struct{ executions int }
+
+func (*destructiveMCPTool) Name() string                    { return "mcp__srv__delete" }
+func (*destructiveMCPTool) Description() string             { return "destructive MCP test tool" }
+func (*destructiveMCPTool) Schema() json.RawMessage         { return json.RawMessage(`{"type":"object"}`) }
+func (*destructiveMCPTool) ReadOnly() bool                  { return false }
+func (*destructiveMCPTool) PlanModeUntrustedReadOnly() bool { return true }
+func (*destructiveMCPTool) MCPDestructiveHint() bool        { return true }
+func (tool *destructiveMCPTool) Execute(context.Context, json.RawMessage) (string, error) {
+	tool.executions++
+	return "deleted", nil
+}
+
+type freshHumanStubGate struct {
+	ordinaryCalls int
+	freshCalls    int
+	allow         bool
+}
+
+func (gate *freshHumanStubGate) Check(context.Context, string, json.RawMessage, bool) (bool, string, error) {
+	gate.ordinaryCalls++
+	return true, "", nil
+}
+
+func (gate *freshHumanStubGate) CheckFreshHumanApproval(context.Context, string, json.RawMessage, string) (bool, string, error) {
+	gate.freshCalls++
+	if !gate.allow {
+		return false, "declined", nil
+	}
+	return true, "", nil
+}
+
 type structuredApprovalTool struct {
 	executions int
 	previews   int
@@ -85,6 +117,41 @@ func (g *stubGate) Check(ctx context.Context, toolName string, args json.RawMess
 		return false, "denied by test policy", nil
 	}
 	return true, "", nil
+}
+
+func TestDestructiveMCPRequiresFreshHumanApproval(t *testing.T) {
+	registry := tool.NewRegistry()
+	destructive := &destructiveMCPTool{}
+	registry.Add(destructive)
+	gate := &freshHumanStubGate{}
+	agent := New(nil, registry, NewSession(""), Options{Gate: gate}, event.Discard)
+
+	blocked := agent.executeOne(context.Background(), provider.ToolCall{Name: destructive.Name(), Arguments: `{}`})
+	if !blocked.blocked || destructive.executions != 0 || gate.freshCalls != 1 || gate.ordinaryCalls != 0 {
+		t.Fatalf("declined destructive call = %+v, executions=%d gate=%+v", blocked, destructive.executions, gate)
+	}
+	gate.allow = true
+	allowed := agent.executeOne(context.Background(), provider.ToolCall{Name: destructive.Name(), Arguments: `{}`})
+	if allowed.blocked || destructive.executions != 1 || gate.freshCalls != 2 || gate.ordinaryCalls != 0 {
+		t.Fatalf("approved destructive call = %+v, executions=%d gate=%+v", allowed, destructive.executions, gate)
+	}
+}
+
+func TestDestructiveMCPStaysBlockedInPlanModeBeforeTrustOrApproval(t *testing.T) {
+	registry := tool.NewRegistry()
+	destructive := &destructiveMCPTool{}
+	registry.Add(destructive)
+	freshGate := &freshHumanStubGate{allow: true}
+	trustGate := &fakePlanModeReadOnlyTrustGate{allow: true}
+	agent := New(nil, registry, NewSession(""), Options{
+		Gate: freshGate, PlanModeReadOnlyTrustGate: trustGate,
+	}, event.Discard)
+	agent.SetPlanMode(true)
+
+	out := agent.executeOne(context.Background(), provider.ToolCall{Name: destructive.Name(), Arguments: `{}`})
+	if !out.blocked || destructive.executions != 0 || freshGate.freshCalls != 0 || trustGate.calls != 0 {
+		t.Fatalf("plan-mode destructive call = %+v, executions=%d fresh=%d trust=%d", out, destructive.executions, freshGate.freshCalls, trustGate.calls)
+	}
 }
 
 // TestGateBlocksDeniedCall proves executeOne consults the gate after the

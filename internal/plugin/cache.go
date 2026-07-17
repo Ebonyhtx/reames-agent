@@ -37,10 +37,8 @@ func cacheableToolsOf(tools []tool.Tool) []CachedTool {
 			continue
 		}
 		out = append(out, CachedTool{
-			Name:        rt.rawName,
-			Description: rt.desc,
-			Schema:      rt.schema,
-			ReadOnly:    rt.readOnly,
+			Name: rt.rawName, Description: rt.desc, Schema: rt.schema, OutputSchema: rt.outputSchema,
+			ReadOnly: rt.declaredReadOnly, Destructive: rt.destructive,
 		})
 	}
 	return out
@@ -49,7 +47,7 @@ func cacheableToolsOf(tools []tool.Tool) []CachedTool {
 // cacheVersion bumps whenever CachedSchema shape changes incompatibly. Old
 // files with a smaller version are treated as a miss so a stale layout never
 // crashes a reader.
-const cacheVersion = 1
+const cacheVersion = 2
 
 // CachedSchema is the persisted snapshot of one server's handshake result.
 // SpecHash gates reuse — Capabilities/Tools are only trusted when the
@@ -68,10 +66,12 @@ type CachedSchema struct {
 // Description (model-visible), Schema (raw JSON for input validation),
 // ReadOnly (drives confirmation prompts).
 type CachedTool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Schema      json.RawMessage `json:"schema"`
-	ReadOnly    bool            `json:"read_only"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Schema       json.RawMessage `json:"schema"`
+	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
+	ReadOnly     bool            `json:"read_only"`
+	Destructive  bool            `json:"destructive,omitempty"`
 }
 
 // SpecFingerprint hashes the load-bearing parts of a Spec so changing the
@@ -83,7 +83,7 @@ func SpecFingerprint(s Spec) string {
 	h := sha256.New()
 	writeField(h, "type", s.Type)
 	writeField(h, "command", s.Command)
-	writeField(h, "url", s.URL)
+	writeField(h, "url", normalizeIdentityURL(s.URL))
 	writeField(h, "dir", s.Dir)
 	writeField(h, "package_owner", s.PackagePolicy.Owner)
 	writeField(h, "package_root", s.PackagePolicy.PackageRoot)

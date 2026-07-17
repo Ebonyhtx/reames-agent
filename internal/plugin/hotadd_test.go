@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"reames-agent/internal/tool"
 )
 
 // TestHostAddRemove exercises the hot add/remove path behind `/mcp add` and
@@ -47,6 +49,54 @@ func TestHostAddRemove(t *testing.T) {
 	}
 	if _, found := h.Remove("h"); found {
 		t.Error("removing an absent server should report not found")
+	}
+}
+
+func TestHostReconnectRefreshesEveryAttachedRegistry(t *testing.T) {
+	srv := mcpHTTPServer(t, false)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	host := NewHost()
+	defer host.Close()
+	active := tool.NewRegistry()
+	sibling := tool.NewRegistry()
+	host.AttachRegistry(active)
+	host.AttachRegistry(sibling)
+	defer host.DetachRegistry(active)
+	defer host.DetachRegistry(sibling)
+
+	spec := Spec{Name: "h", Type: "http", URL: srv.URL, Headers: map[string]string{"Authorization": "Bearer secret"}}
+	if _, err := host.Add(ctx, spec); err != nil {
+		t.Fatalf("first Add: %v", err)
+	}
+	for label, registry := range map[string]*tool.Registry{"active": active, "sibling": sibling} {
+		if _, ok := registry.Get("mcp__h__greet"); !ok {
+			t.Fatalf("%s registry did not receive initial shared-host tools", label)
+		}
+	}
+	if _, ok := host.Remove("h"); !ok {
+		t.Fatal("Remove(h) reported no connected server")
+	}
+	for label, registry := range map[string]*tool.Registry{"active": active, "sibling": sibling} {
+		if _, ok := registry.Get("mcp__h__greet"); ok {
+			t.Fatalf("%s registry retained a stale adapter across shared-host removal", label)
+		}
+	}
+	if _, err := host.Add(ctx, spec); err != nil {
+		t.Fatalf("second Add: %v", err)
+	}
+	for label, registry := range map[string]*tool.Registry{"active": active, "sibling": sibling} {
+		if _, ok := registry.Get("mcp__h__greet"); !ok {
+			t.Fatalf("%s registry was not refreshed after shared-host reconnect", label)
+		}
+	}
+	host.Close()
+	for label, registry := range map[string]*tool.Registry{"active": active, "sibling": sibling} {
+		if _, ok := registry.Get("mcp__h__greet"); ok {
+			t.Fatalf("%s registry retained a stale adapter after shared-host close", label)
+		}
 	}
 }
 

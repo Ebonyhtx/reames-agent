@@ -136,10 +136,24 @@ Reasonix `main-v2` 已审查至 `9b54b9f8937b9878d9052833bff4ab99ba7638de`，相
 本轮同时安全快进并审查 Hermes、Codex、MiMo、Impeccable、Scream Code、AgentArk、Claude Code
 和 Kimi Code 的干净本地参考仓库。只形成三个新的路线图信号：
 
-1. Reasonix 的 MCP identity receipt/launcher lock 进入 M5 P0；
+1. Reasonix 的 MCP identity receipt/launcher lock 已按 Reames control/security 边界完成 M5 P0，
+   见 [`audits/2026-07-17-m5-mcp-identity-trust.md`](audits/2026-07-17-m5-mcp-identity-trust.md)；
 2. Reasonix + MiMo 的 workspace lease/worktree 进入 M4 持续加固 P1；
 3. Reasonix offline Guard/Safe Mode 进入 P2，必须复用现有恢复事务。
 
 其他 UI、主题、发布、遥测、Python/Electron runtime 和参考项目依赖体系不进入 Reames 主树。
 正式 reviewed SHA 保存在 `docs/upstreams/upstreams.lock.json`；`artifacts/upstream-watch/` 仍只
 是本地分析输出，不提交。
+
+同日最终 deep scan 将 Hermes 补审至 `bd0021233734`。其中 stored-id rotation 只适用于其压缩后
+fork SessionDB continuation 的模型；PTY attach-token session scope 只适用于其 keep-alive registry；
+basic-auth deny-list 修复只适用于其可插拔 dashboard auth provider；`_HERMES_GATEWAY` 清理只适用于
+dashboard 在 gateway 进程内再拉起 gateway action 的递归模型。
+Codex 补审至 `315195492c80`。
+Hermes 的统一 worktree dialog 仅补强现有 P1 交付 UX；其 transcript 优化在 Reames hot/warm/cold
+分页与长历史 benchmark 中已有等价或更强机制，compute host 不进入主树。Reames compaction 原地
+重写同一 session path，且 session path recovery 已有 metadata/hydration 对账，因此不复制 Hermes 的
+stored-id route/selection atom。Reames serve 的 controller/session 切换已有 `bindMu` + lease，password
+auth 是编译内置 `authGate`，因此也不复制 Hermes 的 PTY registry key 或 plugin deny-list 修复。Codex 的 SQLite
+migration writer-slot、Bedrock custom transport、approval payload structs、memory provenance 与
+thread originator 变化均完成分类：除通用回归信号外，没有证据支持在本批新增产品路线或依赖。

@@ -194,17 +194,19 @@ type PlanModeClassifier interface {
 	PlanModeSafe() bool
 }
 
-// PlanModeUntrustedReadOnly marks a tool whose ReadOnly() flag is asserted by an
-// external, untrusted source — an MCP server's readOnlyHint — rather than by
-// first-party code. Plan mode must not take such a flag at face value: a tool
-// reporting true here is gated like a writer (it runs while planning only via an
-// explicit plan_mode_allowed_tools declaration, trusted plugin read-only config,
-// or a PlanModeClassifier self-report) and is excluded from read-only research
-// sub-agents. Built-ins, and MCP tools trusted via Spec read-only overrides, do
-// not implement this (or return false) and are trusted normally. Type-assert a
-// Tool to discover support; only externally-sourced tools implement it.
+// PlanModeUntrustedReadOnly marks an external tool that declares itself
+// read-only but lacks an identity-bound local receipt. Its ReadOnly() method may
+// deliberately remain false so ordinary execution treats it like a writer;
+// plan mode can still offer one fresh trust prompt for the declared reader.
 type PlanModeUntrustedReadOnly interface {
 	PlanModeUntrustedReadOnly() bool
+}
+
+// MCPDestructive marks an MCP tool whose server advertised destructiveHint.
+// Hosts use it to require a fresh human decision even when auto/YOLO approval
+// would normally allow an ordinary writer.
+type MCPDestructive interface {
+	MCPDestructiveHint() bool
 }
 
 // MCPMetadata exposes the original MCP identity behind a model-visible

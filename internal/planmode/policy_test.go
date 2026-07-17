@@ -379,7 +379,7 @@ func TestDecideUntrustedReadOnlyFailsClosedThenOverride(t *testing.T) {
 	if d := (Policy{AllowedTools: []string{"mcp__srv__query"}}).Decide(call); d.Blocked {
 		t.Fatalf("plan_mode_allowed_tools must re-enable the declared MCP tool: %s", d.Message)
 	}
-	// A trusted read-only tool (first-party override, Untrusted=false) is allowed.
+	// A trusted read-only tool (for MCP, receipt-backed and Untrusted=false) is allowed.
 	if d := (Policy{}).Decide(Call{Name: "mcp__srv__read", ReadOnly: true, Untrusted: false}); d.Blocked {
 		t.Fatalf("a trusted read-only tool should be allowed: %s", d.Message)
 	}

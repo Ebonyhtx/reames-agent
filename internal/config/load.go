@@ -276,6 +276,7 @@ func mergeTOMLPlugins(paths []string) ([]PluginEntry, error) {
 		}
 		for _, p := range f.Plugins {
 			p, _ = NormalizePluginCommandLine(p)
+			p.configSource = pluginConfigSource("toml", path)
 			if i, ok := index[p.Name]; ok {
 				merged[i] = p
 				continue
@@ -285,6 +286,10 @@ func mergeTOMLPlugins(paths []string) ([]PluginEntry, error) {
 		}
 	}
 	return merged, nil
+}
+
+func pluginConfigSource(kind, _ string) string {
+	return strings.TrimSpace(kind)
 }
 
 // mergeTOMLProviders merges [[providers]] across TOML sources by provider name.

@@ -54,6 +54,7 @@ func mergeInstalledPluginPackages(cfg *Config, root string) []string {
 				packageRoot:  pkg.Root,
 				packageState: pluginpkg.RuntimeStateDir(reamesAgentHome, item.Installed.Name),
 				packageHome:  reamesAgentHome,
+				configSource: "plugin_package:" + item.Installed.Name,
 			}
 			cfg.Plugins = append(cfg.Plugins, entry)
 		}

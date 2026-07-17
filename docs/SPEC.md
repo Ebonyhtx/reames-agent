@@ -144,10 +144,12 @@ interface (`call` / `notify` / `close`) abstracts that, so the MCP-level logic
 - Each remote tool is adapted to the `Tool` interface and injected into the run
   registry, namespaced `mcp__<server>__<tool>` (spaces normalised to `_`) to
   match Claude Code and avoid clashes.
-- A tool's MCP `annotations.readOnlyHint` maps to `Tool.ReadOnly()`. It defaults
-  to false (a remote tool is opaque — we can't see its side effects), so a
-  plugin opts a tool into parallel-batch dispatch and the permission layer's
-  reader-default by declaring `readOnlyHint: true` in `tools/list`.
+- MCP `annotations.readOnlyHint` is recorded as an untrusted declaration. In
+  product composition roots it maps to `Tool.ReadOnly()==true` only after an
+  identity-bound receipt matches the live capability; before that, ordinary
+  execution treats the tool like a writer and Plan Mode may offer a fresh trust
+  prompt. A server cannot opt itself into parallel dispatch or reader-default
+  permission merely by setting one annotation.
 - `prompts/list` + `prompts/get` surface as `/mcp__<server>__<prompt>` slash
   commands; `resources/list` + `resources/read` are referenced as
   `@<server>:<uri>` in chat. `/mcp` shows connected servers and their counts.
@@ -306,16 +308,24 @@ func (p Policy) Decide(toolName string, readOnly bool, args json.RawMessage) Dec
   checked before the permission layer. Its boundary is fail-closed for untrusted
   tools: while planning, a tool runs only if it reports a *trustworthy*
   `ReadOnly()==true` — a built-in, a first-party MCP `ReadOnlyToolNames`
-  override, a plugin-level `trusted_read_only_tools` declaration, or a concrete
-  MCP name listed in `[agent].plan_mode_allowed_tools` — or self-reports
-  plan-safe via `tool.PlanModeClassifier`. An MCP tool's `ReadOnly()` may
-  instead come from the server's self-reported `readOnlyHint`, which plan mode
-  treats as untrusted (`tool.PlanModeUntrustedReadOnly`): interactive
-  controllers may ask once before executing it and may remember a persistent
-  approval as `trusted_read_only_tools`. This trust prompt is a fresh user
-  decision: `auto`, `yolo`, and the approved-plan execution window do not answer
-  it, but an explicit session grant still prevents repeat prompts for the same
-  tool. Non-interactive sessions and declined approvals remain fail-closed.
+  override, an identity-bound MCP reader receipt, or a concrete MCP name listed
+  in `[agent].plan_mode_allowed_tools` — or self-reports plan-safe via
+  `tool.PlanModeClassifier`. An MCP server's self-reported `readOnlyHint` does
+  not by itself make `ReadOnly()` true. Interactive controllers may ask once and
+  save either a session decision or a workspace receipt in
+  `<Reames Agent home>/mcp-security.json`. The receipt binds workspace,
+  config-source category, transport, executable/content or normalized HTTPS
+  endpoint, launcher lock, raw/model tool names, input/output schema, and
+  read-only/destructive annotations. Identity drift blocks before process or
+  network startup; capability drift revokes only changed readers and requires
+  explicit re-verification. `trusted_read_only_tools` is a legacy one-time
+  migration seed: the first successful live handshake may import eligible raw
+  names, then records an import marker so revocation cannot be undone by the old
+  list. UI and approval actions never rewrite that config field. Persistent
+  remote trust requires HTTPS; session trust may be used for non-HTTPS test
+  endpoints. `auto`, `yolo`, Guardian, and the approved-plan execution window do
+  not answer MCP trust prompts. Non-interactive sessions and declined approvals
+  remain fail-closed.
   Bash is gated separately: built-in read-only commands and concrete prefixes
   declared in `[agent].plan_mode_read_only_commands` may run. Interactive
   controllers may also ask once before running an unknown query-shaped prefix
@@ -333,12 +343,16 @@ func (p Policy) Decide(toolName string, readOnly bool, args json.RawMessage) Dec
   read-only registry. Plan mode still allows `read_only_task` and
   `read_only_skill`, whose sub-agents receive only read-only research tools and
   safe foreground bash; writer-capable `task` delegation and full skill execution
-  remain blocked. The desktop MCP panel writes the same
-  `trusted_read_only_tools` raw-name list as an advanced management surface:
-  **Pre-trust read-only** adds currently listed `readOnlyHint` tools, per-tool
-  **Pre-trust** adds an audited reader manually, and **Untrust** removes it
-  again. These UI actions do not make MCP `readOnlyHint` globally trusted by
-  default.
+  remain blocked. The desktop MCP panel manages the same identity-bound receipt:
+  **Pre-trust read-only** adds eligible listed `readOnlyHint` tools, per-tool
+  **Pre-trust** is shown only for non-destructive declared readers, **Untrust**
+  removes a reader, and **Reverify identity** is the only recovery action after
+  identity drift. Connected capability drift lists changed tools and exposes
+  **Reverify trust**, which drops removed/writer/destructive selections. Bulk
+  retry excludes identity-drift failures. A tool marked
+  `destructiveHint` is never eligible for reader trust and requires a fresh
+  human approval for every call; auto/YOLO, Guardian, remembered permission
+  rules, and non-interactive defaults cannot answer it.
 - **User decisions are separate from tool approvals.** Runtime tool approval has
   three user-facing postures: `ask` ("需要批准"), `auto` ("自动批准"), and
   `yolo` ("Yolo批准"). `auto` lets the permission policy auto-approve the writer
@@ -629,7 +643,7 @@ args    = []
 # env   = { FOO = "bar" }
 # call_timeout_seconds = 600            # per-server MCP call timeout; 0 = global/default cap
 # tool_timeout_seconds = { "generate_video" = 1800 }   # raw MCP tool names
-# trusted_read_only_tools = ["search"]   # optional pre-seeded MCP read-only trust
+# trusted_read_only_tools = ["search"]   # legacy one-time seed; migrated after live handshake
 
 # [[plugins]]                   # a remote MCP server over Streamable HTTP
 # name    = "stripe"

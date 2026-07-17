@@ -75,7 +75,7 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 	if err != nil {
 		return nil, err
 	}
-	argv := append([]string{exe}, s.Args...)
+	argv := append([]string{exe}, effectiveLaunchArgs(s)...)
 	dir := s.Dir
 	if s.PackagePolicy.Enabled() && strings.TrimSpace(dir) == "" {
 		dir = s.PackagePolicy.PackageRoot

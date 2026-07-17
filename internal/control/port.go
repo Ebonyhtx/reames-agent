@@ -167,6 +167,9 @@ type Capabilities interface {
 	ConfiguredMCPNames() []string
 	DisconnectedMCPNames() []string
 	UnregisterMCPServerTools(name string) bool
+	MCPTrustedReaderNames(name string) []string
+	SetMCPReaderTrust(ctx context.Context, name, scope string, selected []string) error
+	ReverifyMCPServer(ctx context.Context, e config.PluginEntry) error
 	ImportMCPEntries(entries []config.PluginEntry) (total, added, updated, connected, failed, skipped int, err error)
 }
 

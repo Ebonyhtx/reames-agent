@@ -524,7 +524,7 @@ func TestRenderTOMLDocumentsPluginTrustedReadOnlyTools(t *testing.T) {
 	if !strings.Contains(rendered, `trusted_read_only_tools = ["issue_read", "pull_request_read"]`) {
 		t.Fatalf("rendered config should preserve trusted_read_only_tools:\n%s", rendered)
 	}
-	if !strings.Contains(rendered, "optional pre-seeded MCP read-only trust") {
+	if !strings.Contains(rendered, "legacy one-time MCP reader seed") {
 		t.Fatalf("rendered config should document trusted_read_only_tools semantics:\n%s", rendered)
 	}
 

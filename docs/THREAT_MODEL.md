@@ -1,7 +1,7 @@
 # Reames Agent 威胁模型
 
 > 状态：描述当前代码边界，不把路线图当作已实现能力
-> 更新：2026-07-16
+> 更新：2026-07-17
 
 ## 范围与假设
 
@@ -27,6 +27,7 @@ Controller ── Agent loop ── Provider API
 |---|---|---|---|
 | Provider 凭据 | 部分实现 | Provider key 名写入配置，值从 Reames Agent 全局 `.env` 或进程环境解析；项目 `.env` 不作为 Provider key 来源；Unix 写入权限收紧为 `0600`；有可选 AES-256-GCM 存储原语 | 进程环境仍是有效来源；加密文件使用机器属性派生密钥，不等同 OS keyring/硬件保护；日志与第三方错误的脱敏是 best-effort，需持续回归 |
 | 工具审批 | 已实现核心路径 | `internal/permission` 按工具、subject、只读属性和 allow/ask/deny 规则决策；文件写入审批可携带 diff，拒绝/超时路径有不落盘测试 | `yolo`/显式 allow 会绕过交互；所有新工具、远程入口和扩展必须持续做集成覆盖，不能只依赖工具自报 `readOnly` |
+| MCP reader 信任 | 已实现核心路径 | 宿主本地 `mcp-security.json` receipt 绑定 workspace、配置来源、transport、真实 executable/content 或规范化 HTTPS endpoint、args、env/header 键名、launcher exact content 以及 tool input/output schema/read-only/destructive 指纹；跨进程锁和原子写保护状态。Legacy `trusted_read_only_tools` 只迁移一次；identity drift 在进程/网络启动前阻断，capability drift 撤销变化工具，cache/lazy/Plan Mode/普通执行/只读子代理共用评估。Desktop 显式 reverify；destructive 每次 fresh-human，Auto/YOLO/Guardian 不代答 | MCP annotation 和远端 schema 仍由 server 提供，不能证明实现没有隐藏副作用；HTTPS endpoint 背后的运营内容可变化，因此 live capability 检查仍是必要的第二道门。宿主本地 state 不抵抗同机高权限篡改，也不是跨机器 portable allowlist；MCP 副作用不具备 exactly-once |
 | Shell/子进程隔离 | 部分实现 | `sandbox.mode = enforce` 时 shell 使用 Linux bubblewrap、macOS Seatbelt、Windows AppContainer/低完整性 token 与 Job Object；后端不可用时 enforce 模式 fail closed。已安装包拥有的 Hook/MCP 另由 `processpolicy` 强制使用同一 OS backend、core-only wrapper env、显式 child env、workspace/state 写根、敏感 read barrier 和进程树回收，且不能申请 unconfined escape。显式 child env 不进入 wrapper argv；隐藏 helper 在隔离边界内取走并清除编码环境后才启动 child，缺失/损坏或宿主未注册 helper 时 fail closed | sandbox 可被配置为 off，零值 shell、用户手工 Hook/MCP 与 LSP 不自动隔离；平台能力不完全等价。package process 当前允许网络，且没有跨三平台统一硬 CPU/RSS 配额。helper 环境编码不是加密，不对同机高权限进程、调试器或进程转储提供独立密钥保护 |
 | 不可信内容 | 部分实现 | 有 untrusted envelope、HTML 文本化和常见 token 正则脱敏；system prompt/tool schema 采用稳定前缀约束 | 不能保证模型不受 prompt injection 影响；正则无法识别所有私有凭据；工具/插件/网页内容仍必须依赖权限边界限制副作用 |
 | Prompt/展示数据边界 | 已实现核心路径 | `MessagesForRequest` 在 Provider interface 前剥离 citation/edit/original 等本地 metadata；OpenAI/Anthropic wire-byte 与 Agent cache-prefix 回归覆盖该纪律。`control.TranscriptMessage` 隐藏 system、合成恢复指令、compose 控制块和 referenced-context payload；Serve/ACP history、ACP metadata title、Desktop memory suggestions/history/pagination/planner sidecar 均消费安全投影。Desktop sidecar correlation hash 与安全 replay text 标记为 `json:"-"`，不跨远程 transport；rebuild 通过 opaque history snapshot 刷新已有 system prompt，同时保留 legacy system-less transcript | 新增 Provider、传输适配器或本地 metadata 字段时仍必须加入剥离/投影合同；模型本来就需要看到的用户正文和工具结果不属于该隐藏边界 |

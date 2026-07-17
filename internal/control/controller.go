@@ -42,6 +42,7 @@ import (
 	"reames-agent/internal/hook"
 	"reames-agent/internal/i18n"
 	"reames-agent/internal/jobs"
+	"reames-agent/internal/mcptrust"
 	"reames-agent/internal/memory"
 	"reames-agent/internal/memorycompiler"
 	"reames-agent/internal/nilutil"
@@ -117,7 +118,6 @@ type Controller struct {
 	startedOnce                       bool                             // guards the one-shot SessionStart hook on first turn
 	closeOnce                         sync.Once                        // makes close idempotent under racing teardown paths
 	onRemember                        func(rule string) RememberResult // set via Options; invoked when user picks "always allow"
-	onRememberMCPReadOnlyTrust        func(serverName, rawToolName string) MCPReadOnlyTrustResult
 	onRememberPlanModeReadOnlyCommand func(prefix string) PlanModeReadOnlyCommandTrustResult
 	sessionRecoveryMeta               func(SessionRecoveryRequest) SessionMeta
 	onSessionRecovered                func(SessionRecoveryInfo) error
@@ -313,8 +313,7 @@ type RememberResult struct {
 	Err       error
 }
 
-// MCPReadOnlyTrustResult describes what happened when a trusted MCP read-only
-// tool was persisted.
+// MCPReadOnlyTrustResult describes an identity-bound MCP reader receipt update.
 type MCPReadOnlyTrustResult struct {
 	Server    string
 	Tool      string
@@ -417,11 +416,8 @@ type Options struct {
 	// OnRemember, when set, is invoked with a new allow rule the user chose to
 	// persist to disk (e.g. "Bash(go test:*)"). The callback is wired into the
 	// permission Gate on EnableInteractiveApproval.
-	OnRemember func(rule string) RememberResult
-	// OnRememberMCPReadOnlyTrust persists a raw MCP tool name as trusted
-	// read-only when the user chooses "always allow" from the plan-mode trust
-	// prompt.
-	OnRememberMCPReadOnlyTrust func(serverName, rawToolName string) MCPReadOnlyTrustResult
+	OnRemember      func(rule string) RememberResult
+	MCPTrustManager *mcptrust.Manager
 	// OnRememberPlanModeReadOnlyCommand persists a bash command prefix as trusted
 	// read-only when the user chooses "always allow" from the plan-mode trust
 	// prompt.
@@ -480,7 +476,6 @@ func New(opts Options) *Controller {
 		shell:                             opts.Shell,
 		classifier:                        classifier,
 		onRemember:                        opts.OnRemember,
-		onRememberMCPReadOnlyTrust:        opts.OnRememberMCPReadOnlyTrust,
 		onRememberPlanModeReadOnlyCommand: opts.OnRememberPlanModeReadOnlyCommand,
 		sessionRecoveryMeta:               opts.SessionRecoveryMeta,
 		onSessionRecovered:                opts.OnSessionRecovered,
@@ -489,7 +484,7 @@ func New(opts Options) *Controller {
 		balanceClient:                     opts.BalanceClient,
 		jobs:                              opts.Jobs,
 		subagents:                         opts.SubagentStore,
-		mcp:                               newMcpManager(opts.Host, opts.Registry, pluginCtx),
+		mcp:                               newMcpManager(opts.Host, opts.Registry, pluginCtx, opts.MCPTrustManager),
 		pluginMCPOwners:                   clonePluginMCPOwners(opts.PluginMCPOwners),
 		workspaceRoot:                     opts.WorkspaceRoot,
 		externalFolderToolRefs:            opts.ExternalFolderToolRefs,
@@ -4341,6 +4336,8 @@ func (c *Controller) connectMCPServer(e config.PluginEntry) (int, error) {
 		URL:               exp.URL,
 		Headers:           exp.Headers,
 		ReadOnlyToolNames: trustedReadOnlyToolNames(exp.TrustedReadOnlyTools),
+		TrustManager:      c.mcp.trustManagerRef(),
+		ConfigSource:      e.PluginConfigSource(),
 	}, c.WorkspaceRoot()))
 	if err != nil {
 		return 0, err
@@ -4356,6 +4353,85 @@ func (c *Controller) connectMCPServer(e config.PluginEntry) (int, error) {
 	}
 	c.pluginMCPOwnersMu.Unlock()
 	return n, nil
+}
+
+func (c *Controller) MCPTrustedReaderNames(name string) []string {
+	host := c.mcp.hostRef()
+	if host == nil {
+		return nil
+	}
+	return host.TrustedReaderNames(name)
+}
+
+// SetMCPReaderTrust replaces one server's selected reader set. Workspace trust
+// re-preflights mutable launchers so the saved receipt binds an exact package
+// version/content lock before the live connection is replaced.
+func (c *Controller) SetMCPReaderTrust(ctx context.Context, name, scopeName string, selected []string) error {
+	c.mcpMutationMu.Lock()
+	defer c.mcpMutationMu.Unlock()
+	host := c.mcp.hostRef()
+	if host == nil {
+		return fmt.Errorf("no MCP servers connected")
+	}
+	var scope mcptrust.Scope
+	switch strings.ToLower(strings.TrimSpace(scopeName)) {
+	case "session":
+		scope = mcptrust.ScopeSession
+	case "workspace":
+		scope = mcptrust.ScopeWorkspace
+	default:
+		return fmt.Errorf("invalid MCP trust scope %q", scopeName)
+	}
+	if scope == mcptrust.ScopeSession {
+		return host.SetReaderTrust(name, scope, selected)
+	}
+	spec, ok := host.Spec(name)
+	if !ok {
+		return fmt.Errorf("MCP server %q is not connected", name)
+	}
+	if _, mutable := plugin.MutableLauncherForTrust(spec); mutable && strings.TrimSpace(spec.LauncherDigest) == "" {
+		if err := plugin.SetSpecReaderTrust(ctx, spec, scope, selected); err != nil {
+			return err
+		}
+		c.mcp.disconnect(name)
+		_, err := c.mcp.connectSpec(spec)
+		return err
+	}
+	return host.SetReaderTrust(name, scope, selected)
+}
+
+// ReverifyMCPServer is the explicit recovery path after identity drift. It
+// preflights the current spec, carries forward only previously selected raw
+// readers, preserves the prior session/workspace scope, and reconnects using
+// any exact launcher lock.
+func (c *Controller) ReverifyMCPServer(ctx context.Context, entry config.PluginEntry) error {
+	c.mcpMutationMu.Lock()
+	defer c.mcpMutationMu.Unlock()
+	manager := c.mcp.trustManagerRef()
+	if manager == nil {
+		return fmt.Errorf("MCP trust store is unavailable")
+	}
+	expanded := entry.ExpandedPlugin()
+	configSource := entry.PluginConfigSource()
+	selected, scope, err := manager.SelectedReadersWithScope(expanded.Name, configSource)
+	if err != nil {
+		return err
+	}
+	if scope != mcptrust.ScopeSession && scope != mcptrust.ScopeWorkspace {
+		return fmt.Errorf("MCP server %q has no reader trust receipt to reverify", expanded.Name)
+	}
+	spec := plugin.ApplyKnownOverrides(plugin.Spec{
+		Name: expanded.Name, Type: expanded.Type, Command: expanded.Command, Args: expanded.Args,
+		Env: expanded.Env, URL: expanded.URL, Headers: expanded.Headers,
+		ReadOnlyToolNames: trustedReadOnlyToolNames(expanded.TrustedReadOnlyTools),
+		TrustManager:      manager, ConfigSource: configSource,
+	}, c.WorkspaceRoot())
+	if _, err := plugin.ReverifySpecReaderTrust(ctx, spec, scope, selected); err != nil {
+		return err
+	}
+	c.mcp.disconnect(expanded.Name)
+	_, err = c.mcp.connectSpec(spec)
+	return err
 }
 
 func trustedReadOnlyToolNames(names []string) map[string]bool {
@@ -4611,6 +4687,7 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 				c.jobs.Close() // cancel any still-running background jobs
 			}
 		}
+		c.mcp.detachRegistry()
 		if c.cleanup != nil {
 			c.cleanup()
 		}
@@ -4851,6 +4928,27 @@ func structuredApprovalSubject(plan *event.ApprovalPlan) string {
 // from the public Approve command (different signature, different direction).
 type gateApprover struct{ c *Controller }
 
+func (g gateApprover) CheckFreshHumanApproval(ctx context.Context, toolName string, args json.RawMessage, reason string) (bool, string, error) {
+	if g.c == nil {
+		return false, "approval host is unavailable", nil
+	}
+	if g.c.policy.Decide(toolName, false, args) == permission.Deny {
+		return false, "denied by permission policy - this tool is on the deny list", nil
+	}
+	subject := toolName
+	if metadata, ok := g.c.mcp.registryTool(toolName).(tool.MCPMetadata); ok {
+		subject = fmt.Sprintf("MCP server %s · tool %s", metadata.MCPServerName(), metadata.MCPRawToolName())
+	}
+	reply, err := g.c.requestPerCallHumanApprovalDecision(ctx, toolName, subject, args, reason)
+	if err != nil {
+		return false, "approval aborted", err
+	}
+	if !reply.allow {
+		return false, "the user declined this destructive MCP call", nil
+	}
+	return true, "", nil
+}
+
 func (g gateApprover) Approve(ctx context.Context, tool, subject string, args json.RawMessage) (bool, bool, error) {
 	allow, remember, _, err := g.ApproveWithReason(ctx, tool, subject, args)
 	return allow, remember, err
@@ -4943,8 +5041,13 @@ func (p planModeReadOnlyTrustApprover) CheckPlanModeReadOnlyTrust(ctx context.Co
 	if reply.session {
 		p.c.approval.grantSession(req.ToolName, subject)
 	}
-	if reply.persist && p.c.onRememberMCPReadOnlyTrust != nil {
-		p.c.emitMCPReadOnlyTrustResult(p.c.onRememberMCPReadOnlyTrust(server, rawTool))
+	if reply.persist {
+		selected := p.c.MCPTrustedReaderNames(server)
+		selected = append(selected, rawTool)
+		if err := p.c.SetMCPReaderTrust(ctx, server, "workspace", selected); err != nil {
+			return false, err.Error(), nil
+		}
+		p.c.emitMCPReadOnlyTrustResult(MCPReadOnlyTrustResult{Server: server, Tool: rawTool, Path: mcptrust.StateFilename, Saved: true})
 	}
 	return true, "", nil
 }
@@ -5389,6 +5492,10 @@ func (c *Controller) requestFreshApprovalDecision(ctx context.Context, tool, sub
 	return c.requestApprovalDecisionWithOptions(ctx, tool, subject, args, reason, approvalDecisionOptions{fresh: true})
 }
 
+func (c *Controller) requestPerCallHumanApprovalDecision(ctx context.Context, tool, subject string, args json.RawMessage, reason string) (approvalReply, error) {
+	return c.requestApprovalDecisionWithOptions(ctx, tool, subject, args, reason, approvalDecisionOptions{fresh: true, noSessionReuse: true})
+}
+
 func (c *Controller) requestFreshApprovalDecisionWithPlan(ctx context.Context, toolName, subject string, args json.RawMessage, reason string, plan *event.ApprovalPlan) (approvalReply, error) {
 	return c.requestApprovalDecisionWithOptions(ctx, toolName, subject, args, reason, approvalDecisionOptions{fresh: true, plan: plan})
 }
@@ -5397,15 +5504,16 @@ type approvalDecisionOptions struct {
 	// fresh marks a user trust/business decision rather than an ordinary tool
 	// permission. It may reuse an explicit session grant, but YOLO/auto approval
 	// must not answer or drain the prompt.
-	fresh bool
-	plan  *event.ApprovalPlan
+	fresh          bool
+	noSessionReuse bool
+	plan           *event.ApprovalPlan
 }
 
 func (c *Controller) requestApprovalDecisionWithOptions(ctx context.Context, tool, subject string, args json.RawMessage, reason string, opts approvalDecisionOptions) (approvalReply, error) {
 	// YOLO/full access and the just-approved-plan execution window auto-allow
 	// approval-gated tools without prompting. Plan approval is a user decision,
 	// not a tool permission, so it deliberately stays interactive.
-	if c.approval.preApprovedForDecision(tool, subject, opts.fresh) {
+	if !opts.noSessionReuse && c.approval.preApprovedForDecision(tool, subject, opts.fresh) {
 		return approvalReply{allow: true}, nil
 	}
 
@@ -5414,7 +5522,7 @@ func (c *Controller) requestApprovalDecisionWithOptions(ctx context.Context, too
 
 	// Re-check: a session grant may have landed while we queued behind another
 	// prompt for the same subject.
-	if c.approval.preApprovedForDecision(tool, subject, opts.fresh) {
+	if !opts.noSessionReuse && c.approval.preApprovedForDecision(tool, subject, opts.fresh) {
 		return approvalReply{allow: true}, nil
 	}
 	var id string

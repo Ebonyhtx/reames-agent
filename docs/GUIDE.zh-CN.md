@@ -121,7 +121,9 @@ tool_timeout_seconds = { "generate_video" = 1800 }   # 可选：raw MCP tool 名
 `[agent].plan_mode_allowed_tools` 用于把 Reames Agent 无法自动分类的自定义/外部工具声明为额外只读工具。
 对 MCP/plugin 工具，像 `mcp__github__issue_read` 这样的具体模型可见名也会把该工具提升为
 planner / read-only research 可用的可信只读工具。优先使用 MCP 只读信任的一次性确认；需要预置已审过工具时，
-再在 plugin 上写 `trusted_read_only_tools`，`plan_mode_allowed_tools` 保留为兼容逃生阀。它不再解锁 `bash`、`task`、
+确认结果会保存为 `<Reames Agent home>/mcp-security.json` 中的身份绑定 receipt。
+`trusted_read_only_tools` 只保留为旧配置的一次性迁移种子：成功 live handshake 后导入符合条件的 raw name，
+之后即使 receipt 被撤销也不会被旧列表重新授权。`plan_mode_allowed_tools` 保留为兼容逃生阀。它不再解锁 `bash`、`task`、
 写文件工具、安装器、记忆变更工具等计划模式已知阻断项，也不会绕过 bash 在计划模式下的安全检查。
 
 当计划阶段需要运行 Reames Agent 尚不能自动分类、但你确认只读的 shell 查询命令时，使用
@@ -441,24 +443,29 @@ Reames Agent 是一个 MCP 客户端。`[[plugins]]` 的 `type` 选择传输：`
 程（`command`/`args`/`env`）；`http`（Streamable HTTP）连接远程 `url`，可带静态
 `headers`（`${VAR}` / `${VAR:-default}` 从环境展开，密钥不入文件）。工具以
 `mcp__<server>__<tool>` 暴露给模型，与 Claude Code 一致；声明 MCP `readOnlyHint: true`
-的工具会参与并行调度并命中权限层的只读默认放行，但 planner / read-only research 会先确认第三方
-自报只读。交互式会话里，第一次需要时允许即可；选择持久允许会把 raw MCP tool name 记住。
-这个信任提示属于用户决策，Auto/YOLO 工具审批不会代答；选择本会话允许或持久允许后，同一个 MCP
-工具不会在本会话里重复弹。
+的工具在 identity-bound receipt 匹配 live server/tool capability 前仍保持 writer posture，
+不能仅凭自报加入并行调度或命中权限层只读默认。交互式会话里，第一次需要时可确认；选择持久允许
+会保存 workspace receipt。这个信任提示属于用户决策，Auto/YOLO 工具审批不会代答；选择本会话
+允许或持久允许后，同一个已验证 MCP 工具不会在本会话里重复弹。
 高级用户也可以在 plugin 上预置审过的第三方读工具：
 
 ```toml
 [[plugins]]
 name = "github"
 command = "github-mcp"
-trusted_read_only_tools = ["issue_read", "pull_request_read"]
+trusted_read_only_tools = ["issue_read", "pull_request_read"] # 旧配置的一次性迁移种子
 ```
 
-桌面端 MCP 面板保留为高级管理入口：展开已配置的服务器并打开工具列表；只有在想提前批准工具时，
-才使用 **预先信任只读** 或单个工具旁的 **预先信任**。用 **取消信任** 可以移除已记住的读工具。
-桌面端会把 raw MCP tool name 写入拥有该服务器的配置源：项目 `.mcp.json` 里的服务器会更新到
-`mcpServers.<server>.trusted_read_only_tools`，普通 Reames Agent plugin 会写入用户级 Reames Agent config。
-只信任无副作用的读取工具；create/update/delete 这类写工具应保持未信任。
+桌面端 MCP 面板是身份绑定 receipt 的管理入口：展开已配置的服务器并打开工具列表；只对声明了
+`readOnlyHint`、非 destructive 且 schema 有效的工具使用 **预先信任只读** 或单工具 **预先信任**。
+用 **取消信任** 移除已记住的读工具。Desktop 与审批提示只写宿主本地
+`mcp-security.json`，不会改写项目 `.mcp.json`、`reames-agent.toml` 或全局 `config.toml`。
+Receipt 会绑定 workspace、server identity/launcher content、配置来源类别以及工具 schema/安全元数据；
+凭据值会脱敏，但 env/header 键名仍参与身份。Identity drift 会在启动进程或网络连接前阻断，必须使用
+**重新验证身份**；发生 capability drift 的工具会失去 reader authority。远程持久信任只允许 HTTPS。
+连接仍存活时，面板会列出 changed tool，并通过 **重新验证信任** 清理已删除或变成 writer/destructive
+的旧 selection。带 `destructiveHint` 的工具永远不能进入 reader trust，每次调用都需要
+fresh-human 审批。
 
 服务器的 **prompts** 会暴露成 `/mcp__<server>__<prompt>` 斜杠命令（命令后空格分隔参
 数）；**resources** 通过在消息里写 `@<server>:<uri>` 拉入；`/mcp` 列出已连接服务器及

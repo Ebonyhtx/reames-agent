@@ -161,6 +161,12 @@ type StructuredApprovalGate interface {
 	CheckStructuredApproval(ctx context.Context, toolName string, args json.RawMessage, plan tool.ApprovalPlan) (allow bool, reason string, err error)
 }
 
+// FreshHumanApprovalGate handles tool metadata that must bypass Guardian,
+// auto/YOLO approval, remembered rules, and non-interactive defaults.
+type FreshHumanApprovalGate interface {
+	CheckFreshHumanApproval(ctx context.Context, tool string, args json.RawMessage, reason string) (allow bool, detail string, err error)
+}
+
 // StructuredApprovalPreflightGate can reject a sensitive invocation from its
 // arguments before generating a plan that may read local files or remote URLs.
 // It must not prompt or approve; the full decision still happens with the plan.
@@ -2825,6 +2831,10 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	}
 	callArgs := json.RawMessage(call.Arguments)
 	callReadOnly := tool.InvocationReadOnly(t, callArgs)
+	destructiveMCP := false
+	if destructive, ok := t.(tool.MCPDestructive); ok {
+		destructiveMCP = destructive.MCPDestructiveHint()
+	}
 	if out, blocked := a.repeatedSuccessBlock(call, t); blocked {
 		return toolOutcome{
 			output:  out,
@@ -2857,7 +2867,14 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 		if u, ok := t.(tool.PlanModeUntrustedReadOnly); ok {
 			untrusted = u.PlanModeUntrustedReadOnly()
 		}
-		if decision := a.planModeDecision(call.Name, callReadOnly, untrusted, safety, callArgs); decision.Blocked {
+		// destructiveHint is never a plan-mode reader claim. Even an adapter
+		// bug or third-party Tool implementation that reports both interfaces
+		// must stay blocked by the read-only planning boundary.
+		if destructiveMCP {
+			untrusted = false
+		}
+		declaredReader := callReadOnly || untrusted
+		if decision := a.planModeDecision(call.Name, declaredReader, untrusted, safety, callArgs); decision.Blocked {
 			trustAllowed := false
 			if decision.ReadOnlyCommandTrust != nil {
 				if allow, outcome, handled := a.checkPlanModeBashReadOnlyTrust(ctx, call, decision.ReadOnlyCommandTrust); handled {
@@ -2867,12 +2884,13 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 					trustAllowed = true
 					planModeTrustedReadOnly = true
 				}
-			} else if callReadOnly && untrusted && safety != planmode.PlanSafetyUnsafe {
+			} else if declaredReader && untrusted && safety != planmode.PlanSafetyUnsafe {
 				if allow, outcome, handled := a.checkPlanModeMCPReadOnlyTrust(ctx, call, t); handled {
 					if !allow {
 						return outcome
 					}
 					trustAllowed = true
+					planModeTrustedReadOnly = true
 				}
 			}
 			if !trustAllowed {
@@ -2883,6 +2901,27 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 				}
 			}
 		}
+	}
+	freshApprovalHandled := false
+	if destructiveMCP {
+		freshGate, available := a.gate.(FreshHumanApprovalGate)
+		if !available {
+			return toolOutcome{
+				output:  "blocked: this MCP tool reports destructive behavior and requires a fresh human approval, but this host cannot provide one",
+				blocked: true, errMsg: "blocked: fresh human approval unavailable",
+			}
+		}
+		allow, detail, err := freshGate.CheckFreshHumanApproval(ctx, call.Name, callArgs, "The MCP server marks this tool destructive. Review the exact server, tool, and arguments before allowing this call.")
+		if err != nil {
+			return toolOutcome{output: fmt.Sprintf("blocked: %s (%v)", detail, err), blocked: true, errMsg: fmt.Sprintf("blocked: %v", err)}
+		}
+		if !allow {
+			if strings.TrimSpace(detail) == "" {
+				detail = "fresh human approval was declined"
+			}
+			return toolOutcome{output: "blocked: " + detail, blocked: true, errMsg: "blocked by fresh human approval"}
+		}
+		freshApprovalHandled = true
 	}
 	structuredApprovalHandled := false
 	if previewer, ok := t.(tool.ApprovalPreviewer); ok {
@@ -2946,7 +2985,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 			structuredApprovalHandled = true
 		}
 	}
-	if a.gate != nil && !structuredApprovalHandled {
+	if a.gate != nil && !structuredApprovalHandled && !freshApprovalHandled {
 		readOnly := callReadOnly || planModeTrustedReadOnly
 		allow, reason, err := a.gate.Check(ctx, call.Name, callArgs, readOnly)
 		if err != nil {

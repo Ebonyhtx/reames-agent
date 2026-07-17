@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"reames-agent/internal/mcptrust"
 	"reames-agent/internal/plugin"
 	"reames-agent/internal/tool"
 )
@@ -23,14 +24,33 @@ import (
 // host is either injected at construction (the desktop shared-host path) or
 // created lazily on the first connect; once set it never reverts to nil.
 type mcpManager struct {
-	mu        sync.Mutex
-	host      *plugin.Host
-	reg       *tool.Registry
-	pluginCtx context.Context
+	mu           sync.Mutex
+	host         *plugin.Host
+	reg          *tool.Registry
+	pluginCtx    context.Context
+	trustManager *mcptrust.Manager
 }
 
-func newMcpManager(host *plugin.Host, reg *tool.Registry, pluginCtx context.Context) mcpManager {
-	return mcpManager{host: host, reg: reg, pluginCtx: pluginCtx}
+func newMcpManager(host *plugin.Host, reg *tool.Registry, pluginCtx context.Context, trustManager *mcptrust.Manager) mcpManager {
+	if host != nil && reg != nil {
+		host.AttachRegistry(reg)
+	}
+	return mcpManager{host: host, reg: reg, pluginCtx: pluginCtx, trustManager: trustManager}
+}
+
+func (m *mcpManager) detachRegistry() {
+	m.mu.Lock()
+	host, registry := m.host, m.reg
+	m.mu.Unlock()
+	if host != nil && registry != nil {
+		host.DetachRegistry(registry)
+	}
+}
+
+func (m *mcpManager) trustManagerRef() *mcptrust.Manager {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.trustManager
 }
 
 // hostRef returns the live plugin host (nil until one is injected or lazily
@@ -46,11 +66,16 @@ func (m *mcpManager) hostRef() *plugin.Host {
 // the tool count. The host's network/subprocess I/O runs off mu.
 func (m *mcpManager) connectSpec(s plugin.Spec) (int, error) {
 	m.mu.Lock()
+	created := false
 	if m.host == nil {
 		m.host = plugin.NewHost()
+		created = true
 	}
 	host, ctx, reg := m.host, m.pluginCtx, m.reg
 	m.mu.Unlock()
+	if created && reg != nil {
+		host.AttachRegistry(reg)
+	}
 
 	tools, err := host.Add(ctx, s)
 	if err != nil {
@@ -125,6 +150,15 @@ func (m *mcpManager) registry() *tool.Registry {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.reg
+}
+
+func (m *mcpManager) registryTool(name string) tool.Tool {
+	registry := m.registry()
+	if registry == nil {
+		return nil
+	}
+	toolValue, _ := registry.Get(name)
+	return toolValue
 }
 
 // serverNames lists the live server names (nil when no host is connected).

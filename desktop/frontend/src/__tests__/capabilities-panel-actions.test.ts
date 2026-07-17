@@ -65,7 +65,7 @@ async function waitFor(label: string, predicate: () => boolean) {
     });
     if (predicate()) return;
   }
-  throw new Error(`timed out waiting for ${label}`);
+  throw new Error(`timed out waiting for ${label}: ${document.body.textContent?.trim() ?? ""}`);
 }
 
 function installDom() {
@@ -143,21 +143,35 @@ console.log("capabilities panel MCP actions");
   let trustCalls = 0;
   let bulkTrustCalls = 0;
   let untrustCalls = 0;
+  let reverifyCalls = 0;
   let servers: ServerView[] = [{
     name: "github",
     transport: "stdio",
     status: "connected",
     configured: true,
     autoStart: true,
-    tools: 2,
+    tools: 4,
     prompts: 0,
     resources: 0,
     toolList: [
       { name: "issue_read", description: "Read issues.", readOnlyHint: true },
       { name: "issue_write", description: "Write issues." },
+      { name: "issue_delete", description: "Delete issues.", readOnlyHint: true, destructiveHint: true },
       { name: "broken_read", description: "Broken tool.", readOnlyHint: true, schemaError: "invalid input schema: bad nested type" },
     ],
     trustedReadOnlyTools: [],
+  }, {
+    name: "linear",
+    transport: "stdio",
+    status: "connected",
+    configured: true,
+    autoStart: true,
+    tools: 0,
+    prompts: 0,
+    resources: 0,
+    trustState: "changed",
+    changedTools: ["removed_read"],
+    trustError: "trust receipt needs review",
   }];
   window.go = {
     main: {
@@ -184,6 +198,9 @@ console.log("capabilities panel MCP actions");
         UntrustMCPServerTool: async (name: string, toolName: string) => {
           untrustCalls += 1;
           servers = servers.map((s) => s.name === name ? { ...s, trustedReadOnlyTools: (s.trustedReadOnlyTools ?? []).filter((tool) => tool !== toolName) } : s);
+        },
+        ReverifyMCPServer: async () => {
+          reverifyCalls += 1;
         },
       } as Partial<AppBindings> as AppBindings,
     },
@@ -218,9 +235,11 @@ console.log("capabilities panel MCP actions");
   });
 
   await waitFor("trusted badge", () => Boolean(document.querySelector(".cap-tool-trust")?.textContent?.includes("Trusted")));
-  await waitFor("unavailable tool", () => Boolean(document.querySelector(".cap-tool-hint--error")?.textContent?.includes("Unavailable")));
-  ok(document.body.textContent?.includes("1 unavailable"), "server summary reports one quarantined tool");
+  await waitFor("unavailable tool", () => Array.from(document.querySelectorAll(".cap-tool-hint--error")).some((node) => node.textContent?.includes("Unavailable")));
+  ok(document.body.textContent?.includes("1 unavailable"), "server summary reports the schema-invalid tool as unavailable");
   ok(document.body.textContent?.includes("invalid input schema: bad nested type"), "tool list shows the schema diagnostic");
+  ok(document.body.textContent?.includes("Destructive"), "destructive MCP hint is visible in the tool list");
+  ok(document.querySelectorAll(".cap-tool-trust-btn").length === 0, "writers, destructive tools, and invalid schemas never expose reader-trust actions");
   const untrust = findButton("Untrust");
   if (!untrust) throw new Error("missing Untrust button");
   await act(async () => {
@@ -230,6 +249,7 @@ console.log("capabilities panel MCP actions");
   await waitFor("untrusted tool", () => !(servers[0]?.trustedReadOnlyTools?.includes("issue_read") ?? false));
 
   await waitFor("Pre-trust button", () => Boolean(findButton("Pre-trust")));
+  ok(document.querySelectorAll(".cap-tool-trust-btn").length === 1, "only the eligible declared reader exposes a trust action");
   const trust = findButton("Pre-trust");
   if (!trust) throw new Error("missing Pre-trust button");
   await act(async () => {
@@ -242,6 +262,105 @@ console.log("capabilities panel MCP actions");
   ok(untrustCalls === 1, "clicking Untrust invokes the MCP untrust action once");
   ok(trustCalls === 1, "clicking Trust invokes the MCP trust action once");
   ok(servers[0]?.trustedReadOnlyTools?.includes("issue_read") ?? false, "trusted raw tool name is added to the server snapshot");
+
+  const disclosures = document.querySelectorAll<HTMLButtonElement>(".cap-disclosure");
+  const linearDisclosure = disclosures[1];
+  if (!linearDisclosure) throw new Error("missing capability-drift server disclosure");
+  await act(async () => {
+    linearDisclosure.click();
+    await flush();
+  });
+  await waitFor("capability drift details", () => Boolean(document.body.textContent?.includes("removed_read")));
+  ok(document.body.textContent?.includes("trust receipt needs review"), "trust-store diagnostics are visible in server details");
+  const reverifyTrust = findButton("Reverify trust");
+  if (!reverifyTrust) throw new Error("missing capability trust re-verification button");
+  await act(async () => {
+    reverifyTrust.click();
+    await flush();
+  });
+  await waitFor("capability trust reverify call", () => reverifyCalls === 1);
+
+  await act(async () => {
+    root.unmount();
+  });
+  dom.window.close();
+}
+
+console.log("capabilities panel identity drift recovery");
+
+{
+  const dom = installDom();
+  const rootEl = document.getElementById("root");
+  if (!rootEl) throw new Error("missing root");
+  const root = createRoot(rootEl);
+  let reconnectCalls = 0;
+  let reverifyCalls = 0;
+  const failedServer: ServerView = {
+    name: "github",
+    transport: "stdio",
+    status: "failed",
+    configured: true,
+    autoStart: true,
+    tools: 0,
+    prompts: 0,
+    resources: 0,
+    identityChanged: true,
+    trustState: "changed",
+    error: "MCP server \"github\" identity changed; blocked before process startup",
+  };
+  window.go = {
+    main: {
+      App: {
+        Meta: async () => ({ label: "identity", ready: true, eventChannel: "identity-channel", cwd: "/tmp/identity", workspaceRoot: "/tmp/identity" }),
+        ListTabs: async (): Promise<TabMeta[]> => [{
+          id: "identity-tab",
+          scope: "project",
+          workspaceRoot: "/tmp/identity",
+          workspaceName: "identity",
+          topicId: "identity-topic",
+          topicTitle: "Identity",
+          label: "Identity",
+          cwd: "/tmp/identity",
+          ready: true,
+          running: false,
+          mode: "normal",
+          toolApprovalMode: "auto",
+          active: true,
+        }],
+        MCPServers: async () => [failedServer],
+        ReconnectMCPServer: async () => {
+          reconnectCalls += 1;
+        },
+        ReverifyMCPServer: async () => {
+          reverifyCalls += 1;
+        },
+      } as Partial<AppBindings> as AppBindings,
+    },
+  };
+
+  await act(async () => {
+    root.render(React.createElement(LocaleProvider, null, React.createElement(MCPServersSettingsPage)));
+    await flush();
+  });
+  await waitFor("identity drift failure", () => Boolean(document.body.textContent?.includes("1 MCP startup issues")));
+
+  const retryAll = findButton("Retry all");
+  ok(Boolean(retryAll?.disabled), "bulk retry is disabled when every failure requires identity re-verification");
+  const showDetails = findButton("View details");
+  if (!showDetails) throw new Error("missing identity failure details button");
+  await act(async () => {
+    showDetails.click();
+    await flush();
+  });
+  const reverify = findButton("Reverify identity");
+  if (!reverify) throw new Error(`missing identity re-verification button: ${document.body.textContent?.trim() ?? ""}`);
+  ok(!findButton("Retry"), "identity drift does not expose an ordinary reconnect action");
+  await act(async () => {
+    reverify.click();
+    await flush();
+  });
+  await waitFor("identity reverify call", () => reverifyCalls === 1);
+  ok(reconnectCalls === 0, "identity recovery never bypasses explicit re-verification through reconnect");
 
   await act(async () => {
     root.unmount();

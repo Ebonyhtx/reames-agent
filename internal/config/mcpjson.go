@@ -53,7 +53,11 @@ func loadMCPJSON(path string) ([]PluginEntry, error) {
 	if err := json.Unmarshal(b, &doc); err != nil {
 		return nil, fmt.Errorf("mcp config %s: %w", path, err)
 	}
-	return specsToEntries(doc.MCPServers, nil), nil
+	entries := specsToEntries(doc.MCPServers, nil)
+	for i := range entries {
+		entries[i].configSource = pluginConfigSource("mcp_json", path)
+	}
+	return entries, nil
 }
 
 // LoadMCPJSONPlugin returns one server entry from a Claude-compatible .mcp.json.
@@ -150,6 +154,9 @@ func loadLegacyMCP(path string) []PluginEntry {
 		have[pe.Name] = true
 		pe, _ = NormalizePluginCommandLine(pe)
 		entries = append(entries, pe)
+	}
+	for i := range entries {
+		entries[i].configSource = pluginConfigSource("legacy_json", path)
 	}
 	return entries
 }
