@@ -18,6 +18,7 @@ import (
 	"reames-agent/internal/config"
 	"reames-agent/internal/gatewayservice"
 	"reames-agent/internal/gatewaysetup"
+	"reames-agent/internal/repair"
 )
 
 func botCommand(args []string, version string) int {
@@ -68,6 +69,8 @@ func gatewayCommand(args []string, version string) int {
 		return gatewayRun(rest, version)
 	case "doctor":
 		return botDoctor(rest)
+	case "recovery-status":
+		return gatewayRecoveryStatus(rest)
 	case "install", "start", "stop", "restart", "status", "uninstall":
 		return gatewayService(sub, rest)
 	case "help", "--help", "-h":
@@ -158,6 +161,72 @@ func gatewayRun(args []string, version string) int {
 	return runGatewayForeground(args, version, "gateway run", "gateway")
 }
 
+func gatewayRecoveryStatus(args []string) int {
+	fs := flag.NewFlagSet("gateway recovery-status", flag.ContinueOnError)
+	home := fs.String("home", "", "REAMES_AGENT_HOME to inspect")
+	root := fs.String("root", ".", "project root to inspect")
+	jsonOut := fs.Bool("json", false, "print JSON")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "error: gateway recovery-status does not accept positional arguments")
+		return 2
+	}
+	restoreHome, err := setTemporaryReamesAgentHome(*home)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: set REAMES_AGENT_HOME: %v\n", err)
+		return 2
+	}
+	defer restoreHome()
+	report, err := inspectGatewayRecovery(*root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	if *jsonOut {
+		body, err := repair.MarshalReport(report)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		fmt.Print(string(body))
+	} else {
+		fmt.Printf("gateway recovery: startup=%s failures=%d safe-mode=%v findings=%d\n",
+			report.Startup.Phase, report.Startup.ConsecutiveFailures, report.SafeModeRecommended, len(report.Findings))
+		for _, finding := range report.Findings {
+			fmt.Printf("%s %s: %s\n", finding.Severity, finding.Code, finding.Message)
+		}
+	}
+	if report.HasErrors() {
+		return 1
+	}
+	return 0
+}
+
+func inspectGatewayRecovery(root string) (repair.Report, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return repair.Report{}, err
+	}
+	return repair.Inspect(repair.InspectOptions{Root: root, ExecutablePath: executable})
+}
+
+func gatewayRecoveryPreflight(root string) error {
+	report, err := inspectGatewayRecovery(root)
+	if err != nil {
+		return err
+	}
+	if !report.HasErrors() {
+		return nil
+	}
+	body, marshalErr := repair.MarshalReport(report)
+	if marshalErr != nil {
+		return fmt.Errorf("recovery preflight failed")
+	}
+	return fmt.Errorf("recovery preflight failed; run gateway recovery-status before starting channels:\n%s", strings.TrimSpace(string(body)))
+}
+
 func gatewayService(action string, args []string) int {
 	fs := flag.NewFlagSet("gateway "+action, flag.ContinueOnError)
 	dryRun := fs.Bool("dry-run", false, "print the service-manager plan without changing the host")
@@ -232,6 +301,18 @@ func runGatewayForeground(args []string, version, flagSetName, displayName strin
 		return 2
 	}
 	defer restoreHome()
+	root := strings.TrimSpace(*dir)
+	if root == "" {
+		root = "."
+	}
+	if err := gatewayRecoveryPreflight(root); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	// The top-level CLI deliberately bypasses ordinary startup initialization
+	// for foreground gateways so this preflight remains first. Apply normal
+	// one-time config upgrades only after recovery evidence says it is safe.
+	migrateLegacyConfigForCLI()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -804,6 +885,7 @@ Usage:
   reames-agent gateway setup --channel CHANNEL [connection and access options] [--home PATH] [--dry-run]
   reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME] [--home PATH]
   reames-agent gateway doctor [--json] [--deep] [--home PATH]
+  reames-agent gateway recovery-status [--json] [--home PATH] [--root PATH]
   reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--home PATH] [--channels LIST] [--dir PATH] [--model NAME]
   reames-agent gateway start|stop|restart|status|uninstall [--dry-run] [--scope user|system]
 
@@ -811,6 +893,7 @@ Subcommands:
   setup     atomically create or update a channel connection without accepting secret values
   run       run the gateway in the foreground; compatible with "reames-agent bot start"
   doctor    inspect gateway config, credentials, access control, and connection records
+  recovery-status inspect the shared credential-free Guard recovery projection
   install   install a user-level OS service (systemd, launchd, or Windows Scheduled Task)
   start     start the installed gateway service
   stop      stop the installed gateway service
@@ -822,6 +905,7 @@ Examples:
   reames-agent gateway setup --channel feishu --app-id APP_ID --app-secret-env FEISHU_BOT_APP_SECRET --workspace /path/to/project --pairing
   reames-agent gateway setup --channel qq --app-id APP_ID --users USER_ID --admins ADMIN_ID --dry-run
   reames-agent gateway run --home ~/.reames-agent --channels feishu
+  reames-agent gateway recovery-status --json --home ~/.reames-agent
   reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
   reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu
   reames-agent gateway run --dir /path/to/project --model deepseek-pro

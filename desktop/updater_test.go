@@ -44,6 +44,33 @@ func TestNormalizeVersion(t *testing.T) {
 	}
 }
 
+func TestRetainFailedLinuxUpdateRecordsAttribution(t *testing.T) {
+	applyErr := errors.New("desktop replacement failed")
+	var gotVersion, gotReason string
+	got := retainFailedUpdate("linux", "v2", applyErr, func(version, reason string) error {
+		gotVersion, gotReason = version, reason
+		return nil
+	})
+	if !errors.Is(got, applyErr) || gotVersion != "v2" || gotReason != applyErr.Error() {
+		t.Fatalf("retain failure = %v, marker=%q/%q", got, gotVersion, gotReason)
+	}
+
+	called := false
+	got = retainFailedUpdate("windows", "v2", applyErr, func(string, string) error {
+		called = true
+		return nil
+	})
+	if !errors.Is(got, applyErr) || called {
+		t.Fatalf("Windows failure should remain helper-owned: err=%v called=%v", got, called)
+	}
+
+	markerErr := errors.New("state unavailable")
+	got = retainFailedUpdate("linux", "v2", applyErr, func(string, string) error { return markerErr })
+	if !errors.Is(got, applyErr) || !strings.Contains(got.Error(), markerErr.Error()) {
+		t.Fatalf("marker failure lost attribution error: %v", got)
+	}
+}
+
 func TestEvaluate(t *testing.T) {
 	mk := func(version string) *update.Manifest {
 		return &update.Manifest{
@@ -230,7 +257,7 @@ func TestExtractBinary(t *testing.T) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
-	files := map[string][]byte{"README": []byte("ignore me"), "reamesAgent-desktop": want}
+	files := map[string][]byte{"README": []byte("ignore me"), "reames-agent-desktop": want}
 	for name, body := range files {
 		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg}); err != nil {
 			t.Fatal(err)
@@ -242,7 +269,7 @@ func TestExtractBinary(t *testing.T) {
 	tw.Close()
 	gz.Close()
 
-	got, err := extractBinary(buf.Bytes(), "reamesAgent-desktop")
+	got, err := extractBinary(buf.Bytes(), "reames-agent-desktop")
 	if err != nil {
 		t.Fatalf("extractBinary: %v", err)
 	}

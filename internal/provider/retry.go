@@ -20,6 +20,12 @@ const MaxRetries = 10
 
 const maxBackoff = 15 * time.Second
 
+// errorBodyReadTimeout bounds draining a non-OK response body. A proxy can
+// send the status headers and then leave the body half-open; the client's
+// response-header timeout no longer applies at that point, so an unbounded
+// io.ReadAll would freeze the retry loop with no user-visible progress.
+var errorBodyReadTimeout = 10 * time.Second
+
 // maxAuthRetries bounds how many times a 401/403 is retried for a key that has
 // authenticated before: a transient server-side rejection (quota/gateway/rate)
 // usually clears in a couple of attempts, whereas a key that never worked is a
@@ -149,6 +155,18 @@ func parseRetryAfter(resp *http.Response) time.Duration {
 	return 0
 }
 
+// readErrorBody returns the first 4 KiB of a non-OK response and drains the
+// rest for connection reuse. Closing Body from the timer goroutine unblocks a
+// stalled read; context cancellation already does the same through Transport.
+func readErrorBody(resp *http.Response) []byte {
+	timer := time.AfterFunc(errorBodyReadTimeout, func() { _ = resp.Body.Close() })
+	msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = timer.Stop()
+	_ = resp.Body.Close()
+	return msg
+}
+
 // SendWithRetry POSTs a streaming request built by newReq and returns the OK
 // response. It retries the connection+header phase up to MaxRetries times on
 // transient network errors and retryable statuses with capped exponential
@@ -195,10 +213,8 @@ func SendWithRetry(ctx context.Context, httpClient *http.Client, opts SendOption
 			return resp, nil
 		}
 
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := readErrorBody(resp)
 		retryAfter = parseRetryAfter(resp)
-		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
 
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			authErr := &AuthError{Provider: opts.Provider, KeyEnv: opts.KeyEnv, KeySource: opts.KeySource, Status: resp.StatusCode, HasKey: opts.KeyPresent}

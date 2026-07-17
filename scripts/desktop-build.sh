@@ -27,6 +27,22 @@ arch="${PLATFORM#*/}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APPNAME="Reames Agent"            # wails.json productName -> Reames Agent.app
 BINNAME="reames-agent-desktop"    # wails.json outputfilename -> linux binary name
+GUARDNAME="reames-agent-guard"
+LAUNCHERNAME="reames-agent-launcher"
+
+build_guard() {
+	echo "==> go build Reames Agent Guard"
+	mkdir -p "$(dirname "$guard_out")"
+	if [ "$arch" = universal ]; then
+		guard_tmp=$(mktemp -d)
+		(cd "$ROOT" && GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$guard_tmp/amd64" ./cmd/reames-agent-guard)
+		(cd "$ROOT" && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$guard_tmp/arm64" ./cmd/reames-agent-guard)
+		lipo -create "$guard_tmp/amd64" "$guard_tmp/arm64" -output "$guard_out"
+		rm -rf "$guard_tmp"
+	else
+		(cd "$ROOT" && GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$guard_out" ./cmd/reames-agent-guard)
+	fi
+}
 
 copy_legal_files() {
 	local destination="$1"
@@ -52,6 +68,12 @@ ldflags="-X main.version=$VERSION -X main.channel=$CHANNEL"
 [ "$os" = "darwin" ] && [ "${HAS_APPLE_CERT:-}" = "true" ] && ldflags="$ldflags -X main.macSelfUpdate=true"
 UPDATE_HELPER="reames-agent-update-helper.exe"
 if [ "$os" = windows ]; then
+	guard_out="$ROOT/desktop/build/windows/installer/$GUARDNAME.exe"
+	build_guard
+	launcher_out="$ROOT/desktop/build/windows/installer/$LAUNCHERNAME.exe"
+	echo "==> go build Windows GUI Guard launcher"
+	(cd "$ROOT" && GOOS=windows GOARCH="$arch" CGO_ENABLED=0 go build -trimpath \
+		-ldflags="-s -w -H windowsgui -X main.version=$VERSION" -o "$launcher_out" ./cmd/reames-agent-guard)
 	for nsis_dir in "/c/Program Files (x86)/NSIS" "/c/Program Files/NSIS"; do
 		if [ -x "$nsis_dir/makensis.exe" ]; then
 			export PATH="$nsis_dir:$PATH"
@@ -70,6 +92,10 @@ build_args=(-clean -platform "$PLATFORM" -ldflags "$ldflags")
 
 echo "==> wails build ${build_args[*]}"
 wails build "${build_args[@]}"
+if [ "$os" != windows ]; then
+	guard_out="$ROOT/desktop/build/bin/$GUARDNAME"
+	build_guard
+fi
 
 mkdir -p "$ROOT/dist"
 
@@ -80,6 +106,8 @@ darwin)
 	staging=$(mktemp -d)
 	app="$staging/${APPNAME}.app"
 	cp -R "build/bin/reames-agent-desktop.app" "$app"
+	cp "$guard_out" "$app/Contents/MacOS/$GUARDNAME"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $GUARDNAME" "$app/Contents/Info.plist"
 	copy_legal_files "$app/Contents/Resources/licenses"
 
 	# Two signing paths, selected by HAS_APPLE_CERT (set by release-desktop.yml when
@@ -155,12 +183,15 @@ windows)
 	portable=$(find build/bin -maxdepth 1 -type f -name "*.exe" ! -name "*installer*.exe" | head -n1 || true)
 	[ -n "$portable" ] || { echo "no portable Windows exe found in build/bin" >&2; exit 1; }
 	staging=$(mktemp -d)
-	cp "$portable" "$staging/${APPNAME}.exe"
+	cp "$portable" "$staging/$BINNAME.exe"
 	copy_legal_files "$staging/licenses"
 	helper="build/windows/installer/$UPDATE_HELPER"
 	if [ -f "$helper" ]; then
 		cp "$helper" "$staging/$UPDATE_HELPER"
 	fi
+	cp "$launcher_out" "$staging/${APPNAME}.exe"
+	cp "$launcher_out" "$staging/$LAUNCHERNAME.exe"
+	cp "$guard_out" "$staging/$GUARDNAME.exe"
 	staging_win=$(cygpath -w "$staging")
 	zip_win=$(cygpath -w "$ROOT/dist/${APPNAME}-windows-${arch}.zip")
 	powershell.exe -NoProfile -Command "Compress-Archive -Force -Path '$staging_win\\*' -DestinationPath '$zip_win'"
@@ -169,8 +200,9 @@ windows)
 linux)
 	staging=$(mktemp -d)
 	cp "build/bin/$BINNAME" "$staging/$BINNAME"
+	cp "$guard_out" "$staging/$GUARDNAME"
 	copy_legal_files "$staging/licenses"
-	tar -czf "$ROOT/dist/${APPNAME}-linux-${arch}.tar.gz" -C "$staging" "$BINNAME" licenses
+	tar -czf "$ROOT/dist/${APPNAME}-linux-${arch}.tar.gz" -C "$staging" "$BINNAME" "$GUARDNAME" licenses
 	rm -rf "$staging"
 	# Also build a .deb for Debian/Ubuntu users (goreleaser/nfpm; see
 	# desktop/build/linux/nfpm.yaml). Human-download only: the Linux updater channel

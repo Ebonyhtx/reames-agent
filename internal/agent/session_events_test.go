@@ -172,6 +172,81 @@ func TestForceSaveLeavesLegacyEventTranscriptUntouched(t *testing.T) {
 	}
 }
 
+func TestRepairPreservesDamagedTailBytes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionWithTurns(t, path, 2)
+	logPath := store.SessionEventLog(path)
+	buried := `{"schema_version":1,"type":"append","message_index":99,"messages":[{"role":"user","content":"buried turn"}],"created_at":"2026-01-01T00:00:00Z"}` + "\n"
+	torn := `{"schema_version":1,"type":"ap`
+	f, err := os.OpenFile(logPath, os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write([]byte(buried + torn)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := LoadSession(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumed.Add(provider.Message{Role: provider.RoleUser, Content: "after damage"})
+	if err := resumed.SaveSnapshot(path); err != nil {
+		t.Fatal(err)
+	}
+	salvaged, err := os.ReadFile(store.SessionEventLogDamaged(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(salvaged), "buried turn") || !strings.Contains(string(salvaged), `"damaged_tail":true`) {
+		t.Fatalf("damaged sidecar omitted evidence:\n%s", salvaged)
+	}
+	reloaded, err := LoadSession(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.eventLogDamaged {
+		t.Fatal("event log remained damaged after healing save")
+	}
+	for _, message := range reloaded.Messages {
+		if message.Content == "buried turn" {
+			t.Fatal("discarded record leaked into live transcript")
+		}
+	}
+}
+
+func TestRepairDoesNotTruncateWhenDamagedTailCannotBePreserved(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionWithTurns(t, path, 1)
+	logPath := store.SessionEventLog(path)
+	original, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logPath, append(original, []byte("{torn")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(store.SessionEventLogDamaged(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := repairSessionEventLogTail(path); err == nil {
+		t.Fatal("repair truncated the log without preserving its damaged tail")
+	}
+	after, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("failed forensic preservation changed the event log")
+	}
+}
+
 func TestReplayStopsAtBrokenAppendChain(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	sessionWithTurns(t, path, 1)

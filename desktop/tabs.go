@@ -2619,6 +2619,21 @@ func (a *App) closeTabRuntime(tab *WorkspaceTab) {
 // same way buildController works for the single-controller App. On success it
 // wires the controller and flips Ready; on failure it stores StartupErr.
 func (a *App) startTabControllerBuild(tab *WorkspaceTab) {
+	if config.SafeModeRequested() {
+		a.mu.Lock()
+		if tab == nil || tab.removed {
+			a.mu.Unlock()
+			return
+		}
+		tab.StartupErr = "Safe Mode is recovery-only; inspect status with Guard and restart normally after repair"
+		tab.StartupErrLeaseHeld = false
+		tab.Ready = true
+		tabID := tab.ID
+		a.mu.Unlock()
+		tab.releaseSessionLease()
+		a.emitReady(a.ctx, tabID)
+		return
+	}
 	buildCtx, cancel := context.WithCancel(a.bootContext())
 	a.mu.Lock()
 	if tab == nil || tab.removed {

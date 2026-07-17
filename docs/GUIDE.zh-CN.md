@@ -437,6 +437,16 @@ Settings/用户配置；沙盒配置变更需 reload session config 或新开会
 
 `reames-agent upgrade` 会验证并保留上一二进制为 `<executable>.previous`；`reames-agent upgrade --rollback` 在当前版与上一版间切换并继续保留被替换版。独立 Gateway 不会自动重启，升级或回滚后按需执行 `reames-agent gateway restart`。
 
+## Guard 与安全模式
+
+如果 Desktop 在普通界面出现前连续启动失败，先运行 `reames-agent guard check --json`，再运行
+`reames-agent guard launch --safe-mode`。打包后的 Desktop 会自动先经过独立 Guard。安全模式不读取
+用户/项目 TOML 或 dotenv，不恢复旧 tab/session；Desktop 只建立 recovery-only shell，不启动
+Provider、Controller、普通 Agent loop、MCP、plugin、Hook、Bot、LSP、planner、Guardian、subagent
+或 Memory Compiler。配置修复、有证据的 pending update 回滚、
+插件全量禁用和 Desktop 派生状态 rebuild 都是显式 Guard 操作。完整命令、自动回滚证据和生产限制见
+[恢复、Guard 与安全模式](./RECOVERY.zh-CN.md)。
+
 ## 插件（MCP）
 
 Reames Agent 是一个 MCP 客户端。`[[plugins]]` 的 `type` 选择传输：`stdio`（默认）启动本地子进

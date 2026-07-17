@@ -22,13 +22,17 @@ func TestWindowsUpdateHandoffArgsCarryParentInstallAndRelaunch(t *testing.T) {
 		4242,
 		`C:\Users\Jane Doe\AppData\Local\Reames Agent\updates\Reames Agent-windows-amd64-installer.exe`,
 		`D:\Tools\Reames Agent App`,
-		`D:\Tools\Reames Agent App\reamesAgent-desktop.exe`,
+		`D:\Tools\Reames Agent App\reames-agent-launcher.exe`,
+		`v2.0.0`,
+		`C:\Users\Jane Doe\AppData\Roaming\reames-agent`,
 	)
 	want := []string{
 		"--parent-pid", "4242",
 		"--installer", `C:\Users\Jane Doe\AppData\Local\Reames Agent\updates\Reames Agent-windows-amd64-installer.exe`,
 		"--install-dir", `D:\Tools\Reames Agent App`,
-		"--relaunch", `D:\Tools\Reames Agent App\reamesAgent-desktop.exe`,
+		"--relaunch", `D:\Tools\Reames Agent App\reames-agent-launcher.exe`,
+		"--to-version", `v2.0.0`,
+		"--state-home", `C:\Users\Jane Doe\AppData\Roaming\reames-agent`,
 	}
 	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("args = %#v, want %#v", got, want)

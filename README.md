@@ -36,7 +36,8 @@ powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.co
 - **Three surfaces**: CLI (Bubble Tea TUI), Desktop (Wails + React), Web/Cloud (HTTP/SSE server)
 - **IM Gateway**: Feishu, QQ, WeChat, Telegram bot adapters
 - **Plugin/MCP**: MCP stdio + HTTP transports, skill playbook system
-- **Single binary**: CGO_ENABLED=0, cross-compile to 6 targets
+- **Offline recovery**: credential-free Guard, crash-loop detection, verified update rollback, and Safe Mode
+- **Portable CLI**: CGO_ENABLED=0, cross-compile to 6 targets; Desktop packages add a sibling Guard launcher
 
 ## Usage
 
@@ -46,6 +47,8 @@ reames-agent run "fix the auth bug" # Headless single task
 reames-agent serve                  # Start web UI on localhost:8787
 reames-agent gateway run --channels feishu    # Run IM gateway in foreground
 reames-agent gateway install --dry-run --channels feishu  # Preview background service install
+reames-agent guard check --json        # Credential-free recovery report
+reames-agent guard launch --safe-mode  # Open the recovery-only Desktop shell
 ```
 
 ## Cloud Deployment
@@ -76,6 +79,7 @@ upload, and telemetry endpoints remain disabled until the gates in
 - [Documentation Index](docs/DOCS_INDEX.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment Guide](docs/DEPLOY.md)
+- [Recovery, Guard, and Safe Mode](docs/RECOVERY.md)
 - [Upstream Governance](docs/REFERENCE_GOVERNANCE.md)
 
 ## License

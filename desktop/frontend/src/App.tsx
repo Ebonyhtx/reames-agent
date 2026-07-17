@@ -946,6 +946,7 @@ export default function App() {
     reorderTabs,
     openTopicSession,
     activateTopic,
+    noteNavigationIntent,
     syncActiveTab,
     ensureBlankTab,
     ensureBlankSurface,
@@ -2621,11 +2622,16 @@ export default function App() {
     }
   }, [activateTopic, ensureBlankSurface, ensureBlankTab, openChannelSession, openGlobalTab, openProjectTab, openTopicSession, refreshHistoryView, resumeSession, seedActiveTabMeta, showToast, singleSurfaceLayout, t]);
 
-  const enqueueNavigation = useCallback((input: DesktopNavigationInput): Promise<void> => enqueueNavigationRequest(
-    { seqRef: navigationSeqRef, runningRef: navigationRunningRef, pendingRef: navigationPendingRef },
-    input,
-    runNavigationRequest,
-  ), [runNavigationRequest]);
+  const enqueueNavigation = useCallback((input: DesktopNavigationInput): Promise<void> => {
+    // Invalidate the running activation when the newer click is queued, not
+    // only when the serialized queue eventually starts it.
+    noteNavigationIntent();
+    return enqueueNavigationRequest(
+      { seqRef: navigationSeqRef, runningRef: navigationRunningRef, pendingRef: navigationPendingRef },
+      input,
+      runNavigationRequest,
+    );
+  }, [noteNavigationIntent, runNavigationRequest]);
 
   const openBlankSession = useCallback((scope: string, workspaceRoot: string): Promise<void> =>
     enqueueNavigation({ kind: "blank", scope, workspaceRoot: scope === "project" ? workspaceRoot : "" }),

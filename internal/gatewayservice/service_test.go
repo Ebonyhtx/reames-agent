@@ -61,6 +61,33 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 	}
 }
 
+func TestEveryServiceManagerUsesGatewayRunRecoveryPreflight(t *testing.T) {
+	cases := []struct {
+		goos string
+		exe  string
+		home string
+		dir  string
+	}{
+		{goos: "linux", exe: "/opt/reames/reames-agent", home: "/home/reames/.reames-agent", dir: "/srv/work"},
+		{goos: "darwin", exe: "/Applications/Reames Agent/reames-agent", home: "/Users/reames/.reames-agent", dir: "/Users/reames/work"},
+		{goos: "windows", exe: `C:\Program Files\Reames Agent\reames-agent.exe`, home: `C:\Users\reames\.reames-agent`, dir: `C:\work`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.goos, func(t *testing.T) {
+			plan, err := BuildPlan(tc.goos, Options{Action: "install", Executable: tc.exe, Home: tc.home, Dir: tc.dir})
+			if err != nil {
+				t.Fatal(err)
+			}
+			formatted := FormatPlan(plan)
+			for _, want := range []string{"gateway", "run", "shared credential-free recovery preflight"} {
+				if !strings.Contains(formatted, want) {
+					t.Fatalf("%s service plan missing %q:\n%s", tc.goos, want, formatted)
+				}
+			}
+		})
+	}
+}
+
 func TestLinuxInstallRollbackRemovesNewDefinitionAfterStartFailure(t *testing.T) {
 	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
 	plan := Plan{

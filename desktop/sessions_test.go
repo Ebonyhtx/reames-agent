@@ -301,6 +301,10 @@ func TestReconcileDesktopCleanupPendingDeleteMovesArtifactsToTrash(t *testing.T)
 	if err := os.WriteFile(sessionPath, []byte(`{"role":"user","content":"pending"}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	damagedPath := store.SessionEventLogDamaged(sessionPath)
+	if err := os.WriteFile(damagedPath, []byte(`{"damaged_tail":true}`+"\ntorn bytes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(jobs.ArtifactDir(sessionPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -498,6 +502,10 @@ func TestRestoreTrashedSessionFile(t *testing.T) {
 	if err := os.WriteFile(eventLogPath, []byte(`{"schema_version":1,"type":"replace","messages":[{"role":"user","content":"event"}]}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	damagedPath := store.SessionEventLogDamaged(sessionPath)
+	if err := os.WriteFile(damagedPath, []byte(`{"damaged_tail":true}`+"\ntorn bytes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	eventIndexPath := store.SessionEventIndex(sessionPath)
 	if err := os.WriteFile(eventIndexPath, []byte(`{"schema_version":1,"message_count":1}`), 0o644); err != nil {
 		t.Fatal(err)
@@ -531,7 +539,13 @@ func TestRestoreTrashedSessionFile(t *testing.T) {
 	if err := deleteSessionFile(dir, sessionPath); err != nil {
 		t.Fatalf("trash: %v", err)
 	}
+	if _, err := os.Stat(damagedPath); !os.IsNotExist(err) {
+		t.Fatalf("damaged salvage sidecar remained live: %v", err)
+	}
 	trashPath := filepath.Join(dir, sessionTrashDir, "session.jsonl", "session.jsonl")
+	if _, err := os.Stat(filepath.Join(filepath.Dir(trashPath), "session.events.jsonl.damaged")); err != nil {
+		t.Fatalf("damaged salvage sidecar missing from trash: %v", err)
+	}
 	if err := restoreTrashedSessionFile(dir, trashPath); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
@@ -547,6 +561,9 @@ func TestRestoreTrashedSessionFile(t *testing.T) {
 	}
 	if _, err := os.Stat(eventLogPath); err != nil {
 		t.Fatalf("session event log should be restored: %v", err)
+	}
+	if _, err := os.Stat(damagedPath); err != nil {
+		t.Fatalf("damaged salvage sidecar should be restored: %v", err)
 	}
 	if _, err := os.Stat(eventIndexPath); err != nil {
 		t.Fatalf("session event index should be restored: %v", err)

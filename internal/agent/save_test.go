@@ -20,6 +20,103 @@ func touch(path string, t time.Time) error {
 	return os.Chtimes(path, t, t)
 }
 
+func TestSnapshotUpToDateFastPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	s := NewSession("sys")
+	s.Add(provider.Message{Role: provider.RoleUser, Content: "hello"})
+	s.Add(provider.Message{Role: provider.RoleAssistant, Content: "hi"})
+	if err := s.SaveSnapshot(path); err != nil {
+		t.Fatal(err)
+	}
+	if !s.snapshotUpToDate(path) {
+		t.Fatal("snapshot is not current immediately after a verified save")
+	}
+	logPath := store.SessionEventLog(path)
+	f, err := os.OpenFile(logPath, os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write([]byte("{torn")); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if s.snapshotUpToDate(path) {
+		t.Fatal("external event-log change did not disarm fast path")
+	}
+	if err := s.SaveSnapshot(path); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(after), "{torn") {
+		t.Fatal("snapshot fast-path fallback did not repair the torn event log")
+	}
+	if !s.snapshotUpToDate(path) {
+		t.Fatal("verified repair did not re-arm fast path")
+	}
+
+	s.Add(provider.Message{Role: provider.RoleUser, Content: "again"})
+	if s.snapshotUpToDate(path) {
+		t.Fatal("message mutation did not disarm fast path")
+	}
+	if err := s.SaveSnapshot(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadSession(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.snapshotUpToDate(path) {
+		t.Fatal("load-adopted baseline armed fast path before a verified save")
+	}
+	if got := loaded.Messages[len(loaded.Messages)-1].Content; got != "again" {
+		t.Fatalf("tail = %q", got)
+	}
+}
+
+func TestRepairedSessionArmsSnapshotFastPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	sessionWithTurns(t, path, 2)
+	f, err := os.OpenFile(store.SessionEventLog(path), os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write([]byte(`{"schema_version":1,"type":"ap`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := LoadSession(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.eventLogDamaged || s.snapshotUpToDate(path) {
+		t.Fatal("damaged loaded session incorrectly uses fast path")
+	}
+	s.Add(provider.Message{Role: provider.RoleUser, Content: "heal"})
+	if err := s.SaveSnapshot(path); err != nil {
+		t.Fatal(err)
+	}
+	if !s.snapshotUpToDate(path) {
+		t.Fatal("verified healing save did not re-arm fast path")
+	}
+	s.normalizedDirty = true
+	if s.snapshotUpToDate(path) {
+		t.Fatal("pending normalization repair did not disarm fast path")
+	}
+	if err := s.SaveSnapshot(path); err != nil {
+		t.Fatal(err)
+	}
+	if !s.snapshotUpToDate(path) {
+		t.Fatal("normalization repair save did not re-arm fast path")
+	}
+}
+
 // TestSaveLoadRoundTrip is the contract `reamesAgent --resume` depends on: a
 // session written to disk reloads byte-for-byte, including tool calls and
 // reasoning content (which the model wants to keep across resumes for cache
@@ -798,7 +895,7 @@ func TestSaveSnapshotAllowsExactAppendFromStaleRevisionBaseline(t *testing.T) {
 	}
 
 	s.Add(provider.Message{Role: provider.RoleUser, Content: "two"})
-	s.setPersistedBaseline(path, staleBaseline.digest, staleBaseline.version, staleBaseline.revision, true, 0)
+	s.setPersistedBaseline(path, staleBaseline.digest, staleBaseline.version, staleBaseline.revision, true, true, 0)
 	if err := s.SaveSnapshot(path); err != nil {
 		t.Fatalf("SaveSnapshot exact append from stale revision baseline: %v", err)
 	}
@@ -846,7 +943,7 @@ func TestSaveSnapshotAllowsCompatibleSystemAppendFromStaleRevisionBaseline(t *te
 	msgs[0] = provider.Message{Role: provider.RoleSystem, Content: "sys v2"}
 	msgs = append(msgs, provider.Message{Role: provider.RoleUser, Content: "two"})
 	s.Replace(msgs)
-	s.setPersistedBaseline(path, staleBaseline.digest, staleBaseline.version, staleBaseline.revision, true, 0)
+	s.setPersistedBaseline(path, staleBaseline.digest, staleBaseline.version, staleBaseline.revision, true, true, 0)
 	if err := s.SaveSnapshot(path); err != nil {
 		t.Fatalf("SaveSnapshot compatible-system append from stale baseline: %v", err)
 	}
@@ -2037,6 +2134,10 @@ func TestReconcileOverlongMigratesDiagnosticSidecars(t *testing.T) {
 		[]byte(`{"outcome":"forked_recovery_branch"}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(store.SessionEventLogDamaged(oldPath),
+		[]byte(`{"damaged_tail":true}`+"\ntorn bytes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := ReconcileSessionSidecars(dir); err != nil {
 		t.Fatalf("ReconcileSessionSidecars: %v", err)
@@ -2049,10 +2150,13 @@ func TestReconcileOverlongMigratesDiagnosticSidecars(t *testing.T) {
 	if _, err := os.Stat(store.SessionEventLog(newPath)); err != nil {
 		t.Fatalf("event log not migrated with the rename: %v", err)
 	}
+	if _, err := os.Stat(store.SessionEventLogDamaged(newPath)); err != nil {
+		t.Fatalf("damaged salvage sidecar not migrated with the rename: %v", err)
+	}
 	if _, err := os.Stat(store.SessionConflictLog(newPath)); err != nil {
 		t.Fatalf("conflict log not migrated with the rename: %v", err)
 	}
-	for _, gone := range []string{oldPath, store.SessionEventLog(oldPath), store.SessionConflictLog(oldPath)} {
+	for _, gone := range []string{oldPath, store.SessionEventLog(oldPath), store.SessionEventLogDamaged(oldPath), store.SessionConflictLog(oldPath)} {
 		if _, err := os.Stat(gone); !os.IsNotExist(err) {
 			t.Fatalf("%s still present under the retired stem (err=%v)", filepath.Base(gone), err)
 		}

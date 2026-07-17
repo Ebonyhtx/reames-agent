@@ -311,6 +311,9 @@ func repairSessionEventLogTail(sessionPath string) error {
 	if replay.lastGoodEnd >= replay.size {
 		return nil
 	}
+	if err := preserveDamagedEventLogTail(sessionPath, path, replay.lastGoodEnd, replay.size); err != nil {
+		return fmt.Errorf("preserve damaged event log tail: %w", err)
+	}
 	if err := os.Truncate(path, replay.lastGoodEnd); err != nil {
 		return err
 	}
@@ -328,6 +331,42 @@ func repairSessionEventLogTail(sessionPath string) error {
 		return err
 	}
 	return f.Close()
+}
+
+// preserveDamagedEventLogTail appends bytes about to be truncated to a
+// forensic sidecar. The sidecar is never replayed and follows the transcript
+// through delete, restore, redaction, rename, and diagnostic-bundle flows.
+func preserveDamagedEventLogTail(sessionPath, logPath string, from, to int64) error {
+	if to <= from {
+		return nil
+	}
+	src, err := os.Open(logPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	if _, err := src.Seek(from, io.SeekStart); err != nil {
+		return err
+	}
+	dst, err := os.OpenFile(store.SessionEventLogDamaged(sessionPath), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	header := fmt.Sprintf("{\"damaged_tail\":true,\"preserved_at\":%q,\"log_offset\":%d,\"bytes\":%d}\n",
+		time.Now().UTC().Format(time.RFC3339), from, to-from)
+	if _, err := dst.WriteString(header); err != nil {
+		_ = dst.Close()
+		return err
+	}
+	if _, err := io.CopyN(dst, src, to-from); err != nil && !errors.Is(err, io.EOF) {
+		_ = dst.Close()
+		return err
+	}
+	if _, err := dst.WriteString("\n"); err != nil {
+		_ = dst.Close()
+		return err
+	}
+	return dst.Close()
 }
 
 func appendSessionEvent(sessionPath string, rec sessionEventRecord, sync bool) error {

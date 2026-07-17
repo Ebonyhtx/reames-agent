@@ -9,6 +9,7 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"reames-agent/desktop/internal/update"
+	"reames-agent/internal/repair"
 )
 
 // updater_app.go is the auto-updater's bound command surface — the App methods the
@@ -125,17 +126,29 @@ func (a *App) InstallUpdate() error {
 		return a.failUpdate(err)
 	}
 	a.emitProgress("installing", meta.Size, meta.Size, "")
+	if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
+		target := currentExecutablePath()
+		if target == "" {
+			return a.failUpdate(fmt.Errorf("update: current executable path is unavailable"))
+		}
+		if _, err := repair.PrepareFileUpdate(version, meta.Version, target, releaseUnitSiblingPaths()...); err != nil {
+			return a.failUpdate(err)
+		}
+	}
 	switch runtime.GOOS {
 	case "windows":
-		err = applyWindowsFile(meta.Path)
+		err = applyWindowsFile(meta.Path, meta.Version)
 	case "darwin":
-		err = applyMac(meta.Path)
+		err = applyMac(meta.Path, meta.Version)
 	case "linux":
 		err = applyLinux(data)
 	default:
 		err = fmt.Errorf("self-update unsupported on %s", runtime.GOOS)
 	}
 	if err != nil {
+		err = retainFailedUpdate(runtime.GOOS, meta.Version, err, repair.MarkUpdateApplyFailed)
+		// Keep the prepared transaction and verified backups. Deleting them here
+		// would destroy the only recovery path after a partial apply.
 		return a.failUpdate(err)
 	}
 
@@ -146,10 +159,23 @@ func (a *App) InstallUpdate() error {
 	// macOS the installer/helper we launched takes over once we exit.
 	a.shutdown(a.ctx)
 	if runtime.GOOS == "linux" {
-		_ = relaunch()
+		_ = relaunchThroughGuard()
 	}
 	os.Exit(0)
 	return nil
+}
+
+func retainFailedUpdate(goos, toVersion string, applyErr error, markFailed func(string, string) error) error {
+	if applyErr == nil || goos != "linux" {
+		return applyErr
+	}
+	// Linux may already have replaced Guard before Desktop replacement fails.
+	// Record that attribution so the next Guard launch rolls the complete
+	// release unit back instead of treating the mixed install as probation.
+	if err := markFailed(toVersion, applyErr.Error()); err != nil {
+		return fmt.Errorf("%w; record update failure: %v", applyErr, err)
+	}
+	return applyErr
 }
 
 // ApplyUpdate is kept for older frontend bindings and tests. New UI code uses the

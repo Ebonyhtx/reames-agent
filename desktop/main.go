@@ -22,6 +22,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 
 	"reames-agent/internal/config"
+	"reames-agent/internal/repair"
 	"reames-agent/internal/sandbox"
 )
 
@@ -197,8 +198,24 @@ func main() {
 		fmt.Fprintf(os.Stderr, "desktop: --home: %v\n", parseErr)
 		os.Exit(2)
 	}
+	launch := parseDesktopLaunchArgs(os.Args[1:])
+	if config.SafeModeRequested() {
+		launch.SafeMode = true
+	}
+	tracker := repair.NewStartupTracker("")
+	if tracker.SafeModeRecommended() {
+		launch.SafeMode = true
+	}
+	if launch.SafeMode {
+		_ = os.Setenv("REAMES_AGENT_SAFE_MODE", "1")
+	}
+	startupState, trackerErr := tracker.Begin(version, launch.SafeMode)
+	trackerOwned := trackerErr == nil && startupState.PID == os.Getpid()
 
 	app := NewApp()
+	if trackerOwned {
+		app.startupTracker = tracker
+	}
 
 	// Restore saved window size, or fall back to the default.
 	width, height := 1240, 720
@@ -276,6 +293,23 @@ func main() {
 		},
 	})
 	if err != nil {
+		if trackerOwned {
+			_ = tracker.MarkFailed(err)
+		}
 		println("Error:", err.Error())
 	}
+}
+
+type desktopLaunchOptions struct {
+	SafeMode bool
+}
+
+func parseDesktopLaunchArgs(args []string) desktopLaunchOptions {
+	var out desktopLaunchOptions
+	for _, arg := range args {
+		if arg == "--safe-mode" {
+			out.SafeMode = true
+		}
+	}
+	return out
 }

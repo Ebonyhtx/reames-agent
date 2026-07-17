@@ -745,8 +745,9 @@ func waitForTurnDone(t *testing.T, events <-chan event.Event) {
 	t.Helper()
 	// Goal/AutoResearch tests can perform several filesystem-backed lifecycle
 	// steps before TurnDone. Keep the assertion bounded while allowing the same
-	// slow-runner margin used by the session recovery tests.
-	deadline := time.After(10 * time.Second)
+	// slow-runner margin used by the session recovery tests. Race builds make
+	// the AutoResearch checkpoint lifecycle substantially slower on Windows.
+	deadline := time.After(30 * time.Second)
 	for {
 		select {
 		case e := <-events:

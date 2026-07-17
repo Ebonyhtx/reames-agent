@@ -365,6 +365,79 @@ func TestGatewayCommandHelpAndRunDispatch(t *testing.T) {
 	}
 }
 
+func TestRecoverySensitiveCommandsBypassAmbientConfigInitialization(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       func(selectedHome, root string) []string
+		wantRC     int
+		wantOutput string
+	}{
+		{
+			name: "gateway recovery status",
+			args: func(selectedHome, root string) []string {
+				return []string{"gateway", "recovery-status", "--json", "--home", selectedHome, "--root", root}
+			},
+			wantRC:     0,
+			wantOutput: `"schemaVersion": 1`,
+		},
+		{
+			name: "gateway run",
+			args: func(selectedHome, root string) []string {
+				return []string{"gateway", "run", "--home", selectedHome, "--dir", root}
+			},
+			wantRC:     1,
+			wantOutput: "gateway is not enabled",
+		},
+		{
+			name: "bot start compatibility entrypoint",
+			args: func(selectedHome, root string) []string {
+				return []string{"bot", "start", "--home", selectedHome, "--dir", root}
+			},
+			wantRC:     1,
+			wantOutput: "bot is not enabled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isolateCLIConfigHome(t)
+			ambientConfig := config.UserConfigPath()
+			if err := os.MkdirAll(filepath.Dir(ambientConfig), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			const broken = "[broken\n"
+			if err := os.WriteFile(ambientConfig, []byte(broken), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			selectedHome := filepath.Join(t.TempDir(), "selected-home")
+			root := t.TempDir()
+			var stdout string
+			stderr := captureStderr(t, func() {
+				stdout = captureStdout(t, func() {
+					if rc := Run(tt.args(selectedHome, root), "test-version"); rc != tt.wantRC {
+						t.Fatalf("Run() rc = %d, want %d", rc, tt.wantRC)
+					}
+				})
+			})
+			combined := stdout + stderr
+			if !strings.Contains(combined, tt.wantOutput) {
+				t.Fatalf("Run() output missing %q:\n%s", tt.wantOutput, combined)
+			}
+			if strings.Contains(stderr, "config migration failed") || strings.Contains(stderr, "config upgrade failed") {
+				t.Fatalf("recovery-sensitive command initialized ambient config before preflight:\n%s", stderr)
+			}
+			got, err := os.ReadFile(ambientConfig)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != broken {
+				t.Fatalf("ambient config changed before recovery preflight:\n%s", got)
+			}
+		})
+	}
+}
+
 func TestGatewayDoctorAliasesBotDoctor(t *testing.T) {
 	isolateCLIConfigHome(t)
 

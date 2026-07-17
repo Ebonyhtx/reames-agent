@@ -505,6 +505,55 @@ resolved and prepended to the message as a tagged block the model can read.
   bottom-region menu changes height only on these discrete actions, never per
   streamed token, so scrollback stays clean (§ rendering).
 
+### 3.10 Offline recovery (`internal/repair`, `internal/guardcmd`)
+
+Process-level recovery is intentionally outside the normal Agent assembly.
+`reames-agent-guard` and the CLI's early `guard` dispatch may import recovery,
+config validation/path, atomic file, and plugin-state code, but must not import
+boot, Provider implementations, MCP transports, Hooks, Bot runtime, LSP, or the
+Agent loop.
+
+The durable recovery model consists of:
+
+- a cross-process locked startup ledger with
+  `starting|ready|healthy|clean-exit|failed`, live-PID ownership, a five-minute
+  / three-incomplete-start crash window, and a 30-second health probation;
+- at most five SHA-256 healthy global-config snapshots plus quarantine,
+  restore, and undo transactions;
+- one pending-update transaction for the complete installed release unit,
+  including files that did not exist before the update;
+- an installer apply-failure marker and a single `repair.Report` projection for
+  startup, config, pending update, current/previous binaries, session stores,
+  plugin state, and findings.
+
+Automatic binary rollback is permitted only while the pending-update lock is
+held and only when startup version equals `toVersion`, target and every release
+file are inside the current Guard installation, transaction identity is still
+current, and every retained backup matches its SHA-256. Rollback stages all
+files before swapping. Failed compensation sets `mixedInstall`; callers must
+fail closed instead of launching an unverified release unit.
+
+Preparing an update must fail while any pending transaction exists; a newer
+attempt cannot overwrite the direct predecessor's backups or probation evidence.
+Windows automatic update requires the packaged native helper and must not fall
+back to an unattributed asynchronous installer. Linux partial-apply errors must
+record a durable apply-failure marker for the next Guard launch.
+
+Safe Mode (`REAMES_AGENT_SAFE_MODE=1`) loads built-in recovery defaults without
+reading/migrating user/project TOML or dotenv. It must not restore old Desktop
+tabs/sessions or start user/project Skills, Hooks, MCP, plugins, Bot, LSP,
+planner, Guardian, subagents, Memory Compiler, update checks, telemetry,
+metrics, heartbeat, startup ping, pending flushes, or recovery GC. Safe Mode is
+not an alternate Agent runtime and does not relax permissions. Desktop exposes
+only a recovery shell/status surface, and `boot.Build` must reject Provider,
+Controller, tool-registry, and Agent assembly while Safe Mode is active.
+
+`control.Controller.RecoveryStatus`, Serve `/api/recovery`, Desktop
+`GetRecoveryStatus`, Guard check, and Gateway recovery-status return the same
+`repair.Report`. `gateway run` performs this credential-free preflight before
+loading config, Providers, plugins, or channels, so OS services do not own a
+parallel recovery state machine.
+
 ## 4. Data Types (`internal/provider`)
 
 ```go
@@ -756,8 +805,9 @@ behavior. The escape-prompt and broader OS support are Phase 1's remainder (§9)
   prints or calls `os.Exit`.
 - Only `cli` / `main` decide exit codes and user-facing messages.
 - Tool execution errors are fed back to the model, not fatal.
-- Network layer should apply bounded exponential backoff on 429 / 5xx
-  (interface reserved; implementation may follow).
+- Network retries use bounded exponential backoff on 429 / 5xx and bound reads
+  of non-OK bodies; a peer that sends headers and stalls the body must not freeze
+  the retry loop indefinitely.
 
 ## 7. Code Style
 
@@ -768,6 +818,9 @@ behavior. The escape-prompt and broader OS support are Phase 1's remainder (§9)
 ## 8. Distribution
 
 - Build: `CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o reames-agent ./cmd/reames-agent`
+- Recovery Guard: build `./cmd/reames-agent-guard` for the same six targets.
+  Desktop packages must ship Guard and Desktop as one release unit; Windows may
+  additionally ship the GUI launcher and update helper.
 - Cross matrix: `darwin|linux|windows` × `amd64|arm64`.
 - Version injected via ldflags (`git describe --tags --always`).
 - Install: prebuilt binary / `go install` / future `brew tap`.

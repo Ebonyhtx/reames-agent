@@ -16,6 +16,7 @@ import (
 	"reames-agent/internal/memory"
 	"reames-agent/internal/plugin"
 	"reames-agent/internal/provider"
+	"reames-agent/internal/repair"
 	"reames-agent/internal/skill"
 )
 
@@ -183,6 +184,12 @@ type Status interface {
 	EvidenceSnapshot() evidence.Snapshot
 }
 
+// RecoveryControl projects the shared credential-free recovery report. It does
+// not mutate runtime state or create a second recovery state machine.
+type RecoveryControl interface {
+	RecoveryStatus() (repair.Report, error)
+}
+
 // DeliveryControl exposes isolated writer-subagent deliveries through the same
 // transport-neutral Controller boundary used by every frontend.
 type DeliveryControl interface {
@@ -236,6 +243,7 @@ type SessionAPI interface {
 	MemoryControl
 	Capabilities
 	Status
+	RecoveryControl
 	DeliveryControl
 	SessionPersistence
 	Input
@@ -254,6 +262,7 @@ var (
 	_ MemoryControl        = (*Controller)(nil)
 	_ Capabilities         = (*Controller)(nil)
 	_ Status               = (*Controller)(nil)
+	_ RecoveryControl      = (*Controller)(nil)
 	_ DeliveryControl      = (*Controller)(nil)
 	_ SessionPersistence   = (*Controller)(nil)
 	_ Input                = (*Controller)(nil)

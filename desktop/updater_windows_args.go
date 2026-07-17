@@ -13,7 +13,7 @@ func installerCommandLine(installer, dir string) string {
 	return line
 }
 
-func windowsUpdateHandoffArgs(parentPID int, installer, installDir, relaunch string) []string {
+func windowsUpdateHandoffArgs(parentPID int, installer, installDir, relaunch, toVersion, stateHome string) []string {
 	args := []string{
 		"--parent-pid", strconv.Itoa(parentPID),
 		"--installer", installer,
@@ -23,6 +23,12 @@ func windowsUpdateHandoffArgs(parentPID int, installer, installDir, relaunch str
 	}
 	if relaunch != "" {
 		args = append(args, "--relaunch", relaunch)
+	}
+	if toVersion != "" {
+		args = append(args, "--to-version", toVersion)
+	}
+	if stateHome != "" {
+		args = append(args, "--state-home", stateHome)
 	}
 	return args
 }

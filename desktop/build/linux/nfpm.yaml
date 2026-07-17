@@ -29,6 +29,10 @@ contents:
     dst: /usr/bin/reames-agent-desktop
     file_info:
       mode: 0755
+  - src: ./build/bin/reames-agent-guard
+    dst: /usr/bin/reames-agent-guard
+    file_info:
+      mode: 0755
   - src: ./build/linux/reames-agent.desktop
     dst: /usr/share/applications/reames-agent.desktop
     file_info:

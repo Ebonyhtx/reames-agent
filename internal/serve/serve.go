@@ -329,6 +329,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /ready", s.ready)
 	mux.HandleFunc("GET /api/board", s.boardStatus)
+	mux.HandleFunc("GET /api/recovery", s.recoveryStatus)
 	mux.HandleFunc("POST /api/feedback", s.collectFeedback)
 	mux.HandleFunc("GET /api/feedback/summary", s.feedbackSummary)
 	mux.HandleFunc("POST /api/feedback/draft", s.feedbackDraft)
@@ -1464,4 +1465,18 @@ func (s *Server) boardStatus(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, board.Build(ctrl, nil))
+}
+
+func (s *Server) recoveryStatus(w http.ResponseWriter, _ *http.Request) {
+	ctrl := s.ctl()
+	if ctrl == nil {
+		http.Error(w, "controller not initialized", http.StatusServiceUnavailable)
+		return
+	}
+	report, err := ctrl.RecoveryStatus()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	writeJSON(w, report)
 }

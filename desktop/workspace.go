@@ -168,6 +168,17 @@ func ensureWorkspace() {
 	}
 }
 
+// ensureSafeModeWorkspace avoids reading remembered Desktop state. It only
+// leaves a writable cwd in place or falls back to the user's home directory.
+func ensureSafeModeWorkspace() {
+	if cwdWritable() {
+		return
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		_ = os.Chdir(home)
+	}
+}
+
 // cwdWritable reports whether the current directory accepts a file write — the
 // reliable test for the read-only "/" a GUI launch lands in.
 func cwdWritable() bool {

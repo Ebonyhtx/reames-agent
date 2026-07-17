@@ -28,9 +28,9 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
 ## 已验证基线
 
 - M0、M1、M2、M3、M4 已按路线图门槛关闭。
-- 本批前的最新已验证基线为 `cc7ffe3 fix: absorb Reasonix security and provider updates`。普通 CI
-  `29528150975` 的 8 个 jobs 与 CodeQL `29528150998` 的 Go、JavaScript/TypeScript、
-  Actions 3 个 jobs 全绿。当前 HEAD 与远端状态必须以 Git/GitHub Actions 为准。
+- 本批前远端 `main` 为 `bc40db5 feat: isolate writer subagents in managed worktrees`；当前 P2
+  Guard/Safe Mode、Reasonix session reliability 与文档改动尚未提交，必须先以工作树和本批最终
+  全量验证为准，不能沿用更早 CI 结果冒充当前 HEAD。
 - 同批 workflow 已迁移到 Node.js 24 action majors；上述远端日志未再出现 Node.js 20
   弃用告警。public-readiness 合同扫描 `.yml/.yaml`，拒绝旧 major、未知 ref 和未经审计的
   commit pin。
@@ -61,12 +61,36 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
 - Reasonix MCP identity P0 已按 Reames 边界收口：宿主本地 receipt、identity/capability drift、
   mutable launcher exact content lock、legacy seed 单次迁移、destructive fresh-human、Desktop
   reverify 和共享 Host sibling registry 刷新，见
-  `docs/audits/2026-07-17-m5-mcp-identity-trust.md`。
+`docs/audits/2026-07-17-m5-mcp-identity-trust.md`。
 
-本地门禁已经覆盖 root build/vet/internal 全测、Desktop build/vet/full test、前端
-`test:all`/production build/bundle budget、121 项 Python 合同（2 skipped）、文档/公开/部署/
-发布合同、actionlint、`pluginregistry`/CLI race、六目标 CLI 与 Linux/macOS 测试二进制交叉
-编译；clean clone 构建后 tracked 工作树保持干净。详细证据见：
+## P1/P2 当前边界
+
+- P1 writer worktree isolation 已完成：writer-capable task/Skill/Subagent 使用独立
+  `reames/subagent-*` branch/worktree、workspace/ref 跨进程锁和父会话统一交付事务；ambiguous
+  post-apply crash 保持 `acceptance_interrupted`，不自动覆盖人工 drift。
+- P2 offline Guard/Safe Mode 已实现：三平台 Desktop 入口默认经过 Guard；五分钟三次失败账本、
+  30 秒健康观察期、配置快照、完整安装单元 pending transaction、Windows installer failure
+  marker 和 mixed-install fail-closed 共用 `internal/repair`。
+- Safe Mode 不读取用户/项目 TOML 或 dotenv，不恢复旧 tab/session；Desktop 只建立 recovery-only
+  shell，`boot.Build` 拒绝 Provider、Controller、工具和普通 Agent 装配，并禁用 MCP、plugin、Hook、
+  Bot、LSP、planner、Guardian、subagent、Memory Compiler、update/telemetry/metrics 等运行面。
+- `control.Controller.RecoveryStatus()`、Serve `/api/recovery`、Desktop `GetRecoveryStatus()`、
+  Guard check 与 `gateway recovery-status` 共用同一报告；`gateway run` 在加载普通 runtime 前执行
+  credential-free preflight。
+- Reasonix 已审查到 `c966d0279629`，采用 `dae65e25` 的 stalled error-body deadline、verified
+  snapshot fast path、damaged event-log salvage 和 last-click-wins；不直接跟随删除 Memory Compiler。
+  Hermes/Codex/MiMo/Claude/Kimi/Scream Code 均逐项审查并显式接受到 lock 中记录的 SHA；没有使用
+  `--accept-all`。Codex runtime projection 仅作为 P3 Recovery Center 参考，其他最新增量无采用项。
+
+权威设计、运维与证据见 `docs/RECOVERY.zh-CN.md` 和
+`docs/audits/2026-07-17-p2-offline-guard-safe-mode.md`。
+
+本批本地门禁已经覆盖 root build/vet/internal 全测、Desktop build/vet/full test、前端
+`test:all`/production build/bundle budget、126 项 Python 合同（2 skipped）、文档/公开/部署/
+发布/Desktop artifact 合同、actionlint、恢复相关 Root 与 Desktop race、六目标 CLI + Guard
+`CGO_ENABLED=0` 交叉编译；`git diff --check` 与 tracked 生成物检查均干净。`--no-local` clean clone
+又从空 Frontend `node_modules` 重跑 Root/Desktop/Frontend/合同并保持 tracked clean；当前只剩单次
+push 后的远端 CI/CodeQL 与安装态 candidate 证据。详细证据见：
 
 - `docs/audits/2026-07-14-m5-plugin-lifecycle-trust.md`
 - `docs/audits/2026-07-15-m5-plugin-process-isolation.md`
@@ -89,11 +113,15 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
 
 ## 下一执行顺序
 
-1. 进入 P1：给现有可写 `task`/Skill/Subagent 增加 workspace lease、独立 worktree、
-   取消/崩溃回收和父会话交付，不建立第二套 Agent runtime。
-2. 若生产 registry 的人员、密钥、域名和对象存储条件到位，按双语 runbook 执行真实仪式、
+1. 完成当前 P2 的 root/Desktop/frontend/race/六目标/合同/clean-clone 全量验证，清理生成产物，
+   形成一个大提交并单次 push；随后等待普通 CI、CodeQL 和必要的 Desktop candidate，失败则在同一
+   批次修复，不用碎片 push 消耗 CI。
+2. P3 优先建立低噪音 Desktop Recovery Center，并用真实三平台签名安装包补升级失败、crash-loop
+   自动回滚、Safe Mode 和恢复动作 smoke；继续只投影 `repair.Report`，不新增状态机。
+3. 若生产 registry 的人员、密钥、域名和对象存储条件到位，按双语 runbook 执行真实仪式、
    发布、轮换和 compromise drill，并独立归档证据；未到位时保持明确阻塞，不降低门槛。
-3. 取得干净云节点、真实 IM 应用或签名设施后，关闭 M6 的真实部署、回环和发布证据。
+4. 取得干净云节点、真实 IM 应用或签名设施后，关闭 M6 的 logout/reboot、Gateway recovery
+   preflight 实启、真实渠道回环和发布证据。
 
 长期 GOAL 只有在代码、测试、文档一致、`main` 与最新 CI/CodeQL 全绿，且最近里程碑的所有
 可执行事项关闭、剩余事项均准确标记为外部依赖时才能完成。

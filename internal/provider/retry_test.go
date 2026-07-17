@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -157,6 +158,58 @@ func TestSendWithRetryAuthGivesUpAfterMaxAuthRetries(t *testing.T) {
 	var authErr *AuthError
 	if !errors.As(err, &authErr) || !authErr.HasKey {
 		t.Fatalf("want *AuthError with HasKey=true, got %v", err)
+	}
+}
+
+type stallingBody struct {
+	closeOnce sync.Once
+	closed    chan struct{}
+}
+
+func newStallingBody() *stallingBody { return &stallingBody{closed: make(chan struct{})} }
+
+func (b *stallingBody) Read([]byte) (int, error) {
+	<-b.closed
+	return 0, errors.New("body closed")
+}
+
+func (b *stallingBody) Close() error {
+	b.closeOnce.Do(func() { close(b.closed) })
+	return nil
+}
+
+func TestSendWithRetryUnblocksStalledErrorBody(t *testing.T) {
+	previous := errorBodyReadTimeout
+	errorBodyReadTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { errorBodyReadTimeout = previous })
+
+	calls := 0
+	client := &http.Client{Transport: rtFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return &http.Response{StatusCode: http.StatusBadGateway, Body: newStallingBody(), Header: http.Header{}}, nil
+		}
+		return statusResp(http.StatusOK, nil), nil
+	})}
+	type result struct {
+		resp *http.Response
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		resp, err := SendWithRetry(context.Background(), client, SendOptions{Provider: "p", KeyEnv: "KEY"}, newDummyReq)
+		done <- result{resp: resp, err: err}
+	}()
+	select {
+	case got := <-done:
+		if got.err != nil {
+			t.Fatalf("stalled 502 did not recover: %v", got.err)
+		}
+		if got.resp.StatusCode != http.StatusOK || calls != 2 {
+			t.Fatalf("status=%d calls=%d", got.resp.StatusCode, calls)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("SendWithRetry wedged on a stalled error body")
 	}
 }
 

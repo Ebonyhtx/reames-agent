@@ -558,6 +558,32 @@ func TestGatewaySetupDryRunLeavesSelectedHomeUntouched(t *testing.T) {
 	}
 }
 
+func TestGatewayRecoveryStatusUsesSharedCredentialFreeReport(t *testing.T) {
+	home := t.TempDir()
+	root := t.TempDir()
+	out := captureStdout(t, func() {
+		if rc := gatewayCommand([]string{"recovery-status", "--json", "--home", home, "--root", root}, "test-version"); rc != 0 {
+			t.Fatalf("gateway recovery-status rc = %d", rc)
+		}
+	})
+	for _, want := range []string{`"schemaVersion": 1`, `"binaries"`, `"sessions"`, `"plugins"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("recovery report missing %s:\n%s", want, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("[broken\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out = captureStdout(t, func() {
+		if rc := gatewayCommand([]string{"recovery-status", "--json", "--home", home, "--root", root}, "test-version"); rc != 1 {
+			t.Fatalf("broken recovery-status rc = %d, want 1", rc)
+		}
+	})
+	if !strings.Contains(out, `"config.invalid"`) {
+		t.Fatalf("broken config not projected by shared report:\n%s", out)
+	}
+}
+
 func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
 	out := captureStdout(t, func() {
 		if rc := gatewayCommand([]string{"help"}, "test-version"); rc != 0 {

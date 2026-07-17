@@ -28,6 +28,9 @@ func Load() (*Config, error) {
 // changing the process cwd, while provider keys stay rooted in Reames Agent home.
 func LoadForRoot(root string) (*Config, error) {
 	root = resolveRoot(root)
+	if SafeModeRequested() {
+		return loadSafeModeForRoot(root), nil
+	}
 	expansionEnv := loadDotEnvForRoot(root)
 	cfg := Default()
 	cfg.setExpansionEnv(expansionEnv)
@@ -128,6 +131,48 @@ func LoadForRoot(root string) (*Config, error) {
 	resolveProviderCredentialsForRoot(root, cfg)
 	return cfg, nil
 }
+
+// SafeModeRequested reports whether this process must boot without reading
+// user/project configuration or discovering external runtime integrations.
+func SafeModeRequested() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("REAMES_AGENT_SAFE_MODE"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func loadSafeModeForRoot(root string) *Config {
+	cfg := Default()
+	cfg.safeMode = true
+	cfg.Plugins = nil
+	cfg.Skills = SkillsConfig{}
+	cfg.Bot.Enabled = false
+	cfg.Bot.Connections = nil
+	cfg.Bot.Routes = nil
+	cfg.Statusline.Command = ""
+	cfg.LSP.Enabled = false
+	cfg.Desktop.CheckUpdates = safeModeBoolPtr(false)
+	cfg.Desktop.Telemetry = safeModeBoolPtr(false)
+	cfg.Desktop.Metrics = safeModeBoolPtr(false)
+	cfg.Agent.AutoPlan = "off"
+	cfg.Agent.GuardianModel = ""
+	cfg.Agent.PlannerModel = ""
+	cfg.Agent.SubagentModel = ""
+	cfg.Agent.SubagentModels = nil
+	cfg.Agent.MemoryCompiler.Enabled = safeModeBoolPtr(false)
+	cfg.setExpansionEnv(nil)
+	return cfg
+}
+
+// LoadRecoveryDefaultsForRoot returns Safe Mode's built-in-only configuration
+// without reading TOML, dotenv files, credential stores, or project state.
+func LoadRecoveryDefaultsForRoot(root string) *Config {
+	return loadSafeModeForRoot(resolveRoot(root))
+}
+
+func safeModeBoolPtr(v bool) *bool { return &v }
 
 func (c *Config) setExpansionEnv(env map[string]string) {
 	if c == nil {
@@ -415,6 +460,26 @@ func LoadForEditWithoutCredentials(path string) *Config {
 // dry-run never changes the file it inspects.
 func LoadForEditStrict(path string, persistNormalization bool) (*Config, error) {
 	return loadForEditChecked(path, true, persistNormalization)
+}
+
+// ValidateFile parses one TOML config in isolation. It never loads credentials,
+// runs migrations, or writes the file; a missing path is valid.
+func ValidateFile(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	cfg := Default()
+	if _, err := toml.DecodeFile(path, cfg); err != nil {
+		return fmt.Errorf("config %s: %w", path, err)
+	}
+	return nil
 }
 
 func loadForEditChecked(path string, loadCredentials bool, persistNormalization bool) (*Config, error) {

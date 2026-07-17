@@ -287,7 +287,10 @@ func TestNestedTaskSharesLedgerWithoutHoldingProviderSlot(t *testing.T) {
 		if !errors.Is(err, ErrDelegationStepBudget) {
 			t.Fatalf("Execute error = %v, want shared aggregate step budget", err)
 		}
-	case <-time.After(2 * time.Second):
+	// Full-suite Windows runs can spend several seconds scheduling this
+	// goroutine while many package test binaries build/run in parallel. Keep a
+	// bounded deadlock watchdog without turning host load into a false failure.
+	case <-time.After(10 * time.Second):
 		t.Fatal("nested task deadlocked while max concurrency was one")
 	}
 	if got := prov.calls.Load(); got != 2 {

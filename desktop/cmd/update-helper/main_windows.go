@@ -13,43 +13,85 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+
+	"reames-agent/internal/repair"
 )
 
 const parentExitTimeout = 2 * time.Minute
+
+type helperDependencies struct {
+	logger          *log.Logger
+	waitForExit     func(uint32, time.Duration) error
+	setenv          func(string, string) error
+	runInstaller    func(string, string) error
+	markApplyFailed func(string, string) error
+	startRelaunch   func(string, string) error
+}
 
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
 func run(args []string) int {
+	return runWithDependencies(args, helperDependencies{
+		logger:          newLogger(),
+		waitForExit:     waitForProcessExit,
+		setenv:          os.Setenv,
+		runInstaller:    runInstaller,
+		markApplyFailed: repair.MarkUpdateApplyFailed,
+		startRelaunch:   startRelaunch,
+	})
+}
+
+func runWithDependencies(args []string, deps helperDependencies) int {
 	var parentPID uint
-	var installer, installDir, relaunch string
+	var installer, installDir, relaunch, toVersion, stateHome string
 	fs := flag.NewFlagSet("reamesAgent-update-helper", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.UintVar(&parentPID, "parent-pid", 0, "Reames Agent process id to wait for before installing")
 	fs.StringVar(&installer, "installer", "", "verified NSIS installer path")
 	fs.StringVar(&installDir, "install-dir", "", "Reames Agent installation directory")
 	fs.StringVar(&relaunch, "relaunch", "", "Reames Agent executable to start after the installer succeeds")
+	fs.StringVar(&toVersion, "to-version", "", "replacement release version")
+	fs.StringVar(&stateHome, "state-home", "", "Reames Agent repair state directory")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	logger := newLogger()
+	logger := deps.logger
+	if logger == nil {
+		logger = log.New(os.Stderr, "", log.LstdFlags)
+	}
 	if installer == "" {
 		logger.Print("missing --installer")
 		return 2
 	}
 	if parentPID != 0 {
-		if err := waitForProcessExit(uint32(parentPID), parentExitTimeout); err != nil {
+		if err := deps.waitForExit(uint32(parentPID), parentExitTimeout); err != nil {
 			logger.Printf("wait for parent process %d: %v", parentPID, err)
 			return 1
 		}
 	}
-	if err := runInstaller(installer, installDir); err != nil {
+	if stateHome != "" {
+		if err := deps.setenv("REAMES_AGENT_STATE_HOME", stateHome); err != nil {
+			logger.Printf("set repair state home: %v", err)
+			return 1
+		}
+	}
+	if err := deps.runInstaller(installer, installDir); err != nil {
 		logger.Printf("run installer: %v", err)
+		if markErr := deps.markApplyFailed(toVersion, err.Error()); markErr != nil {
+			logger.Printf("record installer failure: %v", markErr)
+			return 1
+		}
+		if relaunch != "" {
+			if launchErr := deps.startRelaunch(relaunch, installDir); launchErr != nil {
+				logger.Printf("relaunch Guard after installer failure: %v", launchErr)
+			}
+		}
 		return 1
 	}
 	if relaunch != "" {
-		if err := startRelaunch(relaunch, installDir); err != nil {
+		if err := deps.startRelaunch(relaunch, installDir); err != nil {
 			logger.Printf("relaunch: %v", err)
 			return 1
 		}

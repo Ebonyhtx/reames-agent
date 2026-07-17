@@ -71,10 +71,10 @@ type Skill struct {
 	NegativeTriggers []string
 	AutoUse          string // off | suggest | prefer | require
 	NeedsFreshData   bool
-	Cost             string // low | medium | high (advisory)
-	Tags           []string // discoverable tags (frontmatter `tags:`)
-	Platforms      []string // os compatibility filter: linux, macos, windows (empty=all)
-	RelatedSkills  []string // related skill names for progressive disclosure
+	Cost             string   // low | medium | high (advisory)
+	Tags             []string // discoverable tags (frontmatter `tags:`)
+	Platforms        []string // os compatibility filter: linux, macos, windows (empty=all)
+	RelatedSkills    []string // related skill names for progressive disclosure
 }
 
 // IsValidName reports whether name is a usable skill identifier.
@@ -85,14 +85,17 @@ func IsValidName(name string) bool { return config.IsValidSkillName(name) }
 // ReamesAgentHomeDir overrides the canonical Reames Agent home; empty uses
 // config.ReamesAgentHomeDir(), or HomeDir/.reamesAgent when HomeDir is explicitly set.
 type Options struct {
-	HomeDir         string
+	HomeDir            string
 	ReamesAgentHomeDir string
-	ProjectRoot     string
-	CustomPaths     []string
-	ExcludedPaths   []string
-	DisabledNames   []string
-	MaxDepth        int
-	DisableBuiltins bool // suppress shipped built-ins (test-only knob)
+	ProjectRoot        string
+	CustomPaths        []string
+	ExcludedPaths      []string
+	DisabledNames      []string
+	MaxDepth           int
+	DisableBuiltins    bool // suppress shipped built-ins (test-only knob)
+	// DisableDiscovery returns an empty store without probing project, user,
+	// custom, or built-in skill roots. Recovery Safe Mode uses this boundary.
+	DisableDiscovery bool
 	// Stderr is the writer for diagnostic warnings. When nil, defaults to
 	// os.Stderr. Set to io.Discard to suppress output (e.g. during model
 	// switch inside a bubbletea session).
@@ -101,15 +104,16 @@ type Options struct {
 
 // Store resolves skills across the configured roots.
 type Store struct {
-	homeDir         string
+	homeDir            string
 	reamesAgentHomeDir string
-	projectRoot     string
-	customPaths     []string
-	excludedPaths   map[string]bool
-	disabled        map[string]bool
-	maxDepth        int
-	disableBuiltins bool
-	stderr          io.Writer
+	projectRoot        string
+	customPaths        []string
+	excludedPaths      map[string]bool
+	disabled           map[string]bool
+	maxDepth           int
+	disableBuiltins    bool
+	disableDiscovery   bool
+	stderr             io.Writer
 }
 
 // New builds a Store. Relative custom paths and a relative project root are made
@@ -151,15 +155,16 @@ func New(opts Options) *Store {
 		stderr = os.Stderr
 	}
 	return &Store{
-		homeDir:         home,
+		homeDir:            home,
 		reamesAgentHomeDir: reamesAgentHome,
-		projectRoot:     root,
-		customPaths:     custom,
-		excludedPaths:   excluded,
-		disabled:        disabledNameSet(opts.DisabledNames),
-		maxDepth:        normalizeMaxDepth(opts.MaxDepth),
-		disableBuiltins: opts.DisableBuiltins,
-		stderr:          stderr,
+		projectRoot:        root,
+		customPaths:        custom,
+		excludedPaths:      excluded,
+		disabled:           disabledNameSet(opts.DisabledNames),
+		maxDepth:           normalizeMaxDepth(opts.MaxDepth),
+		disableBuiltins:    opts.DisableBuiltins,
+		disableDiscovery:   opts.DisableDiscovery,
+		stderr:             stderr,
 	}
 }
 
@@ -194,6 +199,9 @@ type discoveryRoot struct {
 // under the project root → custom paths → the Reames Agent home skills dir → other
 // home-dir convention dirs. A later root never overrides an earlier one.
 func (s *Store) roots() []discoveryRoot {
+	if s == nil || s.disableDiscovery {
+		return nil
+	}
 	type de struct {
 		dir               string
 		scope             Scope
@@ -299,6 +307,9 @@ func pathStatus(dir string) PathStatus {
 // root wins) with built-ins folded in last, sorted by name so the prefix index
 // stays stable and cacheable.
 func (s *Store) List() []Skill {
+	if s == nil || s.disableDiscovery {
+		return nil
+	}
 	byName := map[string]Skill{}
 	for _, r := range s.roots() {
 		if r.Status != StatusOK {
@@ -503,9 +514,9 @@ func (s *Store) parseSkill(path, stem string, scope Scope, requireSkillMarker bo
 		AutoUse:        parseAutoUse(fm[skillFrontmatterAutoUse]),
 		NeedsFreshData: parseBoolFrontmatter(fm[skillFrontmatterNeedsFreshData]),
 		Cost:           parseCost(fm[skillFrontmatterCost]),
-    		Tags:           parseCSVFrontmatter(fm[skillFrontmatterTags]),
-    		Platforms:      parseCSVFrontmatter(fm[skillFrontmatterPlatforms]),
-    		RelatedSkills:  parseCSVFrontmatter(fm[skillFrontmatterRelatedSkills]),
+		Tags:           parseCSVFrontmatter(fm[skillFrontmatterTags]),
+		Platforms:      parseCSVFrontmatter(fm[skillFrontmatterPlatforms]),
+		RelatedSkills:  parseCSVFrontmatter(fm[skillFrontmatterRelatedSkills]),
 	}, true
 }
 
@@ -524,9 +535,9 @@ const (
 	skillFrontmatterNeedsFreshData   = "needs-fresh-data"
 	skillFrontmatterCost             = "cost"
 
-	skillFrontmatterTags           = "tags"
-	skillFrontmatterPlatforms      = "platforms"
-	skillFrontmatterRelatedSkills  = "related-skills"
+	skillFrontmatterTags          = "tags"
+	skillFrontmatterPlatforms     = "platforms"
+	skillFrontmatterRelatedSkills = "related-skills"
 )
 
 var skillMarkerFrontmatterKeys = []string{

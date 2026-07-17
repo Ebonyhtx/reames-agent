@@ -272,6 +272,9 @@ func appendCredentialNotes(plan *Plan, opts Options) {
 	if plan == nil {
 		return
 	}
+	if opts.Action == "install" {
+		plan.Notes = append(plan.Notes, "gateway run executes the shared credential-free recovery preflight before loading config, providers, plugins, or channels")
+	}
 	if opts.Home != "" {
 		plan.Notes = append(plan.Notes,
 			"gateway service pins REAMES_AGENT_HOME="+opts.Home,

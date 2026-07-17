@@ -26,6 +26,7 @@ import (
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
 	"reames-agent/internal/event"
+	"reames-agent/internal/guardcmd"
 	"reames-agent/internal/i18n"
 	"reames-agent/internal/notify"
 	"reames-agent/internal/sandbox"
@@ -52,6 +53,19 @@ func Run(args []string, version string) int {
 	}
 	if len(args) > 0 && args[0] == sandbox.WindowsHelperCommand {
 		return sandbox.RunWindowsSandboxHelper(args[1:], os.Stdin, os.Stdout, os.Stderr)
+	}
+	// Guard must dispatch before language/config migration and normal runtime
+	// assembly so recovery remains credential-free when configuration is broken.
+	if len(args) > 0 && args[0] == "guard" {
+		return guardcmd.Run(args[1:], version, os.Stdin, os.Stdout, os.Stderr)
+	}
+	// Foreground gateways must run their shared recovery preflight before any
+	// language, theme, config load, or startup migration. recovery-status is a
+	// fully credential-free projection and must remain usable even when the
+	// ambient config is malformed. The foreground commands perform normal
+	// config migration themselves only after their preflight succeeds.
+	if rc, ok := dispatchRecoverySensitiveCommand(args, version); ok {
+		return rc
 	}
 	// Pick the UI language up front so even pre-config paths (the first-run
 	// welcome banner) come through localized. Env-only first; if a config
@@ -148,6 +162,20 @@ func Run(args []string, version string) int {
 		fmt.Fprintf(os.Stderr, i18n.M.UnknownCommandFmt+"\n\n", cmd)
 		usage()
 		return 2
+	}
+}
+
+func dispatchRecoverySensitiveCommand(args []string, version string) (int, bool) {
+	if len(args) < 2 {
+		return 0, false
+	}
+	switch {
+	case args[0] == "gateway" && (args[1] == "run" || args[1] == "recovery-status"):
+		return gatewayCommand(args[1:], version), true
+	case args[0] == "bot" && args[1] == "start":
+		return botCommand(args[1:], version), true
+	default:
+		return 0, false
 	}
 }
 

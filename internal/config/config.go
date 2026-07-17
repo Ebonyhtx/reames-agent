@@ -64,7 +64,12 @@ type Config struct {
 	providerSources          map[string]providerSourceScope
 	shadowedProjectProviders []ProviderEntry
 	expansionEnv             map[string]string
+	safeMode                 bool
 }
+
+// SafeMode reports whether this configuration was built from recovery defaults.
+// It is process-local state and is never serialized to TOML.
+func (c *Config) SafeMode() bool { return c != nil && c.safeMode }
 
 type providerSourceScope string
 

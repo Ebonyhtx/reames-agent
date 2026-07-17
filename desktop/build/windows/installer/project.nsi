@@ -78,6 +78,8 @@ Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
 !define REAMES_AGENT_DEFAULT_INSTALLDIR "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
 !define REAMES_AGENT_UPDATE_HELPER "reames-agent-update-helper.exe"
+!define REAMES_AGENT_GUARD "reames-agent-guard.exe"
+!define REAMES_AGENT_LAUNCHER "reames-agent-launcher.exe"
 !define REAMES_AGENT_UNLOCK_RETRIES 60
 InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation" # Reuse the previous install path on update; .onInit falls back to the default on first install.
 InstallDir "${REAMES_AGENT_DEFAULT_INSTALLDIR}" # Per-user install location (no admin rights required).
@@ -142,6 +144,11 @@ retry:
    FileOpen $1 "$INSTDIR\${PRODUCT_EXECUTABLE}" a
    IfErrors locked
    FileClose $1
+   IfFileExists "$INSTDIR\${REAMES_AGENT_LAUNCHER}" 0 done
+   ClearErrors
+   FileOpen $1 "$INSTDIR\${REAMES_AGENT_LAUNCHER}" a
+   IfErrors locked
+   FileClose $1
    Goto done
 
 locked:
@@ -181,6 +188,12 @@ Section
     !else
     !warning "${REAMES_AGENT_UPDATE_HELPER} was not found; Windows auto-update will fall back to installer-side waiting only."
     !endif
+    !if /FileExists "${REAMES_AGENT_GUARD}"
+    File "/oname=${REAMES_AGENT_GUARD}" "${REAMES_AGENT_GUARD}"
+    !endif
+    !if /FileExists "${REAMES_AGENT_LAUNCHER}"
+    File "/oname=${REAMES_AGENT_LAUNCHER}" "${REAMES_AGENT_LAUNCHER}"
+    !endif
 
     SetOutPath "$INSTDIR\licenses"
     File "/oname=LICENSE" "..\..\..\..\LICENSE"
@@ -190,8 +203,13 @@ Section
     File "/oname=NOTICE" "..\..\..\..\third_party\go-tuf\NOTICE"
     SetOutPath "$INSTDIR"
 
+    !if /FileExists "${REAMES_AGENT_LAUNCHER}"
+    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${REAMES_AGENT_LAUNCHER}" "launch --detach"
+    CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${REAMES_AGENT_LAUNCHER}" "launch --detach"
+    !else
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    !endif
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
@@ -207,6 +225,8 @@ Section "uninstall"
     ; Precision uninstall: delete main application files
     Delete "$INSTDIR\${PRODUCT_EXECUTABLE}"
     Delete "$INSTDIR\${REAMES_AGENT_UPDATE_HELPER}"
+	Delete "$INSTDIR\${REAMES_AGENT_GUARD}"
+	Delete "$INSTDIR\${REAMES_AGENT_LAUNCHER}"
 	RMDir /r "$INSTDIR\licenses"
 
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"

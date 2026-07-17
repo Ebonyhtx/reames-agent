@@ -51,7 +51,9 @@ python scripts/check_desktop_artifacts.py path/to/downloaded-artifact.zip
 python scripts/check_desktop_artifacts.py path/to/expanded-artifacts/
 ```
 
-这个离线检查会验证 Windows portable zip 包含 `reames-agent-update-helper.exe`，Linux tar/deb 和 macOS zip/dmg 的关键文件结构也符合 `scripts/desktop-build.sh` 的约定。
+这个离线检查会验证 Windows portable zip 同时包含 Guard、GUI launcher、真实 Desktop 与
+`reames-agent-update-helper.exe`，Linux tar 包含 Guard + Desktop，macOS app 包含 Guard entrypoint +
+Wails Desktop；Linux deb 和 macOS dmg 的关键容器结构也必须符合 `scripts/desktop-build.sh` 的约定。
 
 同一 workflow 随后在原生 runner 上执行安装/启动 smoke：Linux 安装实际 `.deb` 并在 Xvfb 中要求可见窗口；macOS 挂载实际 `.dmg`、复制和校验 universal `.app` 后启动；Windows 静默安装实际 NSIS、验证 per-user 注册与 update helper、检查窗口消息泵，再运行截图无关的 UIA 交互链路、严格 InvokePattern 可访问性链路和真实 Go 后端插件生命周期，最后静默卸载。
 

@@ -45,6 +45,7 @@ import (
 	"reames-agent/internal/notify"
 	"reames-agent/internal/plugin"
 	"reames-agent/internal/pluginpkg"
+	"reames-agent/internal/repair"
 	"reames-agent/internal/skill"
 	"reames-agent/internal/store"
 )
@@ -202,6 +203,10 @@ type App struct {
 	skillRootsCache skillRootsCache
 
 	heartbeat *HeartbeatEngine // scheduled heartbeat tasks; nil until startup
+
+	startupTracker *repair.StartupTracker
+	// startupReady prevents a clean pre-paint exit from blessing a broken build.
+	startupReady atomic.Bool
 }
 
 type skillRootsCache struct {
@@ -398,14 +403,25 @@ func (a *App) Platform() string {
 	return goruntime.GOOS
 }
 
+// GetRecoveryStatus projects the shared offline Guard report to the desktop.
+func (a *App) GetRecoveryStatus() (repair.Report, error) {
+	if ctrl := a.activeCtrl(); ctrl != nil {
+		return ctrl.RecoveryStatus()
+	}
+	executable, _ := os.Executable()
+	return repair.Inspect(repair.InspectOptions{Root: a.activeWorkspaceRoot(), ExecutablePath: executable})
+}
+
 // startup runs once the webview process is up, before the frontend can issue any
 // bound call. It captures the Wails context (needed for EventsEmit), then kicks
 // off the initialization in a background goroutine so the webview loads immediately.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	installSystemQuitHook()
-	a.startTray()
-	a.enableDeferredRebuildRetry()
+	if !config.SafeModeRequested() {
+		a.startTray()
+		a.enableDeferredRebuildRetry()
+	}
 
 	if cfg, err := config.Load(); err == nil && cfg.DesktopMetrics() && metricsEndpoint != "" && version != "dev" {
 		a.metrics.Store(newMetricsAggregator(config.MemoryUserDir()))
@@ -413,20 +429,26 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.startMainThreadWatchdog()
 
-	a.heartbeat = newHeartbeatEngine(a)
-	a.heartbeat.Start()
+	if !config.SafeModeRequested() {
+		a.heartbeat = newHeartbeatEngine(a)
+		a.heartbeat.Start()
+	}
 
 	a.mu.Lock()
 	a.tabsRestored = make(chan struct{})
 	a.mu.Unlock()
 	go a.restoreOrBuildTabs()
-	a.goSafe("refreshBotRuntime", a.refreshBotRuntime)
-	a.goSafe("sendStartupPing", a.sendStartupPing)
-	a.goSafe("flushMetrics", a.flushMetrics)
-	a.goSafe("flushPendingCrash", a.flushPendingCrash)
+	if !config.SafeModeRequested() {
+		a.goSafe("refreshBotRuntime", a.refreshBotRuntime)
+		a.goSafe("sendStartupPing", a.sendStartupPing)
+		a.goSafe("flushMetrics", a.flushMetrics)
+		a.goSafe("flushPendingCrash", a.flushPendingCrash)
+	}
 	// After restoreOrBuildTabs is launched: the GC's first sweep waits on
 	// tabsRestored so it never observes the pre-restore empty tab map.
-	a.startRecoveryGC()
+	if !config.SafeModeRequested() {
+		a.startRecoveryGC()
+	}
 }
 
 func (a *App) beforeClose(ctx context.Context) bool {
@@ -604,19 +626,29 @@ func (a *App) restoreOrBuildTabs() {
 	// this returns — including the recover path above.
 	defer a.markTabsRestored()
 	// Reap any orphaned codegraph processes from a previous crash or older
-	// version that leaked them, so they don't accumulate across restarts.
-	a.reapOrphanCodeGraph()
+	// version that leaked them, so they don't accumulate across restarts. Safe
+	// Mode must not probe or mutate external runtime state.
+	if !config.SafeModeRequested() {
+		a.reapOrphanCodeGraph()
+	}
 	ctx := a.ctx
-	ensureWorkspace()
+	if config.SafeModeRequested() {
+		ensureSafeModeWorkspace()
+	} else {
+		ensureWorkspace()
+	}
 
 	// Run legacy config migration before the first config load so the
 	// freshly written config (including the user's default_model) is
 	// picked up by Load instead of falling back to built-in defaults.
-	_, _ = config.MigrateLegacyIfNeeded()
-	f := loadTabsFile()
-	_, _ = recoverLegacyProjectSidebarRoots(f)
-	_, _ = config.ApplyUserConfigUpgradesOnStartup(config.UserConfigPath())
-	_, _ = config.MigrateMCPToUserConfigOnUpgrade(desktopMCPMigrationRoots(f))
+	f := desktopTabsFile{}
+	if !config.SafeModeRequested() {
+		_, _ = config.MigrateLegacyIfNeeded()
+		f = loadTabsFile()
+		_, _ = recoverLegacyProjectSidebarRoots(f)
+		_, _ = config.ApplyUserConfigUpgradesOnStartup(config.UserConfigPath())
+		_, _ = config.MigrateMCPToUserConfigOnUpgrade(desktopMCPMigrationRoots(f))
+	}
 
 	// Load i18n from the first available config.
 	// Prefer DesktopLanguage (desktop UI setting) over Language (CLI setting),
@@ -706,6 +738,10 @@ func (a *App) createTabEntry(scope, workspaceRoot, topicID string) *WorkspaceTab
 }
 
 func desktopNewSessionDefaults() (string, string) {
+	if config.SafeModeRequested() {
+		cfg := config.LoadRecoveryDefaultsForRoot("")
+		return strings.TrimSpace(cfg.DefaultModel), normalizeToolApprovalMode(cfg.DesktopDefaultToolApprovalMode())
+	}
 	cfg := config.LoadForEdit(config.UserConfigPath())
 	return strings.TrimSpace(cfg.DefaultModel), normalizeToolApprovalMode(cfg.DesktopDefaultToolApprovalMode())
 }
@@ -772,6 +808,13 @@ func (a *App) shutdown(context.Context) {
 		it.ctrl.Close()
 		it.tab.releaseSessionLease()
 	}
+	if a.startupTracker != nil && a.startupReady.Load() {
+		_ = a.startupTracker.MarkClean()
+		if !config.SafeModeRequested() {
+			_ = repair.MarkUpdateHealthy(version)
+			_ = repair.RecordHealthyConfig(version)
+		}
+	}
 }
 
 // domReady is called (via OnDomReady) after the webview finishes loading its DOM
@@ -818,6 +861,33 @@ func (a *App) domReady(_ context.Context) {
 	}
 
 	runtime.WindowShow(a.ctx)
+	a.startupReady.Store(true)
+	if a.startupTracker != nil {
+		_ = a.startupTracker.MarkReady()
+		tracker := a.startupTracker
+		ctx := a.ctx
+		a.goSafe("confirmStartupHealth", func() {
+			timer := time.NewTimer(repair.StartupHealthDelay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				return
+			}
+			if err := tracker.MarkHealthy(); err != nil {
+				slog.Warn("desktop: mark startup healthy", "err", err)
+				return
+			}
+			if !config.SafeModeRequested() {
+				if err := repair.MarkUpdateHealthy(version); err != nil {
+					slog.Warn("desktop: commit healthy update", "err", err)
+				}
+				if err := repair.RecordHealthyConfig(version); err != nil {
+					slog.Warn("desktop: record healthy config", "err", err)
+				}
+			}
+		})
+	}
 }
 
 // --- bound command surface (frontend → controller) ---

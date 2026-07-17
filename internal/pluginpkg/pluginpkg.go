@@ -437,6 +437,25 @@ func SetEnabled(reamesAgentHome, name string, enabled bool) error {
 	})
 }
 
+// DisableAll atomically disables every currently enabled installed plugin.
+// Recovery Guard uses this explicit mutation when Safe Mode proves an extension
+// is implicated; enabling still requires the normal digest/grant ceremony.
+func DisableAll(reamesAgentHome string) ([]string, error) {
+	var disabled []string
+	err := withStateMutation(reamesAgentHome, func(st State) (State, error) {
+		for i := range st.Plugins {
+			if !st.Plugins[i].Enabled {
+				continue
+			}
+			st.Plugins[i].Enabled = false
+			disabled = append(disabled, st.Plugins[i].Name)
+		}
+		return st, nil
+	})
+	sort.Strings(disabled)
+	return disabled, err
+}
+
 func Enable(reamesAgentHome string, req EnableRequest) error {
 	req.Name = strings.TrimSpace(req.Name)
 	req.ExpectedDigest = strings.TrimSpace(req.ExpectedDigest)

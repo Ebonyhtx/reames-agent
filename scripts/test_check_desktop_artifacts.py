@@ -55,7 +55,10 @@ class DesktopArtifactCheckTests(unittest.TestCase):
         write_zip(
             root / "windows" / "Reames Agent-windows-amd64.zip",
             {
-                "Reames Agent.exe": b"app",
+                "Reames Agent.exe": b"launcher",
+                "reames-agent-desktop.exe": b"app",
+                "reames-agent-guard.exe": b"guard",
+                "reames-agent-launcher.exe": b"launcher",
                 "reames-agent-update-helper.exe": b"helper",
                 "licenses/LICENSE": b"project license",
                 "licenses/NOTICE.md": b"project notice",
@@ -66,6 +69,7 @@ class DesktopArtifactCheckTests(unittest.TestCase):
         (root / "linux" / "Reames Agent-linux-amd64.tar.gz").write_bytes(
             tar_gz_bytes({
                 "reames-agent-desktop": b"linux",
+                "reames-agent-guard": b"guard",
                 "licenses/LICENSE": b"project license",
                 "licenses/NOTICE.md": b"project notice",
                 "licenses/go-tuf/LICENSE": b"apache license",
@@ -78,6 +82,7 @@ class DesktopArtifactCheckTests(unittest.TestCase):
                 root / "darwin" / f"Reames Agent-darwin-{arch}.zip",
                 {
                     "Reames Agent.app/Contents/MacOS/reames-agent-desktop": b"mac",
+                    "Reames Agent.app/Contents/MacOS/reames-agent-guard": b"guard",
                     "Reames Agent.app/Contents/Info.plist": b"plist",
                     "Reames Agent.app/Contents/Resources/iconfile.icns": b"icon",
                     "Reames Agent.app/Contents/Resources/licenses/LICENSE": b"project license",
@@ -103,6 +108,29 @@ class DesktopArtifactCheckTests(unittest.TestCase):
             failures = checker.check(checker.collect_files([root]))
             self.assertIn(
                 "windows/Reames Agent-windows-amd64.zip missing reames-agent-update-helper.exe",
+                failures,
+            )
+
+    def test_missing_guard_release_unit_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.make_good_tree(root)
+            write_zip(
+                root / "windows" / "Reames Agent-windows-amd64.zip",
+                {
+                    "Reames Agent.exe": b"launcher",
+                    "reames-agent-desktop.exe": b"app",
+                    "reames-agent-launcher.exe": b"launcher",
+                    "reames-agent-update-helper.exe": b"helper",
+                    "licenses/LICENSE": b"project license",
+                    "licenses/NOTICE.md": b"project notice",
+                    "licenses/go-tuf/LICENSE": b"apache license",
+                    "licenses/go-tuf/NOTICE": b"go-tuf notice",
+                },
+            )
+            failures = checker.check(checker.collect_files([root]))
+            self.assertIn(
+                "windows/Reames Agent-windows-amd64.zip missing reames-agent-guard.exe",
                 failures,
             )
 

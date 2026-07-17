@@ -575,15 +575,26 @@ func extractBinary(targz []byte, name string) ([]byte, error) {
 // applyLinux replaces the running binary with the one inside the downloaded
 // tar.gz; the caller relaunches afterwards.
 func applyLinux(targz []byte) error {
-	bin, err := extractBinary(targz, "reamesAgent-desktop")
+	bin, err := extractBinary(targz, "reames-agent-desktop")
 	if err != nil {
 		return err
+	}
+	guard, err := extractBinary(targz, "reames-agent-guard")
+	if err != nil {
+		return err
+	}
+	exe := currentExecutablePath()
+	if exe == "" {
+		return fmt.Errorf("update: current executable path is unavailable")
+	}
+	if err := writeAtomic(filepath.Join(filepath.Dir(exe), "reames-agent-guard"), guard, 0o700); err != nil {
+		return fmt.Errorf("update Guard: %w", err)
 	}
 	return selfupdate.Apply(bytes.NewReader(bin), selfupdate.Options{})
 }
 
-func applyWindowsFile(path string) error {
-	return startWindowsUpdateHandoff(path, currentInstallDir(), currentExecutablePath())
+func applyWindowsFile(path, toVersion string) error {
+	return startWindowsUpdateHandoff(path, currentInstallDir(), currentLauncherPath(), toVersion, config.MemoryUserDir())
 }
 
 func currentExecutablePath() string {
@@ -608,13 +619,58 @@ func currentInstallDir() string {
 	return filepath.Dir(exe)
 }
 
-// relaunch starts a fresh copy of the (just-replaced) executable.
-func relaunch() error {
+// relaunchThroughGuard starts the new release through the credential-free Guard.
+func relaunchThroughGuard() error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(exe)
+	launcher := filepath.Join(filepath.Dir(exe), "reames-agent-guard")
+	if runtime.GOOS == "windows" {
+		launcher += ".exe"
+	}
+	if _, statErr := os.Stat(launcher); statErr != nil {
+		return fmt.Errorf("update: Guard launcher is unavailable: %w", statErr)
+	}
+	cmd := exec.Command(launcher, "launch", "--detach")
 	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
 	return cmd.Start()
+}
+
+func currentLauncherPath() string {
+	exe := currentExecutablePath()
+	if exe == "" {
+		return ""
+	}
+	dir := filepath.Dir(exe)
+	candidates := []string{filepath.Join(dir, "reames-agent-guard")}
+	if runtime.GOOS == "windows" {
+		candidates = []string{
+			filepath.Join(dir, "reames-agent-launcher.exe"),
+			filepath.Join(dir, "reames-agent-guard.exe"),
+		}
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func releaseUnitSiblingPaths() []string {
+	exe := currentExecutablePath()
+	if exe == "" {
+		return nil
+	}
+	dir := filepath.Dir(exe)
+	if runtime.GOOS == "windows" {
+		return []string{
+			filepath.Join(dir, "reames-agent-guard.exe"),
+			filepath.Join(dir, "reames-agent-launcher.exe"),
+			filepath.Join(dir, "reames-agent-update-helper.exe"),
+			filepath.Join(dir, "Reames Agent.exe"),
+		}
+	}
+	return []string{filepath.Join(dir, "reames-agent-guard")}
 }

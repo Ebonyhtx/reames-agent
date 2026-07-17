@@ -117,10 +117,16 @@ def check_goreleaser_contract(failures: list[str]) -> None:
     desktop_build = read("scripts/desktop-build.sh")
     require("copy_legal_files" in desktop_build, "Desktop archives must stage project and third-party legal files.", failures)
     require('Contents/Resources/licenses' in desktop_build, "macOS app bundles must include readable legal files.", failures)
+    require('./cmd/reames-agent-guard' in desktop_build, "Desktop candidates must build the recovery Guard.", failures)
+    require('Contents/MacOS/$GUARDNAME' in desktop_build, "macOS app bundles must ship Guard as the entry executable.", failures)
+    require('cp "$guard_out" "$staging/$GUARDNAME"' in desktop_build, "Linux archives must ship Guard beside Desktop.", failures)
+    require('cp "$guard_out" "$staging/$GUARDNAME.exe"' in desktop_build, "Windows portable archives must ship Guard beside Desktop.", failures)
     windows_installer = read("desktop/build/windows/installer/project.nsi")
     require('third_party\\go-tuf\\LICENSE' in windows_installer and 'third_party\\go-tuf\\NOTICE' in windows_installer, "Windows installer must include go-tuf legal files.", failures)
+    require('REAMES_AGENT_GUARD' in windows_installer and 'REAMES_AGENT_LAUNCHER' in windows_installer, "Windows installer must ship and launch through Guard.", failures)
     linux_package = read("desktop/build/linux/nfpm.yaml")
     require("/usr/share/doc/reames-agent-desktop/go-tuf/LICENSE" in linux_package and "/usr/share/doc/reames-agent-desktop/go-tuf/NOTICE" in linux_package, "Linux package must include go-tuf legal files.", failures)
+    require("/usr/bin/reames-agent-guard" in linux_package, "Linux package must install Guard.", failures)
 
 
 def check_build_toolchain(failures: list[str]) -> None:

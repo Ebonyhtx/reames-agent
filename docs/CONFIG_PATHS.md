@@ -41,6 +41,7 @@ non-destructively when `<Reames Agent home>/.env` is missing them.
 | Sessions | `<state root>/sessions/` |
 | Archives | `<state root>/archive/` |
 | Memory | `<state root>/memory/` and `<state root>/projects/` |
+| Guard startup/update/repair state | `<state root>/repair/` |
 
 `<state root>` defaults to `<Reames Agent home>`. It only differs when
 `REAMES_AGENT_STATE_HOME` is set.
@@ -49,6 +50,14 @@ non-destructively when `<Reames Agent home>/.env` is missing them.
 binds reader decisions to the workspace, MCP transport/identity, launcher lock,
 and tool capability fingerprints. Reames Agent protects it from model-visible
 file and shell reads. Do not copy it between machines as a portable allowlist.
+
+`<state root>/repair/` contains the startup ledger, pending update, installer
+failure marker, configuration snapshots, repair/undo transaction, and repair
+logs. It may contain installation and configuration paths plus binary/config
+hashes. Treat it as host-local diagnostic state; do not edit it to force a
+rollback. Use `reames-agent guard ...` so locks, provenance, and hashes are
+validated. Safe Mode still uses this recovery state, but does not read or
+migrate user/project TOML or dotenv files.
 
 The global user config is named `config.toml`. Project-local config files keep
 the name `reames-agent.toml`. If someone says "global reames-agent.toml", they usually

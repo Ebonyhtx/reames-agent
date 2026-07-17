@@ -107,5 +107,6 @@ python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
 - 产品方向以 `docs/PROJECT.md` 为准，执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
 - M0、M1、M2、M3、M4 已按路线图门槛关闭；M5 所有可由仓库、clean clone 和 CI/CodeQL 验证的事项已收口。
 - 当前唯一未关闭的 M5 项是需要真实运营主体的公开 registry 密钥仪式、生产 endpoint、实际轮换/compromise drill 与 provenance policy，保持 `external-blocked`。
+- P1 writer worktree 隔离与 P2 Offline Guard/Safe Mode 的仓库内机制已关闭；Guard、CLI/Serve/Desktop/Gateway 共用 `internal/repair`，Safe Mode 为 recovery-only 且不装配 Provider/Controller/Agent，下一交付门槛是全量/clean-clone/六目标、远端 CI/CodeQL 和三平台安装态恢复证据。
 - 主分支只保留 Go/Wails 产品；旧 Hermes/Python/Electron/TUI/plugin/test/package 树已删除，参考机制只从 `F:\code-reference` 按治理规则吸收。
 - 已有 24 个内置工具和 6 目标交叉编译；完成声明必须以测试、真实交互或发布证据为准。

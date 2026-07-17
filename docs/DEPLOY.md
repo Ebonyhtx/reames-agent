@@ -177,6 +177,7 @@ reames-agent bot start --home "$REAMES_AGENT_HOME" --channels feishu
 ```bash
 reames-agent gateway run --home "$REAMES_AGENT_HOME"  # 前台运行，适合调试/Docker/Termux
 reames-agent gateway doctor --deep --home "$REAMES_AGENT_HOME"  # 只读检查配置、凭据 env、访问控制和连接记录
+reames-agent gateway recovery-status --json --home "$REAMES_AGENT_HOME" --root /srv/project
 reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME" --channels feishu --dir /srv/project
 reames-agent gateway install --start-now --home "$REAMES_AGENT_HOME"    # 安装并启动后台服务
 reames-agent gateway status                 # 查看 service-manager 状态
@@ -210,6 +211,34 @@ reames-agent gateway run --home "$HOME/.reames-agent" --channels feishu
 正式命令会按平台选择 service manager：Linux 使用 user systemd，macOS 使用 launchd，Windows 使用 Scheduled Task。`--scope system` 只渲染计划并要求管理员/root 手动确认，避免误改系统级服务。
 
 Linux user-scope 的 `gateway install` 会在写入后先执行 `systemd-analyze --user verify`，并在变更前快照旧 unit 的 bytes/mode 与 enabled/active 状态。写入、reload、enable、restart 或 is-active 失败时会尝试恢复快照；如果旧 unit 写回或恢复后的 daemon-reload 失败，会 fail closed、停止后续 manager 操作并明确要求人工修复。该自动回滚范围只覆盖 Linux user-scope install，不适用于 macOS launchd、Windows Scheduled Task、uninstall 或 `--scope system`。
+
+`gateway run` 在加载 config、Provider、plugin 和 channel 之前执行共享的 credential-free recovery
+preflight。systemd、launchd 与 Windows Scheduled Task 都因此复用 Guard 的 `repair.Report`，不会各自
+维护恢复状态。若 service 拒绝启动，先运行 `gateway recovery-status` 和 `gateway doctor`；不要通过
+复制 unit/plist/task 或新增旁路状态文件跳过预检。
+
+### 6.1 Desktop Offline Guard 与 Safe Mode
+
+打包后的 Windows/macOS/Linux Desktop 默认先经过 `reames-agent-guard`。连续启动失败、配置损坏、
+installer failure 或 pending update 可在不读取 API key、不启动普通 Agent runtime 的情况下诊断：
+
+```bash
+reames-agent guard check --json
+reames-agent guard launch --safe-mode
+reames-agent guard repair
+reames-agent guard rollback
+```
+
+五分钟内三次未完成启动会建议 Safe Mode；新版本在 DOM ready 后还需持续健康 30 秒，才删除回滚
+备份并提交 pending update。自动回滚只在失败版本与 `toVersion` 一致、目标属于当前安装目录、
+transaction identity 未变化且完整安装单元备份 SHA-256 全部有效时发生。来源或归因不明确时不会
+改二进制，而是进入 Safe Mode 或要求从可信 release 重装。已有 pending 未清算时禁止再次准备更新；
+Windows helper 缺失时自动更新 fail closed，Linux partial apply 会留下供 Guard 归因的 failure marker。
+
+Safe Mode 不读取/迁移用户或项目 TOML、dotenv，不恢复旧 tab/session；Desktop 只建立 recovery-only
+shell，`boot.Build` 拒绝 Provider、Controller、工具与普通 Agent 装配，并禁用 MCP、plugin、Hook、
+Bot、LSP、planner、Guardian、subagent、Memory Compiler、更新检查、遥测和 metrics。
+详细操作、跨平台打包入口和限制见 [恢复指南](RECOVERY.zh-CN.md)。
 
 ### 7. 备份、恢复与二进制回滚
 

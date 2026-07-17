@@ -1,5 +1,6 @@
 // Run: tsx src/__tests__/open-topic-coalescing.test.tsx
 
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import React, { act, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
@@ -221,6 +222,55 @@ dom.window.close();
 
   eq(ran.join(","), "A,C", "tab switches serialize: only the running + latest run, middle coalesces");
   eq(maxConcurrent, 1, "no two tab switches run concurrently (no backend SetActiveTab race)");
+}
+
+// A newer request that is only queued must invalidate the activation already
+// awaiting the backend. Otherwise the old completion can briefly flip the
+// single-surface UI and prune the last-click surface's cached transcript.
+{
+  const refs = { seqRef: { current: 0 }, runningRef: { current: false }, pendingRef: { current: null as any } };
+  const gates = new Map<string, ReturnType<typeof deferred<void>>>();
+  const gate = (id: string) => {
+    if (!gates.has(id)) gates.set(id, deferred<void>());
+    return gates.get(id)!;
+  };
+  let navigationEpoch = 0;
+  let visible = "initial";
+  const applied: string[] = [];
+  const navigate = (id: string) => {
+    navigationEpoch += 1; // App.noteNavigationIntent at enqueue time.
+    return enqueueNavigationRequest(refs, { id }, async (request) => {
+      navigationEpoch += 1; // useController.activateTopic begins an activation.
+      const activationEpoch = navigationEpoch;
+      await gate(request.id).promise;
+      if (navigationEpoch !== activationEpoch) return;
+      visible = request.id;
+      applied.push(request.id);
+    });
+  };
+
+  const first = navigate("slow-first");
+  await flushPromises();
+  const second = navigate("last-click");
+  gate("slow-first").resolve();
+  await first;
+  await flushPromises();
+  eq(visible, "initial", "queued last click invalidates the running activation before it can apply");
+  gate("last-click").resolve();
+  await second;
+  eq(visible, "last-click", "latest queued activation applies when it runs");
+  eq(applied.join(","), "last-click", "stale activation never mutates visible state");
+
+  const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8");
+  const controllerSource = readFileSync(new URL("../lib/useController.ts", import.meta.url), "utf8");
+  ok(
+    /const enqueueNavigation = useCallback\(\(input: DesktopNavigationInput\)[\s\S]{0,700}?noteNavigationIntent\(\);[\s\S]{0,700}?enqueueNavigationRequest\(/.test(appSource),
+    "App invalidates in-flight activation before enqueueing",
+  );
+  ok(
+    /const navigationSeq = beginActiveNavigation\(\);[\s\S]{0,500}?activeNavigationSeqRef\.current !== navigationSeq/.test(controllerSource),
+    "activateTopic refuses stale backend completions",
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed, ${passed + failed} total`);

@@ -2,7 +2,11 @@
 
 package main
 
-import "testing"
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestInstallerCommandPassesUnquotedDFlagLast(t *testing.T) {
 	cmd := installerCommand(`C:\Temp\reamesAgent-update-1.exe`, `D:\Tools\Reames Agent App`)
@@ -25,5 +29,19 @@ func TestInstallerCommandWithoutDirSkipsDFlag(t *testing.T) {
 	want := `"C:\Temp\reamesAgent-update-1.exe" /S`
 	if got != want {
 		t.Fatalf("CmdLine = %q, want %q", got, want)
+	}
+}
+
+func TestWindowsUpdateHandoffFailsClosedWithoutPackagedHelper(t *testing.T) {
+	dir := t.TempDir()
+	err := startWindowsUpdateHandoff(
+		filepath.Join(dir, "verified-installer.exe"),
+		dir,
+		filepath.Join(dir, "reames-agent-launcher.exe"),
+		"v2",
+		t.TempDir(),
+	)
+	if err == nil || !strings.Contains(err.Error(), "start verified update helper") {
+		t.Fatalf("missing helper error = %v", err)
 	}
 }

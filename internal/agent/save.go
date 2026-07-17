@@ -72,7 +72,21 @@ type sessionPersistState struct {
 	// stale-runtime conflict. CAS checks fall back to digest+version until a
 	// successful save re-learns the revision.
 	revisionKnown bool
-	ok            bool
+	transcript    sessionFileStamp
+	eventLog      sessionFileStamp
+	// saveVerified is true only when this process completed a save that
+	// verified transcript and ledger agreement. A load-time baseline may pair
+	// current bytes with a stale sidecar after an interrupted save, so it must
+	// not arm the snapshot no-op path.
+	saveVerified bool
+	ok           bool
+}
+
+type sessionFileStamp struct {
+	known   bool
+	exists  bool
+	size    int64
+	modTime int64
 }
 
 type sessionSaveMode int
@@ -195,6 +209,9 @@ func (s *Session) save(path string, mode sessionSaveMode) error {
 		return fmt.Errorf("lock session file: %w", err)
 	}
 	defer unlockFile()
+	if mode == sessionSaveSnapshot && s.snapshotUpToDate(path) {
+		return nil
+	}
 	// Capture the snapshot only while holding the save locks. Concurrent
 	// in-process savers (turn-end snapshot, periodic autosave, shutdown
 	// snapshot) that captured before locking could land out of order: the
@@ -808,8 +825,34 @@ func (s *Session) persistState(path string) sessionPersistState {
 	return sessionPersistState{}
 }
 
+// snapshotUpToDate proves a defensive snapshot is an in-memory no-op. Every
+// condition fails open to the full save path, which re-derives truth from disk.
+func (s *Session) snapshotUpToDate(path string) bool {
+	key := canonicalSessionSavePath(path)
+	s.mu.RLock()
+	state := s.persisted
+	upToDate := state.ok &&
+		s.persisted.saveVerified &&
+		state.path == key &&
+		state.version == s.version &&
+		state.revisionKnown &&
+		s.rewriteVersion == s.persistedRewriteVersion &&
+		!s.normalizedDirty &&
+		!s.eventLogDamaged
+	s.mu.RUnlock()
+	if !upToDate || !state.transcript.matches(path) || !state.eventLog.matches(store.SessionEventLog(path)) {
+		return false
+	}
+	revision, digest, err := sessionContentRevision(path)
+	return err == nil && revision == state.revision && digest == digestString(state.digest)
+}
+
 func (s *Session) markPersisted(path string, digest [sha256.Size]byte, version uint64, revision int64, rewriteVersion int) {
-	s.setPersistedBaseline(path, digest, version, revision, true, rewriteVersion)
+	s.setPersistedBaseline(path, digest, version, revision, true, true, rewriteVersion)
+}
+
+func (s *Session) markPersistedFromLoad(path string, digest [sha256.Size]byte, version uint64, revision int64, rewriteVersion int) {
+	s.setPersistedBaseline(path, digest, version, revision, true, false, rewriteVersion)
 }
 
 // markPersistedRevisionUnknown records a baseline whose ledger revision could
@@ -817,10 +860,16 @@ func (s *Session) markPersisted(path string, digest [sha256.Size]byte, version u
 // version still anchor ownership checks; revision-based CAS stays disarmed
 // until a successful save records the real revision via markPersisted.
 func (s *Session) markPersistedRevisionUnknown(path string, digest [sha256.Size]byte, version uint64, rewriteVersion int) {
-	s.setPersistedBaseline(path, digest, version, 0, false, rewriteVersion)
+	s.setPersistedBaseline(path, digest, version, 0, false, false, rewriteVersion)
 }
 
-func (s *Session) setPersistedBaseline(path string, digest [sha256.Size]byte, version uint64, revision int64, revisionKnown bool, rewriteVersion int) {
+func (s *Session) setPersistedBaseline(path string, digest [sha256.Size]byte, version uint64, revision int64, revisionKnown, saveVerified bool, rewriteVersion int) {
+	transcript := sessionFileStamp{}
+	eventLog := sessionFileStamp{}
+	if saveVerified {
+		transcript = captureSessionFileStamp(path)
+		eventLog = captureSessionFileStamp(store.SessionEventLog(path))
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.persisted = sessionPersistState{
@@ -829,6 +878,9 @@ func (s *Session) setPersistedBaseline(path string, digest [sha256.Size]byte, ve
 		version:       version,
 		revision:      revision,
 		revisionKnown: revisionKnown,
+		transcript:    transcript,
+		eventLog:      eventLog,
+		saveVerified:  saveVerified,
 		ok:            true,
 	}
 	// rewriteVersion was captured together with the persisted snapshot; only
@@ -837,6 +889,30 @@ func (s *Session) setPersistedBaseline(path string, digest [sha256.Size]byte, ve
 	if rewriteVersion > s.persistedRewriteVersion {
 		s.persistedRewriteVersion = rewriteVersion
 	}
+	if saveVerified {
+		s.normalizedDirty = false
+		s.rawMessages = nil
+		s.eventLogDamaged = false
+	}
+}
+
+func captureSessionFileStamp(path string) sessionFileStamp {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return sessionFileStamp{known: true}
+		}
+		return sessionFileStamp{}
+	}
+	return sessionFileStamp{known: true, exists: true, size: info.Size(), modTime: info.ModTime().UnixNano()}
+}
+
+func (stamp sessionFileStamp) matches(path string) bool {
+	if !stamp.known {
+		return false
+	}
+	current := captureSessionFileStamp(path)
+	return current.known && current.exists == stamp.exists && current.size == stamp.size && current.modTime == stamp.modTime
 }
 
 // sessionContentRevision reads the CAS ledger (revision + content digest) from
@@ -1131,7 +1207,7 @@ func LoadSession(path string) (*Session, error) {
 			if ok {
 				revision = meta.Revision
 			}
-			s.markPersisted(path, digest, s.version, revision, s.rewriteVersion)
+			s.markPersistedFromLoad(path, digest, s.version, revision, s.rewriteVersion)
 		}
 	}
 	return s, nil
@@ -1602,6 +1678,7 @@ func migrateSessionSidecars(oldPath, newPath, newID string) error {
 	for _, pair := range [][2]string{
 		{store.SessionGoalState(oldPath), store.SessionGoalState(newPath)},
 		{store.SessionEventLog(oldPath), store.SessionEventLog(newPath)},
+		{store.SessionEventLogDamaged(oldPath), store.SessionEventLogDamaged(newPath)},
 		{store.SessionEventIndex(oldPath), store.SessionEventIndex(newPath)},
 		{store.SessionConflictLog(oldPath), store.SessionConflictLog(newPath)},
 		{store.SessionCheckpointDir(oldPath), store.SessionCheckpointDir(newPath)},

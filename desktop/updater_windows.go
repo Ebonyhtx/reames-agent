@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 	"time"
 )
 
-const windowsUpdateHelperFileName = "reamesAgent-update-helper.exe"
+const windowsUpdateHelperFileName = "reames-agent-update-helper.exe"
 
 // installerCommand runs the NSIS updater, forcing $INSTDIR to dir via /D= so the
 // update overwrites the current install in place. NSIS requires /D= to be the
@@ -23,14 +24,14 @@ func installerCommand(name, dir string) *exec.Cmd {
 	return cmd
 }
 
-func startWindowsUpdateHandoff(installerPath, installDir, relaunchPath string) error {
-	if err := startWindowsUpdateHelper(installerPath, installDir, relaunchPath); err == nil {
-		return nil
+func startWindowsUpdateHandoff(installerPath, installDir, relaunchPath, toVersion, stateHome string) error {
+	if err := startWindowsUpdateHelper(installerPath, installDir, relaunchPath, toVersion, stateHome); err != nil {
+		return fmt.Errorf("start verified update helper: %w", err)
 	}
-	return installerCommand(installerPath, installDir).Start()
+	return nil
 }
 
-func startWindowsUpdateHelper(installerPath, installDir, relaunchPath string) error {
+func startWindowsUpdateHelper(installerPath, installDir, relaunchPath, toVersion, stateHome string) error {
 	if installDir == "" {
 		return os.ErrNotExist
 	}
@@ -38,7 +39,7 @@ func startWindowsUpdateHelper(installerPath, installDir, relaunchPath string) er
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(helperPath, windowsUpdateHandoffArgs(os.Getpid(), installerPath, installDir, relaunchPath)...)
+	cmd := exec.Command(helperPath, windowsUpdateHandoffArgs(os.Getpid(), installerPath, installDir, relaunchPath, toVersion, stateHome)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Start()
 }

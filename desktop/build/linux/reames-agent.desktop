@@ -2,7 +2,7 @@
 Type=Application
 Name=Reames Agent
 Comment=Reames Agent desktop — a Wails shell around the Go kernel
-Exec=reames-agent-desktop
+Exec=reames-agent-guard launch --detach
 Icon=reames-agent-desktop
 Categories=Development;Utility;
 Terminal=false

@@ -544,6 +544,17 @@ After stopping every Reames Agent process, use `backup create --offline --out FI
 
 `reames-agent upgrade` verifies and retains the prior binary as `<executable>.previous`. `reames-agent upgrade --rollback` swaps current and previous while retaining the replaced version. A separately running Gateway is not restarted automatically; run `reames-agent gateway restart` when needed after either operation.
 
+## Guard and Safe Mode
+
+If Desktop repeatedly fails before the normal UI opens, run `reames-agent guard check --json`, then
+`reames-agent guard launch --safe-mode`. Packaged Desktop builds start through the standalone Guard
+automatically. Safe Mode does not read user/project TOML or dotenv, restore old tabs/sessions, or start
+Providers, Controllers, the Agent loop, MCP, plugins, Hooks, Bot, LSP, planner, Guardian, subagents, or
+Memory Compiler. Desktop opens a recovery-only shell. Configuration
+repair, verified pending-update rollback, plugin disable, and derived Desktop-state rebuild are explicit
+Guard actions. See [Recovery, Guard, and Safe Mode](./RECOVERY.md) for commands, automatic rollback evidence,
+and production limits.
+
 ## Plugins (MCP)
 
 Reames Agent is an MCP client. A `[[plugins]]` entry's `type` selects the transport:
