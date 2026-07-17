@@ -23,7 +23,7 @@ func RedactReportForDisplay(report Report, opts DisplayOptions) Report {
 	redact := newDisplayRedactor(opts)
 	out := report
 	out.Startup.Error = redact.text(out.Startup.Error)
-	out.Config.Checks = append([]ConfigCheck(nil), report.Config.Checks...)
+	out.Config.Checks = append([]ConfigCheck{}, report.Config.Checks...)
 	for i := range out.Config.Checks {
 		out.Config.Checks[i].Path = redact.text(out.Config.Checks[i].Path)
 		out.Config.Checks[i].Error = redact.text(out.Config.Checks[i].Error)
@@ -31,26 +31,26 @@ func RedactReportForDisplay(report Report, opts DisplayOptions) Report {
 	}
 	out.Config.Applied = redact.strings(report.Config.Applied)
 	out.Config.Transaction = redact.transaction(report.Config.Transaction)
-	out.ConfigSnapshots = append([]ConfigSnapshot(nil), report.ConfigSnapshots...)
+	out.ConfigSnapshots = append([]ConfigSnapshot{}, report.ConfigSnapshots...)
 	for i := range out.ConfigSnapshots {
 		out.ConfigSnapshots[i].Path = redact.text(out.ConfigSnapshots[i].Path)
 		out.ConfigSnapshots[i].SourcePath = redact.text(out.ConfigSnapshots[i].SourcePath)
 	}
 	out.LastRepair = redact.transaction(report.LastRepair)
 	out.PendingUpdate = redact.update(report.PendingUpdate)
-	out.Binaries = append([]BinaryStatus(nil), report.Binaries...)
+	out.Binaries = append([]BinaryStatus{}, report.Binaries...)
 	for i := range out.Binaries {
 		out.Binaries[i].Path = redact.text(out.Binaries[i].Path)
 		out.Binaries[i].Error = redact.text(out.Binaries[i].Error)
 	}
-	out.Sessions = append([]StoreStatus(nil), report.Sessions...)
+	out.Sessions = append([]StoreStatus{}, report.Sessions...)
 	for i := range out.Sessions {
 		out.Sessions[i].Path = redact.text(out.Sessions[i].Path)
 		out.Sessions[i].Error = redact.text(out.Sessions[i].Error)
 	}
 	out.Plugins.Path = redact.text(out.Plugins.Path)
 	out.Plugins.Error = redact.text(out.Plugins.Error)
-	out.Findings = append([]Finding(nil), report.Findings...)
+	out.Findings = append([]Finding{}, report.Findings...)
 	for i := range out.Findings {
 		out.Findings[i].Message = redact.text(out.Findings[i].Message)
 		out.Findings[i].Action = redact.text(out.Findings[i].Action)
@@ -120,7 +120,7 @@ func (r displayRedactor) transaction(tx *RepairTransaction) *RepairTransaction {
 		return nil
 	}
 	out := *tx
-	out.Changes = append([]RepairChange(nil), tx.Changes...)
+	out.Changes = append([]RepairChange{}, tx.Changes...)
 	for i := range out.Changes {
 		out.Changes[i].TargetPath = r.text(out.Changes[i].TargetPath)
 		out.Changes[i].PreviousPath = r.text(out.Changes[i].PreviousPath)
@@ -135,7 +135,7 @@ func (r displayRedactor) update(tx *UpdateTransaction) *UpdateTransaction {
 	out := *tx
 	out.TargetPath = r.text(out.TargetPath)
 	out.BackupPath = r.text(out.BackupPath)
-	out.Files = append([]UpdateTransactionFile(nil), tx.Files...)
+	out.Files = append([]UpdateTransactionFile{}, tx.Files...)
 	for i := range out.Files {
 		out.Files[i].TargetPath = r.text(out.Files[i].TargetPath)
 		out.Files[i].BackupPath = r.text(out.Files[i].BackupPath)

@@ -54,6 +54,12 @@ func TestBoundArrayPayloadsAreNonNilBeforeStartup(t *testing.T) {
 		got.Bot.Allowlist.QQGroups == nil || got.Bot.Allowlist.FeishuGroups == nil || got.Bot.Allowlist.WeixinGroups == nil {
 		t.Fatalf("DesktopStartupSettings() contains nil array fields: %+v", got)
 	}
+	if got, err := app.GetRecoveryStatus(); err != nil {
+		t.Fatalf("GetRecoveryStatus(): %v", err)
+	} else if got.Config.Checks == nil || got.Config.Applied == nil || got.ConfigSnapshots == nil ||
+		got.Binaries == nil || got.Sessions == nil || got.Findings == nil {
+		t.Fatalf("GetRecoveryStatus() contains nil array fields: %+v", got)
+	}
 }
 
 func assertNonNilSliceJSON(t *testing.T, name string, got any) {

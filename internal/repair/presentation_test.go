@@ -38,3 +38,41 @@ func TestRedactReportForDisplayRemovesHostPathsAndSecrets(t *testing.T) {
 		}
 	}
 }
+
+func TestRedactReportForDisplayPreservesArrayJSONContract(t *testing.T) {
+	report := Report{
+		Config:          ConfigReport{Checks: []ConfigCheck{}, Applied: []string{}},
+		LastRepair:      &RepairTransaction{Changes: []RepairChange{}},
+		PendingUpdate:   &UpdateTransaction{Files: []UpdateTransactionFile{}},
+		ConfigSnapshots: []ConfigSnapshot{},
+		Binaries:        []BinaryStatus{},
+		Sessions:        []StoreStatus{},
+		Findings:        []Finding{},
+	}
+
+	redacted := RedactReportForDisplay(report, DisplayOptions{})
+	if redacted.Config.Checks == nil || redacted.Config.Applied == nil || redacted.ConfigSnapshots == nil ||
+		redacted.Binaries == nil || redacted.Sessions == nil || redacted.Findings == nil {
+		t.Fatalf("redacted report contains nil frontend arrays: %+v", redacted)
+	}
+	if redacted.LastRepair == nil || redacted.LastRepair.Changes == nil {
+		t.Fatalf("redacted repair transaction contains nil changes: %+v", redacted.LastRepair)
+	}
+	if redacted.PendingUpdate == nil || redacted.PendingUpdate.Files == nil {
+		t.Fatalf("redacted update transaction contains nil files: %+v", redacted.PendingUpdate)
+	}
+	body, err := json.Marshal(redacted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	for _, forbidden := range []string{
+		`"checks":null`, `"applied":null`, `"configSnapshots":null`,
+		`"binaries":null`, `"sessions":null`, `"findings":null`,
+		`"changes":null`, `"files":null`,
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("display report violated array JSON contract with %s: %s", forbidden, text)
+		}
+	}
+}
