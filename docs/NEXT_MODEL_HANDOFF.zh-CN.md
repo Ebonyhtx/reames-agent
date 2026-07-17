@@ -94,8 +94,11 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
 `test:all`/production build/bundle budget；恢复/Provider/Agent/Controller/插件/Gateway 与 Desktop 定向
 race；六目标 CLI + Guard `CGO_ENABLED=0`；133 项 Python 合同（2 项平台跳过）、Node、工具文档、
 docs/deploy/release/public、actionlint 与 shell syntax；最新本地 Windows recovery smoke。localized initial
-JS 为 999,829 / 1,000,000 bytes。当前只剩首次大提交后的 `--no-local` clean clone、最终 upstream
-快照与单次 push 后远端 CI/CodeQL/Desktop candidate。
+JS 为 999,829 / 1,000,000 bytes。`git clone --no-local` 已从提交对象重跑 Root、Desktop、空
+`node_modules` Frontend 与四类合同；新审计漏索引被 clean clone 文档合同发现并修复，最终 tracked
+工作树干净。上游截止点已更新到 lock：Reasonix `3637d0f0` 无新增，Hermes `11d36232`、Codex
+`b9680065` 等已分类；此后按分钟出现的新参考提交留给下一次 Upstream Watch，不反复打开已完成验证。
+当前只剩单次 push 后远端 CI/CodeQL/Desktop candidate。
 
 - `docs/audits/2026-07-14-m5-plugin-lifecycle-trust.md`
 - `docs/audits/2026-07-15-m5-plugin-process-isolation.md`

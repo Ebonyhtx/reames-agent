@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updated_at": "2026-07-17T19:29:19Z",
+  "updated_at": "2026-07-17T19:45:29Z",
   "upstreams": {
     "reasonix": {
       "branch": "main-v2",
@@ -11,14 +11,14 @@
     "hermes": {
       "branch": "main",
       "baseline": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
-      "reviewed": "bcea5371c8194097e867cc0d49a97e7eb958c5df",
-      "latest_seen": "bcea5371c8194097e867cc0d49a97e7eb958c5df"
+      "reviewed": "11d36232c03dd950942a97a08003aeca18eb4b2e",
+      "latest_seen": "11d36232c03dd950942a97a08003aeca18eb4b2e"
     },
     "codex": {
       "branch": "main",
       "baseline": "f6e251c3ac6573a4d6eccddea6ad12587868485f",
-      "reviewed": "24e9b849fad8f506971dfa0313dbdea8abd90112",
-      "latest_seen": "24e9b849fad8f506971dfa0313dbdea8abd90112"
+      "reviewed": "b9680065b05accae1d2093de1ada06e009abb128",
+      "latest_seen": "b9680065b05accae1d2093de1ada06e009abb128"
     },
     "mimo": {
       "branch": "main",

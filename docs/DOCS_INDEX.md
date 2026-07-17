@@ -129,6 +129,7 @@
 | [Reasonix 与参考项目增量同步审计](audits/2026-07-17-reasonix-upstream-sync.md) | Reasonix 525 提交分类、MCP schema/凭据/Provider 采用证据、其他参考仓库增量与下一阶段 P0/P1 方向 |
 | [M5 MCP 身份绑定信任审计](audits/2026-07-17-m5-mcp-identity-trust.md) | Reasonix MCP identity receipt、capability drift、launcher exact lock、Desktop reverify 与 destructive fresh-human 闭环 |
 | [P2 Offline Guard / Safe Mode 审计](audits/2026-07-17-p2-offline-guard-safe-mode.md) | Guard 启动账本、安装单元回滚、Safe Mode、统一恢复投影及 Reasonix 最新可靠性吸收证据 |
+| [P3 Recovery Center 与 Reasonix 方向审计](audits/2026-07-17-p3-recovery-reasonix-direction.md) | Desktop Recovery Center、三平台安装态 smoke、DeepSeek reasoning-only stop、发布棘轮与 P4 受控 Theme Pack 方向 |
 | [Hermes Gateway 参考审计](audits/2026-07-09-hermes-gateway-reference.md) | Hermes 后台社交通道网关、service manager 和安装机制审计 |
 | [安装与部署统一性审计](audits/2026-07-09-install-deploy-governance.md) | Reasonix、Hermes 与 Reames 安装/部署入口统一性审计 |
 
