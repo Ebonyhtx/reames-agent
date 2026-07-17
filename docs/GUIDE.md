@@ -12,6 +12,7 @@
 ## Contents
 
 - [Configuration](#configuration)
+- [Work modes](#work-modes)
 - [Environment variables](#environment-variables)
 - [Serve web frontend](#serve-web-frontend)
 - [Configuration paths](./CONFIG_PATHS.md)
@@ -48,6 +49,29 @@ structure.
 
 For the desktop and CLI usage of visible reasoning language, see
 [Reasoning language](./REASONING_LANGUAGE.md).
+
+## Work modes
+
+Work mode is independent from normal/plan/goal collaboration and from tool
+approval. New sessions default to `balanced`:
+
+```bash
+reames-agent --profile economy
+reames-agent run --profile delivery "ship the requested change"
+reames-agent serve --profile balanced
+reames-agent acp --profile delivery
+```
+
+- `economy` connects optional tool surfaces on demand to reduce fixed schema cost.
+- `balanced` exposes the full stable tool surface and is the default.
+- `delivery` keeps the same tools and safety controls, but adds a stable contract
+  for acceptance criteria, relevant project checks, evidence, diff review, and
+  completion follow-through.
+
+Inside the interactive TUI, use `/work-mode economy|balanced|delivery`. A resumed
+session inherits its saved mode unless `--profile` is explicit. Desktop exposes
+the same three choices in the composer. Bot/Gateway remains explicitly balanced.
+See [Collaboration modes](./COLLABORATION_MODES.zh-CN.md) for the full matrix.
 
 ```toml
 default_model = "deepseek-flash"   # executor; set [agent].planner_model to add a planner
@@ -682,13 +706,9 @@ system prompt, provider prefix, or tool schemas.
 Toggle future turns with `/memory-v5 off|observe|compact|on|status` inside an
 interactive session, or with `reames-agent config memory-v5 off|observe|compact|on|status`
 from a shell/script.
-Desktop users can also use Settings → General → Memory v5. Settings → Updates →
-Share aggregate quality metrics controls the optional aggregate upload. When
-enabled, that upload may include only anonymous
-count/size buckets such as injection on/off, compiled-token bucket, IR-overhead
-bucket, memory-reference count, constraint/risk/step counts, and memory-graph
-size buckets. It never includes memory text, prompts, tool outputs, file paths,
-IDs, keys, base URLs, or file contents.
+Desktop users can also use Settings → General → Memory v5. Its token, cache,
+cost, and compiler counters stay in local session state. Reames Agent has no
+anonymous startup, aggregate metrics, performance, or crash upload service.
 
 CLI/TUI and `reames-agent serve` use the same user/global config. Project
 `reames-agent.toml` files cannot override this user/global setting. The CLI command
@@ -700,8 +720,7 @@ Reames Agent home:
 memory_compiler = { enabled = true, verbosity = "observe" }
 ```
 
-The CLI can use Memory v5 for local turns, but it does not run the desktop
-aggregate metrics upload pipeline. When `reames-agent run --metrics <path>` is used,
+The CLI can use Memory v5 for local turns. When `reames-agent run --metrics <path>` is used,
 the JSON also includes content-free `memory_compiler_*` summary fields and a
 `memory_compiler_turn_details` array with per-turn injection state, compiled token
 and IR-overhead estimates, referenced-memory/constraint/risk/step counts, and

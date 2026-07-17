@@ -1000,32 +1000,6 @@ func TestSetDefaultToolApprovalModePersistsToUserConfig(t *testing.T) {
 	}
 }
 
-func TestSetDesktopMetricsDefaultsOffAndPersistsOptIn(t *testing.T) {
-	isolateDesktopUserDirs(t)
-
-	app := NewApp()
-	if app.Settings().Metrics {
-		t.Fatal("Settings().Metrics default = true, want false")
-	}
-	if err := app.SetDesktopMetrics(true); err != nil {
-		t.Fatalf("SetDesktopMetrics: %v", err)
-	}
-	view := app.Settings()
-	if !view.Metrics {
-		t.Fatal("Settings().Metrics = false, want true")
-	}
-	cfg := config.LoadForEdit(config.UserConfigPath())
-	if cfg.Desktop.Metrics == nil || !*cfg.Desktop.Metrics {
-		t.Fatalf("desktop.metrics = %+v, want true", cfg.Desktop.Metrics)
-	}
-	if !cfg.DesktopMetrics() {
-		t.Fatal("DesktopMetrics() = false, want true")
-	}
-	if app.metrics.Load() != nil {
-		t.Fatal("metrics aggregator started without a repository-owned endpoint")
-	}
-}
-
 func TestSetMemoryCompilerDefaultsOnAndPersistsOff(t *testing.T) {
 	isolateDesktopUserDirs(t)
 

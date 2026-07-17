@@ -121,8 +121,6 @@ function baseSettings(displayMode: "standard" | "compact" = "standard"): Setting
     statusBarItems: ["model", "workspace", "git_branch", "cache", "balance"],
     defaultToolApprovalMode: "ask",
     checkUpdates: true,
-    telemetry: true,
-    metrics: true,
     memoryCompilerEnabled: true,
     configPath: "/tmp/reames-agent/config.toml",
     providerKinds: [],

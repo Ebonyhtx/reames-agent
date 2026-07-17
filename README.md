@@ -33,7 +33,8 @@ powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.co
 
 - **Multi-model**: DeepSeek, OpenAI-compatible, Anthropic — config-driven, no hardcoded models
 - **Cache-first**: DeepSeek prefix cache optimization, 95%+ hit rate target
-- **Three surfaces**: CLI (Bubble Tea TUI), Desktop (Wails + React), Web/Cloud (HTTP/SSE server)
+- **Shared controller, multiple surfaces**: CLI/TUI, Desktop (Wails + React), Web/Cloud (HTTP/SSE), ACP, and IM gateway
+- **Three work modes**: `economy` minimizes optional tool-schema cost, `balanced` exposes the full stable tool set, and `delivery` adds an evidence-backed completion contract
 - **IM Gateway**: Feishu, QQ, WeChat, Telegram bot adapters
 - **Plugin/MCP**: MCP stdio + HTTP transports, skill playbook system
 - **Offline recovery**: credential-free Guard, crash-loop detection, verified update rollback, and Safe Mode
@@ -51,6 +52,18 @@ reames-agent guard check --json        # Credential-free recovery report
 reames-agent guard launch --safe-mode  # Open the recovery-only Desktop shell
 ```
 
+Select a work mode at startup, or use `/work-mode` inside the interactive TUI:
+
+```bash
+reames-agent --profile economy
+reames-agent run --profile delivery "ship the requested change"
+reames-agent serve --profile balanced
+reames-agent acp --profile delivery
+```
+
+`balanced` is the default. Work modes change the stable execution contract, not
+permission, sandbox, evidence, checkpoint, or project-check enforcement.
+
 ## Cloud Deployment
 
 ```bash
@@ -67,10 +80,12 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) for systemd, nginx, and SSH deployment guid
 
 This repository is still before its first public stable release. The current
 safe distribution path is source builds and maintainer-reviewed candidate
-artifacts. Production release, updater, package-manager publishing, crash
-upload, and telemetry endpoints remain disabled until the gates in
-[docs/RELEASING.md](docs/RELEASING.md) and
-[docs/PUBLIC_READINESS.md](docs/PUBLIC_READINESS.md) are satisfied.
+artifacts. Production release, updater, and package-manager publishing remain
+disabled until the gates in [docs/RELEASING.md](docs/RELEASING.md) and
+[docs/PUBLIC_READINESS.md](docs/PUBLIC_READINESS.md) are satisfied. Reames-owned
+startup, metrics, performance, and crash upload endpoints are permanently out of
+scope; diagnostics and feedback stay local unless the user explicitly exports
+them.
 
 ## Documentation
 

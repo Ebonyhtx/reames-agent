@@ -48,7 +48,7 @@ type ArgData struct {
 // (everything after the command word). It returns the suggestions filtered by
 // the token being typed and the byte offset where that token begins, so a caller
 // replaces just that token. Only structured commands participate (/mcp /model
-// /skills /plugins /hooks /effort /auto-plan /goal /reasoning-language /memory-v5
+// /skills /plugins /hooks /effort /work-mode /auto-plan /goal /reasoning-language /memory-v5
 // /theme /language);
 // others yield nil. Single source of truth for CLI + desktop.
 func SlashArgItems(line string, d ArgData) ([]SlashItem, int) {
@@ -75,6 +75,8 @@ func SlashArgItems(line string, d ArgData) ([]SlashItem, int) {
 		raw = hooksArgItems(prior)
 	case "/effort":
 		raw = effortArgItems(prior, d)
+	case "/work-mode":
+		raw = workModeArgItems(prior)
 	case "/auto-plan":
 		raw = autoPlanArgItems(prior)
 	case "/goal":
@@ -91,6 +93,17 @@ func SlashArgItems(line string, d ArgData) ([]SlashItem, int) {
 		return nil, from
 	}
 	return filterSlash(raw, line, from, cur), from
+}
+
+func workModeArgItems(prior []string) []SlashItem {
+	if len(prior) > 1 {
+		return nil
+	}
+	return []SlashItem{
+		{Label: "economy", Insert: "economy", Hint: "lean initial tool surface; connect optional sources on demand"},
+		{Label: "balanced", Insert: "balanced", Hint: "complete tool surface with normal quality and cost tradeoffs"},
+		{Label: "delivery", Insert: "delivery", Hint: "prioritize verified completion and deeper follow-through"},
+	}
 }
 
 func goalArgItems(prior []string) []SlashItem {

@@ -186,8 +186,6 @@ type App struct {
 	botInstalls map[string]*botInstallSession
 	botRuntime  *desktopBotRuntime
 
-	metrics atomic.Pointer[metricsAggregator] // non-nil only when desktop.metrics is opted in; swapped live by SetDesktopMetrics
-
 	notificationSenderOnce sync.Once
 	notificationSender     notify.Sender
 
@@ -432,10 +430,6 @@ func (a *App) startup(ctx context.Context) {
 		a.enableDeferredRebuildRetry()
 	}
 
-	if cfg, err := config.Load(); err == nil && cfg.DesktopMetrics() && metricsEndpoint != "" && version != "dev" {
-		a.metrics.Store(newMetricsAggregator(config.MemoryUserDir()))
-		a.recordSettingsMetricsSnapshot(cfg)
-	}
 	a.startMainThreadWatchdog()
 
 	if !config.SafeModeRequested() {
@@ -449,9 +443,7 @@ func (a *App) startup(ctx context.Context) {
 	go a.restoreOrBuildTabs()
 	if !config.SafeModeRequested() {
 		a.goSafe("refreshBotRuntime", a.refreshBotRuntime)
-		a.goSafe("sendStartupPing", a.sendStartupPing)
-		a.goSafe("flushMetrics", a.flushMetrics)
-		a.goSafe("flushPendingCrash", a.flushPendingCrash)
+		a.goSafe("archivePendingCrash", a.archivePendingCrash)
 	}
 	// After restoreOrBuildTabs is launched: the GC's first sweep waits on
 	// tabsRestored so it never observes the pre-restore empty tab map.

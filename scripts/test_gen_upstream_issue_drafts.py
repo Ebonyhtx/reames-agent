@@ -26,15 +26,18 @@ class UpstreamIssueDraftTests(unittest.TestCase):
             "areas": {"agent-runtime": 2},
             "files": [{"status": "M", "path": "internal/agent/agent.go"}],
             "deep": {"commits": "abc change", "diff": "+change"},
+            "coverage": {"status": "incomplete", "record": "docs/review.json", "missing": ["work-modes"]},
         })
         self.assertIn("## Commits", text)
         self.assertIn("abc change", text)
         self.assertIn("internal/agent/agent.go", text)
+        self.assertIn("work-modes", text)
 
     def test_main_writes_only_attention_drafts(self):
         report = {
             "upstreams": [
                 {"id": "changed", "name": "Changed", "repo": "r", "branch": "main", "changed": True},
+                {"id": "coverage", "name": "Coverage", "repo": "r", "branch": "main", "changed": False, "coverage": {"status": "incomplete"}},
                 {"id": "clean", "name": "Clean", "repo": "r", "branch": "main", "changed": False},
             ]
         }
@@ -46,6 +49,7 @@ class UpstreamIssueDraftTests(unittest.TestCase):
             with mock.patch.object(drafts, "DEFAULT_REPORT", report_path), mock.patch.object(drafts, "DRAFT_DIR", out):
                 self.assertEqual(drafts.main(), 0)
             self.assertTrue((out / "changed.md").exists())
+            self.assertTrue((out / "coverage.md").exists())
             self.assertFalse((out / "clean.md").exists())
 
 

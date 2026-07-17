@@ -1,5 +1,7 @@
 # Telemetry and feedback boundary audit
 
+> 2026-07-17 P4 update: this document is retained as a historical baseline. The desktop launch ping, aggregate metrics, crash HTTP upload code, and their settings were permanently removed. Current diagnostics are local-only and may be copied or saved explicitly by the user.
+
 Date: 2026-07-09
 
 ## 背景

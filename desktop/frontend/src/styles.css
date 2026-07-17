@@ -5963,12 +5963,14 @@ body > .mermaid-diagram--fullscreen {
 }
 
 .composer-modebar[data-mode="auto"],
-.composer-modebar[data-mode="plan"] {
+.composer-modebar[data-mode="plan"],
+.composer-modebar[data-mode="balanced"] {
   --composer-modebar-index: 1;
 }
 
 .composer-modebar[data-mode="yolo"],
-.composer-modebar[data-mode="goal"] {
+.composer-modebar[data-mode="goal"],
+.composer-modebar[data-mode="delivery"] {
   --composer-modebar-index: 2;
 }
 

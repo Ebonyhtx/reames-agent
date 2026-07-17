@@ -4,7 +4,7 @@
 >
 > 更新：2026-07-09
 >
-> 范围：阿里云服务器、独立社交通道网关、远程 CLI、上游研究 Worker、遥测与反馈闭环
+> 范围：云服务器、独立社交通道网关、远程 CLI、上游研究 Worker 与本地反馈工作流
 
 ## 结论
 
@@ -33,10 +33,10 @@ Aliyun ECS / 自有服务器
 │  ├─ 检测官方上游和参考项目更新
 │  ├─ 拉取差异、运行测试、生成研究报告
 │  └─ 创建 Issue / 草稿 PR / 补丁建议
-└─ telemetry feedback collector
-   ├─ 崩溃、指标、用户反馈和失败案例
-   ├─ 隐私保护与脱敏
-   └─ 聚合为自我迭代任务
+└─ local feedback workflow
+   ├─ 管理员主动提交的用户反馈和失败案例
+   ├─ 本地隐私保护与脱敏
+   └─ 生成人工审阅的维护草稿
 ```
 
 所有入口都应接入同一个 `internal/control` 运行边界。CLI、Server、Desktop、Gateway/Bot 只负责交互和传输，不各自实现 Agent 行为。
@@ -135,15 +135,14 @@ SSH 终端是最可靠的兜底入口；IM 是移动端和日常触达入口；S
 - 上游升级必须留下差异、测试、许可证和采纳理由。
 - 涉及代码修改时，先进入草稿分支或补丁建议，再由用户或维护者决定。
 
-### 遥测、反馈和 BUG 汇总
+### 本地反馈和 BUG 汇总
 
-云端可以成为自托管反馈中心，但必须默认保护隐私：
+云端节点可以维护本机反馈账本，但它不是 Reames 自有遥测服务：
 
-- 默认不上传对话全文、源码全文、密钥、环境变量或文件内容。
-- 崩溃报告、错误类型、版本、平台、命令路径、工具失败原因可以结构化收集。
-- 用户主动反馈可以附带可选上下文，并在发送前展示摘要。
-- 所有上报先进入自有 endpoint，不使用继承自上游或第三方的未知服务。
-- 反馈聚合后生成 Issue、回归测试建议或本地修复任务。
+- Desktop 不发送启动、性能、metrics 或 crash 数据；脱敏诊断只能由用户复制或保存到本机。
+- `feedback submit` 和 loopback `serve` API 只写部署节点自己的 JSONL，不连接 Reames 或第三方 endpoint。
+- 管理员主动反馈可以附带可选上下文，并在落盘前脱敏。
+- 反馈聚合后只生成本地 Issue 草稿、回归测试建议或修复任务，发布前必须人工审阅。
 
 ## 分层架构
 
@@ -160,7 +159,7 @@ flowchart TD
   A --> E["Evidence / Checkpoints"]
   A --> J["Jobs / Cron"]
   J --> UP["Upstream Research"]
-  J --> FB["Telemetry Feedback"]
+  J --> FB["Local Feedback Drafts"]
 ```
 
 云端能力必须复用本地 Agent 的权限和证据模型。不能为了“远程方便”绕过审批、沙箱、检查点或密钥脱敏。
@@ -223,15 +222,14 @@ flowchart TD
 
 完成门槛：Reasonix 或参考项目更新后，云端自动产出可审查报告，但不会自动合并。
 
-### C4：遥测与反馈中心
+### C4：本地反馈与维护草稿
 
-- 自托管 crash/metrics/feedback endpoint。
 - 当前已具备第一阶段：`serve` 提供 `POST /api/feedback`、`GET /api/feedback/summary` 和 `POST /api/feedback/draft`，`reames-agent feedback submit|summary|draft --home PATH` 提供 SSH/CLI 运维入口；两者都使用 `<Reames Agent home>/feedback/feedback.jsonl`，并在落盘前脱敏邮箱、用户路径、API key、Bearer token、JWT 和长 token；维护草稿写入 `<Reames Agent home>/feedback/drafts/*.md`，不自动外发。credential-free 预检已证明两条重复 Gateway 反馈聚为一个 group、本地草稿落盘且 fixture 敏感值不进入证据。
-- 默认关闭内容上报，只收集结构化、脱敏、可解释字段。
+- Desktop 启动、性能、metrics 与 crash 上传已永久删除；本节不建设项目自有收集服务器。
 - 将重复失败聚类为 Issue 或维护任务。
-- 为桌面端、CLI、Server 和 Gateway 使用同一套事件 schema。
+- 为 CLI、Server 和 Gateway 的管理员主动反馈使用同一套本地 schema。
 
-完成门槛：一次真实崩溃或用户反馈可以被汇总、去重，并转为可执行维护项。当前已有 HTTP 和 CLI 两条本地维护草稿生成路径，仍缺真实桌面/Gateway 上报按钮、GitHub Issue 草稿发布流程和端到端云节点验证。
+完成门槛：管理员主动提交的一次用户反馈可以被汇总、去重，并转为可执行维护项。当前已有 HTTP 和 CLI 两条本地维护草稿生成路径；GitHub Issue 发布始终保持人工确认，不再要求 Desktop/Gateway 自动上报或专用云节点。
 
 ### C5：加固与运维
 

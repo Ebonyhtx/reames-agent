@@ -219,6 +219,7 @@ var ChineseTraditional = Messages{
 	CmdReloadCmd:        "重載自定義命令",
 	CmdSandbox:          "檢視沙箱狀態",
 	CmdEffort:           "設定推理強度",
+	CmdWorkMode:         "切換經濟、均衡或交付工作模式",
 	CmdMouse:            "切換滑鼠接管（關閉後由終端原生處理選取/右鍵）",
 	CmdAutoPlan:         "設定自動計畫模式",
 	CmdReasonLang:       "設定可見思考語言",

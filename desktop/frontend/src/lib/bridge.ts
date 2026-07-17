@@ -327,8 +327,6 @@ export interface AppBindings {
   GetDesktopZoomFactor(): Promise<number>;
   RestartApplication(): Promise<void>;
   SetDesktopCheckUpdates(enabled: boolean): Promise<void>;
-  SetDesktopTelemetry(enabled: boolean): Promise<void>;
-  SetDesktopMetrics(enabled: boolean): Promise<void>;
   SetMemoryCompilerEnabled(enabled: boolean): Promise<void>;
   SetExpandThinking(on: boolean): Promise<void>;
   MigrateDesktopPreferences(language: string, theme: string, style: string): Promise<void>;
@@ -349,9 +347,9 @@ export interface AppBindings {
   NeedsOnboarding(): Promise<boolean>;
   DismissOnboarding(): Promise<void>;
   ConnectKey(apiKey: string): Promise<string>;
-  // Crash overlay "Send report" (desktop/crash_app.go): scrubs user paths, attaches
-  // version/os/arch, POSTs to the collection endpoint. Only ever sent on user click.
-  ReportCrash(kind: string, detail: string): Promise<void>;
+  // Crash/diagnostic overlay: scrubs sensitive text and stores a local JSON file.
+  // Reames Agent has no project-owned reporting endpoint.
+  SaveDiagnosticReport(kind: string, detail: string): Promise<string>;
   ListTabs(): Promise<TabMeta[]>;
   OpenProjectTab(workspaceRoot: string, topicID: string): Promise<TabMeta>;
   OpenGlobalTab(topicID: string): Promise<TabMeta>;
@@ -666,7 +664,7 @@ export function onSessionRecoveryFailed(cb: (payload: SessionRecoveryFailedEvent
 // app proxies each call to the live binding (or the dev mock only when truly
 // outside the shell), so a late-injected window.go is picked up transparently.
 function bridgeBreadcrumb(method: string): string {
-  if (method === "ReportCrash") return "";
+  if (method === "SaveDiagnosticReport") return "";
   if (/^(Submit|SubmitDisplay|RunShell|Steer|Cancel|Approve|AnswerQuestion|ReplayPendingPrompts)/.test(method))
     return `turn ${method}`;
   if (/^(SetModel|SetEffort|SetTokenMode|SetDefaultModel|SetPlannerModel|SetSubagentModel|SetSubagentEffort|SetMaxSubagentDepth)/.test(method))

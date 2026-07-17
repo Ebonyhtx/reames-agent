@@ -181,7 +181,7 @@ func dispatchRecoverySensitiveCommand(args []string, version string) (int, bool)
 
 func isDefaultInteractiveFlag(arg string) bool {
 	switch arg {
-	case "--model", "--max-steps", "--continue", "-c", "--resume", "--copy", "--dangerously-skip-permissions", "--yolo", "--dir":
+	case "--model", "--profile", "--max-steps", "--continue", "-c", "--resume", "--copy", "--dangerously-skip-permissions", "--yolo", "--dir":
 		return true
 	}
 	if name, _, ok := strings.Cut(arg, "="); ok && isDefaultInteractiveFlag(name) {
@@ -247,12 +247,17 @@ func configureCLIThemeFromConfigNoProbe() {
 // the agent's typed event stream — runAgent passes a TextSink that renders to
 // stdout, the TUI passes an event-channel sink so events become tea.Msgs.
 func setup(ctx context.Context, modelName string, maxStepsOverride int, requireKey bool, sink event.Sink) (*control.Controller, error) {
+	return setupWithWorkMode(ctx, modelName, maxStepsOverride, requireKey, sink, boot.TokenModeFull)
+}
+
+func setupWithWorkMode(ctx context.Context, modelName string, maxStepsOverride int, requireKey bool, sink event.Sink, workMode string) (*control.Controller, error) {
 	migrateMCPConfigForCLIWorkspace()
 	return boot.Build(ctx, boot.Options{
 		Model:      modelName,
 		MaxSteps:   maxStepsOverride,
 		RequireKey: requireKey,
 		Sink:       sink,
+		TokenMode:  workMode,
 		SessionDir: resolveCLISessionDir(),
 	})
 }
@@ -275,12 +280,57 @@ func resolveCLISessionDir() string {
 // Used during model switch inside a bubbletea session to prevent plugin logs
 // from corrupting the TUI's terminal raw mode.
 func setupQuiet(ctx context.Context, modelName string, maxStepsOverride int, requireKey bool, sink event.Sink) (*control.Controller, error) {
+	return setupQuietWithWorkMode(ctx, modelName, maxStepsOverride, requireKey, sink, boot.TokenModeFull)
+}
+
+func setupQuietWithWorkMode(ctx context.Context, modelName string, maxStepsOverride int, requireKey bool, sink event.Sink, workMode string) (*control.Controller, error) {
 	return boot.Build(ctx, boot.Options{
 		Model:      modelName,
 		MaxSteps:   maxStepsOverride,
 		RequireKey: requireKey,
 		Sink:       sink,
+		TokenMode:  workMode,
 		Stderr:     io.Discard,
+	})
+}
+
+func parseCLIWorkMode(raw string) (string, bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return boot.TokenModeFull, false, nil
+	}
+	mode, ok := boot.ParseWorkMode(raw)
+	if !ok {
+		return "", true, fmt.Errorf("profile %q must be economy, balanced, or delivery", raw)
+	}
+	return mode, true, nil
+}
+
+func workModeForResumePath(mode string, explicit bool, resumePath string) string {
+	if explicit || strings.TrimSpace(resumePath) == "" {
+		return boot.NormalizeTokenMode(mode)
+	}
+	meta, ok, err := control.LoadSessionMeta(resumePath)
+	if err == nil && ok {
+		return boot.NormalizeTokenMode(meta.TokenMode)
+	}
+	return boot.NormalizeTokenMode(mode)
+}
+
+func persistCLIWorkMode(path, mode string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	return control.UpdateSessionMeta(path, false, func(meta *control.SessionMeta) error {
+		switch boot.NormalizeTokenMode(mode) {
+		case boot.TokenModeEconomy:
+			meta.TokenMode = boot.TokenModeEconomy
+		case boot.TokenModeDelivery:
+			meta.TokenMode = boot.TokenModeDelivery
+		default:
+			meta.TokenMode = ""
+		}
+		return nil
 	})
 }
 
@@ -332,6 +382,7 @@ func withNotifications(sink event.Sink, cfg *config.Config) event.Sink {
 func runAgent(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	model := fs.String("model", "", "provider name (default: config default_model)")
+	profile := fs.String("profile", "", "work mode: economy, balanced, or delivery (default: balanced; resume inherits when omitted)")
 	maxSteps := fs.Int("max-steps", 0, "max tool-call rounds (0 = use config/default)")
 	showThinking := fs.Bool("show-thinking", false, "show thinking text instead of the collapsed thinking marker")
 	metricsPath := fs.String("metrics", "", "write a JSON token/cache/cost summary of the run to this path")
@@ -341,6 +392,11 @@ func runAgent(args []string) int {
 	resume := fs.String("resume", "", "resume a specific session file (non-interactive; takes precedence over --continue)")
 	copySession := fs.Bool("copy", false, "with --resume/--continue: duplicate the session and continue in the copy (escape hatch when the original is held by another Reames Agent process)")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	workMode, profileExplicit, err := parseCLIWorkMode(*profile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
 	if rc := chdirTo(*dir); rc != 0 {
@@ -383,6 +439,7 @@ func runAgent(args []string) int {
 		fmt.Printf("continuing in a session copy: %s\n", copied)
 		resumePath = copied
 	}
+	workMode = workModeForResumePath(workMode, profileExplicit, resumePath)
 
 	// Own the session file for the lifetime of this run so a desktop window (or
 	// another CLI) writing the same session is refused up front instead of
@@ -433,7 +490,7 @@ func runAgent(args []string) int {
 	if resumePath != "" {
 		*model = modelForResumePath(*model, resumePath, cfg)
 	}
-	ctrl, err := setup(ctx, *model, *maxSteps, true, sink)
+	ctrl, err := setupWithWorkMode(ctx, *model, *maxSteps, true, sink, workMode)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 1
@@ -448,6 +505,10 @@ func runAgent(args []string) int {
 		ctrl.ResumeLoadedSession(resumeSession, resumePath)
 	}
 	ctrl.EnsureSessionPath()
+	if err := persistCLIWorkMode(ctrl.SessionPath(), workMode); err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "persist work mode:", err)
+		return 1
+	}
 	// Fresh sessions take the lease too (defensive: the path is brand new); a
 	// resumed path is already held, making this a no-op.
 	if err := leases.Rebind(ctrl.SessionPath()); err != nil {
@@ -478,6 +539,7 @@ func runAgent(args []string) int {
 func runServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	model := fs.String("model", "", "provider name (default: config default_model)")
+	profile := fs.String("profile", "", "work mode: economy, balanced, or delivery (default: balanced; resume inherits when omitted)")
 	maxSteps := fs.Int("max-steps", 0, "max tool-call rounds (0 = use config/default)")
 	addr := fs.String("addr", "127.0.0.1:8787", "listen address")
 	resume := fs.String("resume", "", "resume a saved session file")
@@ -489,6 +551,11 @@ func runServe(args []string) int {
 	healthCheck := fs.Bool("health-check", false, "probe the local serve /health endpoint and exit")
 	healthURL := fs.String("health-url", "http://127.0.0.1:8787/health", "URL used by --health-check")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	workMode, profileExplicit, err := parseCLIWorkMode(*profile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
 
@@ -573,6 +640,7 @@ func runServe(args []string) int {
 			return 1
 		}
 	}
+	workMode = workModeForResumePath(workMode, profileExplicit, *resume)
 	*model = modelForResumePath(*model, *resume, cfg)
 	// Serve always uses the user's global default_model, ignoring any
 	// project-level override, so the model choice stays consistent across
@@ -584,7 +652,7 @@ func runServe(args []string) int {
 			}
 		}
 	}
-	ctrl, err := setup(ctx, *model, *maxSteps, true, bc)
+	ctrl, err := setupWithWorkMode(ctx, *model, *maxSteps, true, bc, workMode)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 1
@@ -596,6 +664,10 @@ func runServe(args []string) int {
 		ctrl.ResumeLoadedSession(resumeSession, *resume)
 	}
 	ctrl.EnsureSessionPath()
+	if err := persistCLIWorkMode(ctrl.SessionPath(), workMode); err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "persist work mode:", err)
+		return 1
+	}
 	// Fresh sessions take the lease too (defensive: the path is brand new); a
 	// resumed path is already held, making this a no-op.
 	if err := leases.Rebind(ctrl.SessionPath()); err != nil {
@@ -604,6 +676,7 @@ func runServe(args []string) int {
 	}
 
 	srv := serve.New(ctrl, bc, serveCfg)
+	srv.SetWorkMode(workMode)
 	srv.SetSessionLeases(leases)
 	fmt.Printf("reames-agent serve — %s on http://%s\n", ctrl.Label(), *addr)
 	if srv.AuthMode() == "token" {
@@ -659,6 +732,7 @@ func serveHealthCheck(rawURL string) int {
 func chatREPL(args []string) int {
 	fs := flag.NewFlagSet("reames-agent", flag.ContinueOnError)
 	model := fs.String("model", "", "provider name (default: config default_model)")
+	profile := fs.String("profile", "", "work mode: economy, balanced, or delivery (default: balanced; resume inherits when omitted)")
 	maxSteps := fs.Int("max-steps", 0, "max tool-call rounds (0 = use config/default)")
 	cont := fs.Bool("continue", false, "resume the most recent saved session")
 	fs.BoolVar(cont, "c", false, "shorthand for --continue")
@@ -668,6 +742,11 @@ func chatREPL(args []string) int {
 	fs.BoolVar(yolo, "yolo", false, "alias for --dangerously-skip-permissions")
 	dir := fs.String("dir", "", "change to this directory first (project root); config, sandbox and file tools resolve from here")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	workMode, profileExplicit, err := parseCLIWorkMode(*profile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
 	if rc := chdirTo(*dir); rc != 0 {
@@ -710,6 +789,7 @@ func chatREPL(args []string) int {
 		fmt.Printf("continuing in a session copy: %s\n", copied)
 		resumePath = copied
 	}
+	workMode = workModeForResumePath(workMode, profileExplicit, resumePath)
 
 	// Own the active session file for the TUI's lifetime; in-TUI switches
 	// (/resume, /switch, /new, ...) move the lease with the active path.
@@ -739,7 +819,7 @@ func chatREPL(args []string) int {
 
 	var sink event.Sink = &eventSink{ch: eventCh}
 	sink = withNotifications(sink, cfg)
-	ctrl, err := setup(ctx, *model, *maxSteps, false, sink)
+	ctrl, err := setupWithWorkMode(ctx, *model, *maxSteps, false, sink, workMode)
 	if err != nil && errors.Is(err, boot.ErrUnknownModel) && isInteractive() && config.SourcePath() == "" {
 		// True first run whose default model can't resolve: guide setup, then retry.
 		// With a config present, fall through to the descriptive error — re-running
@@ -748,7 +828,7 @@ func chatREPL(args []string) int {
 		if rc := interactiveSetup(defaultConfigTarget(), defaultEnvTarget()); rc != 0 {
 			return rc
 		}
-		ctrl, err = setup(ctx, *model, *maxSteps, false, sink)
+		ctrl, err = setupWithWorkMode(ctx, *model, *maxSteps, false, sink, workMode)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
@@ -767,6 +847,10 @@ func chatREPL(args []string) int {
 		ctrl.ResumeLoadedSession(loaded, resumePath)
 	}
 	ctrl.EnsureSessionPath()
+	if err := persistCLIWorkMode(ctrl.SessionPath(), workMode); err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "persist work mode:", err)
+		return 1
+	}
 	// Fresh sessions take the lease too (defensive: the path is brand new); a
 	// resumed path is already held, making this a no-op.
 	if err := leases.Rebind(ctrl.SessionPath()); err != nil {
@@ -805,6 +889,7 @@ func chatREPL(args []string) int {
 	}
 
 	m := newChatTUI(ctrl, missing, eventCh, termW)
+	m.workMode = boot.WorkModeName(workMode)
 	m.leases = leases
 	if cfg, err := config.Load(); err == nil {
 		m.outputStyle = cfg.Agent.OutputStyle    // shown as the active entry in /output-style
@@ -817,13 +902,28 @@ func chatREPL(args []string) int {
 	// model (carrying the conversation). It must NOT touch the running model —
 	// runModelSubcommand performs the swap on the live copy. The same stable sink
 	// feeds the new controller, so events keep flowing to this TUI.
+	activeWorkMode := workMode
+	m.workModeState = &activeWorkMode
 	m.buildController = func(ref string, carry control.SessionHistorySnapshot, resumePath string) (*control.Controller, error) {
-		c, err := setupQuiet(ctx, ref, *maxSteps, false, sink)
+		c, err := setupQuietWithWorkMode(ctx, ref, *maxSteps, false, sink, activeWorkMode)
 		if err != nil {
 			return nil, err
 		}
 		// Keep the carried conversation in its existing file so the switch doesn't
 		// orphan a duplicate (#2807).
+		path := control.ContinueSessionPath(resumePath, c.SessionDir(), c.Label())
+		c.AdoptSessionHistoryWithCurrentSystemPrompt(carry, path)
+		c.EnableInteractiveApproval()
+		if *yolo {
+			c.SetAutoApproveTools(true)
+		}
+		return c, nil
+	}
+	m.buildWorkModeController = func(ref, nextMode string, carry control.SessionHistorySnapshot, resumePath string) (*control.Controller, error) {
+		c, err := setupQuietWithWorkMode(ctx, ref, *maxSteps, false, sink, nextMode)
+		if err != nil {
+			return nil, err
+		}
 		path := control.ContinueSessionPath(resumePath, c.SessionDir(), c.Label())
 		c.AdoptSessionHistoryWithCurrentSystemPrompt(carry, path)
 		c.EnableInteractiveApproval()

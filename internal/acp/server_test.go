@@ -79,6 +79,7 @@ func (f *configurableFactory) NewSession(_ context.Context, p SessionParams) (*c
 		Cwd:            p.Cwd,
 		Model:          p.Model,
 		EffortOverride: cloneStringPtr(p.EffortOverride),
+		WorkMode:       p.WorkMode,
 	})
 	f.mu.Unlock()
 	behavior := f.behavior
@@ -172,9 +173,22 @@ func (f *configurableFactory) SessionConfigState(_ context.Context, p SessionCon
 		{Value: "auto", Name: "Auto"},
 		{Value: "high", Name: "High"},
 	}
+	workMode := strings.TrimSpace(p.WorkMode)
+	if workMode == "" {
+		workMode = "balanced"
+	}
+	if workMode != "economy" && workMode != "balanced" && workMode != "delivery" {
+		return SessionConfigState{}, os.ErrInvalid
+	}
+	workModeOptions := []SessionConfigSelectOption{
+		{Value: "economy", Name: "Economy"},
+		{Value: "balanced", Name: "Balanced"},
+		{Value: "delivery", Name: "Delivery"},
+	}
 	return SessionConfigState{
 		Model:          model,
 		EffortOverride: effortOverride,
+		WorkMode:       workMode,
 		Models: &SessionModelState{
 			AvailableModels: []ModelInfo{{ModelID: "fast", Name: "Fast"}, {ModelID: "pro", Name: "Pro"}},
 			CurrentModelID:  model,
@@ -182,6 +196,7 @@ func (f *configurableFactory) SessionConfigState(_ context.Context, p SessionCon
 		ConfigOptions: []SessionConfigOption{
 			{ID: "model", Name: "Model", Category: "model", Type: "select", CurrentValue: model, Options: modelOptions},
 			{ID: "effort", Name: "Effort", Category: "thought_level", Type: "select", CurrentValue: effort, Options: effortOptions},
+			{ID: "work_mode", Name: "Work mode", Category: "work_mode", Type: "select", CurrentValue: workMode, Options: workModeOptions},
 		},
 	}, nil
 }
@@ -593,6 +608,9 @@ func TestServeSessionConfigSwitchesModelAndEffort(t *testing.T) {
 	if got := factory.buildAt(t, 0).Model; got != "fast" {
 		t.Fatalf("initial build model = %q, want fast", got)
 	}
+	if got := factory.buildAt(t, 0).WorkMode; got != "balanced" {
+		t.Fatalf("initial build work mode = %q, want balanced", got)
+	}
 
 	setModelResp := client.call(t, "session/set_config_option", SetSessionConfigOptionParams{
 		SessionID: nr.SessionID,
@@ -629,12 +647,30 @@ func TestServeSessionConfigSwitchesModelAndEffort(t *testing.T) {
 		t.Fatalf("effort build = model:%q effort:%v, want pro/high", effortBuild.Model, effortBuild.EffortOverride)
 	}
 
+	setWorkModeResp := client.call(t, "session/set_config_option", SetSessionConfigOptionParams{
+		SessionID: nr.SessionID,
+		ConfigID:  "work_mode",
+		Value:     "delivery",
+	})
+	var workModeSet SetSessionConfigOptionResult
+	if err := json.Unmarshal(setWorkModeResp.Result, &workModeSet); err != nil {
+		t.Fatalf("set work mode result: %v", err)
+	}
+	workModeOpt, _ := findConfigOption(workModeSet.ConfigOptions, "work_mode")
+	if workModeOpt.CurrentValue != "delivery" {
+		t.Fatalf("work mode after set_config_option = %q, want delivery", workModeOpt.CurrentValue)
+	}
+	workModeBuild := factory.buildAt(t, 3)
+	if workModeBuild.Model != "pro" || workModeBuild.WorkMode != "delivery" || workModeBuild.EffortOverride == nil || *workModeBuild.EffortOverride != "high" {
+		t.Fatalf("work-mode build = model:%q effort:%v workMode:%q, want pro/high/delivery", workModeBuild.Model, workModeBuild.EffortOverride, workModeBuild.WorkMode)
+	}
+
 	setLegacyResp := client.call(t, "session/set_model", SetSessionModelParams{SessionID: nr.SessionID, ModelID: "fast"})
 	if setLegacyResp.Error != nil {
 		t.Fatalf("session/set_model errored: %+v", setLegacyResp.Error)
 	}
-	if got := factory.buildAt(t, 3).Model; got != "fast" {
-		t.Fatalf("legacy set_model build model = %q, want fast", got)
+	if got := factory.buildAt(t, 4); got.Model != "fast" || got.WorkMode != "delivery" {
+		t.Fatalf("legacy set_model build = model:%q workMode:%q, want fast/delivery", got.Model, got.WorkMode)
 	}
 }
 
@@ -1042,6 +1078,7 @@ func TestServeSessionLoadFallsBackFromStaleSavedModel(t *testing.T) {
 		Cwd:            cwd,
 		Model:          "missing/model",
 		EffortOverride: &effort,
+		WorkMode:       "turbo",
 		CreatedAt:      time.Now().UTC(),
 		UpdatedAt:      time.Now().UTC(),
 	}); err != nil {
@@ -1060,12 +1097,18 @@ func TestServeSessionLoadFallsBackFromStaleSavedModel(t *testing.T) {
 	if got := factory.buildAt(t, 0).Model; got != "fast" {
 		t.Fatalf("fallback build model = %q, want fast", got)
 	}
+	if got := factory.buildAt(t, 0).WorkMode; got != "balanced" {
+		t.Fatalf("fallback build work mode = %q, want balanced", got)
+	}
 	meta, ok, err := loadACPMeta(path)
 	if err != nil || !ok {
 		t.Fatalf("load rewritten meta = %v, ok=%v", err, ok)
 	}
 	if meta.Model != "fast" {
 		t.Fatalf("rewritten meta model = %q, want fast", meta.Model)
+	}
+	if meta.WorkMode != "balanced" {
+		t.Fatalf("rewritten meta work mode = %q, want balanced", meta.WorkMode)
 	}
 }
 

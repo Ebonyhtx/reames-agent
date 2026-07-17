@@ -15,11 +15,24 @@ import (
 )
 
 const (
-	TokenModeFull    = "full"
-	TokenModeEconomy = "economy"
+	TokenModeFull     = "full" // legacy persisted name for the balanced work mode
+	TokenModeEconomy  = "economy"
+	TokenModeDelivery = "delivery"
+	WorkModeBalanced  = "balanced"
 )
 
 const tokenEconomyPrompt = `Token economy mode is on. Keep the default tool surface lean. Optional sources are hidden behind connect_tool_source; enable skills, read_only_skill, MCP servers, LSP, web_fetch, install_source, task, or read_only_task only when the current request actually needs them.`
+
+const tokenDeliveryPrompt = `<delivery-profile>
+Prioritize a verified, complete result over minimizing model calls or tokens.
+For action requests: establish acceptance criteria; inspect the relevant code and
+project rules; reproduce failures when practical; fix the root cause; run focused
+verification; review the resulting diff and adjacent behavior; and continue until
+the request is complete or a genuine blocker remains. Do not claim success without
+host-observable evidence. State every unverified result or assumption explicitly.
+Use the shared todo_write, complete_step, project-check, checkpoint, and delivery
+mechanisms; this profile does not bypass permissions, plan approval, or sandboxing.
+</delivery-profile>`
 
 var tokenEconomyCoreBuiltins = []string{
 	"bash",
@@ -43,8 +56,38 @@ func NormalizeTokenMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case TokenModeEconomy, "eco", "save", "saving", "low", "lite", "minimal":
 		return TokenModeEconomy
+	case TokenModeDelivery, "deliver", "quality", "performance":
+		return TokenModeDelivery
 	default:
 		return TokenModeFull
+	}
+}
+
+// WorkModeName returns the stable public work-mode name. The legacy persisted
+// value "full" is intentionally projected as "balanced".
+func WorkModeName(mode string) string {
+	switch NormalizeTokenMode(mode) {
+	case TokenModeEconomy:
+		return TokenModeEconomy
+	case TokenModeDelivery:
+		return TokenModeDelivery
+	default:
+		return WorkModeBalanced
+	}
+}
+
+// ParseWorkMode validates a user/wire value and returns the internal token-mode
+// representation used by boot and persisted session metadata.
+func ParseWorkMode(mode string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case TokenModeEconomy, "eco":
+		return TokenModeEconomy, true
+	case WorkModeBalanced, TokenModeFull, "default":
+		return TokenModeFull, true
+	case TokenModeDelivery, "deliver":
+		return TokenModeDelivery, true
+	default:
+		return "", false
 	}
 }
 

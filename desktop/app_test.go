@@ -4613,6 +4613,24 @@ func TestSetTokenModeRebuildsController(t *testing.T) {
 	if len(saved.Tabs) != 1 || saved.Tabs[0].TokenMode != "economy" {
 		t.Fatalf("saved tabs = %+v, want economy token mode", saved.Tabs)
 	}
+
+	economyCtrl := app.activeCtrl()
+	if err := app.SetTokenMode("delivery"); err != nil {
+		t.Fatalf("SetTokenMode(delivery): %v", err)
+	}
+	if c := app.activeCtrl(); c == nil || c == economyCtrl {
+		t.Fatal("delivery mode should atomically rebuild the active controller")
+	}
+	if got := currentTabTokenMode(app.activeTab()); got != boot.TokenModeDelivery {
+		t.Fatalf("token mode = %q, want delivery", got)
+	}
+	if got := app.Meta().TokenMode; got != boot.TokenModeDelivery {
+		t.Fatalf("Meta token mode = %q, want delivery", got)
+	}
+	saved = loadTabsFile()
+	if len(saved.Tabs) != 1 || saved.Tabs[0].TokenMode != boot.TokenModeDelivery {
+		t.Fatalf("saved tabs = %+v, want delivery token mode", saved.Tabs)
+	}
 }
 
 func TestSetTokenModeReusesCurrentSessionLease(t *testing.T) {

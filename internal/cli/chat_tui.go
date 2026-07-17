@@ -22,6 +22,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"reames-agent/internal/boot"
 	"reames-agent/internal/command"
 	"reames-agent/internal/config"
 	"reames-agent/internal/control"
@@ -287,8 +288,14 @@ type chatTUI struct {
 	// disables /model. modelRef is the active "provider/model" ref, marked
 	// current in the picker.
 	buildController func(ref string, carry control.SessionHistorySnapshot, resumePath string) (*control.Controller, error)
-	modelRef        string
-	effortLevel     string // "" when the current provider/model has no configurable effort
+	// buildWorkModeController uses the active model with a new work profile.
+	// workModeState points at the launch closure's internal token-mode value so
+	// later /model and /effort rebuilds keep the newly selected profile.
+	buildWorkModeController func(ref, mode string, carry control.SessionHistorySnapshot, resumePath string) (*control.Controller, error)
+	workModeState           *string
+	modelRef                string
+	workMode                string // economy | balanced | delivery
+	effortLevel             string // "" when the current provider/model has no configurable effort
 
 	// leases owns the session lease guarding the TUI's active session file (set
 	// by chatREPL; nil in tests and when persistence is disabled). Every in-TUI
@@ -438,14 +445,17 @@ func (m chatTUI) refreshGitStatus() tea.Cmd {
 // runs after the render completes, avoiding corruption of the terminal's raw
 // mode that would occur if Close() were called from the build goroutine.
 type modelSwitchMsg struct {
-	ref      string
-	ctrl     control.SessionAPI
-	oldCtrl  control.SessionAPI
-	label    string
-	commands []command.Command
-	skills   []skill.Skill
-	host     *plugin.Host
-	err      error
+	ref           string
+	workMode      string
+	successNotice string
+	errorPrefix   string
+	ctrl          control.SessionAPI
+	oldCtrl       control.SessionAPI
+	label         string
+	commands      []command.Command
+	skills        []skill.Skill
+	host          *plugin.Host
+	err           error
 }
 
 // fetchBalance queries the provider's wallet balance off the event loop. It's a
@@ -1370,7 +1380,11 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modelSwitchPending = false
 		m.pendingModelSwitch = nil
 		if msg.err != nil {
-			m.notice("model: " + msg.err.Error())
+			prefix := msg.errorPrefix
+			if prefix == "" {
+				prefix = "model"
+			}
+			m.notice(prefix + ": " + msg.err.Error())
 			// Build failed — no old controller to retire.
 		} else {
 			m.ctrl = msg.ctrl
@@ -1379,6 +1393,17 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.skills = msg.skills
 			m.host = msg.host
 			m.modelRef = msg.ref
+			if msg.workMode != "" {
+				m.workMode = msg.workMode
+				if m.workModeState != nil {
+					if mode, ok := boot.ParseWorkMode(msg.workMode); ok {
+						*m.workModeState = mode
+					}
+				}
+				if err := persistCLIWorkMode(m.ctrl.SessionPath(), msg.workMode); err != nil {
+					m.notice("work-mode: persist failed: " + err.Error())
+				}
+			}
 			m.refreshEffortStatus()
 			// Stash the old controller for cleanup at exit. It cannot be
 			// closed here or in the build goroutine — Close() runs
@@ -1392,7 +1417,11 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the pre-switch snapshot recovered onto a recovery branch — a
 			// fresh file created by this process, so failure is theoretical.
 			m.followSessionLease()
-			m.notice(fmt.Sprintf(i18n.M.ModelSwitchedFmt, m.label))
+			if msg.successNotice != "" {
+				m.notice(msg.successNotice)
+			} else {
+				m.notice(fmt.Sprintf(i18n.M.ModelSwitchedFmt, m.label))
+			}
 			cmds = append(cmds, fetchBalance(m.ctrl))
 			if c := m.runStatusline(); c != nil {
 				cmds = append(cmds, c)
@@ -2461,6 +2490,9 @@ func (m chatTUI) View() tea.View {
 	if et := m.effortTag(); et != "" {
 		status += " · " + et
 	}
+	if wt := m.workModeTag(); wt != "" {
+		status += " · " + wt
+	}
 	if gt := m.gitTag(); gt != "" {
 		status += " · " + gt
 	}
@@ -2731,6 +2763,17 @@ func (m chatTUI) effortTag() string {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("#2563eb")).Bold(true).Render(body)
 	}
 	return dim(body)
+}
+
+func (m chatTUI) workModeTag() string {
+	switch m.workMode {
+	case "economy":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#059669")).Bold(true).Render("economy")
+	case "delivery":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#7c3aed")).Bold(true).Render("delivery")
+	default:
+		return ""
+	}
 }
 
 // mouseTag is a persistent status-line marker while mouseCaptureOff is on, so
@@ -3090,6 +3133,9 @@ func (m chatTUI) computeStatusLineCount(width int) int {
 	}
 	if et := m.effortTag(); et != "" {
 		status += " · " + et
+	}
+	if wt := m.workModeTag(); wt != "" {
+		status += " · " + wt
 	}
 	if gt := m.gitTag(); gt != "" {
 		status += " · " + gt
@@ -3601,6 +3647,9 @@ func (m *chatTUI) runSlashCommand(input string) tea.Cmd {
 			return nil
 		}
 		m.followSessionLease()
+		if err := persistCLIWorkMode(m.ctrl.SessionPath(), m.workMode); err != nil {
+			m.notice("work-mode: persist failed: " + err.Error())
+		}
 		// Native scrollback keeps the old transcript; mark the fork with a fresh banner.
 		m.resetFreshContextView(false)
 		m.notice(i18n.M.SlashNewDone)
@@ -3634,6 +3683,9 @@ func (m *chatTUI) runSlashCommand(input string) tea.Cmd {
 		m.showSandboxStatus()
 	case "/effort":
 		return m.runEffortCommand(input)
+	case "/work-mode":
+		m.echoLocalCommand(input)
+		return m.runWorkModeCommand(input)
 	case "/auto-plan":
 		m.echoLocalCommand(input)
 		m.runAutoPlanCommand(input)

@@ -85,6 +85,7 @@ func (m *chatTUI) slashItems() []compItem {
 		{label: "/diff-fold", insert: "/diff-fold", hint: i18n.M.CmdDiffFold},
 		{label: "/sandbox", insert: "/sandbox", hint: i18n.M.CmdSandbox},
 		{label: "/effort", insert: "/effort ", hint: i18n.M.CmdEffort, descend: true},
+		{label: "/work-mode", insert: "/work-mode ", hint: i18n.M.CmdWorkMode, descend: true},
 		{label: "/auto-plan", insert: "/auto-plan ", hint: i18n.M.CmdAutoPlan, descend: true},
 		{label: "/reasoning-language", insert: "/reasoning-language ", hint: i18n.M.CmdReasonLang, descend: true},
 		{label: "/memory-v5", insert: "/memory-v5 ", hint: i18n.M.CmdMemoryV5, descend: true},

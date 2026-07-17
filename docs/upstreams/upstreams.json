@@ -10,7 +10,25 @@
       "local_reference": "F:\\code-reference\\DeepSeek-Reasonix",
       "importance": "primary-base",
       "policy": "advisory-report",
-      "diff": true
+      "diff": true,
+      "review_record": "docs/upstreams/reviews/reasonix-current.json",
+      "required_review_areas": [
+        "source-baseline",
+        "active-refs-tags",
+        "agent-runtime",
+        "controller-transports",
+        "provider-cache",
+        "tools-mcp-plugins",
+        "permissions-sandbox",
+        "session-memory-compaction",
+        "goal-plan-work-modes",
+        "desktop-ui-accessibility",
+        "cli-acp",
+        "serve-gateway",
+        "recovery-update",
+        "build-release",
+        "bug-fix-parity"
+      ]
     },
     {
       "id": "hermes",

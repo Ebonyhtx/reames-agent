@@ -1831,6 +1831,7 @@ func (gw *BotGateway) getOrCreateSession(ctx context.Context, key string, msg In
 		Sink:            sessionSink,
 		WorkspaceRoot:   profile.workspaceRoot,
 		SessionDir:      botSessionDir(profile.workspaceRoot),
+		TokenMode:       boot.TokenModeFull, // Bot defaults to balanced until a per-connection contract exists.
 		ApprovalTimeout: gw.approvalTimeout(),
 	})
 	if err != nil {

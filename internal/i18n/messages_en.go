@@ -232,6 +232,7 @@ var English = Messages{
 	CmdDiffFold:         "toggle diff fold/expand",
 	CmdSandbox:          "show sandbox status",
 	CmdEffort:           "set reasoning effort",
+	CmdWorkMode:         "switch economy, balanced, or delivery work mode",
 	CmdMouse:            "toggle in-app mouse capture (off = native terminal selection/right-click)",
 	CmdAutoPlan:         "configure automatic plan mode",
 	CmdReasonLang:       "set visible reasoning language",

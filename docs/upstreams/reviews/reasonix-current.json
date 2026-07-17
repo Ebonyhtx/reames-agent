@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "upstream": "reasonix",
+  "baseline": "07c65c22226e4886004215168230e1e1edad734b",
+  "reviewed": "3637d0f028bb8223d50ba9490a0ab5140eada4f3",
+  "updated_at": "2026-07-18T03:30:00+08:00",
+  "areas": {
+    "source-baseline": {
+      "status": "complete",
+      "evidence": [
+        "ef3a132 records the Reames import from Reasonix main-v2 at 07c65c22226e4886004215168230e1e1edad734b",
+        "docs/audits/2026-07-18-reasonix-generation-parity.md fixes the three-way baseline and reviewed SHA"
+      ]
+    },
+    "active-refs-tags": {
+      "status": "complete",
+      "evidence": [
+        "reasonix-generation-07c65c2-3637d0f.json records stable v1.17.14 tags and every unmerged origin ref",
+        "2026-07-18 parity audit classifies dependency, inline renderer, macOS migration, status bar, tab, missing-drive, reasoning-jank, and v1 refs"
+      ]
+    },
+    "agent-runtime": {
+      "status": "complete",
+      "evidence": [
+        "internal/agent/agent.go and empty_final_test.go absorb d3cfa5c2 behind explicit DeepSeek reasoning capability",
+        "M4 audits cover Goal/Todo/evidence, durable child effects, writer worktrees, and crash recovery"
+      ]
+    },
+    "controller-transports": {
+      "status": "complete",
+      "evidence": [
+        "docs/ARCHITECTURE.md records the empty transport runtime import allowlist and shared SessionAPI/command/event boundary",
+        "work profiles are assembled in internal/boot and reused by Desktop, CLI, Serve, Bot, and ACP"
+      ]
+    },
+    "provider-cache": {
+      "status": "complete",
+      "evidence": [
+        "provider/schema/retry/usage fixes from the generation range are classified in the inventory and prior 2026-07-17 sync audit",
+        "internal/boot tests prove balanced and delivery share the same complete tool schema while each stable prefix remains deterministic"
+      ]
+    },
+    "tools-mcp-plugins": {
+      "status": "complete",
+      "evidence": [
+        "docs/audits/2026-07-17-m5-mcp-identity-trust.md closes identity receipts, launcher pins, drift revocation, and fresh-human trust",
+        "2026-07-18 parity audit adopts persistent-session fixes but explicitly rejects upstream trust simplification"
+      ]
+    },
+    "permissions-sandbox": {
+      "status": "complete",
+      "evidence": [
+        "M4/M5 audits cover per-write approval, os.Root writers, credential isolation, worktree leases, and package process sandboxing",
+        "P2 Guard/Safe Mode audit proves fail-closed recovery-only assembly without Provider or extension runtime"
+      ]
+    },
+    "session-memory-compaction": {
+      "status": "complete",
+      "evidence": [
+        "dae65e25 save/event-log/navigation mechanisms are absorbed with Reames persistence fencing and tests",
+        "c966d027 Memory v5 removal is explicitly classified as a product divergence with observe default and bounded opt-in compact injection"
+      ]
+    },
+    "goal-plan-work-modes": {
+      "status": "complete",
+      "evidence": [
+        "internal/boot/token_profile.go implements economy, balanced, and delivery with a stable delivery contract",
+        "Desktop, CLI /work-mode and --profile, Serve startup profile, ACP work_mode, and Bot balanced default have focused tests"
+      ]
+    },
+    "desktop-ui-accessibility": {
+      "status": "complete",
+      "evidence": [
+        "Desktop implements three-state work mode UI and session persistence with frontend and Go tests",
+        "navigation failure toast, streaming reasoning jank, history timestamps, Windows openers, status item customization, and P5 Theme Pack decision are classified"
+      ]
+    },
+    "cli-acp": {
+      "status": "complete",
+      "evidence": [
+        "interactive CLI, run, serve, and acp accept --profile economy|balanced|delivery; resumed CLI sessions inherit the saved profile",
+        "TUI /work-mode and ACP work_mode rebuild atomically, preserve state, and are covered by internal/cli and internal/acp tests"
+      ]
+    },
+    "serve-gateway": {
+      "status": "complete",
+      "evidence": [
+        "serve --profile preserves the profile across model/effort controller rebuilds",
+        "Bot/Gateway explicitly defaults balanced until a stable per-connection profile contract exists"
+      ]
+    },
+    "recovery-update": {
+      "status": "complete",
+      "evidence": [
+        "docs/audits/2026-07-17-p2-offline-guard-safe-mode.md and P3 Recovery Center evidence cover Guard, repair transaction, and updater rollback",
+        "production signing/notarization remains external-blocked rather than being inferred from candidate tests"
+      ]
+    },
+    "build-release": {
+      "status": "complete",
+      "evidence": [
+        "3637d0f0 release approval changes are classified not applicable while Reames production release remains disabled",
+        "CI, CodeQL, cross-build, candidate, public-readiness, and release workflow ratchets remain the accepted repository evidence"
+      ]
+    },
+    "bug-fix-parity": {
+      "status": "complete",
+      "evidence": [
+        "reasonix-generation-07c65c2-3637d0f.json enumerates all 498 non-merge commits and all 314 exact fix/perf commits with paths and review areas",
+        "scripts/test_audit_reasonix_generation.py verifies deterministic enumeration, fix/perf selection, and area classification"
+      ]
+    }
+  }
+}

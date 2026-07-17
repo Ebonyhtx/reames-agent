@@ -22,7 +22,7 @@
 | [恢复指南（中文）](RECOVERY.zh-CN.md) / [English](RECOVERY.md) | Offline Guard、crash-loop、Safe Mode、更新回滚和运维操作手册 |
 | [云端 Agent 计划](CLOUD_AGENT_PLAN.md) | 服务器 CLI、社交通道 Gateway、上游研究 Worker、遥测反馈闭环 |
 | [配置路径（中文）](CONFIG_PATHS.zh-CN.md) / [English](CONFIG_PATHS.md) | 配置、状态、缓存和迁移路径 |
-| [协作模式](COLLABORATION_MODES.zh-CN.md) | Plan、Goal 与省 token 模式 |
+| [协作方式与工作模式](COLLABORATION_MODES.zh-CN.md) | 普通/计划/目标与经济/均衡/交付两个正交轴 |
 | [工具审批模式](TOOL_APPROVAL_MODES.zh-CN.md) | 询问、自动和 Yolo 权限语义 |
 | [桌面 Hooks](DESKTOP_HOOKS.zh-CN.md) | Hook 配置、事件和 payload |
 | [插件包（中文）](PLUGIN_PACKAGES.zh-CN.md) / [English](PLUGIN_PACKAGES.md) | 插件包安装与管理 |
@@ -67,7 +67,7 @@
 | [参考项目功能差异与吸收清单](audits/2026-07-09-reference-feature-gap-map.md) | 2026-07-09 的跨参考项目证据化差异快照；当前优先级仍以发展计划为准 |
 | [仓库 legacy tree 清洁收口审计](audits/2026-07-17-repository-cleanup.md) | 删除旧 Hermes/Python/Electron/TUI/worker 树、保留边界与 public-readiness 防回归证据 |
 | [Script surface cleanup audit](audits/2026-07-09-script-surface-cleanup.md) | 公开脚本入口清理、旧运行时脚本删除和防回归门禁 |
-| [Telemetry and feedback boundary audit](audits/2026-07-09-telemetry-feedback-boundary.md) | 遥测/反馈默认关闭、自托管边界和公开门禁证据 |
+| [Telemetry and feedback boundary audit](audits/2026-07-09-telemetry-feedback-boundary.md) | 历史默认关闭基线；P4 已永久删除 Desktop 上传并保留本地诊断/反馈边界 |
 | [Self-hosted feedback collector audit](audits/2026-07-10-feedback-collector.md) | `internal/feedback`、`serve` 本地反馈收集、脱敏、去重和 JSONL 账本证据 |
 | [真实 Provider 最小验证](audits/2026-07-09-real-provider.md) | DeepSeek 鉴权、响应、用量与缓存命中证据 |
 | [Desktop M1 桥接审计](audits/2026-07-09-desktop-m1-bridge.md) | Desktop Submit/Cancel 多工作区桥接自动化证据 |

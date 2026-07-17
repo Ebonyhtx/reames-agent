@@ -74,7 +74,7 @@ Provider/IM/云节点证据必须分层表述，不能互相冒充。
   marker 和 mixed-install fail-closed 共用 `internal/repair`。
 - Safe Mode 不读取用户/项目 TOML 或 dotenv，不恢复旧 tab/session；Desktop 只建立 recovery-only
   shell，`boot.Build` 拒绝 Provider、Controller、工具和普通 Agent 装配，并禁用 MCP、plugin、Hook、
-  Bot、LSP、planner、Guardian、subagent、Memory Compiler、update/telemetry/metrics 等运行面。
+  Bot、LSP、planner、Guardian、subagent、Memory Compiler、更新检查、Heartbeat 与本地 pending 诊断归档等运行面。
 - `control.Controller.RecoveryStatus()`、Serve `/api/recovery`、Desktop `GetRecoveryStatus()`、
   Guard check 与 `gateway recovery-status` 共用同一报告；`gateway run` 在加载普通 runtime 前执行
   credential-free preflight。

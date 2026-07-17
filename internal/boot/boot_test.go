@@ -1197,8 +1197,71 @@ model = "x"
 	}
 }
 
+func TestWorkModeNormalizationKeepsLegacyFullCompatible(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		mode  string
+		name  string
+		ok    bool
+	}{
+		{input: "", mode: "", name: "", ok: false},
+		{input: "full", mode: TokenModeFull, name: WorkModeBalanced, ok: true},
+		{input: "balanced", mode: TokenModeFull, name: WorkModeBalanced, ok: true},
+		{input: "economy", mode: TokenModeEconomy, name: TokenModeEconomy, ok: true},
+		{input: "delivery", mode: TokenModeDelivery, name: TokenModeDelivery, ok: true},
+	} {
+		mode, ok := ParseWorkMode(tc.input)
+		if ok != tc.ok || mode != tc.mode {
+			t.Fatalf("ParseWorkMode(%q) = %q,%v, want %q,%v", tc.input, mode, ok, tc.mode, tc.ok)
+		}
+		if ok && WorkModeName(mode) != tc.name {
+			t.Fatalf("WorkModeName(%q) = %q, want %q", mode, WorkModeName(mode), tc.name)
+		}
+	}
+	if got := NormalizeTokenMode("quality"); got != TokenModeDelivery {
+		t.Fatalf("NormalizeTokenMode(quality) = %q, want delivery", got)
+	}
+}
+
+func TestBuildDeliveryAddsStableContractWithoutChangingFullToolSurface(t *testing.T) {
+	isolateConfigHome(t)
+	dir := robustTempDir(t)
+	t.Chdir(dir)
+	writeFile(t, dir, "reames-agent.toml", `
+default_model = "test-model"
+
+[agent]
+system_prompt = "BASE"
+
+[[providers]]
+name = "test-model"
+kind = "boot-token-profile-test"
+model = "x"
+`)
+
+	fullReq := firstTokenProfileRequest(t, TokenModeFull)
+	deliveryReq := firstTokenProfileRequest(t, TokenModeDelivery)
+	fullSystem := systemMessage(fullReq.Messages)
+	deliverySystem := systemMessage(deliveryReq.Messages)
+	if strings.Contains(fullSystem, tokenDeliveryPrompt) {
+		t.Fatalf("balanced/full system prompt contains delivery contract:\n%s", fullSystem)
+	}
+	if !strings.Contains(deliverySystem, tokenDeliveryPrompt) || !strings.Contains(deliverySystem, "host-observable evidence") {
+		t.Fatalf("delivery system prompt missing stable contract:\n%s", deliverySystem)
+	}
+	if got, want := toolSchemaNames(deliveryReq.Tools), toolSchemaNames(fullReq.Tools); !reflect.DeepEqual(got, want) {
+		t.Fatalf("delivery changed the full tool surface\ngot  %v\nwant %v", got, want)
+	}
+	if !reflect.DeepEqual(deliveryReq.Tools, fullReq.Tools) {
+		t.Fatalf("delivery changed provider-visible tool schemas; names=%v", toolSchemaNames(deliveryReq.Tools))
+	}
+	if requestHasTool(deliveryReq, "connect_tool_source") {
+		t.Fatalf("delivery must not expose the economy connector; tools=%v", toolSchemaNames(deliveryReq.Tools))
+	}
+}
+
 func TestBuildInjectsEnvironmentBlockByDefaultAndEconomy(t *testing.T) {
-	for _, tokenMode := range []string{"", TokenModeEconomy} {
+	for _, tokenMode := range []string{"", TokenModeEconomy, TokenModeDelivery} {
 		t.Run(firstNonEmpty(tokenMode, "default"), func(t *testing.T) {
 			isolateConfigHome(t)
 			dir := robustTempDir(t)
@@ -1297,6 +1360,7 @@ func TestBootToolContractMatchesProviderVisibleSurface(t *testing.T) {
 	}{
 		{name: "default", tokenMode: ""},
 		{name: "economy", tokenMode: TokenModeEconomy},
+		{name: "delivery", tokenMode: TokenModeDelivery},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateConfigHome(t)
@@ -1391,6 +1455,7 @@ model = "x"
 
 	fullReq, _ := captureTokenProfileSurface(t, TokenModeFull)
 	economyReq, _ := captureTokenProfileSurface(t, TokenModeEconomy)
+	deliveryReq, _ := captureTokenProfileSurface(t, TokenModeDelivery)
 	doc, err := os.ReadFile(filepath.Join(pkgDir, "..", "..", "docs", "TOOL_CONTRACT.md"))
 	if err != nil {
 		t.Fatalf("read tool contract doc: %v", err)
@@ -1402,7 +1467,9 @@ model = "x"
 		}
 	}
 	var missing []string
-	for _, name := range append(toolSchemaNames(fullReq.Tools), toolSchemaNames(economyReq.Tools)...) {
+	allNames := append(toolSchemaNames(fullReq.Tools), toolSchemaNames(economyReq.Tools)...)
+	allNames = append(allNames, toolSchemaNames(deliveryReq.Tools)...)
+	for _, name := range allNames {
 		if !strings.Contains(text, "`"+name+"`") {
 			missing = append(missing, name)
 		}

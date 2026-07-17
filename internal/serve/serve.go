@@ -50,6 +50,9 @@ type Server struct {
 	bindMu sync.Mutex
 	ctrl   control.SessionAPI
 	bc     *Broadcaster
+	// tokenMode is the internal spelling of the startup work profile. Model and
+	// effort rebuilds must preserve it instead of silently returning to balanced.
+	tokenMode string
 	// buildController builds the replacement controller during a model switch.
 	// Nil in production (switchModel falls back to boot.Build); tests inject a
 	// fake so switchModel can be exercised without real provider IO.
@@ -68,13 +71,23 @@ type Server struct {
 // serveCfg controls authentication (none, token, or password).
 func New(ctrl control.SessionAPI, bc *Broadcaster, serveCfg config.ServeConfig) *Server {
 	s := &Server{
-		ctrl:   ctrl,
-		bc:     bc,
-		titles: newTitleCache(ctrl.SessionDir()),
-		auth:   newAuthGate(serveCfg),
+		ctrl:      ctrl,
+		bc:        bc,
+		tokenMode: boot.TokenModeFull,
+		titles:    newTitleCache(ctrl.SessionDir()),
+		auth:      newAuthGate(serveCfg),
 	}
 	s.titleGenerator = boot.NewSessionTitleGenerator()
 	return s
+}
+
+// SetWorkMode records the startup work profile for later controller rebuilds.
+// The CLI validates public values before calling this; NormalizeTokenMode keeps
+// embedded callers backward compatible with the legacy "full" spelling.
+func (s *Server) SetWorkMode(mode string) {
+	s.mu.Lock()
+	s.tokenMode = boot.NormalizeTokenMode(mode)
+	s.mu.Unlock()
 }
 
 // ctl returns the current controller. Handlers must read it through here, never
@@ -207,10 +220,14 @@ func (s *Server) build(ctx context.Context, ref string) (*control.Controller, er
 	if s.buildController != nil {
 		return s.buildController(ctx, ref)
 	}
+	s.mu.RLock()
+	tokenMode := s.tokenMode
+	s.mu.RUnlock()
 	return boot.Build(ctx, boot.Options{
-		Model:  ref,
-		Sink:   s.bc,
-		Stderr: os.Stderr,
+		Model:     ref,
+		Sink:      s.bc,
+		Stderr:    os.Stderr,
+		TokenMode: tokenMode,
 	})
 }
 

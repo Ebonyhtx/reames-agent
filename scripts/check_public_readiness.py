@@ -382,11 +382,14 @@ def check_tracked_artifacts(failures: list[str]) -> None:
 
 def check_telemetry_boundaries(failures: list[str]) -> None:
     crash_app = read("desktop/crash_app.go")
-    metrics_app = read("desktop/metrics_app.go")
-    require('var crashEndpoint = ""' in crash_app, "desktop crash reporting must default to no endpoint.", failures)
-    require('var metricsEndpoint = ""' in metrics_app, "desktop metrics upload must default to no endpoint.", failures)
-    require("crash reporting is unavailable in this build" in crash_app, "desktop crash reporting must fail closed without an owned endpoint.", failures)
-    require("Gated on config desktop.metrics and a repository-owned endpoint." in metrics_app, "desktop metrics must document the owned-endpoint gate.", failures)
+    pending = read("desktop/crash_pending.go")
+    require(not (ROOT / "desktop/telemetry_app.go").exists(), "desktop anonymous launch upload code must stay removed.", failures)
+    require(not (ROOT / "desktop/metrics_app.go").exists(), "desktop aggregate metrics upload code must stay removed.", failures)
+    require("SaveDiagnosticReport" in crash_app, "desktop diagnostics must retain an explicit local-save API.", failures)
+    require("contains no upload path" in crash_app, "desktop diagnostics must document the permanent local-only boundary.", failures)
+    require("archivePendingCrash" in pending and "never uploaded" in pending, "pending crash evidence must be archived locally, never uploaded.", failures)
+    for rel, text in (("desktop/crash_app.go", crash_app), ("desktop/crash_pending.go", pending)):
+        require('"net/http"' not in text and "http.NewRequest" not in text, f"{rel} must not contain an HTTP upload client.", failures)
 
     forbidden_tokens = [
         "SENTRY_DSN",
@@ -398,6 +401,14 @@ def check_telemetry_boundaries(failures: list[str]) -> None:
         "METRICS_ENDPOINT",
         "crashEndpoint = \"http",
         "metricsEndpoint = \"http",
+        "pingEndpoint",
+        "metricsEndpoint",
+        "crashEndpoint",
+        "sendStartupPing",
+        "flushMetrics",
+        "flushPendingCrash",
+        "SetDesktopTelemetry",
+        "SetDesktopMetrics",
     ]
     scan_roots = (
         ".github/workflows",

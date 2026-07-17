@@ -548,8 +548,8 @@ record a durable apply-failure marker for the next Guard launch.
 Safe Mode (`REAMES_AGENT_SAFE_MODE=1`) loads built-in recovery defaults without
 reading/migrating user/project TOML or dotenv. It must not restore old Desktop
 tabs/sessions or start user/project Skills, Hooks, MCP, plugins, Bot, LSP,
-planner, Guardian, subagents, Memory Compiler, update checks, telemetry,
-metrics, heartbeat, startup ping, pending flushes, or recovery GC. Safe Mode is
+planner, Guardian, subagents, Memory Compiler, update checks, heartbeat,
+local pending-diagnostic archival, or recovery GC. Safe Mode is
 not an alternate Agent runtime and does not relax permissions. Desktop exposes
 only a recovery shell/status surface, and `boot.Build` must reject Provider,
 Controller, tool-registry, and Agent assembly while Safe Mode is active.

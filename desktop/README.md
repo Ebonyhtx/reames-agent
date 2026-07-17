@@ -269,19 +269,18 @@ desktop/
         editors/  PlainCode, PlainDiff   ← editor seam impls (swap targets)
 ```
 
-## Telemetry
+## Local diagnostics
 
-Telemetry and aggregate metrics are disabled by default. This build has no
-project-owned reporting endpoint, so it does not upload launch, metrics, or crash
-data. The settings remain reserved for a future opt-in service with documented
-ownership and retention.
+The desktop has no anonymous launch ping, aggregate metrics uploader, crash
+uploader, or project-owned reporting endpoint. Crash and performance prompts can
+copy a scrubbed report or save it under the local Reames Agent diagnostics
+directory. A Go panic or native hang watchdog report is archived there on the
+next launch and is never transmitted automatically.
 
-When Memory v5 is enabled, the same aggregate metrics pipeline may include only
-content-free count/size buckets such as injection on/off, compiled-token bucket,
-IR-overhead bucket, memory-reference count, constraint/risk/step counts, and
-memory-graph size buckets. It never uploads memory text, tool outputs, prompts,
-file paths, IDs, keys, base URLs, or file contents. The Memory v5 runtime itself
-is controlled from Settings > General > "Memory v5" and shares the user/global
+Local session telemetry remains available for token, cost, cache, read-file, and
+Memory v5 diagnostics. It is stored beside local session state and is not a
+network reporting pipeline. The Memory v5 runtime itself is controlled from
+Settings > General > "Memory v5" and shares the user/global
 `agent.memory_compiler.enabled` setting with the CLI/TUI and `reames-agent serve`;
 CLI users can also run `/memory-v5 off|observe|compact|on|status` in a session
 or `reames-agent config memory-v5 off|observe|compact|on|status` from a shell.

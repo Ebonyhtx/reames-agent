@@ -29,6 +29,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "docs" / "upstreams" / "upstreams.json"
 DEFAULT_LOCK = ROOT / "docs" / "upstreams" / "upstreams.lock.json"
+REVIEW_COMPLETE = "complete"
 
 
 AREA_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
@@ -251,6 +252,81 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
         repo = str(up["repo"]).strip()
         if not re.match(r"^https://github\.com/[^/]+/[^/]+(?:\.git)?$", repo):
             raise ValueError(f"upstream {upstream_id}: repo must be an official HTTPS GitHub repository URL")
+        required_areas = up.get("required_review_areas", [])
+        if required_areas:
+            if not isinstance(required_areas, list) or any(not str(area).strip() for area in required_areas):
+                raise ValueError(f"upstream {upstream_id}: required_review_areas must be non-empty strings")
+            normalized = [str(area).strip() for area in required_areas]
+            if any(not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", area) for area in normalized):
+                raise ValueError(
+                    f"upstream {upstream_id}: required_review_areas must use lowercase kebab-case names"
+                )
+            if len(set(normalized)) != len(normalized):
+                raise ValueError(f"upstream {upstream_id}: required_review_areas contains duplicates")
+            if not str(up.get("review_record", "")).strip():
+                raise ValueError(f"upstream {upstream_id}: review_record is required with required_review_areas")
+
+
+def review_coverage(up: dict[str, Any], baseline: str, reviewed: str) -> dict[str, Any]:
+    required = [str(area).strip() for area in up.get("required_review_areas", []) if str(area).strip()]
+    if not required:
+        return {"status": "not-required", "record": "", "missing": [], "error": ""}
+    record_name = str(up.get("review_record", "")).strip()
+    result: dict[str, Any] = {
+        "status": "incomplete",
+        "record": record_name,
+        "missing": list(required),
+        "error": "",
+    }
+    if not record_name:
+        result["error"] = "review record is not configured"
+        return result
+    root = ROOT.resolve()
+    record_path = (ROOT / record_name).resolve()
+    try:
+        record_path.relative_to(root)
+    except ValueError:
+        result["error"] = "review record must stay inside the repository"
+        return result
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        result["error"] = f"read review record: {str(exc).strip()[:240]}"
+        return result
+    areas = record.get("areas")
+    if not isinstance(areas, dict):
+        result["error"] = "review record areas must be an object"
+        return result
+    missing = []
+    evidence_errors = []
+    for area in required:
+        entry = areas.get(area)
+        status = entry if isinstance(entry, str) else entry.get("status") if isinstance(entry, dict) else ""
+        if str(status).strip().lower() != REVIEW_COMPLETE:
+            missing.append(area)
+            continue
+        evidence = entry.get("evidence") if isinstance(entry, dict) else None
+        if not isinstance(evidence, list) or not evidence or any(not str(item).strip() for item in evidence):
+            missing.append(area)
+            evidence_errors.append(area)
+    mismatches = []
+    if str(record.get("upstream", "")).strip() not in ("", str(up.get("id", ""))):
+        mismatches.append("upstream id")
+    if str(record.get("baseline", "")).strip() != baseline:
+        mismatches.append("baseline")
+    if str(record.get("reviewed", "")).strip() != reviewed:
+        mismatches.append("reviewed revision")
+    result["missing"] = missing
+    errors = []
+    if mismatches:
+        errors.append("review record mismatch: " + ", ".join(mismatches))
+    if evidence_errors:
+        errors.append("complete areas require non-empty evidence: " + ", ".join(evidence_errors))
+    if errors:
+        result["error"] = "; ".join(errors)
+    elif not missing:
+        result["status"] = REVIEW_COMPLETE
+    return result
 
 
 def lock_points(lock_entry: dict[str, Any]) -> tuple[str, str]:
@@ -263,6 +339,7 @@ def lock_points(lock_entry: dict[str, Any]) -> tuple[str, str]:
 def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool = False) -> dict[str, Any]:
     branch = up["branch"]
     baseline, reviewed = lock_points(lock_entry)
+    coverage = review_coverage(up, baseline, reviewed)
     try:
         refs = git_ls_remote(up["repo"])
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
@@ -286,6 +363,7 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool 
             "error": error,
             "recommendation": "Upstream check failed; inspect network, repository, and branch configuration.",
             "deep": None,
+            "coverage": coverage,
         }
 
     branch_ref = f"refs/heads/{branch}"
@@ -306,6 +384,16 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool 
         files = diff_changed_files(up["repo"], branch, reviewed, latest)
     areas = Counter(classify_path(f["path"]) for f in files if not f["path"].startswith("<diff unavailable"))
     risk = risk_from_areas(areas, changed)
+    decision = decision_for(up, changed, risk, error)
+    rec = (
+        "Upstream check failed; inspect network, repository, and branch configuration."
+        if error
+        else recommendation(up, changed, risk, areas)
+    )
+    if not error and up.get("importance") == "primary-base" and coverage["status"] != REVIEW_COMPLETE:
+        decision = "review-required"
+        detail = ", ".join(coverage["missing"][:8]) or coverage["error"] or "coverage evidence"
+        rec = f"Primary-base review coverage is incomplete ({detail}); complete the parity record before accepting this revision."
     return {
         "id": up["id"],
         "name": up["name"],
@@ -321,14 +409,11 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool 
         "files": files,
         "areas": dict(areas),
         "risk": "unknown" if error else risk,
-        "decision": decision_for(up, changed, risk, error),
+        "decision": decision,
         "error": error,
         "deep": deep_info if deep else None,
-        "recommendation": (
-            "Upstream check failed; inspect network, repository, and branch configuration."
-            if error
-            else recommendation(up, changed, risk, areas)
-        ),
+        "recommendation": rec,
+        "coverage": coverage,
     }
 
 
@@ -340,6 +425,10 @@ def report_fingerprint(upstreams: list[dict[str, Any]]) -> str:
             "latest": up["latest"],
             "decision": up["decision"],
             "error": up["error"],
+            "coverage": up.get("coverage", {}).get("status", "not-required"),
+            "coverage_record": up.get("coverage", {}).get("record", ""),
+            "coverage_missing": up.get("coverage", {}).get("missing", []),
+            "coverage_error": up.get("coverage", {}).get("error", ""),
         }
         for up in upstreams
     ]
@@ -371,18 +460,19 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Summary",
         "",
-        "| Upstream | Branch | Reviewed | Latest | Decision | Risk | Recommendation |",
-        "|---|---|---|---|---|---|---|",
+        "| Upstream | Branch | Reviewed | Latest | Decision | Risk | Coverage | Recommendation |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for u in report["upstreams"]:
         lines.append(
-            "| {name} | `{branch}` | `{pinned}` | `{latest}` | {changed} | {risk} | {rec} |".format(
+            "| {name} | `{branch}` | `{pinned}` | `{latest}` | {changed} | {risk} | {coverage} | {rec} |".format(
                 name=u["name"],
                 branch=u["branch"],
                 pinned=(u["reviewed"] or "")[:12],
                 latest=(u["latest"] or "")[:12],
                 changed=u["decision"],
                 risk=u["risk"],
+                coverage=u.get("coverage", {}).get("status", "not-required"),
                 rec=u["recommendation"],
             )
         )
@@ -397,8 +487,18 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- Decision: **{u['decision']}**",
             f"- Risk: **{u['risk']}**",
             f"- Recommendation: {u['recommendation']}",
+            f"- Review coverage: **{u.get('coverage', {}).get('status', 'not-required')}**",
             "",
         ]
+        coverage = u.get("coverage", {})
+        if coverage.get("record"):
+            lines += [f"- Coverage record: `{coverage['record']}`"]
+        if coverage.get("missing"):
+            lines += [f"- Missing review areas: `{', '.join(coverage['missing'])}`"]
+        if coverage.get("error"):
+            lines += [f"- Coverage error: `{coverage['error']}`"]
+        if coverage.get("record") or coverage.get("missing") or coverage.get("error"):
+            lines.append("")
         if u["error"]:
             lines += [f"- Check error: `{u['error']}`", ""]
         if u["tags"]:
@@ -450,8 +550,15 @@ def main() -> int:
     if unknown_ids:
         raise ValueError(f"unknown upstream ids: {', '.join(sorted(unknown_ids))}")
     if accepted_ids:
+        manifest_by_id = {str(up["id"]): up for up in manifest["upstreams"]}
         for u in upstreams:
             if u["id"] in accepted_ids:
+                source = manifest_by_id[u["id"]]
+                baseline, _ = lock_points(lock_entries.get(u["id"], {}))
+                coverage = review_coverage(source, baseline or u["latest"], u["latest"])
+                if source.get("required_review_areas") and coverage["status"] != REVIEW_COMPLETE:
+                    detail = coverage["error"] or ", ".join(coverage["missing"])
+                    raise ValueError(f"cannot accept {u['id']}: review coverage incomplete ({detail})")
                 lock_entries[u["id"]] = accepted_lock_entry(u, lock_entries.get(u["id"], {}))
                 u["reviewed"] = u["latest"]
                 u["changed"] = False
@@ -460,6 +567,7 @@ def main() -> int:
                 u["risk"] = "none"
                 u["decision"] = "up-to-date"
                 u["recommendation"] = "Accepted as reviewed by explicit operator action."
+                u["coverage"] = coverage
         lock["version"] = 2
         lock["updated_at"] = now
         args.lock.write_text(json.dumps(lock, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -469,7 +577,12 @@ def main() -> int:
         "generated_at": now,
         "changed_count": sum(1 for u in upstreams if u["changed"]),
         "failed_count": sum(1 for u in upstreams if u["error"]),
-        "attention_count": sum(1 for u in upstreams if u["changed"] or u["error"]),
+        "attention_count": sum(
+            1
+            for u in upstreams
+            if u["changed"] or u["error"] or u.get("coverage", {}).get("status") == "incomplete"
+        ),
+        "coverage_incomplete_count": sum(1 for u in upstreams if u.get("coverage", {}).get("status") == "incomplete"),
         "fingerprint": fingerprint,
         "upstreams": upstreams,
     }

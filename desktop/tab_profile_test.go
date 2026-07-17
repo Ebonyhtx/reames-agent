@@ -200,7 +200,7 @@ api_key_env = "REAMES_AGENT_TEST_KEY_UNSET"
 	}
 }
 
-func TestSaveTabsPersistsTokenModeOnlyWhenEconomy(t *testing.T) {
+func TestSaveTabsPersistsNonDefaultWorkModes(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	app := NewApp()
@@ -220,6 +220,16 @@ func TestSaveTabsPersistsTokenModeOnlyWhenEconomy(t *testing.T) {
 	}
 	if got.Tabs[0].TokenMode != "economy" {
 		t.Fatalf("saved token mode = %q, want economy", got.Tabs[0].TokenMode)
+	}
+
+	tab.tokenMode = boot.TokenModeDelivery
+	app.mu.Lock()
+	app.saveTabsLocked()
+	app.mu.Unlock()
+
+	got = loadTabsFile()
+	if got.Tabs[0].TokenMode != boot.TokenModeDelivery {
+		t.Fatalf("saved token mode = %q, want delivery", got.Tabs[0].TokenMode)
 	}
 
 	tab.tokenMode = "full"

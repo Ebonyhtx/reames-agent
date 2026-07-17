@@ -357,8 +357,6 @@ export function SettingsPanel({
                     <UpdatesSection
                       configPath={s.configPath}
                       checkUpdates={s.checkUpdates}
-                      telemetry={s.telemetry !== false}
-                      metrics={s.metrics !== false}
                       settingsBusy={busy}
                       applySettings={apply}
                     />
@@ -2560,7 +2558,7 @@ function BotsSection({ s, busy, apply, initialFocus }: BotsSectionProps) {
     const diag = await ensureReportableDiagnostic(connection);
     if (!diag.reportDetail) return;
     try {
-      await app.ReportCrash(diag.reportKind || "bot", diag.reportDetail);
+      await app.SaveDiagnosticReport(diag.reportKind || "bot", diag.reportDetail);
       setDiagnostics((prev) => ({ ...prev, [connection.id]: { ...diag, status: "ok", message: t("settings.botDiagnosticReportSent") } }));
     } catch (err) {
       setDiagnostics((prev) => ({
@@ -6972,15 +6970,11 @@ const mb = (n: number) => (n / MB).toFixed(1);
 function UpdatesSection({
   configPath,
   checkUpdates,
-  telemetry,
-  metrics,
   settingsBusy,
   applySettings,
 }: {
   configPath: string;
   checkUpdates: boolean;
-  telemetry: boolean;
-  metrics: boolean;
   settingsBusy: boolean;
   applySettings: (fn: () => Promise<void>) => Promise<void>;
 }) {
@@ -7005,28 +6999,6 @@ function UpdatesSection({
           value={checkUpdates}
           disabled={settingsBusy}
           onChange={(enabled) => void applySettings(() => app.SetDesktopCheckUpdates(enabled))}
-        />
-      </SettingsField>
-      <SettingsField
-        className="settings-field--wide-copy"
-        label={t("settings.telemetryLabel")}
-        hint={t("settings.telemetryHint")}
-      >
-        <ToggleSegment
-          value={telemetry}
-          disabled={settingsBusy}
-          onChange={(enabled) => void applySettings(() => app.SetDesktopTelemetry(enabled))}
-        />
-      </SettingsField>
-      <SettingsField
-        className="settings-field--wide-copy"
-        label={t("settings.metricsLabel")}
-        hint={t("settings.metricsHint")}
-      >
-        <ToggleSegment
-          value={metrics}
-          disabled={settingsBusy}
-          onChange={(enabled) => void applySettings(() => app.SetDesktopMetrics(enabled))}
         />
       </SettingsField>
       <SettingsField label={t("updater.currentVersion", { v: version || "…" })}>

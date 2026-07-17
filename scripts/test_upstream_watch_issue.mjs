@@ -37,6 +37,7 @@ const baseReport = {
   generated_at: "2026-07-09T00:00:00Z",
   changed_count: 1,
   failed_count: 0,
+  coverage_incomplete_count: 0,
   attention_count: 1,
   fingerprint: "abc123",
 };
@@ -69,4 +70,20 @@ const context = { repo: { owner: "owner", repo: "repo" } };
   fs.rmSync(f.dir, { recursive: true, force: true });
 }
 
-console.log("upstream watch issue reconciliation: 3 passed");
+{
+  const report = {
+    ...baseReport,
+    changed_count: 0,
+    coverage_incomplete_count: 1,
+    attention_count: 1,
+    fingerprint: "coverage-only",
+  };
+  const f = fixture(report);
+  const result = await reconcile({ ...f, context });
+  assert.deepEqual(result, { action: "created", issue: 42 });
+  const create = f.calls.find(([name]) => name === "create");
+  assert.match(create[1].title, /1 coverage gap/);
+  fs.rmSync(f.dir, { recursive: true, force: true });
+}
+
+console.log("upstream watch issue reconciliation: 4 passed");

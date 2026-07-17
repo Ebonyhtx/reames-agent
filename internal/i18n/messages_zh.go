@@ -233,6 +233,7 @@ var Chinese = Messages{
 	CmdDiffFold:         "切换 diff 折叠/展开",
 	CmdSandbox:          "查看沙箱状态",
 	CmdEffort:           "设置推理强度",
+	CmdWorkMode:         "切换经济、均衡或交付工作模式",
 	CmdMouse:            "切换鼠标接管（关闭后由终端原生处理选中/右键）",
 	CmdAutoPlan:         "配置自动计划模式",
 	CmdReasonLang:       "设置可见思考语言",

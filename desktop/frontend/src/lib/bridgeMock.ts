@@ -606,8 +606,6 @@ export function makeMockApp(): AppBindings {
     statusBarItems: [...DEFAULT_STATUS_BAR_ITEMS],
     defaultToolApprovalMode: "ask",
     checkUpdates: true,
-    telemetry: true,
-    metrics: true,
     memoryCompilerEnabled: true,
     configPath: "~/projects/reames-agent/reames-agent.toml",
     providerKinds: ["openai", "anthropic"],
@@ -2806,12 +2804,6 @@ export function makeMockApp(): AppBindings {
         async SetDesktopCheckUpdates(enabled: boolean) {
           settings.checkUpdates = enabled;
         },
-        async SetDesktopTelemetry(enabled: boolean) {
-          settings.telemetry = enabled;
-        },
-        async SetDesktopMetrics(enabled: boolean) {
-          settings.metrics = enabled;
-        },
         async SetMemoryCompilerEnabled(enabled: boolean) {
           settings.memoryCompilerEnabled = enabled;
         },
@@ -2909,8 +2901,9 @@ export function makeMockApp(): AppBindings {
       await delay(300);
       return "";
     },
-    async ReportCrash() {
+    async SaveDiagnosticReport() {
       await delay(300);
+      return "~/diagnostics/reports/mock.json";
     },
     // Tab management mocks.
     async ListTabs() {

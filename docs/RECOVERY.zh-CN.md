@@ -85,8 +85,7 @@ pending update，后续更新不能覆盖仍在观察或失败状态的回滚证
 安全模式禁用：
 
 - 用户/项目 Skill、Hook、MCP、插件包、宿主 ExtraPlugins 和共享 Plugin Host；
-- Bot/Gateway、LSP、状态栏命令、更新检查、遥测、Metrics、Heartbeat、启动 ping、crash/metrics
-  flush 和 Recovery GC；
+- Bot/Gateway、LSP、状态栏命令、更新检查、Heartbeat、本地 pending 诊断归档和 Recovery GC；
 - planner、Guardian、subagent 与 Memory Compiler；
 - 现有 Desktop tab/session 恢复。
 

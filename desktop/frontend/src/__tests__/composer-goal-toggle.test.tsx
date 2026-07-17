@@ -91,12 +91,14 @@ async function renderComposer(props: Partial<Parameters<typeof Composer>[0]> = {
     cancel: number;
     clearGoal: number;
     setCollaborationMode: CollaborationMode[];
+    setTokenMode: TokenMode[];
   } = {
     send: [],
     submit: [],
     cancel: 0,
     clearGoal: 0,
     setCollaborationMode: [],
+    setTokenMode: [],
   };
   let currentProps: Parameters<typeof Composer>[0] = {
     running: false,
@@ -124,7 +126,7 @@ async function renderComposer(props: Partial<Parameters<typeof Composer>[0]> = {
     },
     onSwitchModel: () => {},
     onSetEffort: () => {},
-    onSetTokenMode: () => {},
+    onSetTokenMode: (mode) => calls.setTokenMode.push(mode),
     ready: true,
     ...props,
   };
@@ -241,6 +243,33 @@ console.log("\ncomposer goal toggle");
   eq(calls.send.length, 0, "enabling goal mode with a draft does not send");
   eq(calls.setCollaborationMode.join(","), "goal", "enabling goal mode switches only the collaboration axis");
   eq(textarea.value, "ship the release notes", "enabling goal mode preserves the draft text");
+
+  await act(async () => {
+    root.unmount();
+  });
+  dom.window.close();
+}
+
+{
+  const dom = installDom();
+  const { root, calls } = await renderComposer();
+  const intentButton = document.querySelector(".composer-action-trigger") as HTMLButtonElement | null;
+  if (!intentButton) throw new Error("composer intent button did not render");
+
+  await act(async () => {
+    intentButton.click();
+    await flushTimers();
+  });
+
+  const deliveryButton = document.querySelector('[data-work-mode="delivery"]') as HTMLButtonElement | null;
+  if (!deliveryButton) throw new Error("delivery work-mode button did not render");
+  await act(async () => {
+    deliveryButton.click();
+    await flushTimers();
+  });
+
+  eq(calls.setTokenMode.join(","), "delivery", "work-mode selector emits delivery independently of collaboration mode");
+  eq(calls.setCollaborationMode.length, 0, "work-mode selection does not change collaboration mode");
 
   await act(async () => {
     root.unmount();

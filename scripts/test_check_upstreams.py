@@ -47,6 +47,39 @@ class ManifestValidationTests(unittest.TestCase):
                 }
             )
 
+    def test_primary_review_areas_require_record(self):
+        with self.assertRaisesRegex(ValueError, "review_record"):
+            watch.validate_manifest(
+                {
+                    "upstreams": [
+                        {
+                            "id": "reasonix",
+                            "name": "Reasonix",
+                            "repo": "https://github.com/esengine/DeepSeek-Reasonix.git",
+                            "branch": "main-v2",
+                            "required_review_areas": ["agent-runtime"],
+                        }
+                    ]
+                }
+            )
+
+    def test_primary_review_areas_require_kebab_case(self):
+        with self.assertRaisesRegex(ValueError, "kebab-case"):
+            watch.validate_manifest(
+                {
+                    "upstreams": [
+                        {
+                            "id": "reasonix",
+                            "name": "Reasonix",
+                            "repo": "https://github.com/esengine/DeepSeek-Reasonix.git",
+                            "branch": "main-v2",
+                            "required_review_areas": ["Agent Runtime"],
+                            "review_record": "docs/upstreams/reviews/reasonix-current.json",
+                        }
+                    ]
+                }
+            )
+
 
 class AnalysisTests(unittest.TestCase):
     def setUp(self):
@@ -100,6 +133,50 @@ class AnalysisTests(unittest.TestCase):
         )
         self.assertEqual(accepted["baseline"], "a" * 40)
         self.assertEqual(accepted["reviewed"], "c" * 40)
+
+    def test_primary_base_without_complete_coverage_stays_review_required(self):
+        upstream = {
+            **self.upstream,
+            "required_review_areas": ["agent-runtime", "work-modes"],
+            "review_record": "missing-review.json",
+        }
+        with mock.patch.object(watch, "git_ls_remote", return_value={"refs/heads/main-v2": "b" * 40}):
+            result = watch.analyze_upstream(upstream, self.lock)
+        self.assertFalse(result["changed"])
+        self.assertEqual(result["decision"], "review-required")
+        self.assertEqual(result["coverage"]["status"], "incomplete")
+
+    def test_review_coverage_requires_every_area_and_matching_revision(self):
+        with tempfile.TemporaryDirectory(dir=watch.ROOT) as tmp:
+            record = Path(tmp) / "review.json"
+            record.write_text(
+                '{"upstream":"reasonix","baseline":"base","reviewed":"head",'
+                '"areas":{"agent-runtime":{"status":"complete","evidence":["runtime diff reviewed"]},'
+                '"work-modes":{"status":"pending"}}}',
+                encoding="utf-8",
+            )
+            relative = record.relative_to(watch.ROOT).as_posix()
+            up = {
+                "id": "reasonix",
+                "required_review_areas": ["agent-runtime", "work-modes"],
+                "review_record": relative,
+            }
+            incomplete = watch.review_coverage(up, "base", "head")
+            self.assertEqual(incomplete["missing"], ["work-modes"])
+            payload = record.read_text(encoding="utf-8").replace('"pending"', '"complete"')
+            record.write_text(payload, encoding="utf-8")
+            missing_evidence = watch.review_coverage(up, "base", "head")
+            self.assertEqual(missing_evidence["missing"], ["work-modes"])
+            self.assertIn("require non-empty evidence", missing_evidence["error"])
+            record.write_text(
+                payload.replace(
+                    '"work-modes":{"status":"complete"}',
+                    '"work-modes":{"status":"complete","evidence":["mode commits and tests reviewed"]}',
+                ),
+                encoding="utf-8",
+            )
+            complete = watch.review_coverage(up, "base", "head")
+            self.assertEqual(complete["status"], "complete")
 
     def test_report_fingerprint_ignores_generation_time(self):
         upstreams = [

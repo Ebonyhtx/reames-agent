@@ -141,6 +141,11 @@ func TestSlashArgItems(t *testing.T) {
 	if !has(items, "auto") || !has(items, "disabled") || !has(items, "high") || !has(items, "max") || has(items, "off") {
 		t.Errorf("/effort should offer auto/disabled/high/max; got %v", labelsOf(items))
 	}
+	// /work-mode
+	items, _ = SlashArgItems("/work-mode ", data)
+	if !has(items, "economy") || !has(items, "balanced") || !has(items, "delivery") {
+		t.Errorf("/work-mode should offer economy/balanced/delivery; got %v", labelsOf(items))
+	}
 	// /auto-plan
 	items, _ = SlashArgItems("/auto-plan ", data)
 	if !has(items, "off") || !has(items, "on") || has(items, "ask") {

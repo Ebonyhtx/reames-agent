@@ -1210,7 +1210,9 @@ export function Composer({
   const planModeOn = collaborationMode === "plan";
   const activeGoal = (goal ?? "").trim();
   const goalModeOn = collaborationMode === "goal";
-  const tokenModeOn = tokenMode === "economy";
+  const workMode = tokenMode === "economy" || tokenMode === "delivery" ? tokenMode : "balanced";
+  const economyModeOn = workMode === "economy";
+  const nonDefaultWorkModeOn = workMode !== "balanced";
   const warnImageInputFallback = useCallback((message = t("composer.imageInputUnsupported")) => {
     showToast(message, "warn");
   }, [showToast, t]);
@@ -2036,9 +2038,9 @@ export function Composer({
       requestAnimationFrame(() => taRef.current?.focus());
     });
   };
-  const chooseTokenMode = () => {
+  const chooseTokenMode = (nextMode: TokenMode) => {
     closeIntentMenu(() => {
-      onSetTokenMode(tokenModeOn ? "full" : "economy");
+      onSetTokenMode(nextMode);
       requestAnimationFrame(() => taRef.current?.focus());
     });
   };
@@ -2083,7 +2085,7 @@ export function Composer({
   const composerMetaClass = [
     "composer-meta",
     hasEffort ? "composer-meta--has-effort" : "composer-meta--no-effort",
-    planModeOn || goalModeOn || tokenModeOn ? "composer-meta--has-intent-chip" : "composer-meta--no-intent-chip",
+    planModeOn || goalModeOn || nonDefaultWorkModeOn ? "composer-meta--has-intent-chip" : "composer-meta--no-intent-chip",
   ].join(" ");
 
   return (
@@ -2134,22 +2136,30 @@ export function Composer({
               <span />
             </span>
           </button>
-          <button
-            type="button"
-            className={`composer-access-menu__item composer-intent-menu__item${tokenModeOn ? " composer-access-menu__item--active" : ""}`}
-            onClick={chooseTokenMode}
-            disabled={disabled || running}
-            title={tokenModeOn ? t("composer.tokenEconomyOnDesc") : t("composer.tokenEconomyDesc")}
-          >
-            <Gauge size={16} />
-            <span className="composer-access-menu__copy">
-              <span className="composer-access-menu__title">{t("composer.tokenEconomy")}</span>
-              <span className="composer-access-menu__desc">{tokenModeOn ? t("composer.tokenEconomyOnDesc") : t("composer.tokenEconomyDesc")}</span>
-            </span>
-            <span className={`composer-intent-switch${tokenModeOn ? " composer-intent-switch--on" : ""}`} aria-hidden="true">
-              <span />
-            </span>
-          </button>
+        </div>
+        <div className="composer-access-menu__section">
+          <div className="composer-access-menu__label">{t("composer.workModeTitle")}</div>
+          <div className="composer-modebar" data-mode={workMode}>
+            <span className="composer-modebar__thumb" aria-hidden="true" />
+            {([
+              ["economy", "composer.tokenEconomy", "composer.tokenEconomyDesc"],
+              ["balanced", "composer.workModeBalanced", "composer.workModeBalanced"],
+              ["delivery", "composer.workModeDelivery", "composer.workModeDeliveryDesc"],
+            ] as const).map(([mode, label, description]) => (
+              <button
+                key={mode}
+                type="button"
+                className={`composer-modebar__item${workMode === mode ? " composer-modebar__item--active" : ""}`}
+                data-work-mode={mode}
+                onClick={() => chooseTokenMode(mode)}
+                disabled={disabled || running}
+                title={t(description)}
+                aria-pressed={workMode === mode}
+              >
+                <span>{t(label)}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </AnchoredPopover>
       <AnchoredPopover
@@ -2613,12 +2623,12 @@ export function Composer({
                   </button>
                 </Tooltip>
               )}
-              {tokenModeOn && (
-                <Tooltip label={t("composer.tokenEconomyOnDesc")}>
+              {nonDefaultWorkModeOn && (
+                <Tooltip label={economyModeOn ? t("composer.tokenEconomyOnDesc") : t("composer.workModeDeliveryDesc")}>
                   <button
                     type="button"
                     className="composer-mode-chip composer-mode-chip--token"
-                    onClick={chooseTokenMode}
+                    onClick={() => chooseTokenMode("balanced")}
                     disabled={disabled || running}
                     title={t("composer.tokenEconomyExitTitle")}
                     aria-label={t("composer.tokenEconomyExitTitle")}
@@ -2629,7 +2639,7 @@ export function Composer({
                     <span className="composer-mode-chip__icon composer-mode-chip__icon--dismiss" aria-hidden="true">
                       <X size={11} />
                     </span>
-                    <span className="composer-mode-chip__label">{t("composer.tokenEconomyShort")}</span>
+                    <span className="composer-mode-chip__label">{economyModeOn ? t("composer.tokenEconomyShort") : t("composer.workModeDelivery")}</span>
                   </button>
                 </Tooltip>
               )}

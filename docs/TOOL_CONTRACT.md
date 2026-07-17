@@ -88,3 +88,13 @@ mode so an existing isolated delivery can still be inspected and resolved.
 Core built-in tools such as `bash`, `read_file`, `grep`, file writers, job tools,
 and `todo_write` remain available in economy mode and are listed in the built-in
 table above.
+
+## Balanced and Delivery Profiles
+
+Balanced is the default public work mode; legacy persisted `full` values normalize
+to balanced. Balanced and delivery expose the same complete, stable tool schema.
+Delivery changes only the cache-stable system contract: it asks the runtime to
+drive acceptance criteria, root-cause fixes, focused verification, diff review,
+and evidence-backed completion through the existing Todo, `complete_step`, project
+checks, checkpoint, permission, and sandbox mechanisms. It does not create a
+second Agent runtime or grant additional tools.

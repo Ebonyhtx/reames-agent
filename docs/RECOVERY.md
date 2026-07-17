@@ -112,8 +112,8 @@ Disabled in Safe Mode:
 
 - user/project Skills, Hooks, MCP, plugin packages, host extra plugins, and the
   shared plugin host;
-- Bot/Gateway channels, LSP, status-line commands, update checks, telemetry,
-  metrics, heartbeat, startup ping, crash/metrics flush, and recovery GC;
+- Bot/Gateway channels, LSP, status-line commands, update checks, heartbeat,
+  local pending-diagnostic archival, and recovery GC;
 - planner, Guardian, subagents, and Memory Compiler;
 - restoration of existing Desktop tabs or sessions.
 

@@ -445,7 +445,7 @@ function sendButton(
 ): HTMLButtonElement | null {
   // Resolved at click time via window.go, not the bridge module: this overlay must
   // stay usable even when the rest of the app (and its imports) is broken.
-  const report = window.go?.main?.App?.ReportCrash;
+  const report = window.go?.main?.App?.SaveDiagnosticReport;
   if (!report) return null;
   const send = document.createElement("button");
   send.className = className;

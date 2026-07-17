@@ -154,8 +154,6 @@ func loadSafeModeForRoot(root string) *Config {
 	cfg.Statusline.Command = ""
 	cfg.LSP.Enabled = false
 	cfg.Desktop.CheckUpdates = safeModeBoolPtr(false)
-	cfg.Desktop.Telemetry = safeModeBoolPtr(false)
-	cfg.Desktop.Metrics = safeModeBoolPtr(false)
 	cfg.Agent.AutoPlan = "off"
 	cfg.Agent.GuardianModel = ""
 	cfg.Agent.PlannerModel = ""

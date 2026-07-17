@@ -1,12 +1,8 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"reflect"
+	"os"
 	"strings"
 	"testing"
 )
@@ -47,62 +43,38 @@ func TestScrubSensitiveText(t *testing.T) {
 	}
 }
 
-func TestPostCrashReport(t *testing.T) {
-	var got crashReport
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("method = %s, want POST", r.Method)
-		}
-		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-			t.Errorf("content-type = %q", ct)
-		}
-		body, _ := io.ReadAll(r.Body)
-		if err := json.Unmarshal(body, &got); err != nil {
-			t.Errorf("body not JSON: %v", err)
-		}
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer srv.Close()
-
-	r := crashReport{Kind: "crash", Version: "v9.9.9", OS: "windows", Arch: "amd64", Message: "[react]\nboom"}
-	if err := postCrashReport(context.Background(), srv.Client(), srv.URL, r); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(got, r) {
-		t.Errorf("server received %+v, want %+v", got, r)
-	}
-}
-
-func TestPostCrashReportRejectedStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusTooManyRequests)
-	}))
-	defer srv.Close()
-
-	err := postCrashReport(context.Background(), srv.Client(), srv.URL, crashReport{Kind: "crash"})
-	if err == nil || !strings.Contains(err.Error(), "429") {
-		t.Fatalf("want 429 error, got %v", err)
-	}
-}
-
-func TestReportCrashRejectsBadInput(t *testing.T) {
+func TestSaveDiagnosticReportRejectsBadInput(t *testing.T) {
 	app := NewApp()
-	if err := app.ReportCrash("telemetry", "x"); err == nil {
+	if _, err := app.SaveDiagnosticReport("telemetry", "x"); err == nil {
 		t.Error("unknown kind should be rejected")
 	}
-	if err := app.ReportCrash("crash", ""); err == nil {
+	if _, err := app.SaveDiagnosticReport("crash", ""); err == nil {
 		t.Error("empty detail should be rejected")
 	}
 }
 
-func TestReportCrashUnavailableWithoutOwnedEndpoint(t *testing.T) {
-	old := crashEndpoint
-	crashEndpoint = ""
-	t.Cleanup(func() { crashEndpoint = old })
-
-	err := NewApp().ReportCrash("crash", "boom")
-	if err == nil || !strings.Contains(err.Error(), "unavailable") {
-		t.Fatalf("ReportCrash error = %v, want unavailable", err)
+func TestSaveDiagnosticReportWritesScrubbedLocalFile(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	path, err := NewApp().SaveDiagnosticReport("crash", "boom at /Users/alice/app.ts api_key=sk-proj-abcdefghijklmnopqrstuvwxyz123456")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(path, diagnosticReportsDir()) {
+		t.Fatalf("report path = %q, want under %q", path, diagnosticReportsDir())
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "alice") || strings.Contains(string(body), "sk-proj-") {
+		t.Fatalf("local report leaked sensitive text: %s", body)
+	}
+	var report crashReport
+	if err := json.Unmarshal(body, &report); err != nil {
+		t.Fatalf("local report is not JSON: %v", err)
+	}
+	if report.Kind != "crash" || report.Source != "legacy" {
+		t.Fatalf("local report = %+v", report)
 	}
 }
 

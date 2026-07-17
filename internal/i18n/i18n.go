@@ -221,6 +221,7 @@ type Messages struct {
 	CmdDiffFold         string // /diff-fold
 	CmdSandbox          string // /sandbox
 	CmdEffort           string // /effort
+	CmdWorkMode         string // /work-mode
 	CmdMouse            string // /mouse
 	CmdAutoPlan         string // /auto-plan
 	CmdReasonLang       string // /reasoning-language

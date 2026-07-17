@@ -63,6 +63,7 @@ def generate_issue_draft(upstream: dict) -> str:
     files = upstream.get("files", [])
     areas = upstream.get("areas", {})
     error = upstream.get("error", "")
+    coverage = upstream.get("coverage", {})
 
     lines = [
         f"# Upstream: {name}",
@@ -77,11 +78,20 @@ def generate_issue_draft(upstream: dict) -> str:
         f"- Reviewed: `{reviewed}`",
         f"- Latest: `{latest}`",
         f"- Recommendation: {recommendation}",
+        f"- Review coverage: `{coverage.get('status', 'not-required')}`",
         "",
     ]
 
     if error:
         lines += [f"⚠️ Check error: `{error}`", ""]
+    if coverage.get("record"):
+        lines += [f"- Coverage record: `{coverage['record']}`"]
+    if coverage.get("missing"):
+        lines += [f"- Missing coverage areas: `{', '.join(coverage['missing'])}`"]
+    if coverage.get("error"):
+        lines += [f"- Coverage error: `{coverage['error']}`"]
+    if coverage.get("record") or coverage.get("missing") or coverage.get("error"):
+        lines.append("")
 
     if areas:
         lines += ["## Changed Areas", ""]
@@ -110,6 +120,7 @@ def generate_issue_draft(upstream: dict) -> str:
         "## Review Checklist",
         "",
         "- [ ] Read all changed files",
+        "- [ ] Complete every required primary-base review area in the coverage record",
         "- [ ] Assess breaking changes / API compatibility",
         "- [ ] Check for security implications",
         "- [ ] Determine adoption strategy (adopt / defer / ignore)",
@@ -134,7 +145,11 @@ def main() -> int:
     report = json.loads(report_path.read_text(encoding="utf-8"))
     upstreams = report.get("upstreams", [])
 
-    changed = [u for u in upstreams if u.get("changed") or u.get("error")]
+    changed = [
+        u
+        for u in upstreams
+        if u.get("changed") or u.get("error") or u.get("coverage", {}).get("status") == "incomplete"
+    ]
     if not changed:
         print("No changed upstreams — nothing to draft.")
         return 0

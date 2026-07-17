@@ -27,14 +27,20 @@ import (
 func acpCommand(args []string, version string) int {
 	fs := flag.NewFlagSet("acp", flag.ContinueOnError)
 	model := fs.String("model", "", "provider name (default: config default_model)")
+	profile := fs.String("profile", "", "default work mode: economy, balanced, or delivery")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	workMode, _, err := parseCLIWorkMode(*profile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	factory := &acpFactory{model: *model}
+	factory := &acpFactory{model: *model, workMode: workMode}
 	info := acp.AgentInfo{Name: "reames-agent", Version: version}
 	if err := acp.Serve(ctx, os.Stdin, os.Stdout, factory, info); err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
@@ -48,7 +54,8 @@ func acpCommand(args []string, version string) int {
 // desktop, and serve assembly while still adding the host-supplied MCP servers
 // for this session only.
 type acpFactory struct {
-	model string
+	model    string
+	workMode string
 }
 
 func (f *acpFactory) SessionDir() string {
@@ -75,6 +82,7 @@ func (f *acpFactory) NewSession(ctx context.Context, p acp.SessionParams) (*cont
 		Stderr:                   os.Stderr,
 		WorkspaceRoot:            root,
 		ExtraPlugins:             p.MCPServers,
+		TokenMode:                p.WorkMode,
 		CleanupPendingReconciler: acp.ReconcileCleanupPending,
 		OnSessionRecovered:       p.OnSessionRecovered,
 	})
@@ -108,6 +116,11 @@ func (f *acpFactory) SessionConfigState(_ context.Context, p acp.SessionConfigSt
 	if !entry.Configured() {
 		return acp.SessionConfigState{}, fmt.Errorf("model %q is not configured", ref)
 	}
+	workMode, ok := boot.ParseWorkMode(firstNonEmpty(p.WorkMode, f.workMode, boot.WorkModeBalanced))
+	if !ok {
+		return acp.SessionConfigState{}, fmt.Errorf("work mode %q must be economy, balanced, or delivery", p.WorkMode)
+	}
+	publicWorkMode := boot.WorkModeName(workMode)
 	currentModel := entry.Name + "/" + entry.Model
 	modelOptions, modelInfos := acpModelOptions(cfg)
 	if !hasModelOption(modelOptions, currentModel) {
@@ -150,6 +163,19 @@ func (f *acpFactory) SessionConfigState(_ context.Context, p acp.SessionConfigSt
 		CurrentValue: currentModel,
 		Options:      modelOptions,
 	}}
+	options = append(options, acp.SessionConfigOption{
+		ID:           "work_mode",
+		Name:         "Work mode",
+		Description:  "Choose economy, balanced, or delivery execution behavior.",
+		Category:     "work_mode",
+		Type:         "select",
+		CurrentValue: publicWorkMode,
+		Options: []acp.SessionConfigSelectOption{
+			{Value: "economy", Name: "Economy", Description: "Lean initial tool surface; connect optional sources on demand."},
+			{Value: "balanced", Name: "Balanced", Description: "Complete tool surface with normal quality and cost tradeoffs."},
+			{Value: "delivery", Name: "Delivery", Description: "Prioritize verified completion and deeper follow-through."},
+		},
+	})
 	if cap := config.EffortCapabilityForEntry(&effortEntry); cap.Supported {
 		currentEffort := config.EffortDisplay(&effortEntry)
 		if !containsString(cap.Levels, currentEffort) {
@@ -173,6 +199,7 @@ func (f *acpFactory) SessionConfigState(_ context.Context, p acp.SessionConfigSt
 	return acp.SessionConfigState{
 		Model:          currentModel,
 		EffortOverride: effortOverride,
+		WorkMode:       publicWorkMode,
 		Models: &acp.SessionModelState{
 			AvailableModels: modelInfos,
 			CurrentModelID:  currentModel,

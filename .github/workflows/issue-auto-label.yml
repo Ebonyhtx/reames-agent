@@ -4,6 +4,8 @@ name: Auto-label issues
 # API (the project's own model). The model is constrained to a fixed label set —
 # anything it returns outside the set is dropped — so it can't invent labels.
 # Issues it can't place into any area get `needs-triage` for a human to look at.
+# DEEPSEEK_API_KEY is optional: when absent or unavailable, the workflow performs
+# no classifier request and applies `needs-triage` instead.
 # Version (v1/v2) labels are handled separately by issue-version-label.yml.
 on:
   issues:
@@ -57,7 +59,9 @@ jobs:
             ].join('\n');
 
             let labels = [];
-            try {
+            if (!process.env.DEEPSEEK_API_KEY) {
+              core.warning('DEEPSEEK_API_KEY is not configured; falling back to needs-triage');
+            } else try {
               const res = await fetch('https://api.deepseek.com/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -75,16 +79,15 @@ jobs:
                 }),
               });
               if (!res.ok) {
-                core.warning(`DeepSeek API ${res.status}: ${await res.text()}`);
-                return;
+                core.warning(`DeepSeek API ${res.status}; falling back to needs-triage`);
+              } else {
+                const data = await res.json();
+                const parsed = JSON.parse(data.choices[0].message.content);
+                labels = [...(parsed.area || []), ...(parsed.platform || []), ...(parsed.severity || [])]
+                  .filter(l => ALLOWED.has(l));
               }
-              const data = await res.json();
-              const parsed = JSON.parse(data.choices[0].message.content);
-              labels = [...(parsed.area || []), ...(parsed.platform || []), ...(parsed.severity || [])]
-                .filter(l => ALLOWED.has(l));
             } catch (e) {
-              core.warning(`Classification failed: ${e.message}`);
-              return;
+              core.warning(`Classification failed; falling back to needs-triage: ${e.message}`);
             }
 
             if (!labels.some(l => AREA.includes(l))) labels.push('needs-triage');

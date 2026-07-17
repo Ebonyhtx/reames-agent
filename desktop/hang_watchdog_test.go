@@ -2,12 +2,9 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"reames-agent/internal/config"
 )
 
 func TestHangAgeBucket(t *testing.T) {
@@ -71,13 +68,11 @@ func TestMainThreadHeartbeatAgeIgnoresWallClockJump(t *testing.T) {
 	}
 }
 
-func TestRecordMainThreadHangWritesPendingReportAndMetrics(t *testing.T) {
+func TestRecordMainThreadHangWritesPendingLocalReport(t *testing.T) {
 	t.Cleanup(func() {
 		os.Remove(pendingCrashPath())
-		os.Remove(filepath.Join(config.MemoryUserDir(), metricsPendingFile))
 	})
 	app := NewApp()
-	app.metrics.Store(newMetricsAggregator(config.MemoryUserDir()))
 
 	last := time.Now().Add(-20 * time.Second)
 	app.recordMainThreadHang(20*time.Second, last, time.Now())
@@ -88,12 +83,5 @@ func TestRecordMainThreadHangWritesPendingReportAndMetrics(t *testing.T) {
 	}
 	if r.Kind != "performance" || r.Source != "native.watchdog" || r.Label != "mac.main_thread.hang" {
 		t.Fatalf("pending report = %+v", r)
-	}
-	c := readCounters(filepath.Join(config.MemoryUserDir(), metricsPendingFile))
-	if got := c["desktop_hang"]["main_thread"]; got != 1 {
-		t.Fatalf("desktop_hang/main_thread = %d, want 1", got)
-	}
-	if got := c["desktop_hang_age"]["s_15_30"]; got != 1 {
-		t.Fatalf("desktop_hang_age/s_15_30 = %d, want 1", got)
 	}
 }

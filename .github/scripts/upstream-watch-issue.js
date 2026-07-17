@@ -5,7 +5,7 @@ const marker = "<!-- reames-agent-upstream-watch -->";
 module.exports = async function reconcileUpstreamIssue({ github, context, core, reportPath, markdownPath }) {
   const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   const fingerprintMarker = `<!-- upstream-fingerprint:${report.fingerprint} -->`;
-  const title = `Upstream watch: ${report.changed_count} changed, ${report.failed_count} check failure(s)`;
+  const title = `Upstream watch: ${report.changed_count} changed, ${report.failed_count} check failure(s), ${report.coverage_incomplete_count || 0} coverage gap(s)`;
   const markdown = fs.readFileSync(markdownPath, "utf8");
   const body = `${marker}
 ${fingerprintMarker}
@@ -15,6 +15,7 @@ ${markdown}
 ## Review workflow
 
 - [ ] Review primary-upstream security/provider/runtime changes first
+- [ ] Complete the primary-base subsystem coverage record before accepting a revision
 - [ ] Record adopt/defer/ignore decisions
 - [ ] Open scoped implementation issues for accepted changes
 - [ ] Run \`python scripts/check_upstreams.py --accept <id>\` only after review

@@ -15,7 +15,7 @@ import {
   type ComposerProfilesByTab,
   type UserPlanModeIntents,
 } from "../lib/composerProfile";
-import type { Meta, TabMeta } from "../lib/types";
+import { normalizeTokenMode, type Meta, type TabMeta } from "../lib/types";
 
 type LooseTabMeta = Omit<TabMeta, "toolApprovalMode"> & { toolApprovalMode?: TabMeta["toolApprovalMode"] | "" };
 type LooseMeta = Omit<Meta, "toolApprovalMode"> & { toolApprovalMode?: Meta["toolApprovalMode"] | "" };
@@ -75,6 +75,9 @@ function meta(overrides: Partial<LooseMeta> = {}): Meta {
 
 console.log("\ncomposer profile");
 
+eq(normalizeTokenMode("full"), "balanced", "legacy full work mode is projected as balanced");
+eq(normalizeTokenMode("delivery"), "delivery", "delivery work mode survives frontend normalization");
+
 {
   let profiles: ComposerProfilesByTab = {};
   profiles = hydrateComposerProfilesFromTabs(profiles, [tab({ tokenMode: "economy" })]);
@@ -119,6 +122,11 @@ console.log("\ncomposer profile");
 
   eq(profiles["tab-1"].tokenMode, "economy", "acknowledged token saver remains enabled");
   eq(Boolean(profiles["tab-1"].pending.tokenMode), false, "token saver pending clears after matching meta");
+
+  profiles = patchComposerProfile(profiles, "tab-1", profiles["tab-1"], { tokenMode: "delivery" }, ["tokenMode"]);
+  profiles = hydrateComposerProfileFromMeta(profiles, "tab-1", meta({ tokenMode: "delivery" }));
+  eq(profiles["tab-1"].tokenMode, "delivery", "delivery work mode is acknowledged independently");
+  eq(Boolean(profiles["tab-1"].pending.tokenMode), false, "delivery pending clears after matching meta");
 }
 
 {

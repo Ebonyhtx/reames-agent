@@ -24,7 +24,7 @@ func TestSafeModeIgnoresBrokenConfigAndCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.SafeMode() || len(cfg.Plugins) != 0 || cfg.Bot.Enabled || cfg.DesktopCheckUpdates() || cfg.DesktopTelemetry() || cfg.DesktopMetrics() {
+	if !cfg.SafeMode() || len(cfg.Plugins) != 0 || cfg.Bot.Enabled || cfg.DesktopCheckUpdates() {
 		t.Fatalf("unsafe recovery config: %+v", cfg)
 	}
 }

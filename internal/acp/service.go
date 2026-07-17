@@ -42,6 +42,7 @@ type SessionParams struct {
 	Sink               event.Sink
 	Model              string
 	EffortOverride     *string
+	WorkMode           string
 	OnSessionRecovered func(control.SessionRecoveryInfo) error
 }
 
@@ -63,12 +64,14 @@ type SessionConfigStateParams struct {
 	Cwd            string
 	Model          string
 	EffortOverride *string
+	WorkMode       string
 }
 
 // SessionConfigState is the complete ACP-visible config state for a session.
 type SessionConfigState struct {
 	Model          string
 	EffortOverride *string
+	WorkMode       string
 	Models         *SessionModelState
 	ConfigOptions  []SessionConfigOption
 }
@@ -167,6 +170,7 @@ type acpSession struct {
 	cwd        string
 	mcpServers []plugin.Spec
 	model      string
+	workMode   string
 	// nil means use config; non-nil empty string means provider default.
 	effortOverride *string
 	pendingConfig  *SessionConfigState
@@ -474,6 +478,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 		Sink:               sink,
 		Model:              cfgState.Model,
 		EffortOverride:     cloneStringPtr(cfgState.EffortOverride),
+		WorkMode:           cfgState.WorkMode,
 		OnSessionRecovered: s.sessionRecoveredHandler(id),
 	})
 	if err != nil {
@@ -491,6 +496,7 @@ func (s *service) sessionNew(ctx context.Context, raw json.RawMessage) (any, err
 		cwd:            cwd,
 		mcpServers:     clonePluginSpecs(mcpServers),
 		model:          cfgState.Model,
+		workMode:       cfgState.WorkMode,
 		effortOverride: cloneStringPtr(cfgState.EffortOverride),
 		createdAt:      now,
 		updatedAt:      now,
@@ -599,9 +605,10 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 		Cwd:            cwd,
 		Model:          saved.Model,
 		EffortOverride: cloneStringPtr(saved.EffortOverride),
+		WorkMode:       saved.WorkMode,
 	}
 	cfgState, err := s.sessionConfigState(ctx, cfgParams)
-	if err != nil && (strings.TrimSpace(saved.Model) != "" || saved.EffortOverride != nil) {
+	if err != nil && (strings.TrimSpace(saved.Model) != "" || saved.EffortOverride != nil || strings.TrimSpace(saved.WorkMode) != "") {
 		cfgState, err = s.sessionConfigState(ctx, SessionConfigStateParams{Cwd: cwd})
 	}
 	if err != nil {
@@ -615,6 +622,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 		Sink:               sink,
 		Model:              cfgState.Model,
 		EffortOverride:     cloneStringPtr(cfgState.EffortOverride),
+		WorkMode:           cfgState.WorkMode,
 		OnSessionRecovered: s.sessionRecoveredHandler(id),
 	})
 	if err != nil {
@@ -655,6 +663,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 	meta := metadataForLoadedSession(path, id, cwd, ctrl.Transcript())
 	meta.Model = cfgState.Model
 	meta.EffortOverride = cloneStringPtr(cfgState.EffortOverride)
+	meta.WorkMode = cfgState.WorkMode
 	sess := &acpSession{
 		id:             id,
 		ctrl:           ctrl,
@@ -663,6 +672,7 @@ func (s *service) openExistingSession(ctx context.Context, method, id, cwdParam 
 		cwd:            meta.Cwd,
 		mcpServers:     clonePluginSpecs(mcpServers),
 		model:          cfgState.Model,
+		workMode:       cfgState.WorkMode,
 		effortOverride: cloneStringPtr(cfgState.EffortOverride),
 		title:          meta.Title,
 		createdAt:      meta.CreatedAt,
@@ -776,7 +786,7 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 }
 
 // sessionSetConfigOption applies ACP's generic session-level selector. Reames Agent
-// currently exposes model and reasoning-effort selectors through this path.
+// exposes model, reasoning-effort, and work-mode selectors through this path.
 func (s *service) sessionSetConfigOption(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p SetSessionConfigOptionParams
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -804,6 +814,8 @@ func (s *service) sessionSetConfigOption(ctx context.Context, raw json.RawMessag
 		next, err = s.switchSessionModel(ctx, sess, p.Value)
 	case "thought_level":
 		next, err = s.switchSessionEffort(ctx, sess, p.Value)
+	case "work_mode":
+		next, err = s.switchSessionWorkMode(ctx, sess, p.Value)
 	default:
 		err = &RPCError{Code: ErrInvalidParams, Message: "session/set_config_option: unsupported config option " + option.ID}
 	}
@@ -853,6 +865,19 @@ func (s *service) switchSessionEffort(ctx context.Context, sess *acpSession, eff
 		level = ""
 	}
 	params.EffortOverride = &level
+	cfgState, err := s.sessionConfigState(ctx, params)
+	if err != nil {
+		return SessionConfigState{}, &RPCError{Code: ErrInvalidParams, Message: "session/set_config_option: " + err.Error()}
+	}
+	if err := s.rebuildSession(ctx, sess, cfgState); err != nil {
+		return SessionConfigState{}, err
+	}
+	return cfgState, nil
+}
+
+func (s *service) switchSessionWorkMode(ctx context.Context, sess *acpSession, workMode string) (SessionConfigState, error) {
+	params := sess.configStateParams()
+	params.WorkMode = strings.TrimSpace(workMode)
 	cfgState, err := s.sessionConfigState(ctx, params)
 	if err != nil {
 		return SessionConfigState{}, &RPCError{Code: ErrInvalidParams, Message: "session/set_config_option: " + err.Error()}
@@ -928,6 +953,7 @@ func (s *service) rebuildSession(ctx context.Context, sess *acpSession, cfgState
 		Sink:               sink,
 		Model:              cfgState.Model,
 		EffortOverride:     cloneStringPtr(cfgState.EffortOverride),
+		WorkMode:           cfgState.WorkMode,
 		OnSessionRecovered: s.sessionRecoveredHandler(sess.id),
 	})
 	if err != nil {
@@ -957,6 +983,7 @@ func (s *service) rebuildSession(ctx context.Context, sess *acpSession, cfgState
 	}
 	sess.ctrl = newCtrl
 	sess.model = cfgState.Model
+	sess.workMode = cfgState.WorkMode
 	sess.effortOverride = cloneStringPtr(cfgState.EffortOverride)
 	if sess.transcript != "" && sessionFileExists(sess.transcript) {
 		_ = saveACPMeta(sess.transcript, sess.metaLocked())
@@ -1240,6 +1267,7 @@ func (s *acpSession) configStateParams() SessionConfigStateParams {
 		Cwd:            s.cwd,
 		Model:          s.model,
 		EffortOverride: cloneStringPtr(s.effortOverride),
+		WorkMode:       s.workMode,
 	}
 }
 
@@ -1259,6 +1287,8 @@ func normalizeConfigID(id string) string {
 		return "model"
 	case "reasoning_effort", "thought_level":
 		return "effort"
+	case "profile", "work-mode", "work_mode":
+		return "work_mode"
 	default:
 		return strings.TrimSpace(id)
 	}
@@ -1282,6 +1312,8 @@ func configOptionCategory(option SessionConfigOption) string {
 		return "model"
 	case "effort":
 		return "thought_level"
+	case "work_mode":
+		return "work_mode"
 	default:
 		return ""
 	}
@@ -1408,6 +1440,7 @@ func (s *acpSession) metaLocked() acpSessionMeta {
 		Cwd:            s.cwd,
 		Model:          s.model,
 		EffortOverride: cloneStringPtr(s.effortOverride),
+		WorkMode:       s.workMode,
 		Title:          s.title,
 		CreatedAt:      s.createdAt,
 		UpdatedAt:      s.updatedAt,
@@ -1420,6 +1453,9 @@ func (s *acpSession) info() SessionInfo {
 	extra := map[string]any{}
 	if n := len(ctrl.History()); n > 0 {
 		extra["messageCount"] = n
+	}
+	if strings.TrimSpace(meta.WorkMode) != "" {
+		extra["workMode"] = meta.WorkMode
 	}
 	if len(extra) == 0 {
 		extra = nil
@@ -1534,6 +1570,7 @@ type acpSessionMeta struct {
 	Cwd            string    `json:"cwd"`
 	Model          string    `json:"model,omitempty"`
 	EffortOverride *string   `json:"effortOverride,omitempty"`
+	WorkMode       string    `json:"workMode,omitempty"`
 	Title          string    `json:"title,omitempty"`
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`

@@ -256,6 +256,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	config.NormalizeLegacyMimoCustomProvidersForRefs(cfg, modelName)
 	tokenMode := NormalizeTokenMode(opts.TokenMode)
 	tokenEconomy := tokenMode == TokenModeEconomy
+	tokenDelivery := tokenMode == TokenModeDelivery
 	keepPolicy := agentKeepPolicy(cfg.Agent.Keep)
 	entry, ok := cfg.ResolveModel(modelName)
 	if !ok {
@@ -366,6 +367,8 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	}
 	if tokenEconomy {
 		sysPrompt += "\n\n" + tokenEconomyPrompt
+	} else if tokenDelivery {
+		sysPrompt += "\n\n" + tokenDeliveryPrompt
 	}
 	if cfg.EnvironmentEnabled() {
 		shellLabel := shell.Kind.String()

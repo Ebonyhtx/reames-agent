@@ -130,6 +130,22 @@ effort = "high"
 	if state.EffortOverride == nil || *state.EffortOverride != "high" {
 		t.Fatalf("reasoning effort override = %v, want high", state.EffortOverride)
 	}
+	workMode, ok := findACPConfigOption(state.ConfigOptions, "work_mode")
+	if !ok || workMode.CurrentValue != "balanced" || len(workMode.Options) != 3 {
+		t.Fatalf("work-mode option = %+v, want balanced with three choices", workMode)
+	}
+
+	state, err = (&acpFactory{}).SessionConfigState(context.Background(), acp.SessionConfigStateParams{
+		Cwd:      project,
+		Model:    "reasoner/reasoning-model",
+		WorkMode: "delivery",
+	})
+	if err != nil {
+		t.Fatalf("delivery SessionConfigState: %v", err)
+	}
+	if state.WorkMode != "delivery" {
+		t.Fatalf("delivery work mode = %q, want delivery", state.WorkMode)
+	}
 
 	state, err = (&acpFactory{}).SessionConfigState(context.Background(), acp.SessionConfigStateParams{
 		Cwd:            project,

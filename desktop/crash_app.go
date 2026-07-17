@@ -1,21 +1,23 @@
 package main
 
 import (
-	"bytes"
-	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
+
+	"reames-agent/internal/config"
 )
 
-// crash_app.go is the crash/feedback/performance reporting surface. Reports are
-// sent only on an explicit user click in the frontend UI — never automatically.
-
-var crashEndpoint = ""
+// crash_app.go builds privacy-scrubbed crash, feedback, performance, and bot
+// diagnostics. Reports are stored only on the local machine. Reames Agent has no
+// project-owned reporting endpoint and this package contains no upload path.
 
 const maxCrashDetailBytes = 16 << 10
 const maxCrashStackBytes = 8 << 10
@@ -242,38 +244,70 @@ func crashReportFromDetail(kind, detail string) (crashReport, error) {
 	return r, nil
 }
 
-func (a *App) ReportCrash(kind, detail string) error {
-	r, err := crashReportFromDetail(kind, detail)
-	if err != nil {
-		return err
+func diagnosticReportsDir() string {
+	root := config.MemoryUserDir()
+	if root == "" {
+		return ""
 	}
-	if crashEndpoint == "" {
-		return errors.New("crash reporting is unavailable in this build")
-	}
-	c, err := httpClient()
-	if err != nil {
-		return err
-	}
-	return postCrashReport(a.reqCtx(), c, crashEndpoint, r)
+	return filepath.Join(root, "diagnostics", "reports")
 }
 
-func postCrashReport(ctx context.Context, c *http.Client, endpoint string, r crashReport) error {
-	body, err := json.Marshal(r)
+func saveDiagnosticReport(r crashReport) (string, error) {
+	body, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
-		return err
+		return "", fmt.Errorf("encode diagnostic report: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	dir := diagnosticReportsDir()
+	if dir == "" {
+		return "", fmt.Errorf("resolve diagnostic report directory")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create diagnostic report directory: %w", err)
+	}
+	for range 4 {
+		random := make([]byte, 4)
+		if _, err := rand.Read(random); err != nil {
+			return "", fmt.Errorf("create diagnostic report id: %w", err)
+		}
+		name := fmt.Sprintf(
+			"%s-%s-%s.json",
+			time.Now().UTC().Format("20060102T150405.000Z"),
+			r.Kind,
+			hex.EncodeToString(random),
+		)
+		path := filepath.Join(dir, name)
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if os.IsExist(err) {
+			continue
+		}
+		if err != nil {
+			return "", fmt.Errorf("create diagnostic report: %w", err)
+		}
+		n, writeErr := f.Write(append(body, '\n'))
+		closeErr := f.Close()
+		if writeErr != nil || n != len(body)+1 {
+			_ = os.Remove(path)
+			if writeErr != nil {
+				return "", fmt.Errorf("write diagnostic report: %w", writeErr)
+			}
+			return "", fmt.Errorf("write diagnostic report: short write")
+		}
+		if closeErr != nil {
+			_ = os.Remove(path)
+			return "", fmt.Errorf("close diagnostic report: %w", closeErr)
+		}
+		return path, nil
+	}
+	return "", fmt.Errorf("create diagnostic report: exhausted unique names")
+}
+
+// SaveDiagnosticReport stores one scrubbed report locally and returns its path.
+// The frontend may also let the user copy the same report; neither action sends
+// data to Reames Agent or any third party.
+func (a *App) SaveDiagnosticReport(kind, detail string) (string, error) {
+	r, err := crashReportFromDetail(kind, detail)
 	if err != nil {
-		return err
+		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("crash endpoint returned %s", resp.Status)
-	}
-	return nil
+	return saveDiagnosticReport(r)
 }

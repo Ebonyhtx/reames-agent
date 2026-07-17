@@ -957,12 +957,6 @@ func (s *tabEventSink) Emit(e event.Event) {
 		case event.TurnDone:
 			s.recordTurnDone()
 		}
-		if m := app.metrics.Load(); m != nil {
-			m.observe(e)
-			if e.Kind == event.TurnDone {
-				m.persist()
-			}
-		}
 		if e.Kind == event.TurnDone {
 			s.flushPlannerDisplay()
 		}
@@ -7144,7 +7138,7 @@ func (s tabRuntimeSnapshot) currentTokenMode() string {
 
 func persistedTabTokenMode(mode string) string {
 	mode = boot.NormalizeTokenMode(mode)
-	if mode == boot.TokenModeEconomy {
+	if mode == boot.TokenModeEconomy || mode == boot.TokenModeDelivery {
 		return mode
 	}
 	return ""

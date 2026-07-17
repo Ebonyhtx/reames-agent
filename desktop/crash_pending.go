@@ -10,11 +10,8 @@ import (
 	"reames-agent/internal/config"
 )
 
-// crash_pending.go captures Go-side panics to disk and ships them on the next
-// launch. Frontend crashes are click-to-send, but an unrecovered Go panic kills the
-// process before the user can react, so the whole agent/provider/tool layer would
-// otherwise never surface a single report. The resend is gated on the same
-// desktop.telemetry opt-out as the launch ping.
+// crash_pending.go captures Go-side panics and native watchdog reports to disk.
+// The next launch archives the scrubbed report locally; it is never uploaded.
 
 const pendingCrashFile = "crash-pending.json"
 
@@ -81,37 +78,20 @@ func (a *App) goSafe(site string, fn func()) {
 	}()
 }
 
-// flushPendingCrash drains a Go panic captured on a prior run and POSTs it, then
-// clears it. Runs at launch alongside the ping; honours the telemetry opt-out by
-// dropping the file unsent.
-func (a *App) flushPendingCrash() {
-	if version == "dev" {
-		return
-	}
+// archivePendingCrash moves a prior panic/watchdog report into the durable local
+// diagnostics directory. The pending file is removed only after the archive is
+// safely written, so startup failures cannot silently discard the evidence.
+func (a *App) archivePendingCrash() {
 	path := pendingCrashPath()
-	if crashEndpoint == "" {
-		_ = os.Remove(path)
-		return
-	}
 	body, err := os.ReadFile(path)
 	if err != nil {
 		return
 	}
-	cfg, err := config.Load()
-	if err != nil || !cfg.DesktopTelemetry() {
-		_ = os.Remove(path)
-		return
-	}
 	var r crashReport
 	if json.Unmarshal(body, &r) != nil {
-		_ = os.Remove(path)
 		return
 	}
-	c, err := httpClient()
-	if err != nil {
-		return
-	}
-	if postCrashReport(a.bootContext(), c, crashEndpoint, r) == nil {
+	if _, err := saveDiagnosticReport(r); err == nil {
 		_ = os.Remove(path)
 	}
 }

@@ -37,7 +37,7 @@ export const defaultComposerProfile: ComposerProfile = Object.freeze({
   collaborationMode: "normal",
   goalDraftMode: false,
   toolApprovalMode: "ask",
-  tokenMode: "full",
+  tokenMode: "balanced",
   goal: "",
   pending: {},
 });

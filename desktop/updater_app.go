@@ -242,10 +242,6 @@ func (a *App) failUpdate(err error) error {
 }
 
 func (a *App) recordUpdateError(err error) {
-	if err == nil || version == "dev" {
-		return
-	}
-	if m := a.metrics.Load(); m != nil {
-		m.inc("updater_error", errorClass(err.Error()))
-	}
+	// Update failures remain visible in the local progress stream and logs. The
+	// desktop intentionally has no aggregate upload pipeline.
 }

@@ -716,7 +716,9 @@ export interface RecoveryActionResult {
 
 export type CollaborationMode = "normal" | "plan" | "goal";
 export type ToolApprovalMode = "ask" | "auto" | "yolo";
-export type TokenMode = "full" | "economy";
+// "full" is accepted only as the legacy backend/persistence spelling of
+// balanced. User-facing state uses economy | balanced | delivery.
+export type TokenMode = "full" | "economy" | "balanced" | "delivery";
 export type GoalStatus = "running" | "complete" | "blocked" | "stopped";
 
 export interface AutoResearchCompactView {
@@ -790,7 +792,8 @@ export function normalizeToolApprovalMode(
 
 export function normalizeTokenMode(mode?: string): TokenMode {
   if (mode === "economy") return "economy";
-  return "full";
+  if (mode === "delivery") return "delivery";
+  return "balanced";
 }
 
 // Mode is the compatibility string for two independent composer axes:
@@ -1570,8 +1573,6 @@ export interface SettingsView {
   statusBarItems: string[]; // ordered visible status bar item ids
   defaultToolApprovalMode: ToolApprovalMode | string; // default for newly-created sessions
   checkUpdates: boolean; // check for new versions on startup
-  telemetry: boolean; // anonymous launch ping (install id + version + OS)
-  metrics: boolean; // aggregate desktop metrics (anonymous signal/bucket counts)
   memoryCompilerEnabled: boolean; // Memory v5 execution compiler
   configPath: string;
   providerKinds: string[]; // provider implementations the kernel registered (for the kind picker)
