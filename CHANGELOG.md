@@ -14,6 +14,7 @@
 
 ### Security / Governance
 
+- Added the strict `.reames-theme` v1 contract with semantic-token and recipe allowlists; ZIP traversal, symlink, Windows-device-name, duplicate, count, size, expansion-ratio, compression-bomb, image-format, edge, pixel, and full-SHA-256 validation; and a public schema checked against the Go allowlist.
 - Raised the pinned build toolchain to Go 1.26.5 so release and source builds include the standard-library fixes for GO-2026-5856 and GO-2026-4970; the source minimum remains Go 1.25 with automatic toolchain selection.
 - Migrated CI, CodeQL support steps, candidates, upstream watch, and deploy workflows from embedded Node.js 20 action majors to official Node.js 24 majors, with a public-readiness ratchet that rejects their return.
 - Added an opt-in TUF plugin registry client with an out-of-band bootstrap root, project-resistant trust configuration, persistent rollback/freeze metadata, sequential root rotation, strict signed index/provenance bindings, canonical cross-platform Git source digests, ambient-Git-config isolation, apply-time re-resolution, lifecycle evidence persistence, and packaged Apache-2.0/NOTICE attribution. No public registry or TOFU endpoint is enabled; optional attestation targets are authenticated bytes, not claimed DSSE identity or SLSA policy verification.
@@ -33,6 +34,8 @@
 
 ### Desktop
 
+- Added a lazy Appearance/Gallery with separate select, reversible preview, and apply actions; content-addressed immutable scene delivery; atomic install/active-replace/delete recovery; restart rollback of uncommitted previews; Safe Mode Graphite fallback; and read-only official/user pack partitioning. Official packs now use the same allow-listed frontend runtime projection as user packs while remaining non-replaceable and non-deletable; every Wails pack-mutation binding rejects Safe Mode before opening a picker or touching the store.
+- Added two original MIT-licensed Reames themes with embedded digest-verified artwork and repository-recorded prompts, generation IDs, dimensions, conversion steps, and SHA-256 provenance. No Reasonix branding, artwork, marketplace, endpoint, telemetry, or second runtime was imported.
 - Kept fresh-clone Windows production builds Git-clean by restoring the embedded frontend `dist` placeholder as a byte-empty file, avoiding CRLF/LF-only worktree drift after Vite clears stale assets.
 - Added authenticated signed-registry search and release selection to Plugin settings, including trusted registry/root evidence in preview and installed-plugin details; an unconfigured registry fails closed without changing direct local/Git installs.
 - Added a structured plugin/source approval modal that displays operation, risk, target, MCP execution details, version/digest changes, trust, requested permissions, source revision, warnings, and enable state from the same exact plan used by every host.
@@ -55,7 +58,7 @@
 ### Upstream
 
 - Kept upstream/reference tracking issue-driven; automatic discovery may propose review work but must not auto-merge upgrades.
-- Reviewed Reasonix Theme Pack V2 and retained its manifest/token/storage/preview safety mechanisms as the next staged direction without importing its branding, assets, marketplace, or production release infrastructure.
+- Reviewed Reasonix Theme Pack V2 at the source/test/schema level and implemented the independently verified manifest, storage, preview, and recovery mechanisms without importing its branding, assets, marketplace, or production release infrastructure.
 
 ## v0.1.0 (2026-07-08)
 

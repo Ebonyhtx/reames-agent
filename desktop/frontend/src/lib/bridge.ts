@@ -63,6 +63,9 @@ import type {
   SkillSuggestion,
   SlashArgsResult,
   TabMeta,
+  ThemeActiveView,
+  ThemeExperienceView,
+  ThemeImportResult,
   TopicMeta,
   UpdateDownloadResult,
   UpdateInfo,
@@ -277,6 +280,15 @@ export interface AppBindings {
   SaveDoc(path: string, body: string): Promise<string>;
   SaveDocForTab(tabID: string, path: string, body: string): Promise<string>;
   DesktopStartupSettings(): Promise<DesktopStartupSettingsView>;
+  ActiveThemePack(): Promise<ThemeActiveView>;
+  ThemeExperience(): Promise<ThemeExperienceView>;
+  PreviewThemePack(id: string): Promise<ThemeExperienceView>;
+  CancelThemePreview(): Promise<ThemeExperienceView>;
+  ApplyThemePack(id: string): Promise<ThemeExperienceView>;
+  DeleteThemePack(id: string): Promise<ThemeExperienceView>;
+  ImportThemePack(): Promise<ThemeImportResult>;
+  ConfirmThemePackImport(pendingId: string): Promise<ThemeImportResult>;
+  CancelThemePackImport(pendingId: string): Promise<void>;
   Settings(): Promise<SettingsView>;
   HooksSettings(scope: string): Promise<HooksSettingsView>;
   SaveHooksSettings(scope: string, hooks: HookConfigView[]): Promise<void>;

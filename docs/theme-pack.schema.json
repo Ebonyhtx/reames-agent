@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reames.dev/schemas/theme-pack-v1.json",
+  "title": "Reames Theme Pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "version", "license", "provenance", "baseStyle", "tokens", "recipes"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z]([a-z0-9-]{0,62}[a-z0-9])?$",
+      "not": { "enum": ["graphite", "aurora", "slate", "carbon", "nocturne", "amber", "reames-dawn", "reames-workshop"] }
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-][0-9A-Za-z.-]+)?$", "maxLength": 64 },
+    "author": { "type": "string", "maxLength": 240 },
+    "description": { "type": "string", "maxLength": 512 },
+    "license": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "baseStyle": { "enum": ["graphite", "aurora", "slate", "carbon", "nocturne", "amber"] },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["light", "dark"],
+      "properties": {
+        "light": { "$ref": "#/$defs/tokenMap" },
+        "dark": { "$ref": "#/$defs/tokenMap" }
+      }
+    },
+    "recipes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["density", "corners"],
+      "properties": {
+        "density": { "enum": ["compact", "comfortable"] },
+        "corners": { "enum": ["square", "soft", "round"] }
+      }
+    },
+    "scenes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "home": { "$ref": "#/$defs/scene" },
+        "workspace": { "$ref": "#/$defs/scene" }
+      }
+    }
+  },
+  "$defs": {
+    "hexColor": { "type": "string", "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "source"],
+      "properties": {
+        "kind": { "enum": ["original", "licensed"] },
+        "source": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "sourceUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "generatedWith": { "type": "string", "maxLength": 240 }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "sha256"],
+      "properties": {
+        "file": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\\.(png|jpe?g|webp)$" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "focusX", "focusY", "safeArea", "opacity", "overlayStrength"],
+      "properties": {
+        "image": { "$ref": "#/$defs/asset" },
+        "focusX": { "type": "number", "minimum": 0, "maximum": 1 },
+        "focusY": { "type": "number", "minimum": 0, "maximum": 1 },
+        "safeArea": { "enum": ["left", "center", "right"] },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "overlayStrength": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "tokenMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bg": { "$ref": "#/$defs/hexColor" },
+        "bgSoft": { "$ref": "#/$defs/hexColor" },
+        "bgElev": { "$ref": "#/$defs/hexColor" },
+        "panel": { "$ref": "#/$defs/hexColor" },
+        "sidebar": { "$ref": "#/$defs/hexColor" },
+        "chat": { "$ref": "#/$defs/hexColor" },
+        "workspace": { "$ref": "#/$defs/hexColor" },
+        "workspaceFiles": { "$ref": "#/$defs/hexColor" },
+        "border": { "$ref": "#/$defs/hexColor" },
+        "borderSoft": { "$ref": "#/$defs/hexColor" },
+        "fg": { "$ref": "#/$defs/hexColor" },
+        "fgDim": { "$ref": "#/$defs/hexColor" },
+        "fgFaint": { "$ref": "#/$defs/hexColor" },
+        "accent": { "$ref": "#/$defs/hexColor" },
+        "accentFg": { "$ref": "#/$defs/hexColor" },
+        "ok": { "$ref": "#/$defs/hexColor" },
+        "warn": { "$ref": "#/$defs/hexColor" },
+        "err": { "$ref": "#/$defs/hexColor" }
+      }
+    }
+  }
+}

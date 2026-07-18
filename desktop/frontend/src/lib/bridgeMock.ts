@@ -17,6 +17,7 @@ import type {
 
 const EVENT_CHANNEL = "agent:event";
 const GLOBAL_PROJECT_ORDER_KEY = "__global__";
+const themePackMock = () => import("./themePackMock");
 
 function stripGoalResearchFlags(arg: string): string {
   const parts = arg.trim().split(/\s+/).filter(Boolean);
@@ -612,6 +613,7 @@ export function makeMockApp(): AppBindings {
     autoApproveTools: false,
     bypass: false,
   };
+
   const hookEvents = ["PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "PostLLMCall", "SessionStart", "SessionEnd", "SubagentStop", "Notification", "PreCompact"];
   const hookSettings: Record<string, HooksSettingsView> = {
     global: {
@@ -2514,6 +2516,31 @@ export function makeMockApp(): AppBindings {
         checkUpdates,
       })) as DesktopStartupSettingsView;
     },
+    async ActiveThemePack() {
+      return (await themePackMock()).active();
+    },
+    async ThemeExperience() {
+      return (await themePackMock()).experience();
+    },
+    async PreviewThemePack(id: string) {
+      return (await themePackMock()).preview(id);
+    },
+    async CancelThemePreview() {
+      return (await themePackMock()).cancelPreview();
+    },
+    async ApplyThemePack(id: string) {
+      return (await themePackMock()).apply(id);
+    },
+    async DeleteThemePack(id: string) {
+      return (await themePackMock()).remove(id);
+    },
+    async ImportThemePack() {
+      return (await themePackMock()).canceledImport();
+    },
+    async ConfirmThemePackImport(_pendingId: string) {
+      return (await themePackMock()).canceledImport();
+    },
+    async CancelThemePackImport(_pendingId: string) {},
     async Settings() {
       return JSON.parse(JSON.stringify(settings)) as SettingsView;
     },

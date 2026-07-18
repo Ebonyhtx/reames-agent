@@ -2,7 +2,7 @@
 
 > 状态：当前产品方向的权威说明
 >
-> 更新：2026-07-17
+> 更新：2026-07-18
 
 ## 一句话定位
 
@@ -54,6 +54,7 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 - 2026-07-17 Reasonix 再同步已采用 MCP schema/凭据/Provider 加固，并关闭 identity-bound MCP trust P0、writer worktree P1 与 offline Guard/Safe Mode P2。独立 Guard 在普通 runtime 之前运行，使用五分钟三次失败的进程所有权启动账本、30 秒健康观察期、配置健康快照和完整安装单元 pending transaction；自动回滚必须同时满足 crash 归因、版本、同安装目录与全量备份 SHA-256，歧义或 mixed install fail closed。Safe Mode 不读取用户/项目 TOML 或 dotenv，不启动 Provider、MCP、插件、Hook、Bot、LSP、planner、Guardian、subagent 或 Memory Compiler。CLI/Serve/Desktop/Gateway 共享 `repair.Report`；三平台 Desktop 包均通过 Guard 启动，Gateway service 在加载运行时前执行同一 credential-free preflight。
 - P3 Desktop Recovery Center 已完成仓库内、真实 Windows 本地和修复后远端三平台证据：普通模式与 recovery-only Safe Mode 都只投影同一 `repair.Report`，所有修复经 `repair.ExecuteAction -> control.Controller.RunRecoveryAction -> Desktop RunRecoveryAction` 受控执行；支持配置隔离、快照恢复、精确 undo、已验证更新回滚、tabs/projects/window/zoom 派生状态重建和插件全量禁用。Recovery DTO 空数组 `null` 回归已加入 Go/Wails 合同；提交 `89a8b2b` 的 CI `29610566790` 8/8、CodeQL `29610566725` 3/3、Desktop candidate `29610593446` Linux/macOS/Windows 全绿。真实签名/notarization、公开 release 升级失败与断电点回滚保持 `external-blocked`。
 - P4 已把 Reasonix 追踪从增量抽样升级为完整代码级代际账本：固定 `07c65c2..3637d0f0`，枚举 672 个提交、498 个非 merge 提交、314 个精确 fix/perf 提交和 993 个变化文件，并将稳定 tag、活跃未合并 ref、15 个 required area 的源码/测试证据写入 `audits/2026-07-18-reasonix-generation-parity.md` 与 `docs/upstreams/reviews/`。`dae65e25` 会话可靠性和 `d3cfa5c2` DeepSeek reasoning-only stop 已吸收；普通/计划/目标与 economy/balanced/delivery 两个正交轴已闭环 Desktop、CLI/TUI、Serve、ACP 和 Bot 默认合同。Reames 自有启动、metrics、crash、performance 远端上传永久删除，只保留本地诊断。`7f00d2c2` Theme Pack V2 进入 P5；Memory v5 删除、trust 简化和生产 release workflow 是有证据的产品/安全分歧，不机械跟随。
+- P5 已完成仓库内受控 Theme Pack 实现：`.reames-theme` v1 只允许严格 JSON、语义颜色、有限 recipe 和最多两张本地 raster scene；ZIP/path/symlink/Windows 名称/数量/尺寸/压缩比/像素炸弹、图片 magic/解码与完整 SHA-256 均 fail closed。用户包使用内容寻址 Store、原子 pack/state、可恢复 install/delete journal 和故障注入；替换 active 包会原子推进活动摘要。Desktop Appearance/Gallery 延迟加载，选择、预览和应用分离，预览不落盘且重启撤销；Safe Mode 不读主题 Store，并强制 Graphite。两套只读官方主题使用 Reames 原创内嵌 JPEG，ID、许可证、生成记录和 digest 可检查，不继承 Reasonix 品牌、图片、marketplace、endpoint 或发布运行时。当前并发写保证限于受单实例保护的 Desktop 进程；未来开放 CLI/Serve 写入口前必须增加跨进程 Store lock。用户与资产文档见 `THEME_PACKS.md`，验收审计见 `audits/2026-07-18-p5-controlled-theme-pack-design.md`。
 - 参考项目最新增量已按锁文件人工接受：Kimi 的 Auto/YOLO 文案准确性已转化为三语权限契约测试；Hermes 的 session-state 单一投影、profile prewarm 和 best-effort stream fence、Codex 的集中 MCP runtime、MiMo 的 CLI-only 演示脚本路径均只作为架构回归信号，不引入 Python/Electron/Rust 或第二套 runtime。Reasonix 新增的多套生产 release workflow 不继承；Reames 反而增加全 workflow 发布写权限/动作棘轮，继续只允许无 secrets、`contents: read` 的候选构建。外部风险仍是公开 registry 运营、干净云节点 logout/reboot、真实 IM 回环和生产签名链。
 - 继承自早期迁移的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package 元数据以及 `site/`、`workers/` 已在完成运行引用和替代实现审计后从当前树删除；参考机制只保留在 Git 历史和 `F:\code-reference`，不得重新整套 vendor。
 

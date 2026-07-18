@@ -30,10 +30,13 @@ powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.co
 
 - **多模型**: DeepSeek、OpenAI 兼容、Anthropic — 配置驱动，无需硬编码
 - **缓存优先**: DeepSeek 前缀缓存优化，目标 95%+ 命中率
-- **三端统一**: CLI(Bubble Tea TUI)、桌面(Wails+React)、云端(HTTP/SSE)
+- **统一 Controller，多入口**: CLI/TUI、Desktop、HTTP/SSE、ACP 与 IM Gateway 共用运行语义
+- **三种工作模式**: economy、balanced、delivery；交付模式要求证据化完成，不放宽权限或沙箱
 - **IM 网关**: 飞书、QQ、微信、Telegram 机器人适配
 - **插件/MCP**: MCP stdio+HTTP 双传输，技能 playbook 系统
-- **单二进制**: CGO_ENABLED=0，6 平台交叉编译
+- **离线恢复**: credential-free Guard、crash-loop 检测、已验证更新回滚与 Safe Mode
+- **受控主题包**: 不可执行离线包、可撤销预览、原子恢复和 Reames 原创内置主题
+- **可移植 CLI**: CGO_ENABLED=0，6 平台交叉编译；Desktop 包含同级 Guard launcher
 
 ## 使用
 
@@ -43,6 +46,8 @@ reames-agent run "修复 auth 的 bug" # 单任务执行
 reames-agent serve                  # 启动 Web UI (localhost:8787)
 reames-agent gateway run --channels feishu    # 前台运行 IM Gateway
 reames-agent gateway install --dry-run --channels feishu  # 预览后台服务安装计划
+reames-agent guard check --json        # 无凭据恢复报告
+reames-agent guard launch --safe-mode  # 启动 recovery-only Desktop
 ```
 
 ## 云端部署
@@ -64,6 +69,8 @@ docker run -p 127.0.0.1:8787:8787 \
 - [文档索引](docs/DOCS_INDEX.md)
 - [架构设计](docs/ARCHITECTURE.md)
 - [部署指南](docs/DEPLOY.md)
+- [恢复、Guard 与 Safe Mode](docs/RECOVERY.zh-CN.md)
+- [受控主题包](docs/THEME_PACKS.md)
 - [参考项目治理](docs/REFERENCE_GOVERNANCE.md)
 
 ## 许可证

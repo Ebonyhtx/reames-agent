@@ -183,6 +183,7 @@ type App struct {
 	hangWatchdogCancel  context.CancelFunc
 
 	mediaTokens *mediaTokenStore
+	themes      *themeRuntime
 	botInstalls map[string]*botInstallSession
 	botRuntime  *desktopBotRuntime
 
@@ -328,13 +329,36 @@ func (a *App) ensureMediaTokenStore() *mediaTokenStore {
 	return a.mediaTokens
 }
 
-// workspaceMediaMiddleware returns an HTTP middleware that intercepts
-// /__reames_agent_workspace_media/{token}/{filename} requests and serves the
-// corresponding workspace file. All other paths pass through to the Wails
-// default asset handler unchanged.
+// workspaceMediaMiddleware serves both short-lived workspace previews and
+// immutable, digest-addressed controlled-theme assets. All other paths pass to
+// the Wails embedded frontend unchanged.
 func (a *App) workspaceMediaMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			themePrefix := "/__reames_agent_theme_asset/"
+			if strings.HasPrefix(r.URL.Path, themePrefix) {
+				if r.Method != http.MethodGet && r.Method != http.MethodHead {
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					return
+				}
+				digest := strings.TrimPrefix(r.URL.Path, themePrefix)
+				if digest == "" || strings.Contains(digest, "/") {
+					http.NotFound(w, r)
+					return
+				}
+				asset, err := a.themeAsset(digest)
+				if err != nil {
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", asset.MIME)
+				w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": asset.Name}))
+				w.Header().Set("X-Content-Type-Options", "nosniff")
+				w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+				http.ServeContent(w, r, asset.Name, asset.ModTime, bytes.NewReader(asset.Data))
+				return
+			}
+
 			prefix := "/__reames_agent_workspace_media/"
 			if !strings.HasPrefix(r.URL.Path, prefix) {
 				next.ServeHTTP(w, r)
@@ -383,6 +407,7 @@ func NewApp() *App {
 		tabs:             map[string]*WorkspaceTab{},
 		detachedSessions: map[string]*WorkspaceTab{},
 		mediaTokens:      newMediaTokenStore(),
+		themes:           newThemeRuntime(),
 		botInstalls:      map[string]*botInstallSession{},
 		botRuntime:       newDesktopBotRuntime(),
 	}

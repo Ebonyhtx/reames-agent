@@ -1,5 +1,5 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
-import { Bot as BotIcon, Check, CheckCircle2, ChevronDown, ChevronUp, Clipboard, GripVertical, KeyRound, Loader2, MessageCircle, Minus, Play, Plus, QrCode, RefreshCw, RotateCcw, Send } from "lucide-react";
+import { Bot as BotIcon, Check, CheckCircle2, ChevronDown, ChevronUp, Clipboard, GripVertical, KeyRound, Loader2, MessageCircle, Play, QrCode, RefreshCw, Send } from "lucide-react";
 import { asArray } from "../lib/array";
 import { useDeferredClose } from "../lib/useMountTransition";
 import { isTopModalDialog, useDialogFocus } from "../lib/useDialogFocus";
@@ -8,7 +8,6 @@ import { normalizeLangPref, useI18n, useT, type DictKey, type LangPref } from ".
 import { apiKeyEnvFromProviderName, inferredVisionModels, mergedFetchedProviderModels, providerApiKeyEnvForSave, providerDefaultModel, providerIsConfigured, providerModelCandidates, providerRequiresKey } from "../lib/providerModels";
 import { useUpdater } from "../lib/useUpdater";
 import {
-  THEME_STYLES,
   applyTheme,
   getTheme,
   getThemeStyle,
@@ -17,8 +16,8 @@ import {
   type Theme,
   type ThemeStyle,
 } from "../lib/theme";
-import { TEXT_SIZES, applyTextSize, getTextSize, type TextSize } from "../lib/textSize";
-import { createZoomWriteQueue, DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, snapZoom, zoomToPercent, saveRestartZoom, getRestartZoom, type ZoomLevel } from "../lib/dpiScale";
+import { applyTextSize, getTextSize, type TextSize } from "../lib/textSize";
+import { createZoomWriteQueue, snapZoom, zoomToPercent, saveRestartZoom, getRestartZoom, type ZoomLevel } from "../lib/dpiScale";
 import {
   applyFontFamily,
   applyMonoFontFamily,
@@ -31,7 +30,6 @@ import {
   type FontFamily,
   type MonoFontFamily,
 } from "../lib/fontFamily";
-import { getAvailableFontFamilies, getAvailableMonoFontFamilies } from "../lib/fontAvailability";
 import { getDisplayMode, onDisplayModeChange, setDisplayMode as setLocalDisplayMode } from "../lib/displayMode";
 import { DEFAULT_STATUS_BAR_ITEMS, normalizeStatusBarItems, type StatusBarItemId } from "../lib/statusBarItems";
 import { normalizeToolApprovalMode } from "../lib/types";
@@ -65,6 +63,10 @@ const MCPServersSettingsPage = lazy(() => import("./CapabilitiesPanel").then((mo
 const SkillsSettingsPage = lazy(() => import("./CapabilitiesPanel").then((module) => ({ default: module.SkillsSettingsPage })));
 const PluginsSettingsPage = lazy(() => import("./CapabilitiesPanel").then((module) => ({ default: module.PluginsSettingsPage })));
 const MemorySettingsPage = lazy(() => import("./MemoryPanel").then((module) => ({ default: module.MemorySettingsPage })));
+const nodeTestRuntime = Boolean((globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node);
+const AppearancePanel = lazy(() => (
+  nodeTestRuntime ? import("./AppearancePanel") : import("./AppearancePanelRoute")
+).then((module) => ({ default: module.AppearancePanel })));
 const QRCodeSVG = lazy(() => import("qrcode.react").then((module) => ({ default: module.QRCodeSVG })));
 
 // SettingsPanel is the desktop settings centre — a centred modal with left
@@ -302,54 +304,55 @@ export function SettingsPanel({
                 {tab === "network" && s && <SettingsPageShell key={tab} s={s} tab={tab} busy={busy} apply={apply}><NetworkSection s={s} busy={busy} apply={apply} /></SettingsPageShell>}
                 {tab === "appearance" && s && (
                   <SettingsPageShell key={tab} s={s} tab={tab} busy={busy} apply={apply}>
-                    <AppearanceSection
-                      theme={theme}
-                      themeStyle={themeStyle}
-                      textSize={textSize}
-                      showDisplayZoom={desktopPlatform === "windows"}
-                      zoomPct={zoomPct}
-                      zoomRestartRequired={zoomPersistedPct !== zoomAppliedPct}
-                      zoomSaving={zoomSaving}
-                      zoomRestarting={zoomRestarting}
-                      fontFamily={fontFamily}
-                      monoFontFamily={monoFontFamily}
-                      customFontName={customFontName}
-                      customMonoFontName={customMonoFontName}
-                      onTheme={(nextTheme) => {
-                        applyTheme(nextTheme, themeStyle, { persist: false });
-                        setThemeState(nextTheme);
-                        void apply(() => app.SetDesktopAppearance(nextTheme, themeStyle));
-                      }}
-                      onThemeStyle={(style) => {
-                        applyTheme(theme, style, { persist: false });
-                        setThemeStyleState(style);
-                        void apply(() => app.SetDesktopAppearance(theme, style));
-                      }}
-                      onTextSize={(size) => {
-                        applyTextSize(size);
-                        setTextSizeState(size);
-                      }}
-                      onRestartZoom={setRestartZoom}
-                      onRestartForZoom={restartForZoom}
-                      onFontFamily={(font) => {
-                        applyFontFamily(font);
-                        setFontFamilyState(font);
-                      }}
-                      onMonoFontFamily={(font) => {
-                        applyMonoFontFamily(font);
-                        setMonoFontFamilyState(font);
-                      }}
-                      onCustomFontNameChange={(name) => {
-                        setCustomFontNameState(name);
-                        setCustomFontName(name);
-                        applyFontFamily("custom");
-                      }}
-                      onCustomMonoFontNameChange={(name) => {
-                        setCustomMonoFontNameState(name);
-                        setCustomMonoFontName(name);
-                        applyMonoFontFamily("custom");
-                      }}
-                    />
+                    <Suspense fallback={lazySettingsPageFallback}>
+                      <AppearancePanel
+                        theme={theme}
+                        themeStyle={themeStyle}
+                        textSize={textSize}
+                        showDisplayZoom={desktopPlatform === "windows"}
+                        zoomPct={zoomPct}
+                        zoomRestartRequired={zoomPersistedPct !== zoomAppliedPct}
+                        zoomSaving={zoomSaving}
+                        zoomRestarting={zoomRestarting}
+                        fontFamily={fontFamily}
+                        monoFontFamily={monoFontFamily}
+                        customFontName={customFontName}
+                        customMonoFontName={customMonoFontName}
+                        onTheme={(nextTheme) => {
+                          applyTheme(nextTheme, themeStyle, { persist: false });
+                          setThemeState(nextTheme);
+                          void apply(() => app.SetDesktopAppearance(nextTheme, themeStyle));
+                        }}
+                        onCommittedThemeStyle={(style) => {
+                          setThemeStyleState(style);
+                          applyTheme(theme, style, { persist: false });
+                        }}
+                        onTextSize={(size) => {
+                          applyTextSize(size);
+                          setTextSizeState(size);
+                        }}
+                        onRestartZoom={setRestartZoom}
+                        onRestartForZoom={restartForZoom}
+                        onFontFamily={(font) => {
+                          applyFontFamily(font);
+                          setFontFamilyState(font);
+                        }}
+                        onMonoFontFamily={(font) => {
+                          applyMonoFontFamily(font);
+                          setMonoFontFamilyState(font);
+                        }}
+                        onCustomFontNameChange={(name) => {
+                          setCustomFontNameState(name);
+                          setCustomFontName(name);
+                          applyFontFamily("custom");
+                        }}
+                        onCustomMonoFontNameChange={(name) => {
+                          setCustomMonoFontNameState(name);
+                          setCustomMonoFontName(name);
+                          applyMonoFontFamily("custom");
+                        }}
+                      />
+                    </Suspense>
                   </SettingsPageShell>
                 )}
                 {tab === "updates" && s && (
@@ -6633,331 +6636,6 @@ function SandboxSection({ s, busy, apply }: SectionProps) {
       />
     </SettingsSection>
   );
-}
-
-// Visual-style metadata for the appearance theme cards. The two surface
-// swatches + accent are read from CSS variables at render time so they always
-// reflect the live token values for the currently-resolved light/dark mode.
-const THEME_STYLE_META: Record<ThemeStyle, { name: string; zh: DictKey; note: DictKey; desc: DictKey }> = {
-  graphite: { name: "Graphite", zh: "settings.style.graphite.zh", note: "settings.style.graphite.note", desc: "settings.style.graphite.desc" },
-  aurora: { name: "Aurora", zh: "settings.style.aurora.zh", note: "settings.style.aurora.note", desc: "settings.style.aurora.desc" },
-  slate: { name: "Slate", zh: "settings.style.slate.zh", note: "settings.style.slate.note", desc: "settings.style.slate.desc" },
-  carbon: { name: "Carbon", zh: "settings.style.carbon.zh", note: "settings.style.carbon.note", desc: "settings.style.carbon.desc" },
-  nocturne: { name: "Nocturne", zh: "settings.style.nocturne.zh", note: "settings.style.nocturne.note", desc: "settings.style.nocturne.desc" },
-  amber: { name: "Amber", zh: "settings.style.amber.zh", note: "settings.style.amber.note", desc: "settings.style.amber.desc" },
-};
-
-function AppearanceSection({
-  theme,
-  themeStyle,
-  textSize,
-  showDisplayZoom,
-  zoomPct,
-  zoomRestartRequired,
-  zoomSaving,
-  zoomRestarting,
-  fontFamily,
-  monoFontFamily,
-  customFontName,
-  customMonoFontName,
-  onTheme,
-  onThemeStyle,
-  onTextSize,
-  onRestartZoom,
-  onRestartForZoom,
-  onFontFamily,
-  onMonoFontFamily,
-  onCustomFontNameChange,
-  onCustomMonoFontNameChange,
-}: {
-  theme: Theme;
-  themeStyle: ThemeStyle;
-  textSize: TextSize;
-  showDisplayZoom: boolean;
-  zoomPct: number;
-  zoomRestartRequired: boolean;
-  zoomSaving: boolean;
-  zoomRestarting: boolean;
-  fontFamily: FontFamily;
-  monoFontFamily: MonoFontFamily;
-  customFontName: string;
-  customMonoFontName: string;
-  onTheme: (t: Theme) => void;
-  onThemeStyle: (style: ThemeStyle) => void;
-  onTextSize: (size: TextSize) => void;
-  onRestartZoom: (zoom: ZoomLevel) => Promise<void>;
-  onRestartForZoom: () => Promise<void>;
-  onFontFamily: (font: FontFamily) => void;
-  onMonoFontFamily: (font: MonoFontFamily) => void;
-  onCustomFontNameChange: (name: string) => void;
-  onCustomMonoFontNameChange: (name: string) => void;
-}) {
-  const t = useT();
-  const themeOptions: Theme[] = ["auto", "light", "dark"];
-  const availableFontFamilies = useMemo(() => getAvailableFontFamilies(fontFamily), [fontFamily]);
-  const availableMonoFontFamilies = useMemo(() => getAvailableMonoFontFamilies(monoFontFamily), [monoFontFamily]);
-  const zoomMinPct = zoomToPercent(MIN_ZOOM);
-  const zoomMaxPct = zoomToPercent(MAX_ZOOM);
-  const zoomStepPct = Math.round(ZOOM_STEP * 100);
-  const zoomProgressPct = Math.min(100, Math.max(0, ((zoomPct - zoomMinPct) / (zoomMaxPct - zoomMinPct)) * 100));
-  const canDecreaseZoom = zoomPct > zoomMinPct;
-  const canIncreaseZoom = zoomPct < zoomMaxPct;
-  const setZoomPercent = (pct: number) => {
-    void onRestartZoom(pct / 100);
-  };
-  return (
-    <SettingsSection title={t("settings.appearance")}>
-      <SettingsField label={t("settings.theme")}>
-        <div className="set-seg">
-          {themeOptions.map((opt) => (
-            <button
-              key={opt}
-              className={`set-seg__btn${theme === opt ? " set-seg__btn--on" : ""}`}
-              onClick={() => onTheme(opt)}
-            >
-              {themeName(opt, t)}
-            </button>
-          ))}
-        </div>
-      </SettingsField>
-      <SettingsField label={t("settings.themeStyle")} stacked>
-        <div className="theme-card-grid">
-          {THEME_STYLES.map((opt) => {
-            const meta = THEME_STYLE_META[opt];
-            const selected = themeStyle === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                className={`theme-card${selected ? " theme-card--on" : ""}`}
-                onClick={() => onThemeStyle(opt)}
-              >
-                <span className="theme-card__head">
-                  <span className="theme-card__name">
-                    {meta.name} <span className="theme-card__zh">{t(meta.zh)}</span>
-                  </span>
-                  <span className="theme-card__tag">{t(meta.note)}</span>
-                </span>
-                <span className="theme-card__swatches" data-theme-style-card={opt}>
-                  <span className="theme-card__swatch theme-card__swatch--bg" />
-                  <span className="theme-card__swatch theme-card__swatch--surface" />
-                  <span className="theme-card__swatch theme-card__swatch--accent" />
-                </span>
-                <span className="theme-card__desc">{t(meta.desc)}</span>
-                <span className="theme-card__check" aria-hidden="true">
-                  <Check size={13} strokeWidth={3} />
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </SettingsField>
-      <SettingsField label={t("settings.textSize")}>
-        <div className="set-seg">
-          {TEXT_SIZES.map((size) => (
-            <button
-              key={size}
-              className={`set-seg__btn${textSize === size ? " set-seg__btn--on" : ""}`}
-              onClick={() => onTextSize(size)}
-            >
-              {textSizeName(size, t)}
-            </button>
-          ))}
-        </div>
-      </SettingsField>
-      {showDisplayZoom && (
-        <SettingsField label={t("settings.displayZoom")}>
-          <div className="zoom-slider-wrap">
-            <div className="zoom-slider__head">
-              <div className="zoom-slider__value">{zoomPct}%</div>
-              <div className="zoom-stepper">
-                <button
-                  type="button"
-                  className="zoom-stepper__btn"
-                  aria-label={t("settings.displayZoomDecrease")}
-                  title={t("settings.displayZoomDecrease")}
-                  disabled={!canDecreaseZoom}
-                  onClick={() => setZoomPercent(zoomPct - zoomStepPct)}
-                >
-                  <Minus size={13} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="zoom-stepper__reset"
-                  aria-label={t("settings.displayZoomReset")}
-                  title={t("settings.displayZoomReset")}
-                  disabled={zoomPct === zoomToPercent(DEFAULT_ZOOM)}
-                  onClick={() => { void onRestartZoom(DEFAULT_ZOOM); }}
-                >
-                  <RotateCcw size={12} aria-hidden="true" />
-                  <span>100%</span>
-                </button>
-                <button
-                  type="button"
-                  className="zoom-stepper__btn"
-                  aria-label={t("settings.displayZoomIncrease")}
-                  title={t("settings.displayZoomIncrease")}
-                  disabled={!canIncreaseZoom}
-                  onClick={() => setZoomPercent(zoomPct + zoomStepPct)}
-                >
-                  <Plus size={13} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-            <div className="zoom-slider-row">
-              <span className="zoom-slider__label">{zoomMinPct}%</span>
-              <div className="slider-track">
-                <div className="slider-track__bg" />
-                <div
-                  className="slider-track__fill"
-                  style={{ width: `calc(${zoomProgressPct}% + 15px)` }}
-                />
-                <div className="slider-thumb" style={{ left: `${zoomProgressPct}%` }} />
-                <input
-                  aria-label={t("settings.displayZoom")}
-                  aria-valuetext={`${zoomPct}%`}
-                  type="range"
-                  min={zoomMinPct}
-                  max={zoomMaxPct}
-                  step={zoomStepPct}
-                  value={zoomPct}
-                  onChange={(e) => setZoomPercent(Number(e.target.value))}
-                />
-              </div>
-              <span className="zoom-slider__label">{zoomMaxPct}%</span>
-            </div>
-            <div className="zoom-slider__status" role="status" aria-live="polite">
-              {zoomSaving ? (
-                <span>{t("settings.displayZoomSaving")}</span>
-              ) : zoomRestartRequired ? (
-                <>
-                  <span>{t("settings.displayZoomPending", { zoom: zoomPct })}</span>
-                  <button
-                    type="button"
-                    className="btn btn--small"
-                    disabled={zoomRestarting}
-                    onClick={() => { void onRestartForZoom(); }}
-                  >
-                    {zoomRestarting ? t("settings.displayZoomRestarting") : t("settings.displayZoomRestart")}
-                  </button>
-                </>
-              ) : (
-                <span>{t("settings.displayZoomApplied")}</span>
-              )}
-            </div>
-          </div>
-        </SettingsField>
-      )}
-      <SettingsField label={t("settings.fontFamily")}>
-        <div className="set-seg">
-          {availableFontFamilies.map((font) => (
-            <button
-              key={font}
-              className={`set-seg__btn${fontFamily === font ? " set-seg__btn--on" : ""}`}
-              onClick={() => onFontFamily(font)}
-            >
-              {fontFamilyName(font, t)}
-            </button>
-          ))}
-        </div>
-      </SettingsField>
-      {fontFamily === "custom" && (
-        <SettingsField label={t("settings.fontFamilyCustomName")}>
-          <textarea
-            className="mem-input"
-            style={{ width: "100%", resize: "vertical" }}
-            rows={2}
-            placeholder={t("settings.fontFamilyCustomPlaceholder")}
-            value={customFontName}
-            onChange={(e) => onCustomFontNameChange(e.target.value)}
-          />
-        </SettingsField>
-      )}
-      <SettingsField label={t("settings.monoFontFamily")}>
-        <div className="set-seg">
-          {availableMonoFontFamilies.map((font) => (
-            <button
-              key={font}
-              className={`set-seg__btn${monoFontFamily === font ? " set-seg__btn--on" : ""}`}
-              onClick={() => onMonoFontFamily(font)}
-            >
-              {monoFontFamilyName(font, t)}
-            </button>
-          ))}
-        </div>
-      </SettingsField>
-      {monoFontFamily === "custom" && (
-        <SettingsField label={t("settings.monoFontFamilyCustomName")}>
-          <textarea
-            className="mem-input"
-            style={{ width: "100%", resize: "vertical" }}
-            rows={2}
-            placeholder={t("settings.monoFontFamilyCustomPlaceholder")}
-            value={customMonoFontName}
-            onChange={(e) => onCustomMonoFontNameChange(e.target.value)}
-          />
-        </SettingsField>
-      )}
-    </SettingsSection>
-  );
-}
-
-function themeName(theme: Theme, t: ReturnType<typeof useT>): string {
-  switch (theme) {
-    case "auto":
-      return t("settings.themeAuto");
-    case "light":
-      return t("settings.themeLight");
-    case "dark":
-      return t("settings.themeDark");
-  }
-}
-
-function textSizeName(size: TextSize, t: ReturnType<typeof useT>): string {
-  switch (size) {
-    case "small":
-      return t("settings.textSizeSmall");
-    case "default":
-      return t("settings.textSizeDefault");
-    case "large":
-      return t("settings.textSizeLarge");
-    case "xlarge":
-      return t("settings.textSizeXLarge");
-    case "xxlarge":
-      return t("settings.textSizeXXLarge");
-  }
-}
-
-function fontFamilyName(font: FontFamily, t: ReturnType<typeof useT>): string {
-  switch (font) {
-    case "system":
-      return t("settings.fontFamilySystem");
-    case "yahei":
-      return t("settings.fontFamilyYaHei");
-    case "pingfang":
-      return t("settings.fontFamilyPingFang");
-    case "noto":
-      return t("settings.fontFamilyNoto");
-    case "custom":
-      return t("settings.fontFamilyCustom");
-  }
-}
-
-function monoFontFamilyName(font: MonoFontFamily, t: ReturnType<typeof useT>): string {
-  switch (font) {
-    case "system":
-      return t("settings.monoFontFamilySystem");
-    case "cascadia":
-      return t("settings.monoFontFamilyCascadia");
-    case "jetbrains":
-      return t("settings.monoFontFamilyJetBrains");
-    case "sfmono":
-      return t("settings.monoFontFamilySFMono");
-    case "custom":
-      return t("settings.monoFontFamilyCustom");
-  }
 }
 
 const MB = 1024 * 1024;

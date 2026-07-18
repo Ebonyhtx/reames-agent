@@ -1592,6 +1592,90 @@ export interface DesktopStartupSettingsView {
   checkUpdates: boolean; // check for new versions on startup
 }
 
+export type ThemeTokenKey =
+  | "bg" | "bgSoft" | "bgElev" | "panel" | "sidebar" | "chat"
+  | "workspace" | "workspaceFiles" | "border" | "borderSoft"
+  | "fg" | "fgDim" | "fgFaint" | "accent" | "accentFg"
+  | "ok" | "warn" | "err";
+
+export type ThemeTokenMap = Partial<Record<ThemeTokenKey, string>>;
+
+export interface ThemeAssetRef {
+  file: string;
+  sha256: string;
+}
+
+export interface ThemeSceneView {
+  image: ThemeAssetRef;
+  imageUrl: string;
+  focusX: number;
+  focusY: number;
+  safeArea: "left" | "center" | "right";
+  opacity: number;
+  overlayStrength: number;
+}
+
+export interface ThemeContrastWarning {
+  mode: "light" | "dark";
+  pair: string;
+  ratio: number;
+  minimum: number;
+  suggest: string;
+}
+
+export interface ThemePackView {
+  id: string;
+  name: string;
+  version?: string;
+  author?: string;
+  description?: string;
+  license?: string;
+  provenance: {
+    kind: "original" | "licensed" | "";
+    source: string;
+    sourceUrl?: string;
+    generatedWith?: string;
+  };
+  baseStyle: string;
+  tokens: { light: ThemeTokenMap; dark: ThemeTokenMap };
+  recipes: { density: "compact" | "comfortable"; corners: "square" | "soft" | "round" };
+  scenes: { home?: ThemeSceneView; workspace?: ThemeSceneView };
+  kind: "base" | "official" | "user";
+  applied: boolean;
+  preview: boolean;
+  packageDigest?: string;
+  contrastWarnings: ThemeContrastWarning[];
+}
+
+export interface ThemeActiveView {
+  themeMode: "auto" | "light" | "dark";
+  baseStyle: string;
+  effectiveStyle: string;
+  appliedThemeId?: string;
+  pack?: ThemePackView;
+  warning?: string;
+  safeMode: boolean;
+}
+
+export interface ThemeExperienceView {
+  themeMode: "auto" | "light" | "dark";
+  baseStyle: string;
+  effectiveStyle: string;
+  appliedThemeId?: string;
+  previewThemeId?: string;
+  effectiveId?: string;
+  packs: ThemePackView[];
+  warnings: string[];
+  safeMode: boolean;
+}
+
+export interface ThemeImportResult {
+  pack: ThemePackView;
+  needsReplace?: boolean;
+  pendingId?: string;
+  canceled?: boolean;
+}
+
 // Auto-updater payloads (desktop/updater.go). UpdateInfo drives the update banner;
 // UpdateProgress streams on the "updater:progress" event during download/install.
 export interface UpdateInfo {

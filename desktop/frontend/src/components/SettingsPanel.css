@@ -4882,6 +4882,7 @@
   :root:not([data-theme]) .theme-card__swatches[data-theme-style-card="amber"] .theme-card__swatch--surface { background: #ffffff; }
   :root:not([data-theme]) .theme-card__swatches[data-theme-style-card="amber"] .theme-card__swatch--accent { background: linear-gradient(120deg, #dd5b28, #ef8a4a); }
 }
+
 .settings-config-path {
   margin-top: 18px;
 }

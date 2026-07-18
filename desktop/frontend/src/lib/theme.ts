@@ -41,6 +41,11 @@ const AUTO_THEME_MEDIA_QUERY = "(prefers-color-scheme: light)";
 let currentTheme: Theme = DEFAULT_THEME;
 let currentThemeStyle: ThemeStyle = DEFAULT_THEME_STYLE;
 let autoThemeMediaQuery: MediaQueryList | null = null;
+let themePackRuntime: { effectiveStyle(base: ThemeStyle): ThemeStyle; apply(): void } | null = null;
+
+export function registerThemePackRuntime(runtime: { effectiveStyle(base: ThemeStyle): ThemeStyle; apply(): void }): void {
+  themePackRuntime = runtime;
+}
 
 export function normalizeThemePreference(value: unknown): Theme {
   if (typeof value === "object" && value !== null) {
@@ -110,12 +115,13 @@ export function applyTheme(theme: Theme, style: ThemeStyle = getThemeStyle(theme
   const nextStyle: ThemeStyle = isThemeStyle(style) ? style : DEFAULT_THEME_STYLE;
   currentTheme = theme;
   currentThemeStyle = nextStyle;
-  root.setAttribute("data-theme-style", nextStyle);
+  root.setAttribute("data-theme-style", themePackRuntime?.effectiveStyle(nextStyle) ?? nextStyle);
+  themePackRuntime?.apply();
+  syncAutoThemeBackgroundListener(theme);
 
   // Sync the native window theme (title bar, traffic lights) to match.
   const runtime = typeof window !== "undefined" ? window.runtime : undefined;
   if (runtime) {
-    syncAutoThemeBackgroundListener(theme);
     if (theme === "auto") {
       runtime.WindowSetSystemDefaultTheme?.();
     } else if (theme === "light") {
@@ -154,8 +160,9 @@ function clearAutoThemeBackgroundListener(): void {
 }
 
 function syncAutoThemeBackground(): void {
-  if (currentTheme === "auto" && typeof window !== "undefined" && window.runtime) {
-    syncNativeWindowBackground("auto");
+  if (currentTheme === "auto") {
+    themePackRuntime?.apply();
+    if (typeof window !== "undefined" && window.runtime) syncNativeWindowBackground("auto");
   }
 }
 
@@ -197,6 +204,7 @@ export function clearLegacyThemePreference(): void {
 export function initTheme(): void {
   const theme = getTheme();
   applyTheme(theme, getThemeStyle(theme), { persist: false });
+  void import("./themeStartup");
 }
 
 function syncNativeWindowBackground(theme: Theme): void {

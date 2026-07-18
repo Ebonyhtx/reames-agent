@@ -38,6 +38,7 @@ powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.co
 - **IM Gateway**: Feishu, QQ, WeChat, Telegram bot adapters
 - **Plugin/MCP**: MCP stdio + HTTP transports, skill playbook system
 - **Offline recovery**: credential-free Guard, crash-loop detection, verified update rollback, and Safe Mode
+- **Controlled themes**: offline, non-executable theme packs with reversible preview, atomic recovery, and original bundled Reames artwork
 - **Portable CLI**: CGO_ENABLED=0, cross-compile to 6 targets; Desktop packages add a sibling Guard launcher
 
 ## Usage
@@ -95,6 +96,7 @@ them.
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment Guide](docs/DEPLOY.md)
 - [Recovery, Guard, and Safe Mode](docs/RECOVERY.md)
+- [Controlled Theme Packs](docs/THEME_PACKS.md)
 - [Upstream Governance](docs/REFERENCE_GOVERNANCE.md)
 
 ## License

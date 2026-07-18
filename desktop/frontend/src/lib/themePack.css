@@ -1,0 +1,35 @@
+/* Controlled Theme Pack scene and bounded recipe projection. Package values
+ * reach these rules only through the Go manifest allow-list and themePack.ts's
+ * digest URL/color checks. */
+:root[data-theme-pack] .chat-pane--creation-empty {
+  background-color: var(--chat-bg);
+  background-image: var(--theme-home-background, none);
+  background-position: var(--theme-home-position, center);
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+:root[data-theme-pack] .workspace-panel,
+:root[data-theme-pack] .workspace-preview {
+  background-color: var(--workspace-preview-bg);
+  background-image: var(--theme-workspace-background, none);
+  background-position: var(--theme-workspace-position, center);
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+:root[data-theme-corners="square"] {
+  --button-radius: 2px;
+  --radius: 2px;
+  --r-s: 2px;
+  --project-tree-row-radius: 2px;
+  --tree-row-radius: 2px;
+}
+
+:root[data-theme-corners="round"] {
+  --button-radius: 12px;
+  --radius: 14px;
+  --r-s: 12px;
+  --project-tree-row-radius: 10px;
+  --tree-row-radius: 10px;
+}

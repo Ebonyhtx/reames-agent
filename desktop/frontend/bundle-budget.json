@@ -1,10 +1,10 @@
 {
   "maxEntryJSBytes": 640000,
   "maxInitialJSBytes": 900000,
-  "maxLocalizedInitialJSBytes": 1000000,
+  "maxLocalizedInitialJSBytes": 1001000,
   "maxInitialCSSBytes": 525000,
-  "maxBridgeMockStartupJSBytes": 980000,
-  "maxVirtualMenuStartupJSBytes": 905000,
+  "maxBridgeMockStartupJSBytes": 981000,
+  "maxVirtualMenuStartupJSBytes": 906000,
   "maxSettingsStartupJSBytes": 1075000,
   "maxSettingsStartupCSSBytes": 625000,
   "maxSingleJSAssetBytes": 725000,

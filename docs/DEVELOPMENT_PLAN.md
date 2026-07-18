@@ -321,14 +321,23 @@ Theme Pack 是已知候选，但必须在完整代际审计后重新排序。
 Reasonix `7f00d2c2` 的 Theme Pack V2 提供了值得吸收的安全和体验机制，但其品牌资产、图片、发布
 体系、marketplace 与整体 1.36 万行实现不属于 Reames。P5 按三层推进：
 
-1. **安全主题契约与原子存储**：不可执行、版本化 manifest；semantic token allowlist；ZIP bomb、
-   path traversal、symlink、文件数量/尺寸/像素限制；内容寻址资产；导入/替换/删除的原子事务与故障注入。
-2. **延迟加载 Appearance/Gallery**：`select != apply`；实时预览必须可撤销并在 crash/relaunch 后回到
-   已提交主题；Safe Mode 强制 Graphite/内置无资产回退；对比度、字体和 bundle budget 受硬合同保护。
-3. **Reames 原创官方资产与 provenance**：只提交项目自有或许可证明确的资源；官方 pack 与用户 pack
-   分区；来源、digest、license 与生成方式可检查，不连接 Reasonix marketplace 或继承发布 endpoint。
+- [x] **安全主题契约与原子存储**：不可执行、版本化 manifest；semantic token allowlist；ZIP bomb、
+  path traversal、symlink、Windows 名称、文件数量/尺寸/像素限制；内容寻址资产；导入/替换/删除的原子
+  事务与故障注入。替换 active 用户包同时更新 pack 与 state digest，中断矩阵按发布点回滚或前滚。
+- [x] **延迟加载 Appearance/Gallery**：`select != apply`；实时预览可撤销且 crash/relaunch 回到已提交主题；
+  Safe Mode 不读取 Store、不提供主题资产并强制 Graphite；启动只恢复 active pack，不枚举 Gallery；
+  对比度、字体和 bundle budget 继续受硬合同保护。
+- [x] **Reames 原创官方资产与 provenance**：`reames-dawn`、`reames-workshop` 与用户 pack 分区，内嵌
+  JPEG 的提示词、生成记录、尺寸、digest 和 MIT license 可检查；官方 ID 不可导入覆盖、替换或删除，
+  不连接 Reasonix marketplace 或继承发布 endpoint。
+- [x] **用户与维护者文档**：公开 JSON Schema 与 Go allowlist 有回归测试；`THEME_PACKS.md` 说明导入、
+  创建、限额、恢复和 Safe Mode；设计审计记录跨进程并发边界。当前只有受单实例保护的 Desktop 写 Store，
+  若未来向 CLI/Serve 开放写入口，必须先增加跨进程锁。
 
-P5 在 P4 代际差距与核心运行模式闭环通过本地/远端门禁后启动；主题功能不能替代上游核心 bug-fix parity。
+P5 仓库内实现和本地全量/race/六目标/真实 Chromium/Windows production Wails normal + Safe Mode
+门槛已通过，关闭仍以集中 push 后的 CI、CodeQL 和三平台 Desktop candidate 为准；主题功能不能替代
+上游核心 bug-fix parity。真实签名、notarization、公开主题 registry
+或 marketplace 不属于 P5 依赖并保持 `external-blocked`。
 
 ## M6：远程与多渠道
 
@@ -383,11 +392,11 @@ P5 在 P4 代际差距与核心运行模式闭环通过本地/远端门禁后启
 当前执行顺序：
 
 ```text
-P1/P2/P3 已关闭，P3 修复后的 CI、CodeQL 与三平台 Desktop candidate 全绿
-→ 当前交付 P4：完整 Reasonix 逐提交/bug-fix parity 账本、遥测远端删除和跨入口工作模式已实现；
-完成本地全量门禁后集中单次 push，并核验 CI、CodeQL 与三平台 Desktop candidate
-→ P5（受控 Theme Pack）：先安全 manifest/原子内容寻址存储，再延迟 Gallery/可撤销预览，最后原创资产；
-不复制 Reasonix 品牌、图片、marketplace 或发布基础设施
+P1/P2/P3/P4 已关闭，P4 的 CI、CodeQL 与三平台 Desktop candidate 全绿
+→ 当前交付 P5（受控 Theme Pack）：安全 manifest、原子内容寻址 Store、延迟 Gallery、可撤销预览、
+Safe Mode、两套原创官方资产、schema/用户文档、故障注入和本地全量/race/六目标/浏览器/Windows 原生
+smoke 已完成；集中单次 push，并核验 CI、CodeQL 与三平台 Desktop candidate；不复制 Reasonix 品牌、图片、marketplace
+或发布基础设施
 → M6：优先干净 Linux linger-enabled logout/reboot、Gateway recovery-status/system service 实启，
 再做真实 Provider 与飞书/微信/QQ 文本、审批、取消、恢复回环
 → 体验候选：历史消息时间、Windows 外部打开器、Subagent profile、workspace 面板偏好按真实用户缺口进入

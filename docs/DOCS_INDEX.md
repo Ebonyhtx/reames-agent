@@ -20,6 +20,7 @@
 | [中文机器人指南](BOT_GUIDE.zh-CN.md) / [English bot guide](BOT_GUIDE.md) | IM Gateway 配置与使用 |
 | [部署指南](DEPLOY.md) | 服务器 CLI、独立 Gateway service、敏感备份/恢复、二进制回滚、Docker、systemd 与 nginx |
 | [恢复指南（中文）](RECOVERY.zh-CN.md) / [English](RECOVERY.md) | Offline Guard、crash-loop、Safe Mode、更新回滚和运维操作手册 |
+| [受控主题包](THEME_PACKS.md) | Desktop 主题导入、创建、限额、原子恢复、Safe Mode 与官方资产 provenance |
 | [云端 Agent 计划](CLOUD_AGENT_PLAN.md) | 可选服务器 CLI、社交通道 Gateway、上游研究 Worker与本地反馈工作流 |
 | [配置路径（中文）](CONFIG_PATHS.zh-CN.md) / [English](CONFIG_PATHS.md) | 配置、状态、缓存和迁移路径 |
 | [协作方式与工作模式](COLLABORATION_MODES.zh-CN.md) | 普通/计划/目标与经济/均衡/交付两个正交轴 |
@@ -128,6 +129,7 @@
 | [M5 Registry 运维审计与轮换演练](audits/2026-07-16-m5-registry-operations-audit.md) | 只读生产策略审计、2-of-3 角色隔离、连续双阈值 root、完整 target 字节与 external-required 边界 |
 | [Reasonix 与参考项目增量同步审计](audits/2026-07-17-reasonix-upstream-sync.md) | Reasonix 525 提交分类、MCP schema/凭据/Provider 采用证据、其他参考仓库增量与下一阶段 P0/P1 方向 |
 | [Reasonix 全量代际与 bug-fix parity 审计](audits/2026-07-18-reasonix-generation-parity.md) | 从导入基线到当前 main-v2 的完整提交账本、required-area 证据、工作模式与明确产品分歧 |
+| [P5 受控 Theme Pack 设计与交付审计](audits/2026-07-18-p5-controlled-theme-pack-design.md) | manifest/schema、恶意包防护、原子 Store、可撤销预览、Safe Mode、原创官方资产与验证边界 |
 | [M5 MCP 身份绑定信任审计](audits/2026-07-17-m5-mcp-identity-trust.md) | Reasonix MCP identity receipt、capability drift、launcher exact lock、Desktop reverify 与 destructive fresh-human 闭环 |
 | [P2 Offline Guard / Safe Mode 审计](audits/2026-07-17-p2-offline-guard-safe-mode.md) | Guard 启动账本、安装单元回滚、Safe Mode、统一恢复投影及 Reasonix 最新可靠性吸收证据 |
 | [P3 Recovery Center 与 Reasonix 方向审计](audits/2026-07-17-p3-recovery-reasonix-direction.md) | Desktop Recovery Center、三平台安装态 smoke、DeepSeek reasoning-only stop、发布棘轮与 P4 代际差距/P5 Theme Pack 方向 |
