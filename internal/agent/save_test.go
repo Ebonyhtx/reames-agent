@@ -128,6 +128,10 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		Role:             provider.RoleAssistant,
 		Content:          "Let me check.",
 		ReasoningContent: "I should look at main.go first.",
+		ReasoningBlocks: []provider.ReasoningBlock{
+			{Type: "thinking", Text: "I should look at main.go first.", Signature: "sig"},
+			{Type: "redacted_thinking", Data: "opaque"},
+		},
 		ToolCalls: []provider.ToolCall{{
 			ID: "call_1", Name: "read_file", Arguments: `{"path":"main.go"}`,
 		}},
@@ -158,6 +162,11 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		}
 		if loaded.Messages[i].ReasoningContent != m.ReasoningContent {
 			t.Errorf("message %d reasoning mismatch", i)
+		}
+		if len(loaded.Messages[i].ReasoningBlocks) != len(m.ReasoningBlocks) {
+			t.Errorf("message %d reasoning block count mismatch", i)
+		} else if len(m.ReasoningBlocks) > 0 && (loaded.Messages[i].ReasoningBlocks[0].Signature != "sig" || loaded.Messages[i].ReasoningBlocks[1].Data != "opaque") {
+			t.Errorf("message %d reasoning blocks mismatch: %+v", i, loaded.Messages[i].ReasoningBlocks)
 		}
 		if len(loaded.Messages[i].ToolCalls) != len(m.ToolCalls) {
 			t.Errorf("message %d tool_calls count mismatch", i)

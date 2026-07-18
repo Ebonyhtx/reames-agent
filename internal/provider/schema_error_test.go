@@ -34,3 +34,15 @@ func TestAnnotateToolSchemaErrorLeavesUnrelatedErrorsUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func TestAnnotateToolSchemaErrorDoesNotAttributeAmbiguousMCPName(t *testing.T) {
+	err := &APIError{Provider: "openai", Status: 400, Body: `{"error":{"message":"Tool 0 function has invalid parameters schema"}}`}
+	got := AnnotateToolSchemaError(err, []ToolSchema{{Name: "mcp__filesystem__nested__search"}})
+	var apiErr *APIError
+	if !errors.As(got, &apiErr) {
+		t.Fatalf("AnnotateToolSchemaError() = %T, want *APIError", got)
+	}
+	if strings.Contains(apiErr.ToolContext, "MCP server") || !strings.Contains(apiErr.ToolContext, `Reames Agent tool "mcp__filesystem__nested__search"`) {
+		t.Fatalf("ambiguous MCP name was attributed to a server: %q", apiErr.ToolContext)
+	}
+}

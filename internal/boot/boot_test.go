@@ -1033,6 +1033,98 @@ func TestNewProviderAppliesConfiguredDefaultEffort(t *testing.T) {
 	}
 }
 
+func TestNewProviderAppliesExplicitResponsesMode(t *testing.T) {
+	var gotReq map[string]any
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-1\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n"))
+	}))
+	defer srv.Close()
+
+	p, err := NewProvider(&config.ProviderEntry{
+		Name:              "openai-native",
+		Kind:              "openai",
+		BaseURL:           srv.URL + "/v1",
+		APIMode:           "responses",
+		Model:             "gpt-test",
+		ReasoningProtocol: "openai",
+		SupportedEfforts:  []string{"low", "high"},
+		DefaultEffort:     "high",
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+	if gotPath != "/v1/responses" {
+		t.Fatalf("request path = %q, want /v1/responses", gotPath)
+	}
+	if _, ok := gotReq["input"].([]any); !ok {
+		t.Fatalf("Responses input = %#v", gotReq["input"])
+	}
+	reasoning, ok := gotReq["reasoning"].(map[string]any)
+	if !ok || reasoning["effort"] != "high" || reasoning["summary"] != "auto" {
+		t.Fatalf("Responses reasoning = %#v", gotReq["reasoning"])
+	}
+	if _, exists := gotReq["messages"]; exists {
+		t.Fatalf("Chat Completions messages leaked into Responses request: %#v", gotReq)
+	}
+}
+
+func TestOfficialAnthropicHaikuOverrideOmitsAdaptiveThinking(t *testing.T) {
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1}}}\n\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1}}\n\ndata: {\"type\":\"message_stop\"}\n\n"))
+	}))
+	defer srv.Close()
+
+	preset, ok := config.CuratedProviderPreset("anthropic-official")
+	if !ok || len(preset.Entries) != 1 {
+		t.Fatalf("Anthropic preset = %+v, ok=%v", preset, ok)
+	}
+	cfg := &config.Config{Providers: preset.Entries}
+	entry, ok := cfg.ResolveModel("anthropic/claude-haiku-4-5")
+	if !ok {
+		t.Fatal("resolve official Haiku model")
+	}
+	entry.BaseURL = srv.URL
+	p, err := NewProvider(entry)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+	if _, exists := gotReq["thinking"]; exists {
+		t.Fatalf("Haiku request leaked adaptive thinking: %#v", gotReq)
+	}
+	if _, exists := gotReq["output_config"]; exists {
+		t.Fatalf("Haiku request leaked effort config: %#v", gotReq)
+	}
+}
+
 func TestNewProviderAppliesModelReasoningProtocol(t *testing.T) {
 	var gotReq map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

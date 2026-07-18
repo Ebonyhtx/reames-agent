@@ -57,6 +57,7 @@ func ClassifyError(err error, statusCode int, body string) ClassifiedError {
 	// --- Body pattern matching ---
 	lower := strings.ToLower(body)
 	errStr := strings.ToLower(err.Error())
+	diagnostic := lower + "\n" + errStr
 
 	switch {
 	// Billing / quota
@@ -71,6 +72,20 @@ func ClassifyError(err error, statusCode int, body string) ClassifiedError {
 		"tpm", "rpm", "tokens per minute", "并发限制", "频率限制"):
 		ce.Reason = FailRateLimit
 		ce.Message = "rate limit — backing off"
+
+	// Some aggregators report an exhausted empty-response retry loop with an
+	// advisory that mentions "very low max_tokens" as one possible cause. The
+	// bare max_tokens token is also a legitimate context-overflow signal below,
+	// so intercept the narrow empty-response shapes first. Otherwise a transient
+	// provider failure can send a healthy session into needless compaction.
+	case containsAny(diagnostic,
+		"returned an empty response",
+		"empty response despite retries",
+		"provider returned an empty response",
+		"model returning empty responses",
+		"empty response stream"):
+		ce.Reason = FailServerError
+		ce.Message = "provider returned an empty response — retry"
 
 	// Context overflow
 	case containsAny(lower, "context_length_exceeded", "maximum context length", "context window",

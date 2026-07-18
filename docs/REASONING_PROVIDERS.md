@@ -6,6 +6,27 @@ chain-of-thought is requested on the wire. The `openai` provider adapts the
 request shape per backend; this table is the reference for which protocol each
 known backend uses and which parameters it honours or ignores.
 
+## First-party native protocols
+
+| Provider | Config | Reasoning control | `/effort` levels | Notes |
+|----------|--------|-------------------|------------------|-------|
+| OpenAI Responses | `kind = "openai"`, `api_mode = "responses"`, `reasoning_protocol = "openai"` | `reasoning.effort` + `reasoning.summary = "auto"` | `auto`, `none`, `low`, `medium`, `high`, `xhigh`; `max` where the selected model declares it | The official GPT-5.6 models expose `max`; legacy config value `ultra` maps to wire `max` but is not advertised because Codex ultra also carries automatic-delegation semantics. Responses uses item/event streaming and keeps a backwards-compatible `reasoning.encrypted_content` include for `store=false` tool-turn replay (current OpenAI APIs return it by default). Opaque Data is not displayed or exported. |
+| Anthropic Messages | `kind = "anthropic"`, normally `thinking = "adaptive"` | `thinking` and independent `output_config.effort` | `auto`, `low`, `medium`, `high`, `xhigh`, `max` | Signed thinking and opaque `redacted_thinking` blocks are persisted in original order for tool-use replay. Compatible gateways that use `enabled`/`disabled` keep their binary vocabulary. |
+
+The official Anthropic preset includes Sonnet 4.6, Opus 4.8, and Haiku 4.5. Only Opus exposes
+`xhigh`/`max`. Haiku 4.5 is a legacy-thinking model in the public Claude Code plugin sources, so its
+model override explicitly omits adaptive thinking and disables effort while Sonnet/Opus inherit the provider-level
+adaptive wire.
+
+The official OpenAI preset includes GPT-5.6 Sol, Terra, Luna, and GPT-5.4 over Responses. The GPT-5.6
+models use a 1.05M context window, default to medium effort, expose `max`, and accept `original` image detail;
+GPT-5.4 omits `max` and defaults to `none`. This is native public API support, not a claim that Reames already
+implements Codex freeform/code-mode, Responses Lite, programmatic tool calling, multi-agent, hosted tools,
+persisted-reasoning controls, pro mode, or App-Server semantics.
+
+`api_mode` is explicit. An existing `openai` provider with an empty value remains
+on `chat_completions`; Reames Agent does not infer Responses from a GPT model name.
+
 ## Auto-detected backends
 
 These are recognised by base URL (see `internal/provider/openai/host.go`) and
@@ -17,7 +38,7 @@ get a tailored request shape automatically — no extra config needed.
 | MiniMax M3 | `api.minimaxi.com`, `*.minimaxi.com` | `thinking.type` (`adaptive`\|`disabled`) | `auto`, `adaptive`, `disabled` | No depth scale; `reasoning_effort` is omitted. |
 | Zhipu GLM | `open.bigmodel.cn` / `*.bigmodel.cn`, `api.z.ai` / `*.z.ai` | `thinking.type` (`enabled`\|`disabled`) | `auto`, `enabled`, `disabled` | **`reasoning_effort` is silently ignored** by the endpoint, so reasoning is driven purely through `thinking.type`. |
 
-## Everything else (standard `reasoning_effort`)
+## Everything else (Chat Completions `reasoning_effort`)
 
 Any other OpenAI-compatible backend falls through to the standard
 `reasoning_effort` scale (`low`\|`medium`\|`high`). Surveyed popular providers

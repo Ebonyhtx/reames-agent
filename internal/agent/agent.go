@@ -1254,7 +1254,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 			prevPrefixShape = prefixShape
 		}
 
-		text, reasoning, signature, calls, usage, interrupted, partialToolStarted, err := a.stream(ctx, step+1)
+		text, reasoning, signature, reasoningBlocks, calls, usage, interrupted, partialToolStarted, err := a.stream(ctx, step+1)
 		if err != nil {
 			// A provider may report usage before a terminal stream error. Account
 			// that receipt even when the visible response must be recovered.
@@ -1285,6 +1285,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 						Content:            text,
 						ReasoningContent:   reasoning,
 						ReasoningSignature: signature,
+						ReasoningBlocks:    reasoningBlocks,
 						MemoryCitations:    a.memoryCitations(),
 					})
 				}
@@ -1337,6 +1338,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 			Content:            text,
 			ReasoningContent:   reasoning,
 			ReasoningSignature: signature,
+			ReasoningBlocks:    reasoningBlocks,
 			ToolCalls:          calls,
 			MemoryCitations:    a.memoryCitations(),
 		})
@@ -2340,10 +2342,10 @@ func streamRecoveryMessage(hasPartialText, hadPartialTool bool) string {
 // stream so a sink can re-render the streamed raw text as styled markdown. The
 // accumulated text and reasoning are also returned so the caller can round-trip
 // reasoning on the next turn.
-func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, []provider.ToolCall, *provider.Usage, bool, bool, error) {
+func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, []provider.ReasoningBlock, []provider.ToolCall, *provider.Usage, bool, bool, error) {
 	release, err := a.acquireDelegationRound(ctx)
 	if err != nil {
-		return "", "", "", nil, nil, false, false, err
+		return "", "", "", nil, nil, nil, false, false, err
 	}
 	defer release()
 	ctx = provider.WithRetryNotify(ctx, func(info provider.RetryInfo) {
@@ -2355,7 +2357,7 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		Temperature: provider.OptionalTemperature(a.temperature),
 	})
 	if err != nil {
-		return "", "", "", nil, nil, false, false, err
+		return "", "", "", nil, nil, nil, false, false, err
 	}
 
 	// A PostLLMCall hook rewrites the whole reasoning block, so when one is wired
@@ -2366,6 +2368,7 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 
 	var text, reasoning strings.Builder
 	var signature string // provider-issued proof for the reasoning (Anthropic thinking)
+	var reasoningBlocks []provider.ReasoningBlock
 	var calls []provider.ToolCall
 	var usage *provider.Usage
 	var partialToolStarted bool
@@ -2389,12 +2392,12 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		select {
 		case <-ctx.Done():
 			stored, _ := finishReasoning()
-			return text.String(), stored, signature, calls, usage, false, partialToolStarted, ctx.Err()
+			return text.String(), stored, signature, reasoningBlocks, calls, usage, false, partialToolStarted, ctx.Err()
 		case c, ok := <-ch:
 			if !ok {
 				if err := ctx.Err(); err != nil {
 					stored, _ := finishReasoning()
-					return text.String(), stored, signature, calls, usage, false, partialToolStarted, err
+					return text.String(), stored, signature, reasoningBlocks, calls, usage, false, partialToolStarted, err
 				}
 				stored, display := finishReasoning()
 				if text.Len() > 0 || display != "" {
@@ -2405,15 +2408,26 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 						MemoryCitations: a.memoryCitations(),
 					})
 				}
-				return text.String(), stored, signature, calls, usage, false, false, nil
+				return text.String(), stored, signature, reasoningBlocks, calls, usage, false, false, nil
 			}
 			chunk = c
 		}
 		switch chunk.Type {
 		case provider.ChunkReasoning:
 			reasoning.WriteString(chunk.Text)
+			if chunk.ReasoningBlock != nil {
+				reasoningBlocks = append(reasoningBlocks, *chunk.ReasoningBlock)
+				// A native block carries the authoritative complete signature.
+				// Anthropic normally streams signature_delta fragments first, but
+				// compatible endpoints may only attach it to content_block_stop.
+				if chunk.ReasoningBlock.Signature != "" {
+					signature = chunk.ReasoningBlock.Signature
+				}
+			}
 			if chunk.Signature != "" {
-				signature = chunk.Signature
+				// Signature chunks are deltas, unlike the complete value on a
+				// ReasoningBlock. Preserve all fragments until the block arrives.
+				signature += chunk.Signature
 			}
 			if chunk.Text != "" && !transformReasoning {
 				a.sink.Emit(event.Event{Kind: event.Reasoning, Text: chunk.Text})
@@ -2443,9 +2457,9 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		case provider.ChunkError:
 			if provider.IsStreamInterrupted(chunk.Err) {
 				stored, _ := finishReasoning()
-				return text.String(), stored, signature, calls, usage, true, partialToolStarted, chunk.Err
+				return text.String(), stored, signature, reasoningBlocks, calls, usage, true, partialToolStarted, chunk.Err
 			}
-			return "", "", "", nil, usage, false, false, chunk.Err
+			return "", "", "", nil, nil, usage, false, false, chunk.Err
 		}
 	}
 }

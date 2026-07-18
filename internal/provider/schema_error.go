@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
+
+	"reames-agent/internal/mcpname"
 )
 
 var providerToolIndexPattern = regexp.MustCompile(`(?i)\btool\s+(\d+)\s+function\b`)
@@ -37,13 +38,5 @@ func AnnotateToolSchemaError(err error, tools []ToolSchema) error {
 }
 
 func splitMCPToolName(name string) (server, tool string, ok bool) {
-	const prefix = "mcp__"
-	if !strings.HasPrefix(name, prefix) {
-		return "", "", false
-	}
-	parts := strings.SplitN(strings.TrimPrefix(name, prefix), "__", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", false
-	}
-	return parts[0], parts[1], true
+	return mcpname.Split(name)
 }

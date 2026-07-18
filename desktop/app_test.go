@@ -1739,7 +1739,7 @@ func TestAddEveryProviderPresetAccessInstallsTemplate(t *testing.T) {
 				if !access[entry.Name] {
 					t.Fatalf("provider_access for preset %q missing %q: %+v", preset.ID, entry.Name, cfg.Desktop.ProviderAccess)
 				}
-				if got.Kind != entry.Kind || got.BaseURL != entry.BaseURL || got.DefaultModel() != entry.DefaultModel() || got.APIKeyEnv != entry.APIKeyEnv || got.AuthHeader != entry.AuthHeader || got.NoProxy != entry.NoProxy {
+				if got.Kind != entry.Kind || got.BaseURL != entry.BaseURL || got.APIMode != entry.APIMode || got.DefaultModel() != entry.DefaultModel() || got.APIKeyEnv != entry.APIKeyEnv || got.AuthHeader != entry.AuthHeader || got.NoProxy != entry.NoProxy {
 					t.Fatalf("provider %q core fields = %+v, want template %+v", entry.Name, got, entry)
 				}
 				if got.PresetID != preset.ID || got.PresetVersion != config.ProviderPresetVersion {

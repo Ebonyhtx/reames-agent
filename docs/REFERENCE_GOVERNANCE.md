@@ -231,7 +231,7 @@ planmode/permission 边界；plugin `require_sha` 也不替代 Reames 已有 TUF
 | Grok Build | `98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce` |
 | awesome-design-md | `664b3e78fd1a298ba11973822da988483256d4b4` |
 
-Reasonix 仍是唯一主源码上游；其他项目只提供机制信号。完整差距、采用、已有等价、延后和拒绝结论见
+Reasonix 仍是唯一主源码上游；Codex 与 Claude Code 是二级战略代码上游，其余项目只提供机制信号。完整差距、采用、已有等价、延后和拒绝结论见
 [`audits/2026-07-18-upstream-reference-freeze.md`](audits/2026-07-18-upstream-reference-freeze.md)，
 Reasonix 最新 5 提交的机器账本和 required-area 关闭证据位于 `docs/upstreams/reviews/`。此冻结点之后
 只审 `docs/upstreams/upstreams.lock.json` 到新 `latest` 的差异。
@@ -262,3 +262,30 @@ Codex 的压缩 rollout inventory 因 Reames 当前没有 compressed session/SQL
 用户要求的 GPT/Claude、Codex 类插件/headless 和 CDP 浏览器控制已进入 P8/P9/P10，但“参考 Codex”
 不改变来源治理：只移植 MIT/兼容许可下适用机制，复用 Reames Controller、permission、sandbox、
 credential 和 evidence，不整体 vendor Codex runtime 或接入未经治理的 marketplace。
+
+## 11. 2026-07-19 P8 战略上游与错误分类增量
+
+P8 继续按代码路径和真实 wire 审查，而不是按 README 或模型名猜测协议。当前权威 reviewed SHA 为：
+
+| 项目 | reviewed SHA | 本批结论 |
+|---|---|---|
+| DeepSeek Reasonix | `2335d0df9ea4029108ed965f76c2efff30fe6cf4` | 一级主源码上游，无新增未审提交 |
+| OpenAI Codex | `312caf176a8fd3a5897a3d1fd3ed0a283bd1b5ac` | Responses wire/reasoning/tool、TUI 与 Realtime V3 初始历史项已逐文件审查 |
+| Claude Code | `07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60` | 可公开 plugin/schema/example 与产品信号已分层审查 |
+| Hermes | `7a43ab042f65182bb8cb00cebbd1320867d751db` | 空响应修复已采用；新增断线补偿、单轮模型和 computer-use 信号进入后续阶段 |
+| Grok Build | `7cfcb20d2b50b0d18801a6c0af2e401c0e060894` | 采用无歧义 MCP 名称合同，其余保持机制参考 |
+
+Hermes `bf391030..862b1b37` 的 advisory 会同时出现 “empty response” 和 `max_tokens`。Reames 的共享
+classifier 原先也会因匹配顺序返回 `ShouldCompact=true`；本批将窄化的 empty-response 形状优先分类为
+可重试 server error，并用反向测试保证真实 `max_tokens > context_window` 仍返回 compaction 建议。当前
+Agent 自动压缩由 usage 阈值驱动，尚未消费该分类合同，所以这里只证明分类加固，不声称复现了运行时
+压缩事故。该采用落在统一 Go Provider 层，没有引回 Python runtime。
+
+Codex `35eaf3ff..312caf17` 只增加 Realtime V3/Frameless Bidi 的 role-bearing `initial_items`，并以
+128 项、单项/总计 8192 估算 token 为边界；Reames 当前 P8 是 HTTP Responses transport，因此该变化
+进入 P9 Realtime/App-Server，不以普通 Responses history 冒充采用。Hermes `862b1b37..7a43ab04` 的
+Desktop gateway reconnect 在其双 runtime/REST+RPC 投影中保留 pending turn；Reames Desktop 与 Controller
+同进程、已有 canonical event log、session transaction、hydration 和 pending approval replay，没有同构
+双权威补丁。其 Discord durable cursor/final-delivery gate 是 M6 明确缺口；`/model --once` 是 P9 候选；
+computer-use 的 verify→foreground escalation、按 session+delivery-mode 审批和 dead-driver reconnect 是
+P10 验收输入。以上均按机制边界登记，不复制 Python/Electron runtime。

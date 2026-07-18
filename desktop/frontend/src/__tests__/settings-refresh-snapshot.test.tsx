@@ -12,6 +12,8 @@ import {
   providerBaseURLFromChatURL,
   providerChatURLPreview,
   providerEditorEffectiveKind,
+  providerAPIModeForKind,
+  providerRequestURLPreview,
 } from "../components/SettingsPanel";
 import { LocaleProvider } from "../lib/i18n";
 import type { AppBindings } from "../lib/bridge";
@@ -135,6 +137,12 @@ eq(providerEditorEffectiveKind(true, "anthropic", ["anthropic", "openai"]), "ant
 eq(providerEditorEffectiveKind(false, "anthropic", ["anthropic", "openai"]), "anthropic", "existing providers preserve their stored kind");
 eq(providerChatURLPreview("https://proxy.example.com/v1", "", false), "https://proxy.example.com/v1/chat/completions", "base URL mode previews chat completions URL");
 eq(providerChatURLPreview("", "https://proxy.example.com/custom/chat", true), "https://proxy.example.com/custom/chat", "full URL mode previews configured URL");
+eq(providerRequestURLPreview("https://api.openai.com/v1", "", false, "responses"), "https://api.openai.com/v1/responses", "Responses mode previews native endpoint");
+eq(providerRequestURLPreview("https://api.openai.com/v1/responses/", "", false, "responses"), "https://api.openai.com/v1/responses", "Responses endpoint is not duplicated");
+eq(providerAPIModeForKind("openai", "responses"), "responses", "OpenAI preserves explicit Responses mode");
+eq(providerAPIModeForKind("openai", ""), "chat_completions", "OpenAI defaults to Chat Completions");
+eq(providerAPIModeForKind("anthropic", "chat_completions"), "", "non-OpenAI providers do not persist api_mode");
+eq(providerAPIModeForKind(" OpenAI ", " Responses "), "responses", "api mode input is normalized before saving");
 eq(providerBaseURLFromChatURL("https://proxy.example.com/v1/chat/completions"), "https://proxy.example.com/v1", "chat URL derives base URL for model discovery");
 eq(formatProviderExtraBody({ top_p: 0.7, enable_thinking: true }), "{\n  \"enable_thinking\": true,\n  \"top_p\": 0.7\n}", "extra body editor formats stable JSON");
 eq(JSON.stringify(parseProviderExtraBody('{ "enable_thinking": true, "top_p": 0.7 }')), "{\"enable_thinking\":true,\"top_p\":0.7}", "extra body editor parses JSON object");

@@ -1,4 +1,7 @@
-// Package openai implements the OpenAI-compatible /chat/completions provider.
+// Package openai implements both the OpenAI Responses API and the
+// OpenAI-compatible /chat/completions protocol. The wire API is selected
+// explicitly through provider api_mode; model names and URLs are never used to
+// silently switch an existing provider between incompatible request shapes.
 // It self-registers under the "openai" kind, so DeepSeek, MiMo, MiniMax-M3, and
 // any other OpenAI-compatible endpoint are just config instances rather than
 // code. Each instance picks the wire shape from its base URL:
@@ -70,14 +73,20 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 	protocol, _ := cfg.Extra["reasoning_protocol"].(string)
 	protocol = normalizeReasoningProtocol(protocol)
+	rawAPIMode, _ := cfg.Extra["api_mode"].(string)
+	apiMode := normalizeAPIMode(rawAPIMode)
+	if apiMode == "" {
+		return nil, fmt.Errorf("openai: provider %q: api_mode must be chat_completions or responses", name)
+	}
 	chatURL, _ := cfg.Extra["chat_url"].(string)
 	chatURL = normalizeChatURL(cfg.BaseURL, chatURL)
+	responsesURL := normalizeResponsesURL(cfg.BaseURL)
 	headers, _ := cfg.Extra["headers"].(map[string]string)
 	extraBody, _ := cfg.Extra["extra_body"].(map[string]any)
 	vision, _ := cfg.Extra["vision"].(bool)
 	visionDetail, _ := cfg.Extra["vision_detail"].(string)
 	visionDetail = strings.ToLower(strings.TrimSpace(visionDetail))
-	if visionDetail != "low" && visionDetail != "high" {
+	if visionDetail != "low" && visionDetail != "high" && visionDetail != "original" {
 		visionDetail = "" // auto — omit the field
 	}
 	deepseek := protocol == "deepseek" || (protocol == "" && IsDeepSeek(cfg.BaseURL))
@@ -85,6 +94,9 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	zhipu := protocol == "" && IsZhipu(cfg.BaseURL)
 	longcat := protocol == "" && IsLongCat(cfg.BaseURL)
 	ollamaCloud := protocol == "" && IsOllamaCloud(cfg.BaseURL)
+	if apiMode == apiModeResponses && (deepseek || minimax || zhipu || longcat) {
+		return nil, fmt.Errorf("openai: provider %q: api_mode=responses is incompatible with the resolved vendor-specific chat protocol; set reasoning_protocol=openai only for an endpoint that actually implements Responses", name)
+	}
 	// Optional explicit `thinking` config field — a vendor-agnostic escape hatch
 	// (credit @eghrhegpe, #5063) for OpenAI-compatible providers we don't
 	// auto-detect (e.g. opencode.ai). "enabled"/"disabled" drive thinking.type;
@@ -160,6 +172,17 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		default:
 			return nil, fmt.Errorf("openai: provider %q uses Ollama Cloud thinking; effort must be none, low, medium, high, or max", name)
 		}
+	case apiMode == apiModeResponses:
+		switch effort {
+		case "", "none", "minimal", "low", "medium", "high", "xhigh", "max":
+		case "ultra":
+			// Backward-compatible config alias only. Codex's product-level ultra
+			// also enables automatic delegation; Reames does not advertise parity
+			// until that Agent/runtime behavior is implemented.
+			effort = "max"
+		default:
+			return nil, fmt.Errorf("openai: provider %q uses Responses API; effort must be none, minimal, low, medium, high, xhigh, or max", name)
+		}
 	case effort != "":
 		// Non-DeepSeek backends use OpenAI's reasoning_effort scale (low/medium/
 		// high); "max" is a DeepSeek-ism MiMo et al. reject with 400, so clamp it
@@ -177,26 +200,29 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		return nil, fmt.Errorf("openai: network: %w", err)
 	}
 	return &client{
-		name:         name,
-		apiKey:       cfg.APIKey,
-		keyEnv:       keyEnv,
-		keySource:    keySource,
-		baseURL:      strings.TrimRight(cfg.BaseURL, "/"),
-		chatURL:      chatURL,
-		headers:      cleanCustomHeaders(headers),
-		extraBody:    cleanExtraBody(extraBody),
-		model:        cfg.Model,
-		mimo:         provider.IsMiMoEndpoint(cfg.BaseURL),
-		deepseek:     deepseek,
-		minimax:      minimax,
-		zhipu:        zhipu,
-		longcat:      longcat,
-		thinkingType: thinkingType,
-		vision:       vision,
-		visionDetail: visionDetail,
-		effort:       effort,
-		http:         httpClient,
-		idleTimeout:  defaultStreamIdleTimeout,
+		name:            name,
+		apiKey:          cfg.APIKey,
+		keyEnv:          keyEnv,
+		keySource:       keySource,
+		baseURL:         strings.TrimRight(cfg.BaseURL, "/"),
+		apiMode:         apiMode,
+		chatURL:         chatURL,
+		responsesURL:    responsesURL,
+		headers:         cleanCustomHeaders(headers),
+		extraBody:       cleanExtraBody(extraBody),
+		model:           cfg.Model,
+		mimo:            provider.IsMiMoEndpoint(cfg.BaseURL),
+		deepseek:        deepseek,
+		minimax:         minimax,
+		zhipu:           zhipu,
+		longcat:         longcat,
+		openaiReasoning: protocol == "openai",
+		thinkingType:    thinkingType,
+		vision:          vision,
+		visionDetail:    visionDetail,
+		effort:          effort,
+		http:            httpClient,
+		idleTimeout:     defaultStreamIdleTimeout,
 	}, nil
 }
 
@@ -211,30 +237,49 @@ func newHTTPClient(cfg provider.Config) (*http.Client, error) {
 }
 
 type client struct {
-	name         string
-	apiKey       string
-	keyEnv       string // api_key_env name, surfaced in auth errors
-	keySource    string // source of keyEnv, surfaced in auth errors
-	baseURL      string
-	chatURL      string
-	headers      map[string]string
-	extraBody    map[string]any
-	model        string
-	http         *http.Client
-	deepseek     bool
-	mimo         bool          // official MiMo endpoints require draft 2020-12 tuple syntax
-	minimax      bool          // true for api.minimaxi.com — emits MiniMax-M3's thinking knob instead of reasoning_effort
-	zhipu        bool          // true for Zhipu GLM (bigmodel.cn / z.ai) — gates thinking via thinking.type, ignores reasoning_effort
-	longcat      bool          // true for LongCat — gates thinking via thinking.type, ignores reasoning_effort
-	thinkingType string        // explicit `thinking` config override (enabled|disabled); "" = no override
-	vision       bool          // model accepts image input — embed attached images as image_url parts
-	visionDetail string        // image_url detail hint (low|high); "" = auto/omit
-	effort       string        // reasoning_effort for OpenAI; thinking.type for MiniMax; "" = auto/provider default
-	idleTimeout  time.Duration // SSE stall watchdog window; defaultStreamIdleTimeout unless a test overrides
-	authed       atomic.Bool   // a request has succeeded — gate transient-401 retry
+	name            string
+	apiKey          string
+	keyEnv          string // api_key_env name, surfaced in auth errors
+	keySource       string // source of keyEnv, surfaced in auth errors
+	baseURL         string
+	apiMode         string
+	chatURL         string
+	responsesURL    string
+	headers         map[string]string
+	extraBody       map[string]any
+	model           string
+	http            *http.Client
+	deepseek        bool
+	mimo            bool // official MiMo endpoints require draft 2020-12 tuple syntax
+	minimax         bool // true for api.minimaxi.com — emits MiniMax-M3's thinking knob instead of reasoning_effort
+	zhipu           bool // true for Zhipu GLM (bigmodel.cn / z.ai) — gates thinking via thinking.type, ignores reasoning_effort
+	longcat         bool // true for LongCat — gates thinking via thinking.type, ignores reasoning_effort
+	openaiReasoning bool
+	thinkingType    string        // explicit `thinking` config override (enabled|disabled); "" = no override
+	vision          bool          // model accepts image input — embed attached images as image_url parts
+	visionDetail    string        // image_url detail hint (low|high|original); "" = auto/omit
+	effort          string        // reasoning_effort for OpenAI; thinking.type for MiniMax; "" = auto/provider default
+	idleTimeout     time.Duration // SSE stall watchdog window; defaultStreamIdleTimeout unless a test overrides
+	authed          atomic.Bool   // a request has succeeded — gate transient-401 retry
 }
 
 func (c *client) Name() string { return c.name }
+
+const (
+	apiModeChatCompletions = "chat_completions"
+	apiModeResponses       = "responses"
+)
+
+func normalizeAPIMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "auto", apiModeChatCompletions, "chat", "completions":
+		return apiModeChatCompletions
+	case apiModeResponses:
+		return apiModeResponses
+	default:
+		return ""
+	}
+}
 
 // RequiresToolCallReasoning exposes the resolved wire capability rather than
 // asking the agent loop to infer it from provider names or model strings.
@@ -266,6 +311,14 @@ func normalizeChatURL(baseURL, chatURL string) string {
 		return trimmed
 	}
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/chat/completions"
+}
+
+func normalizeResponsesURL(baseURL string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if strings.HasSuffix(strings.ToLower(trimmed), "/responses") {
+		return trimmed
+	}
+	return trimmed + "/responses"
 }
 
 func cleanCustomHeaders(in map[string]string) map[string]string {
@@ -325,7 +378,7 @@ func cleanExtraBody(in map[string]any) map[string]any {
 
 func reservedExtraBodyField(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "model", "messages", "tools", "stream", "stream_options", "temperature", "max_tokens", "reasoning_effort", "thinking":
+	case "model", "messages", "instructions", "input", "tools", "tool_choice", "parallel_tool_calls", "stream", "stream_options", "temperature", "max_tokens", "max_output_tokens", "reasoning", "reasoning_effort", "thinking", "store", "include":
 		return true
 	default:
 		return false
@@ -352,7 +405,13 @@ var bufPool = sync.Pool{
 func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
-	if err := json.NewEncoder(buf).Encode(c.buildRequest(req)); err != nil {
+	var wireRequest any = c.buildRequest(req)
+	requestURL := c.chatURL
+	if c.apiMode == apiModeResponses {
+		wireRequest = c.buildResponsesRequest(req)
+		requestURL = c.responsesURL
+	}
+	if err := json.NewEncoder(buf).Encode(wireRequest); err != nil {
 		bufPool.Put(buf)
 		return nil, fmt.Errorf("%s: marshal request: %w", c.name, err)
 	}
@@ -361,7 +420,7 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 	bufPool.Put(buf)
 
 	newReq := func(ctx context.Context) (*http.Request, error) {
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.chatURL, bytes.NewReader(body))
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
 		}
@@ -553,6 +612,13 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 // any model output was forwarded (so the caller can decide a replay is safe) and
 // the first fatal error — a nil error means the stream reached [DONE].
 func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<- provider.Chunk) (emitted bool, _ error) {
+	if c.apiMode == apiModeResponses {
+		return c.readResponsesStream(ctx, resp, out)
+	}
+	return c.readChatStream(ctx, resp, out)
+}
+
+func (c *client) readChatStream(ctx context.Context, resp *http.Response, out chan<- provider.Chunk) (emitted bool, _ error) {
 	defer resp.Body.Close()
 
 	// Close the response body when the context is canceled (user interrupt) or the

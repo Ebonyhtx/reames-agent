@@ -10,7 +10,10 @@ func TestSplit(t *testing.T) {
 		wantOK     bool
 	}{
 		{name: "mcp__github__issue_read", wantServer: "github", wantTool: "issue_read", wantOK: true},
-		{name: "mcp__server__nested__tool", wantServer: "server", wantTool: "nested__tool", wantOK: true},
+		{name: "mcp__server-name__nested_tool-1", wantServer: "server-name", wantTool: "nested_tool-1", wantOK: true},
+		{name: "mcp__server__nested__tool"},
+		{name: "mcp__server___tool"},
+		{name: "mcp__server____tool"},
 		{name: "read_file"},
 		{name: "mcp____tool"},
 		{name: "mcp__server__"},

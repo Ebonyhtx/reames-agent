@@ -17,7 +17,10 @@ func TestTranscriptMessagesHidePromptInternalsAndPreserveDisplayData(t *testing.
 		{Role: provider.RoleUser, Content: "Referenced context:\n<file path=\"secret.txt\">FILE-SECRET</file>\n\nexplain it"},
 		{Role: provider.RoleUser, Content: "The previous assistant response finished without any visible answer text. Continue the same task now and provide a concise visible answer to the user."},
 		{Role: provider.RoleUser, Content: agent.MidTurnSteerPrefix + "\nfocus tests"},
-		{Role: provider.RoleAssistant, Content: "done", ReasoningContent: "reason", ToolCalls: []provider.ToolCall{{
+		{Role: provider.RoleAssistant, Content: "done", ReasoningContent: "reason", ReasoningBlocks: []provider.ReasoningBlock{
+			{Type: "openai_reasoning", Text: "reason", Data: "OPENAI-OPAQUE-SECRET"},
+			{Type: "redacted_thinking", Data: "ANTHROPIC-OPAQUE-SECRET"},
+		}, ToolCalls: []provider.ToolCall{{
 			ID: "call-1", Name: "write_file", Arguments: `{"path":"a.txt"}`, Diff: "+hello", Added: 1,
 		}}, MemoryCitations: []provider.MemoryCitation{{ID: "mem-1", Source: "MEMORY.md", LineStart: 3, Note: "rule"}}},
 		{Role: provider.RoleTool, Content: "ok", ToolCallID: "call-1", Name: "write_file"},
@@ -56,6 +59,13 @@ func TestTranscriptMessagesHidePromptInternalsAndPreserveDisplayData(t *testing.
 	}
 	if len(got[5].MemoryCitations) != 1 || got[5].MemoryCitations[0].Source != "MEMORY.md" {
 		t.Fatalf("memory citations = %+v", got[5].MemoryCitations)
+	}
+	displayJSON, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(displayJSON), "OPENAI-OPAQUE-SECRET") || strings.Contains(string(displayJSON), "ANTHROPIC-OPAQUE-SECRET") {
+		t.Fatalf("opaque provider reasoning leaked into transcript DTO: %s", displayJSON)
 	}
 	if got[6].ToolCallID != "call-1" || got[6].ToolName != "write_file" || got[6].Content != "ok" {
 		t.Fatalf("tool entry = %+v", got[6])

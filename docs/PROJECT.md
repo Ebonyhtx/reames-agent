@@ -74,6 +74,26 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
   审计并补齐插件/Skill/Hook/MCP/headless 能力；P10 实现第一方 CDP Browser Control。当前已有
   OpenAI-compatible Chat Completions、Anthropic Messages 和受治理插件基础，但不能据此宣称 Codex/Claude
   parity；`web_search`、`web_fetch` 与可选 Playwright MCP 也不算内置浏览器控制。
+- P8 已完成仓库内原生协议实现，并通过本批全量、race、12 目标交叉编译与 clean-clone 门槛：OpenAI 通过显式
+  `api_mode=responses` 支持 instructions/input item、GPT reasoning、单/并行工具、图像、usage/cache、
+  typed failed/incomplete 与中断恢复，并请求/回放 opaque `reasoning.encrypted_content` 维持
+  `store=false` 工具续轮；该 Data 不进入展示或导出。历史 Provider 默认仍为 Chat Completions。Anthropic Messages 现将
+  effort 与 thinking 解耦，缺失 `message_stop` fail closed，并按原始顺序持久化 signed thinking 与 opaque
+  `redacted_thinking` 供 tool-use 续轮回放；第一方预设用模型级 override 让 legacy-thinking Haiku 4.5
+  省略 adaptive/effort，而 Sonnet/Opus 继承原生 adaptive wire。两条协议共用 Provider/boot/Controller/Agent，Desktop/TOML
+  可显式选择且提供 OpenAI/Anthropic 第一方预设；OpenAI 预设按 2026-07-19 公共 API 文档开放
+  `gpt-5.6-sol`、`gpt-5.6-terra`、`gpt-5.6-luna` 和 `gpt-5.4` 的原生普通 function-tool Responses。
+  Codex catalog 的 `code_mode_only` 是产品 runtime 选择；P9 仍跟进 freeform/code-mode、Responses
+  Lite/WebSocket、PTC、persisted reasoning/pro、显式缓存、hosted tools、multi-agent 与 App-Server。真实公网
+  API 回环仍为 `external-blocked`；最终公开交付仍要求该 push 对应 CI/CodeQL 全绿。详见
+  `audits/2026-07-19-p8-native-gpt-claude-provider-parity.md`。
+- Hermes `bf391030..862b1b37` 暴露的空响应分类问题已完成同构修复：Provider 返回的 empty-response
+  advisory 即使提到 `max_tokens`，共享 classifier 也返回可重试 server error 和 `ShouldCompact=false`；
+  真实 context-window 溢出仍返回压缩建议。当前 Agent 自动压缩由 usage 驱动，尚未消费该分类合同，
+  因此这是一项前置加固而非已复现的运行时恢复证据。
+- 最新增量已审至 Codex `312caf17` 与 Hermes `7a43ab04`：Realtime V3 初始历史项进入 P9；IM durable
+  recovery cursor/final-delivery gate 进入 M6；单轮模型覆盖进入 P9；browser/computer-use 的验证后前台
+  升级、按会话审批和 dead-driver 重连进入 P10。它们均未被包装成 P8 已完成能力。
 - 参考项目最新增量已按锁文件人工接受：Kimi 的 Auto/YOLO 文案准确性已转化为三语权限契约测试；Hermes 的 session-state 单一投影、profile prewarm 和 best-effort stream fence、Codex 的集中 MCP runtime、MiMo 的 CLI-only 演示脚本路径均只作为架构回归信号，不引入 Python/Electron/Rust 或第二套 runtime。Reasonix 新增的多套生产 release workflow 不继承；Reames 反而增加全 workflow 发布写权限/动作棘轮，继续只允许无 secrets、`contents: read` 的候选构建。外部风险仍是公开 registry 运营、干净云节点 logout/reboot、真实 IM 回环和生产签名链。
 - 继承自早期迁移的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package 元数据以及 `site/`、`workers/` 已在完成运行引用和替代实现审计后从当前树删除；参考机制只保留在 Git 历史和 `F:\code-reference`，不得重新整套 vendor。
 

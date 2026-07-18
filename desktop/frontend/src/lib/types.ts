@@ -1232,6 +1232,7 @@ export interface ProviderView {
   added: boolean;
   kind: string;
   baseUrl: string;
+  apiMode?: string; // openai: chat_completions (default) | responses
   chatUrl?: string; // optional full chat completions URL; empty derives from baseUrl
   models: string[];
   visionModels: string[]; // subset of models that accepts image input
@@ -1276,6 +1277,7 @@ export interface ProviderPresetView {
 export interface ProviderModelOverrideView {
   model: string;
   reasoningProtocol: string;
+  thinking?: string | null;
   supportedEfforts: string[];
   defaultEffort: string;
   vision?: boolean | null;

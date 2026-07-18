@@ -356,6 +356,9 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 			fmt.Fprintf(&b, "name        = %q\n", p.Name)
 			fmt.Fprintf(&b, "kind        = %q\n", p.Kind)
 			fmt.Fprintf(&b, "base_url    = %q\n", p.BaseURL)
+			if p.APIMode != "" {
+				fmt.Fprintf(&b, "api_mode    = %q   # openai only: chat_completions | responses\n", p.APIMode)
+			}
 			if p.ChatURL != "" {
 				fmt.Fprintf(&b, "chat_url    = %q   # optional full chat completions URL; disables automatic /chat/completions suffix\n", p.ChatURL)
 			}
@@ -411,7 +414,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 				fmt.Fprintf(&b, "vision_models = %s   # models in this provider that accept image input\n", renderStringArray(p.VisionModels))
 			}
 			if p.VisionDetail != "" {
-				fmt.Fprintf(&b, "vision_detail = %q   # openai image detail hint: low|high; empty = auto\n", p.VisionDetail)
+				fmt.Fprintf(&b, "vision_detail = %q   # openai image detail hint: low|high|original; empty = auto\n", p.VisionDetail)
 			}
 			if p.ReasoningProtocol != "" {
 				fmt.Fprintf(&b, "reasoning_protocol = %q   # auto|deepseek|openai|none; overrides model/endpoint reasoning detection\n", p.ReasoningProtocol)
@@ -933,6 +936,9 @@ func RenderTOMLProjectDelta(c *Config) string {
 			fmt.Fprintf(&b, "name        = %q\n", p.Name)
 			fmt.Fprintf(&b, "kind        = %q\n", p.Kind)
 			fmt.Fprintf(&b, "base_url    = %q\n", p.BaseURL)
+			if p.APIMode != "" {
+				fmt.Fprintf(&b, "api_mode    = %q\n", p.APIMode)
+			}
 			if p.ChatURL != "" {
 				fmt.Fprintf(&b, "chat_url    = %q\n", p.ChatURL)
 			}
@@ -1496,6 +1502,9 @@ func renderModelOverride(ov ProviderModelOverride) string {
 	if ov.ReasoningProtocol != "" {
 		parts = append(parts, fmt.Sprintf("reasoning_protocol = %q", ov.ReasoningProtocol))
 	}
+	if ov.Thinking != nil {
+		parts = append(parts, fmt.Sprintf("thinking = %q", *ov.Thinking))
+	}
 	if len(ov.SupportedEfforts) > 0 {
 		parts = append(parts, "supported_efforts = "+renderStringArray(ov.SupportedEfforts))
 	}
@@ -1509,7 +1518,7 @@ func renderModelOverride(ov ProviderModelOverride) string {
 }
 
 func modelOverrideEmpty(ov ProviderModelOverride) bool {
-	return ov.ReasoningProtocol == "" && len(ov.SupportedEfforts) == 0 && ov.DefaultEffort == "" && ov.Vision == nil
+	return ov.ReasoningProtocol == "" && ov.Thinking == nil && len(ov.SupportedEfforts) == 0 && ov.DefaultEffort == "" && ov.Vision == nil
 }
 
 func hasPositiveIntMap(m map[string]int) bool {

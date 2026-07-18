@@ -774,6 +774,18 @@ export function providerChatURLPreview(baseUrl: string, chatUrl: string, fullURL
   return base ? `${base}/chat/completions` : "";
 }
 
+export function providerRequestURLPreview(baseUrl: string, chatUrl: string, fullURL: boolean, apiMode: string): string {
+  if (apiMode !== "responses") return providerChatURLPreview(baseUrl, chatUrl, fullURL);
+  const base = trimmedURL(baseUrl);
+  if (!base) return "";
+  return base.toLowerCase().endsWith("/responses") ? base : `${base}/responses`;
+}
+
+export function providerAPIModeForKind(kind: string, apiMode: string): string {
+  if (kind.trim().toLowerCase() !== "openai") return "";
+  return apiMode.trim().toLowerCase() === "responses" ? "responses" : "chat_completions";
+}
+
 export function providerBaseURLFromChatURL(chatUrl: string): string {
   const full = trimmedURL(chatUrl);
   for (const suffix of ["/chat/completions", "/responses", "/response"]) {
@@ -1202,6 +1214,7 @@ function normalizeProviderView(p: ProviderView): ProviderView {
     ...p,
     builtIn: Boolean(p.builtIn),
     added: Boolean(p.added),
+    apiMode: providerAPIModeForKind(p.kind, p.apiMode ?? ""),
     chatUrl: p.chatUrl ?? "",
     models: asArray(p.models),
     visionModels,
@@ -5628,6 +5641,7 @@ function ProviderEditor({
   const [name, setName] = useState(initial?.name ?? "");
   const [kind, setKind] = useState(initial?.kind ?? "openai");
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
+  const [apiMode, setApiMode] = useState(initial?.apiMode === "responses" ? "responses" : "chat_completions");
   const [chatUrl, setChatUrl] = useState(initial?.chatUrl ?? "");
   const [fullChatUrl, setFullChatUrl] = useState(Boolean((initial?.chatUrl ?? "").trim()));
   const [models, setModels] = useState((initial?.models ?? []).join(", "));
@@ -5661,8 +5675,10 @@ function ProviderEditor({
     return choices.length > 0 ? choices : ["openai"];
   }, [kind, kinds]);
   const effectiveKind = providerEditorEffectiveKind(isNewCustomProvider, kind, providerKindChoices);
-  const effectiveBaseUrl = fullChatUrl ? providerBaseURLFromChatURL(chatUrl) : baseUrl.trim();
-  const effectiveChatUrl = fullChatUrl ? trimmedURL(chatUrl) : "";
+  const effectiveAPIMode = providerAPIModeForKind(effectiveKind, apiMode);
+  const usesResponses = effectiveAPIMode === "responses";
+  const effectiveBaseUrl = !usesResponses && fullChatUrl ? providerBaseURLFromChatURL(chatUrl) : baseUrl.trim();
+  const effectiveChatUrl = !usesResponses && fullChatUrl ? trimmedURL(chatUrl) : "";
   const effectiveModelsUrl = modelsUrl.trim();
   const effectiveHeaders = parseProviderHeaders(headersDraft);
   const extraBodyParse = useMemo(() => {
@@ -5674,7 +5690,7 @@ function ProviderEditor({
   }, [extraBodyDraft, t]);
   const effectiveExtraBody = extraBodyParse.value;
   const extraBodyInvalid = Boolean(extraBodyDraft.trim() && extraBodyParse.error);
-  const previewChatUrl = providerChatURLPreview(baseUrl, chatUrl, fullChatUrl);
+  const previewChatUrl = providerRequestURLPreview(baseUrl, chatUrl, fullChatUrl, effectiveAPIMode);
 
   // Empty supportedEfforts means "use protocol defaults". The simplified
   // provider flow no longer edits these levels directly, but it preserves
@@ -5704,6 +5720,7 @@ function ProviderEditor({
         added: initial?.added ?? true,
         kind: effectiveKind,
         baseUrl: effectiveBaseUrl,
+        apiMode: effectiveAPIMode,
         chatUrl: effectiveChatUrl,
         modelsUrl: effectiveModelsUrl,
         models: [],
@@ -5756,6 +5773,7 @@ function ProviderEditor({
       added: initial?.added ?? true,
       kind: effectiveKind,
       baseUrl: effectiveBaseUrl,
+      apiMode: effectiveAPIMode,
       chatUrl: effectiveChatUrl,
       models: ms,
       visionModels: vms,
@@ -5988,11 +6006,34 @@ function ProviderEditor({
         ))}
       </select>
       <div className="mem-hint">{providerKindHint(effectiveKind, t)}</div>
+      {effectiveKind === "openai" && (
+        <>
+          <label className="set-label">{t("settings.providerApiMode")}</label>
+          <select
+            className="mem-select"
+            value={apiMode}
+            onChange={(e) => {
+              const next = e.target.value === "responses" ? "responses" : "chat_completions";
+              setApiMode(next);
+              if (next === "responses") {
+                if (!baseUrl.trim() && chatUrl.trim()) setBaseUrl(providerBaseURLFromChatURL(chatUrl));
+                setFullChatUrl(false);
+              }
+            }}
+          >
+            <option value="chat_completions">{t("settings.providerApiModeChat")}</option>
+            <option value="responses">{t("settings.providerApiModeResponses")}</option>
+          </select>
+          <div className="mem-hint">
+            {t(usesResponses ? "settings.providerApiModeResponsesHint" : "settings.providerApiModeChatHint")}
+          </div>
+        </>
+      )}
       <div className="set-row">
         <label className="set-label set-grow">
           {t(fullChatUrl ? "settings.providerChatUrlLabel" : "settings.providerBaseUrlLabel")}
         </label>
-        <label className="set-check">
+        {!usesResponses && <label className="set-check">
           <input
             type="checkbox"
             checked={fullChatUrl}
@@ -6007,7 +6048,7 @@ function ProviderEditor({
             }}
           />
           {t("settings.providerUseFullChatUrl")}
-        </label>
+        </label>}
       </div>
       <input
         className="mem-input"

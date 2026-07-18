@@ -124,6 +124,10 @@ func TestSlashExportFiltersInternalAndReferencedContext(t *testing.T) {
 			Role:             provider.RoleAssistant,
 			Content:          "visible answer",
 			ReasoningContent: "private thinking should not export",
+			ReasoningBlocks: []provider.ReasoningBlock{
+				{Type: "openai_reasoning", Text: "private thinking should not export", Data: "openai opaque should not export"},
+				{Type: "redacted_thinking", Data: "anthropic opaque should not export"},
+			},
 			ToolCalls: []provider.ToolCall{{
 				ID:        "call_1",
 				Name:      "read_file",
@@ -162,6 +166,8 @@ func TestSlashExportFiltersInternalAndReferencedContext(t *testing.T) {
 		"hiddenReference",
 		"internal steer should not export",
 		"private thinking should not export",
+		"openai opaque should not export",
+		"anthropic opaque should not export",
 		"private-tool-input.txt",
 		"tool output should not export",
 	} {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"reames-agent/internal/mcpname"
 	"reames-agent/internal/tool"
 )
 
@@ -119,6 +120,14 @@ func TestNormalizeNameAvoidsSanitizedCollisions(t *testing.T) {
 	}
 	if normalizeName("@foo") == normalizeName("foo") {
 		t.Fatal("trimmed invalid prefix should not collapse onto valid name")
+	}
+	if got := normalizeName("foo__bar"); strings.Contains(got, "__") || got == normalizeName("foo_bar") {
+		t.Fatalf("reserved MCP delimiter was not collision-safely normalized: %q", got)
+	}
+	ambiguous := toolName("foo__bar", "read__file")
+	server, rawTool, ok := mcpname.Split(ambiguous)
+	if !ok || server == "foo" || strings.Contains(server, "__") || strings.Contains(rawTool, "__") {
+		t.Fatalf("normalized MCP identity is ambiguous: %q -> %q/%q ok=%v", ambiguous, server, rawTool, ok)
 	}
 }
 

@@ -66,15 +66,15 @@
 | 项目 | reviewed SHA | 决策角色 |
 |---|---|---|
 | DeepSeek Reasonix | `2335d0df9ea4029108ed965f76c2efff30fe6cf4` | 唯一主源码上游 |
-| Hermes | `581e92e42c89645b5dacf8263abebb15348c791b` | Gateway/错误/运维参考 |
-| Codex | `b8b61bc692517adcd18622df260f2ddd80635122` | 二级战略；GPT/Responses、协议、插件、Hook/LSP/CDP |
+| Hermes | `7a43ab042f65182bb8cb00cebbd1320867d751db` | Gateway/错误/运维参考 |
+| Codex | `312caf176a8fd3a5897a3d1fd3ed0a283bd1b5ac` | 二级战略；GPT/Responses、协议、插件、Hook/LSP/CDP |
 | MiMo Code | `d48888f7b1d22e830ee5c10faf2b9e455f3cd881` | 设计/技能体验参考 |
 | Impeccable | `8967edc988ee146823bca3c51fcf51296e9dec18` | 品牌设计语言参考 |
-| Scream Code | `53fa61b2a9b1bbc1914949f328928fe8f03b16d2` | Goal/TUI/主题机制参考 |
+| Scream Code | `5b1a9922e06d87e53a52be964555119a113f576e` | Goal/TUI/主题机制参考 |
 | AgentArk | `63985cf819d1760f50f2a5c0dc11d82815e74623` | 安全架构参考 |
 | Claude Code | `07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60` | 二级战略；Claude/Messages、Thinking、工具/视觉/缓存、插件 |
 | Kimi Code | `4f3c7240c4adc7c748e536bf578e468c1b5bcd7b` | Desktop Shell/权限文案参考 |
-| Grok Build | `98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce` | 安全/终端/ACP 机制参考 |
+| Grok Build | `7cfcb20d2b50b0d18801a6c0af2e401c0e060894` | 安全/终端/ACP 机制参考；本批采用无歧义 MCP 名称合同 |
 | awesome-design-md | `664b3e78fd1a298ba11973822da988483256d4b4` | 设计资料参考 |
 
 Reasonix `3637d0f0..40ef98de` 共 5 个非 merge 提交、49 文件、`+1658/-410`；完整逐提交结论和机器账本：
@@ -130,6 +130,35 @@ full-load/resize zoom 修复缺少 Wails/WebView2 同构证据，只作为 nativ
 stream/multimodal 信号转入 P8；MiMo/Kimi 无同构缺口，Scream Goal wizard、Provider/多代理帮助入口为
 P8/P9 体验候选，品牌 welcome/Think badge 不复制。
 
+## 5.1 P8 当前实现状态
+
+P8 仓库内实现与本地交付门槛已关闭；最终公开交付仍等待该 push 对应 CI/CodeQL：
+
+- `kind = "openai"` 新增显式 `api_mode = "responses"`；空值保持 Chat Completions，不能按模型名猜测；
+- OpenAI Responses 已覆盖 instructions/input、GPT reasoning summary、文本、并行 function call/output、
+  vision data URL、usage/cache/reasoning tokens、typed failed/incomplete、cancel/reconnect/interruption；同时
+  保留向后兼容 include 并保存 opaque `reasoning.encrypted_content`（当前 `store=false` API 默认也返回），
+  写入 `ReasoningBlocks` 供工具续轮回放，
+  transcript DTO 与 `/export` 有不泄漏回归；
+- Anthropic Messages 已补 effort 与 thinking 解耦、typed SSE error、缺失 `message_stop`/未闭合 block
+  fail closed，以及 signed thinking + opaque `redacted_thinking` 原序持久化/回放；模型级 thinking override
+  让 Haiku 4.5 省略不兼容 adaptive/effort，Sonnet/Opus 保持 adaptive；
+- `ProviderEntry.api_mode` 已贯通 TOML、boot、Desktop 读写；第一方 OpenAI/Anthropic 推荐预设已加入；
+- OpenAI 官方预设已按 2026-07-19 公共 API 文档开放 `gpt-5.6-sol`、`gpt-5.6-terra`、
+  `gpt-5.6-luna` 与 `gpt-5.4`；前三者有 1.05M context、vision、普通 function calling 和
+  none/low/medium/high/xhigh/max effort。Codex catalog 的 `code_mode_only` 只描述其产品 runtime，
+  P9 仍须补 freeform/code-mode、Responses Lite/WebSocket、PTC、显式缓存、persisted reasoning/pro、
+  hosted tools、multi-agent 与 App-Server，不能把 P8 function tools 冒充 Codex 产品 parity；
+- Hermes 最新空响应分类修复已完成同构吸收：包含 `max_tokens` 的 empty-response advisory 不再让
+  `provider.ClassifyError` 建议 context compaction，真实 `max_tokens > context_window` 仍保持该分类门禁；
+  当前 Agent 压缩仍由 usage 驱动，尚未消费 `ShouldCompact`，不得写成已复现的运行时事故；
+- Codex `312caf17` 的 Realtime V3 初始历史项已做代码级审查，保留 128 项/8192 token 的会话播种边界
+  供 P9 WebSocket/App-Server 使用，不混入 P8 HTTP Responses；Hermes `7a43ab04` 的 Discord durable
+  recovery cursor/final-delivery gate 进入 M6，`/model --once` 进入 P9，computer-use 验证后前台升级和
+  dead-driver reconnect 进入 P10；
+- 权威审计为 `audits/2026-07-19-p8-native-gpt-claude-provider-parity.md`。真实 OpenAI/Anthropic
+  key、账单、缓存计费和公网模型可用性仍是 `external-blocked`。
+
 ## 6. 本批本地验证
 
 冻结提交形成前已通过：
@@ -137,13 +166,12 @@ P8/P9 体验候选，品牌 welcome/Think badge 不复制。
 - Root：`go build ./...`、`go vet ./...`、`go test ./internal/... -count=1 -timeout 300s`；
 - Desktop：`go build ./...`、`go vet ./...`、`go test ./... -count=1 -timeout 300s`；
 - Frontend：`corepack pnpm test:all`、`corepack pnpm build`、bundle budget；
-- Race：`go test -race ./internal/systemdnotify ./internal/gatewayservice ./internal/cli -count=1 -timeout 600s`；
-- Python：143 项脚本/合同测试通过，2 项平台条件跳过；
-- 上游：Reasonix generation、19 项 upstream、Node Issue reconciliation、显式逐项目接受；
-- 治理：tool 文档、docs/public/deploy/release 合同、actionlint v1.7.7、Git Bash shell syntax；
-- 运维：`verify-baseline.ps1` 与 credential-free Gateway smoke；
+- Race：`go test -race ./internal/provider/openai ./internal/provider/anthropic ./internal/agent ./internal/plugin ./internal/control -count=1 -timeout 600s`；
+- 上游：21 项治理测试、Node Issue reconciliation、Codex/Hermes 显式逐项目接受，最终 11/11 无变化；
+- 治理：docs/public/deploy/release、安装器、Gateway、Desktop candidate/native/interaction/accessibility 合同；
+- 浏览器：真实 Chrome 插件安装/启用/更新/回滚/doctor/移除 smoke，无 console/page error；
 - 发布形态：六目标 CLI + 六目标 Guard，共 12 个 `CGO_ENABLED=0` 构建。
-- clean clone：冻结提交对象通过 `git clone --no-local` 的 Root/Desktop 全量、空 `node_modules`
+- clean clone：冻结提交对象通过独立 `--no-hardlinks` clone 的 Root/Desktop 全量、空 `node_modules`
   Frontend install/test/build/bundle budget，以及 Reasonix/upstream/docs/public 合同。
 
 远端完成声明必须使用最终 push 提交对应的 CI/CodeQL。为避免仅写回 run ID 又触发一次 CI，本文件不

@@ -1609,10 +1609,15 @@ func ToolPrefix(server string) string {
 }
 
 var invalidNameChars = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+var ambiguousNameDelimiter = regexp.MustCompile(`_{2,}`)
 
 func normalizeName(s string) string {
 	raw := s
 	s = strings.Trim(invalidNameChars.ReplaceAllString(s, "_"), "_")
+	// "__" is the MCP namespace delimiter. Keep it out of both components so
+	// model names cannot collide across (server, tool) pairs or be removed by
+	// another server's prefix. A hash below preserves identity when collapsing.
+	s = ambiguousNameDelimiter.ReplaceAllString(s, "_")
 	if s == "" {
 		s = "unnamed"
 	}

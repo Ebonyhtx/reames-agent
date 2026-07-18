@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updated_at": "2026-07-18T16:51:57Z",
+  "updated_at": "2026-07-18T22:11:05Z",
   "upstreams": {
     "reasonix": {
       "branch": "main-v2",
@@ -11,14 +11,14 @@
     "hermes": {
       "branch": "main",
       "baseline": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
-      "reviewed": "581e92e42c89645b5dacf8263abebb15348c791b",
-      "latest_seen": "581e92e42c89645b5dacf8263abebb15348c791b"
+      "reviewed": "7a43ab042f65182bb8cb00cebbd1320867d751db",
+      "latest_seen": "7a43ab042f65182bb8cb00cebbd1320867d751db"
     },
     "codex": {
       "branch": "main",
       "baseline": "f6e251c3ac6573a4d6eccddea6ad12587868485f",
-      "reviewed": "b8b61bc692517adcd18622df260f2ddd80635122",
-      "latest_seen": "b8b61bc692517adcd18622df260f2ddd80635122"
+      "reviewed": "312caf176a8fd3a5897a3d1fd3ed0a283bd1b5ac",
+      "latest_seen": "312caf176a8fd3a5897a3d1fd3ed0a283bd1b5ac"
     },
     "mimo": {
       "branch": "main",
@@ -35,8 +35,8 @@
     "scream-code": {
       "branch": "main",
       "baseline": "946eda69896ac161223bdb830acc62e4b6c8228e",
-      "reviewed": "53fa61b2a9b1bbc1914949f328928fe8f03b16d2",
-      "latest_seen": "53fa61b2a9b1bbc1914949f328928fe8f03b16d2"
+      "reviewed": "5b1a9922e06d87e53a52be964555119a113f576e",
+      "latest_seen": "5b1a9922e06d87e53a52be964555119a113f576e"
     },
     "agentark": {
       "branch": "main",
@@ -65,8 +65,8 @@
     "grok-build": {
       "branch": "main",
       "baseline": "98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce",
-      "reviewed": "98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce",
-      "latest_seen": "98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce"
+      "reviewed": "7cfcb20d2b50b0d18801a6c0af2e401c0e060894",
+      "latest_seen": "7cfcb20d2b50b0d18801a6c0af2e401c0e060894"
     }
   }
 }

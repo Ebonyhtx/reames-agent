@@ -458,6 +458,7 @@ func TestSaveProviderPersistsCustomEndpointURLs(t *testing.T) {
 		Name:      "sub2api",
 		Kind:      "openai",
 		BaseURL:   "https://proxy.example.com/v1",
+		APIMode:   "chat_completions",
 		ChatURL:   " https://proxy.example.com/custom/chat/completions ",
 		ModelsURL: " https://proxy.example.com/v1/models ",
 		Models:    []string{"model-a"},
@@ -495,6 +496,51 @@ func TestSaveProviderPersistsCustomEndpointURLs(t *testing.T) {
 	t.Fatalf("Settings providers missing sub2api: %+v", view.Providers)
 }
 
+func TestSaveProviderClearsAPIModeForNonOpenAIKind(t *testing.T) {
+	isolateDesktopUserDirs(t)
+
+	app := NewApp()
+	if err := app.SaveProvider(ProviderView{
+		Name:      "anthropic-custom",
+		Kind:      "anthropic",
+		BaseURL:   "https://api.anthropic.com",
+		APIMode:   "chat_completions",
+		Models:    []string{"claude-test"},
+		Default:   "claude-test",
+		APIKeyEnv: "ANTHROPIC_API_KEY",
+	}); err != nil {
+		t.Fatalf("SaveProvider: %v", err)
+	}
+
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	got, ok := cfg.Provider("anthropic-custom")
+	if !ok {
+		t.Fatal("saved provider not found")
+	}
+	if got.APIMode != "" {
+		t.Fatalf("Anthropic api_mode = %q, want empty", got.APIMode)
+	}
+}
+
+func TestProviderModelOverrideThinkingRoundTrip(t *testing.T) {
+	thinkingOff := ""
+	original := map[string]config.ProviderModelOverride{
+		"claude-haiku-4-5": {
+			ReasoningProtocol: config.ReasoningProtocolNone,
+			Thinking:          &thinkingOff,
+		},
+	}
+	views := providerModelOverridesForView(original, []string{"claude-haiku-4-5"})
+	if len(views) != 1 || views[0].Thinking == nil || *views[0].Thinking != "" {
+		t.Fatalf("override views = %+v, want explicit empty thinking", views)
+	}
+	saved := providerModelOverridesForSave(views, []string{"claude-haiku-4-5"})
+	got := saved["claude-haiku-4-5"]
+	if got.Thinking == nil || *got.Thinking != "" || got.ReasoningProtocol != config.ReasoningProtocolNone {
+		t.Fatalf("saved override = %+v, want explicit empty thinking", got)
+	}
+}
+
 func TestSaveProviderPreservesHiddenProviderFields(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
@@ -503,6 +549,7 @@ func TestSaveProviderPreservesHiddenProviderFields(t *testing.T) {
 		Name:         "custom",
 		Kind:         "openai",
 		BaseURL:      "https://proxy.example.com/v1",
+		APIMode:      "responses",
 		Models:       []string{"model-a", "model-b"},
 		Default:      "model-a",
 		APIKeyEnv:    "CUSTOM_API_KEY",
@@ -553,6 +600,9 @@ func TestSaveProviderPreservesHiddenProviderFields(t *testing.T) {
 	}
 	if got.Thinking != "adaptive" || got.Effort != "high" {
 		t.Fatalf("thinking/effort = %q/%q, want adaptive/high", got.Thinking, got.Effort)
+	}
+	if got.APIMode != "responses" || view.APIMode != "responses" {
+		t.Fatalf("api_mode = config %q view %q, want responses", got.APIMode, view.APIMode)
 	}
 	if got.VisionDetail != "low" {
 		t.Fatalf("vision_detail = %q, want low", got.VisionDetail)

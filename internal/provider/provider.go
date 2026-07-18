@@ -37,13 +37,30 @@ type Message struct {
 	// replayed on the next turn when a tool call followed thinking; providers
 	// without signed reasoning (e.g. the openai-compatible ones) leave it empty.
 	// Round-tripped alongside ReasoningContent.
-	ReasoningSignature string           `json:"reasoning_signature,omitempty"`
-	ToolCalls          []ToolCall       `json:"tool_calls,omitempty"`      // set by assistant
-	ToolCallID         string           `json:"tool_call_id,omitempty"`    // links a tool result to its call
-	Name               string           `json:"name,omitempty"`            // tool message: tool name
-	MemoryCitations    []MemoryCitation `json:"memoryCitations,omitempty"` // local UI metadata; provider requests ignore it
-	Edited             bool             `json:"edited,omitempty"`          // local UI metadata; provider requests ignore it
-	Original           string           `json:"original,omitempty"`        // user prompt before inline edit
+	ReasoningSignature string `json:"reasoning_signature,omitempty"`
+	// ReasoningBlocks preserves provider-native reasoning envelopes that must be
+	// replayed byte-for-byte on a later tool-use turn. Anthropic may interleave
+	// signed thinking and opaque redacted_thinking blocks; the flattened
+	// ReasoningContent/ReasoningSignature fields remain for display and legacy
+	// sessions, while providers that need exact ordering use this slice.
+	ReasoningBlocks []ReasoningBlock `json:"reasoning_blocks,omitempty"`
+	ToolCalls       []ToolCall       `json:"tool_calls,omitempty"`      // set by assistant
+	ToolCallID      string           `json:"tool_call_id,omitempty"`    // links a tool result to its call
+	Name            string           `json:"name,omitempty"`            // tool message: tool name
+	MemoryCitations []MemoryCitation `json:"memoryCitations,omitempty"` // local UI metadata; provider requests ignore it
+	Edited          bool             `json:"edited,omitempty"`          // local UI metadata; provider requests ignore it
+	Original        string           `json:"original,omitempty"`        // user prompt before inline edit
+}
+
+// ReasoningBlock is a provider-issued reasoning envelope. Type is currently
+// "thinking" or "redacted_thinking" for Anthropic Messages, and
+// "openai_reasoning" for a Responses API reasoning item. Data is opaque and
+// must never be displayed or interpreted; it is stored only for exact replay.
+type ReasoningBlock struct {
+	Type      string `json:"type"`
+	Text      string `json:"text,omitempty"`
+	Signature string `json:"signature,omitempty"`
+	Data      string `json:"data,omitempty"`
 }
 
 // MemoryCitation is local display metadata for memories that influenced an
@@ -598,11 +615,15 @@ func isThreeLetterCurrencyCode(value string) bool {
 // Chunk is a single streamed event. Read the field matching Type.
 type Chunk struct {
 	Type      ChunkType
-	Text      string    // ChunkText, ChunkReasoning
-	Signature string    // ChunkReasoning: opaque proof for the reasoning (Anthropic thinking signature), when issued
-	ToolCall  *ToolCall // ChunkToolCallStart (ID+Name only), ChunkToolCall (complete)
-	Usage     *Usage    // ChunkUsage
-	Err       error     // ChunkError
+	Text      string // ChunkText, ChunkReasoning
+	Signature string // ChunkReasoning: opaque proof for the reasoning (Anthropic thinking signature), when issued
+	// ReasoningBlock is metadata-only ChunkReasoning content emitted when a
+	// provider-native reasoning block closes. Text deltas still stream through
+	// Text for UI display; callers persist this block without displaying Data.
+	ReasoningBlock *ReasoningBlock
+	ToolCall       *ToolCall // ChunkToolCallStart (ID+Name only), ChunkToolCall (complete)
+	Usage          *Usage    // ChunkUsage
+	Err            error     // ChunkError
 }
 
 // StreamInterruptedError marks a recoverable transport cut that happened after

@@ -223,7 +223,8 @@ Goal、由 `todo_write` 工具驱动的实时 Todo 面板，以及已配置 prov
 在桌面端打开 **设置 -> 模型 -> 接入 -> 添加模型服务 -> 自定义供应商**，用于接入代理、
 聚合平台或自建 OpenAI-compatible chat API / Anthropic-compatible Messages API 服务。
 
-常用服务优先使用 **添加模型服务 -> 推荐预设**。Reames Agent 可以预填可编辑的自定义 provider：
+常用服务优先使用 **添加模型服务 -> 推荐预设**。第一方 **OpenAI** 预设使用原生 Responses
+API，第一方 **Anthropic** 预设使用原生 Messages API。Reames Agent 还可以预填可编辑的自定义 provider：
 Kimi CN、Kimi Global、Kimi Coding Plan、MiMo API、MiMo Anthropic、MiMo Token Plan
 CN/SGP/AMS 及其 Anthropic-compatible 变体、MiniMax CN/Global API、MiniMax
 CN/Global Anthropic、GLM CN、Z.AI Global、GLM/Z.AI Coding Plan 的
@@ -241,7 +242,13 @@ Anthropic-compatible 网关需要的 Bearer 认证、Ollama Cloud max-effort 支
 以及 OpenCode Go 的每模型 reasoning 覆盖。添加后仍然可以打开 provider 卡片，
 继续修改模型、请求头、端点或兼容设置。
 
-**API 地址** 填写服务端点。默认模式下，Reames Agent 会预览并把聊天请求发送到：
+`kind = "openai"` 时必须显式选择线协议。**Chat Completions** 是已有兼容网关的默认值；
+**Responses API** 使用原生 item/event 协议，请求地址为 `<API 地址>/responses`，适用于第一方
+OpenAI 以及 GPT reasoning、并行工具和图像输入。无状态工具续轮会在本地保存供应商返回的加密
+reasoning item 并原样回传；该 opaque 数据不会显示在会话或 Markdown 导出中。Reames Agent 不会
+根据模型名静默切换协议。
+
+**API 地址** 填写服务端点。Chat Completions 模式下，Reames Agent 会预览并把聊天请求发送到：
 
 ```text
 <API 地址>/chat/completions
@@ -267,10 +274,11 @@ Anthropic-compatible 网关需要的 Bearer 认证、Ollama Cloud max-effort 支
 
 | 字段 | 作用 | 什么时候改 |
 | --- | --- | --- |
+| OpenAI 线协议 / `api_mode` | 对 `kind = "openai"` 显式选择 `chat_completions` 或 `responses`。 | 只有端点真实实现 OpenAI Responses API 时才使用 Responses；普通 OpenAI-compatible 网关通常保持 Chat Completions。 |
 | `api_key_env` | 该 provider 使用的 API key 环境变量名。桌面端保存的真实 key 会写入 Reames Agent home `.env` 的同名变量；TOML 配置里只保存变量名。 | 多个 provider 需要不同 key 时改名；服务不需要 API key 时可以留空。 |
 | `models_url` | 只用于自动发现模型列表的 URL。聊天请求仍使用上方的 API 地址或完整 URL。 | `/models` 或 `/v1/models` 不是该网关模型列表地址时填写。 |
 | 额外请求头 | 静态 HTTP header，一行一个 `Header: value`。 | OpenRouter 等网关要求 `HTTP-Referer`、`X-Title` 或类似站点来源 header 时使用。API key 仍放在上方密钥字段，不要重复写到这里。 |
-| 额外请求体 | 合并到聊天请求体顶层的 JSON 对象。 | 仅用于服务商专用开关，例如 `{"enable_thinking": true}`。`model`、`messages`、`tools`、`stream`、`thinking` 等核心字段仍由 Reames Agent 控制，且不接受 `null` 值。 |
+| 额外请求体 | 合并到所选 OpenAI 请求体顶层的 JSON 对象。 | 仅用于服务商专用开关，例如 `{"enable_thinking": true}`。`model`、`messages`/`input`、`tools`、`stream`、`reasoning`、`thinking` 等核心字段仍由 Reames Agent 控制，且不接受 `null` 值。 |
 | Authorization: Bearer | 对 Anthropic-compatible provider，把已保存的 API key 用 `Authorization: Bearer <key>` 发送，而不是 `x-api-key`。 | MiniMax Global、Vercel AI Gateway 等网关文档明确要求 Bearer 认证时开启。 |
 | 模型能力模式 | 指定 Reames Agent 对该 provider 使用哪种 reasoning 请求协议。 | 默认用“自动识别”。只有网关被误判，或模型文档要求特定 reasoning 格式时再切换。 |
 | Thinking 覆盖 | provider 专用的 `thinking.type` 覆盖项。 | 默认用 Auto。只有后端文档明确支持 `enabled`、`disabled` 或 `adaptive` 时再手动指定；不支持的值可能让中转站拒绝请求。 |

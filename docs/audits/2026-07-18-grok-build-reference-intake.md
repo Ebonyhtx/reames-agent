@@ -89,3 +89,26 @@ python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
 python scripts/check_public_readiness.py
 python scripts/check_docs_contracts.py
 ```
+
+## 2026-07-19 增量同步：`98c3b243..7cfcb20d`
+
+本次官方 `main` 仍是单个 `Synced from monorepo` 快照提交，但内部源标识已从
+`124d85bc5dc6e7805560215fcc6d5413944920e1` 推进到
+`f9736c7b86f8e1c0e99e20ebbbd1195cd0c147e3`；差异覆盖 292 文件、约
+`+23315/-9209`，不能按一个普通功能提交理解。优先代码级复核了 permission/folder trust、MCP
+OAuth/qualified name、plugin git install/registry、web_fetch SSRF、session cancel/auto-wake 和 terminal
+生命周期。
+
+| 增量机制 | 决策 | Reames 结论 |
+|---|---|---|
+| MCP `server__tool` 单一、overlap-aware delimiter | **采用** | Reames 的 `mcp__<server>__<tool>` 旧解析允许组件内 `__`，可让不同 server/tool pair 共享模型名，并干扰 prefix removal、审批与 capability 归属。本批将 `internal/mcpname.Split` 改为只接受一个无重叠分隔符；`plugin.normalizeName` 折叠保留分隔符并附稳定 hash，原始名字仍保存在 MCP metadata 中。 |
+| marketplace `require_sha`、registry churn | 已有更强实现 | Reames 安装启用已绑定 `sha256-tree-v1`、expected digest、不可变 generation、TUF metadata/provenance 与 fresh-human grants；不降级为可选 git SHA。 |
+| web_fetch SSRF 重构 | 已有等价/更强边界 | Reames 已在 dial time 解析并钉住公网 IP，逐跳重建 transport，阻断 RFC1918、link-local、unspecified、CGNAT/阿里云 metadata，并覆盖 HTTP CONNECT/SOCKS5 与 redirect；localhost 是明确的本地开发合同，不由三级参考静默改掉。 |
+| permission edit cwd/path context、folder roles/personas trust | 等价性信号 | Reames previewable writer 已使用 handle-relative resolve-beneath；项目 shell Hook 有用户全局 trust store，项目 registry/资源预算不能覆盖全局控制。Grok 的角色/persona 目录不直接对应 Reames 可执行面，不新增 Rust permission runtime。 |
+| MCP OAuth RFC 9207 callback issuer | **延后至 P9** | Reames 当前没有完整 MCP OAuth/auth helper；只复制 `iss` 回调校验会形成半套授权生命周期。P9 必须把 discovery、PKCE/state/issuer、token storage/redaction、refresh、取消和 Desktop/CLI 状态统一设计后再实现。 |
+| transient auth recovery、Ctrl+C 后 background auto-wake、terminal/session fixes | 已有部分等价；保留回归信号 | Provider 已对曾成功鉴权的 401 做有界 retry；Controller close 会取消后台 jobs，当前没有 Grok 同构的自动 task-wake actor。若 P9/P10 引入后台唤醒，再使用其 cancel barrier/queued prompt 测试思想。 |
+| xAI model/auth、Rust pager/leader、online services | 拒绝整套引入 | 仍只作为机制证据；不增加 xAI 登录、Rust runtime、遥测或第二套 session/permission/terminal 状态机。 |
+
+采用项的仓库证据为 `internal/mcpname/name.go`、`internal/plugin/plugin.go` 及对应测试；其余结论是
+明确的 superseded/defer/reject，不表示未审查。更新 lock 只能使用显式
+`python scripts/check_upstreams.py --accept grok-build`。

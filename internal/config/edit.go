@@ -483,6 +483,10 @@ func validateProvider(e ProviderEntry) error {
 		return fmt.Errorf("provider %q: base_url is required", e.Name)
 	case !providerHasAnyModel(e):
 		return fmt.Errorf("provider %q: model is required", e.Name)
+	case e.APIMode != "" && e.Kind != "openai":
+		return fmt.Errorf("provider %q: api_mode is only supported for kind=openai", e.Name)
+	case e.APIMode != "" && e.APIMode != "chat_completions" && e.APIMode != "responses":
+		return fmt.Errorf("provider %q: api_mode must be chat_completions or responses", e.Name)
 	}
 	return nil
 }

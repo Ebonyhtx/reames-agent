@@ -10,7 +10,7 @@ import { modeHasAutoApproveTools, modeWithAutoApproveTools, modeWithPlan, normal
 import type {
   BotSettingsView, DesktopStartupSettingsView, HistoryMessage, HistoryPage, HookConfigView,
   HooksSettingsView, MCPServerInput, MemorySuggestion, Mode, NetworkView, PluginInstallOptions,
-  PluginOperationView, PluginView, ProjectNode, PromptHistoryEntry, ProviderPresetView, ProviderView, ServerView,
+  PluginOperationView, PluginView, ProjectNode, PromptHistoryEntry, ProviderModelOverrideView, ProviderPresetView, ProviderView, ServerView,
   SessionMeta, SettingsView, SkillRootView, SkillSuggestion, SkillView, TabMeta, ToolApprovalMode,
   UpdateProgress, WireEvent,
 } from "./types";
@@ -113,6 +113,7 @@ function mockProviderTemplate(p: Pick<ProviderView, "name" | "kind" | "baseUrl" 
     added: true,
     kind: p.kind,
     baseUrl: p.baseUrl,
+    apiMode: p.apiMode ?? "",
     modelsUrl: p.modelsUrl ?? "",
     models: p.models,
     visionModels: p.visionModels ?? [],
@@ -133,11 +134,17 @@ function mockProviderTemplate(p: Pick<ProviderView, "name" | "kind" | "baseUrl" 
   };
 }
 
-function mockPreset(id: string, label: string, description: string, keyEnv: string, provider: ProviderView): MockProviderPresetTemplate {
-  return { id, label, description, keyEnv, provider };
+function mockPreset(id: string, label: string, _description: string, keyEnv: string, provider: ProviderView): MockProviderPresetTemplate {
+  // The browser-only mock keeps the real labels and provider contracts, while
+  // deriving compact copy instead of bundling every production description.
+  return { id, label, description: `${label} provider preset.`, keyEnv, provider };
 }
 
 const mockKimiAPIModels = ["kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6", "kimi-k2.5"];
+const mockOpenAI56Models = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
+const mockOpenAIModels = [...mockOpenAI56Models, "gpt-5.4"];
+const mockOpenAIBaseEfforts = ["none", "low", "medium", "high", "xhigh"];
+const mockOpenAI56Efforts = [...mockOpenAIBaseEfforts, "max"];
 const mockLongCatModels = ["LongCat-2.0"];
 const mockMiMoV25Models = ["mimo-v2.5-pro", "mimo-v2.5"];
 const mockMiniMaxModels = ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"];
@@ -156,7 +163,18 @@ const mockGMIModels = ["zai-org/GLM-5.2-FP8", "deepseek-ai/DeepSeek-V4-Pro", "de
 const mockVercelModels = ["anthropic/claude-sonnet-4.6", "anthropic/claude-opus-4.8", "openai/gpt-5.4", "openai/gpt-5.4-pro", "moonshotai/kimi-k2.7-code", "zai/glm-5.2", "deepseek/deepseek-v4-pro"];
 const mockOllamaCloudModels = ["glm-5.2", "kimi-k2.7-code", "deepseek-v4-pro", "deepseek-v4-flash", "minimax-m3", "nemotron-3-nano:30b", "qwen3-coder-next"];
 
+function mockModelOverride(model: string, supportedEfforts: string[], defaultEffort: string, reasoningProtocol = "", thinking?: string): ProviderModelOverrideView {
+  return { model, reasoningProtocol, supportedEfforts, defaultEffort, ...(thinking === undefined ? {} : { thinking }) };
+}
+
+const mockOpenAIOverrides = [
+  ...mockOpenAI56Models.map((model) => mockModelOverride(model, mockOpenAI56Efforts, "medium")),
+  mockModelOverride("gpt-5.4", mockOpenAIBaseEfforts, "none"),
+];
+
 const mockProviderPresetTemplates: MockProviderPresetTemplate[] = [
+  mockPreset("openai-official", "OpenAI", "First-party OpenAI Responses API for GPT coding models.", "OPENAI_API_KEY", mockProviderTemplate({ name: "openai", kind: "openai", baseUrl: "https://api.openai.com/v1", apiMode: "responses", modelsUrl: "https://api.openai.com/v1/models", models: mockOpenAIModels, visionModels: mockOpenAIModels, default: "gpt-5.6-sol", apiKeyEnv: "OPENAI_API_KEY", contextWindow: 1050000, reasoningProtocol: "openai", supportedEfforts: mockOpenAIBaseEfforts, defaultEffort: "medium", modelOverrides: mockOpenAIOverrides })),
+  mockPreset("anthropic-official", "Anthropic", "First-party Anthropic Messages API for Claude coding models.", "ANTHROPIC_API_KEY", mockProviderTemplate({ name: "anthropic", kind: "anthropic", baseUrl: "https://api.anthropic.com", models: ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5"], visionModels: ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5"], default: "claude-sonnet-4-6", apiKeyEnv: "ANTHROPIC_API_KEY", contextWindow: 200000, thinking: "adaptive", supportedEfforts: ["low", "medium", "high"], defaultEffort: "high", modelOverrides: [mockModelOverride("claude-opus-4-8", ["low", "medium", "high", "xhigh", "max"], "high"), mockModelOverride("claude-haiku-4-5", [], "", "none", "")] })),
   mockPreset("longcat-openai", "LongCat OpenAI", "LongCat Platform OpenAI-compatible endpoint for LongCat-2.0.", "LONGCAT_API_KEY", mockProviderTemplate({ name: "longcat-openai", kind: "openai", baseUrl: "https://api.longcat.chat/openai/v1", modelsUrl: "https://api.longcat.chat/openai/v1/models", models: mockLongCatModels, default: "LongCat-2.0", apiKeyEnv: "LONGCAT_API_KEY", contextWindow: 131072, thinking: "enabled", supportedEfforts: ["enabled", "disabled"], defaultEffort: "enabled" })),
   mockPreset("longcat-anthropic", "LongCat Anthropic", "LongCat Platform Anthropic-compatible Messages endpoint for LongCat-2.0.", "LONGCAT_API_KEY", mockProviderTemplate({ name: "longcat-anthropic", kind: "anthropic", baseUrl: "https://api.longcat.chat/anthropic", modelsUrl: "https://api.longcat.chat/anthropic/v1/models", models: mockLongCatModels, default: "LongCat-2.0", apiKeyEnv: "LONGCAT_API_KEY", authHeader: true, contextWindow: 131072, thinking: "enabled", supportedEfforts: ["enabled", "disabled"], defaultEffort: "enabled" })),
   mockPreset("kimi-cn", "Kimi CN API", "Moonshot Kimi China OpenAI-compatible API.", "KIMI_API_KEY", mockProviderTemplate({ name: "kimi-cn", kind: "openai", baseUrl: "https://api.moonshot.cn/v1", models: mockKimiAPIModels, visionModels: mockKimiAPIModels, default: "kimi-k2.7-code", apiKeyEnv: "KIMI_API_KEY", balanceUrl: "https://api.moonshot.cn/v1/users/me/balance", contextWindow: 262144, reasoningProtocol: "none" })),
@@ -218,11 +236,12 @@ function mockProviderPresetViews(): ProviderPresetView[] {
 }
 
 function mockProviderPresetDisplayRank(id: string): number {
-  if (id === "glm-cn" || id === "zai-global" || id.startsWith("glm-coding-plan-") || id.startsWith("zai-coding-plan-")) return 0;
-  if (id.startsWith("longcat-")) return 1;
-  if (id.startsWith("kimi-")) return 2;
-  if (id.startsWith("minimax-")) return 3;
-  return 4;
+  if (id === "openai-official" || id === "anthropic-official") return 0;
+  if (id === "glm-cn" || id === "zai-global" || id.startsWith("glm-coding-plan-") || id.startsWith("zai-coding-plan-")) return 1;
+  if (id.startsWith("longcat-")) return 2;
+  if (id.startsWith("kimi-")) return 3;
+  if (id.startsWith("minimax-")) return 4;
+  return 5;
 }
 
 function cloneMockProviderTemplate(id: string, key: string): ProviderView | undefined {

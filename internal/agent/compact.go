@@ -159,7 +159,15 @@ func estimateMessagesTokens(msgs []provider.Message) int {
 	for _, m := range msgs {
 		total += 4 // chat-message framing overhead
 		total += estimateTextTokens(m.Content)
-		total += estimateTextTokens(m.ReasoningContent)
+		if len(m.ReasoningBlocks) == 0 {
+			total += estimateTextTokens(m.ReasoningContent)
+		} else {
+			for _, block := range m.ReasoningBlocks {
+				total += estimateTextTokens(block.Text)
+				total += estimateTextTokens(block.Signature)
+				total += estimateTextTokens(block.Data)
+			}
+		}
 		total += estimateTextTokens(m.Name)
 		total += estimateTextTokens(m.ToolCallID)
 		for _, tc := range m.ToolCalls {

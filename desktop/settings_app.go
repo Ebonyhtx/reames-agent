@@ -32,6 +32,7 @@ type ProviderView struct {
 	Added             bool                        `json:"added"`
 	Kind              string                      `json:"kind"`
 	BaseURL           string                      `json:"baseUrl"`
+	APIMode           string                      `json:"apiMode"`
 	ChatURL           string                      `json:"chatUrl"`
 	Models            []string                    `json:"models"`
 	VisionModels      []string                    `json:"visionModels"`
@@ -84,7 +85,7 @@ const (
 type ProviderModelOverrideView struct {
 	Model             string   `json:"model"`
 	ReasoningProtocol string   `json:"reasoningProtocol"`
-	Thinking          string   `json:"thinking"`
+	Thinking          *string  `json:"thinking"`
 	SupportedEfforts  []string `json:"supportedEfforts"`
 	DefaultEffort     string   `json:"defaultEffort"`
 	Vision            *bool    `json:"vision"`
@@ -344,6 +345,7 @@ func providerModelOverridesForView(overrides map[string]config.ProviderModelOver
 		out = append(out, ProviderModelOverrideView{
 			Model:             model,
 			ReasoningProtocol: ov.ReasoningProtocol,
+			Thinking:          cloneStringPointer(ov.Thinking),
 			SupportedEfforts:  nonNil(ov.SupportedEfforts),
 			DefaultEffort:     ov.DefaultEffort,
 			Vision:            ov.Vision,
@@ -368,11 +370,12 @@ func providerModelOverridesForSave(overrides []ProviderModelOverrideView, models
 		}
 		ov := config.ProviderModelOverride{
 			ReasoningProtocol: strings.TrimSpace(item.ReasoningProtocol),
+			Thinking:          cloneStringPointer(item.Thinking),
 			SupportedEfforts:  nonNil(item.SupportedEfforts),
 			DefaultEffort:     strings.TrimSpace(item.DefaultEffort),
 			Vision:            item.Vision,
 		}
-		if strings.TrimSpace(ov.ReasoningProtocol) == "" && len(ov.SupportedEfforts) == 0 && strings.TrimSpace(ov.DefaultEffort) == "" && ov.Vision == nil {
+		if strings.TrimSpace(ov.ReasoningProtocol) == "" && ov.Thinking == nil && len(ov.SupportedEfforts) == 0 && strings.TrimSpace(ov.DefaultEffort) == "" && ov.Vision == nil {
 			continue
 		}
 		out[model] = ov
@@ -381,6 +384,14 @@ func providerModelOverridesForSave(overrides []ProviderModelOverrideView, models
 		return nil
 	}
 	return out
+}
+
+func cloneStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 func providerRemovalFallbackRef(c *config.Config, name string) string {
@@ -485,7 +496,7 @@ func providerViewFromEntryForRootWithResolver(p config.ProviderEntry, builtIn, a
 	key := resolver.ResolveGlobalFirst(p.APIKeyEnv)
 	requiresKey := p.RequiresAPIKey()
 	return ProviderView{
-		Name: p.Name, BuiltIn: builtIn, Added: added, Kind: p.Kind, BaseURL: p.BaseURL, ChatURL: p.ChatURL,
+		Name: p.Name, BuiltIn: builtIn, Added: added, Kind: p.Kind, BaseURL: p.BaseURL, APIMode: p.APIMode, ChatURL: p.ChatURL,
 		Models: nonNil(models), VisionModels: nonNil(providerVisionModels(models, visionModels)), VisionModelsSet: visionModelsSet, ModelsURL: p.ModelsURL, Default: p.DefaultModel(),
 		APIKeyEnv:         p.APIKeyEnv,
 		Headers:           nonNilStringMap(p.Headers),
@@ -680,6 +691,7 @@ func providerEntryUsesPresetID(existing config.ProviderEntry, presetID string) b
 func providerEntryCoreMatches(existing, preset config.ProviderEntry) bool {
 	return strings.EqualFold(strings.TrimSpace(existing.Kind), strings.TrimSpace(preset.Kind)) &&
 		normalizeProviderURL(existing.BaseURL) == normalizeProviderURL(preset.BaseURL) &&
+		strings.TrimSpace(existing.APIMode) == strings.TrimSpace(preset.APIMode) &&
 		strings.TrimSpace(existing.ChatURL) == strings.TrimSpace(preset.ChatURL) &&
 		strings.TrimSpace(existing.APIKeyEnv) == strings.TrimSpace(preset.APIKeyEnv) &&
 		existing.AuthHeader == preset.AuthHeader
@@ -1933,6 +1945,10 @@ func saveProviderConfig(c *config.Config, p ProviderView) error {
 	e.Name = p.Name
 	e.Kind = p.Kind
 	e.BaseURL = p.BaseURL
+	e.APIMode = ""
+	if strings.EqualFold(strings.TrimSpace(p.Kind), "openai") {
+		e.APIMode = strings.TrimSpace(p.APIMode)
+	}
 	e.ChatURL = strings.TrimSpace(p.ChatURL)
 	e.ModelsURL = strings.TrimSpace(p.ModelsURL)
 	e.APIKeyEnv = p.APIKeyEnv

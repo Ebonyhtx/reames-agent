@@ -258,7 +258,9 @@ Custom provider** for proxies, aggregators, or self-hosted services that speak
 the OpenAI-compatible chat API or Anthropic-compatible Messages API.
 
 For common providers, choose **Add model service -> Recommended preset** instead.
-Reames Agent can prefill editable custom-provider entries for Kimi CN, Kimi Global,
+The first-party **OpenAI** preset uses the native Responses API, while the
+first-party **Anthropic** preset uses the native Messages API. Reames Agent can
+also prefill editable custom-provider entries for Kimi CN, Kimi Global,
 Kimi Coding Plan, MiMo API, MiMo Anthropic, MiMo Token Plan CN/SGP/AMS and their
 Anthropic-compatible variants, MiniMax CN/Global API, MiniMax CN/Global
 Anthropic, GLM CN, Z.AI Global, GLM/Z.AI Coding Plan OpenAI-compatible and
@@ -279,8 +281,17 @@ max-effort support, and OpenCode Go per-model reasoning overrides. After adding
 a preset, open its provider card if you need to change models, headers,
 endpoint, or compatibility settings.
 
-Fill **API address** with the provider endpoint that should receive the standard
-chat path. In this mode Reames Agent previews and sends chat requests to:
+For an OpenAI-kind provider, choose the wire API explicitly. **Chat Completions**
+is the compatibility default for existing gateways. **Responses API** uses the
+native item/event protocol and sends requests to `<API address>/responses`; it is
+the correct mode for the first-party OpenAI preset and GPT reasoning/tool/image
+support. For stateless tool continuations it also preserves the provider-issued
+encrypted reasoning item locally and sends it back to OpenAI; that opaque payload
+is never shown in the transcript or Markdown export. Reames Agent never switches
+this field from a model name.
+
+Fill **API address** with the provider endpoint. In Chat Completions mode Reames
+Agent previews and sends requests to:
 
 ```text
 <API address>/chat/completions
@@ -311,10 +322,11 @@ For Anthropic-compatible services, such as some coding-plan endpoints, choose
 
 | Field | What it controls | When to change it |
 | --- | --- | --- |
+| OpenAI wire API / `api_mode` | Selects `chat_completions` or `responses` for `kind = "openai"`. | Use Responses only when the endpoint implements the OpenAI Responses API. Existing OpenAI-compatible gateways normally stay on Chat Completions. |
 | `api_key_env` | The environment-variable name used for this provider's API key. Desktop-saved key values are stored in Reames Agent home `.env` under this name; the TOML config stores only the name. | Change it when several providers need distinct keys, or leave it blank for a service that does not require an API key. |
 | `models_url` | The URL used only for model discovery. Chat requests still use the API address or Full URL above. | Set it when `/models` or `/v1/models` is not where the gateway exposes its model list. |
 | Extra request headers | Static HTTP headers, one `Header: value` per line. | Use for gateways such as OpenRouter that require `HTTP-Referer`, `X-Title`, or similar site headers. Keep bearer/API keys in the key field instead of duplicating them here. |
-| Extra request body | A JSON object merged into the top-level chat request body. | Use only for provider-specific flags such as `{"enable_thinking": true}`. Reames Agent still owns core fields such as `model`, `messages`, `tools`, `stream`, and `thinking`, and null values are rejected. |
+| Extra request body | A JSON object merged into the selected OpenAI request body. | Use only for provider-specific flags such as `{"enable_thinking": true}`. Reames Agent still owns core Chat/Responses fields such as `model`, `messages`/`input`, `tools`, `stream`, `reasoning`, and `thinking`, and null values are rejected. |
 | Authorization: Bearer | For Anthropic-compatible providers, sends the saved API key as `Authorization: Bearer <key>` instead of `x-api-key`. | Enable it only when the gateway documents Bearer auth, such as MiniMax Global or Vercel AI Gateway. |
 | Model capability mode | Which reasoning request protocol Reames Agent should use for this provider. | Keep **Auto-detect** unless the gateway is misdetected or the model docs require a specific reasoning format. |
 | Thinking override | Provider-specific override for `thinking.type`. | Keep **Auto** unless the backend documents `enabled`, `disabled`, or `adaptive`. Unsupported values can make some OpenAI-compatible gateways reject the request. |

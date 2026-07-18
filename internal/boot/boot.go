@@ -1819,6 +1819,7 @@ func NewProviderWithProxy(e *config.ProviderEntry, proxy netclient.ProxySpec) (p
 		Extra: map[string]any{
 			"api_key_env":        e.APIKeyEnv,
 			"api_key_source":     e.APIKeySourceLabel(),
+			"api_mode":           e.APIMode,
 			"thinking":           e.Thinking,
 			"effort":             config.EffectiveEffort(e),
 			"reasoning_protocol": config.ReasoningProtocolForEntry(e),

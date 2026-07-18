@@ -4,6 +4,8 @@ import "testing"
 
 func TestCuratedProviderPresetsCoverRequestedProviders(t *testing.T) {
 	wantIDs := []string{
+		"openai-official",
+		"anthropic-official",
 		"longcat-openai",
 		"longcat-anthropic",
 		"kimi-cn",
@@ -77,6 +79,8 @@ func TestCuratedProviderPresetsCoverRequestedProviders(t *testing.T) {
 
 func TestCuratedProviderPresetsDisplayOrder(t *testing.T) {
 	wantPrefix := []string{
+		"openai-official",
+		"anthropic-official",
 		"glm-cn",
 		"zai-global",
 		"glm-coding-plan-cn",
@@ -101,6 +105,56 @@ func TestCuratedProviderPresetsDisplayOrder(t *testing.T) {
 		if got[i].ID != want {
 			t.Fatalf("preset[%d] = %q, want %q", i, got[i].ID, want)
 		}
+	}
+}
+
+func TestOfficialStrategicProviderPresetsUseNativeProtocols(t *testing.T) {
+	openAI, ok := CuratedProviderPreset("openai-official")
+	if !ok || len(openAI.Entries) != 1 {
+		t.Fatalf("OpenAI preset = %+v, ok=%v", openAI, ok)
+	}
+	openAIEntry := openAI.Entries[0]
+	if openAIEntry.Kind != "openai" || openAIEntry.APIMode != "responses" || openAIEntry.BaseURL != "https://api.openai.com/v1" {
+		t.Fatalf("OpenAI native entry = %+v", openAIEntry)
+	}
+	if openAIEntry.Default != "gpt-5.6-sol" || openAIEntry.ContextWindow != 1_050_000 || !openAIEntry.Vision || len(openAIEntry.SupportedEfforts) == 0 {
+		t.Fatalf("OpenAI capabilities = %+v", openAIEntry)
+	}
+	if !containsString(openAIEntry.Models, "gpt-5.6-sol") || !containsString(openAIEntry.Models, "gpt-5.6-terra") || !containsString(openAIEntry.Models, "gpt-5.6-luna") || containsString(openAIEntry.SupportedEfforts, "ultra") || containsString(openAIEntry.SupportedEfforts, "max") {
+		t.Fatalf("provider-wide OpenAI efforts must be the model intersection, got %v", openAIEntry.SupportedEfforts)
+	}
+	openAIConfig := &Config{Providers: []ProviderEntry{openAIEntry}}
+	sol, ok := openAIConfig.ResolveModel("openai/gpt-5.6-sol")
+	if !ok || sol.DefaultEffort != "medium" || !containsString(sol.SupportedEfforts, "max") {
+		t.Fatalf("GPT-5.6 Sol efforts = %+v, ok=%v", sol, ok)
+	}
+	legacy, ok := openAIConfig.ResolveModel("openai/gpt-5.4")
+	if !ok || legacy.DefaultEffort != "none" || containsString(legacy.SupportedEfforts, "max") {
+		t.Fatalf("GPT-5.4 efforts = %+v, ok=%v", legacy, ok)
+	}
+
+	anthropicPreset, ok := CuratedProviderPreset("anthropic-official")
+	if !ok || len(anthropicPreset.Entries) != 1 {
+		t.Fatalf("Anthropic preset = %+v, ok=%v", anthropicPreset, ok)
+	}
+	anthropicEntry := anthropicPreset.Entries[0]
+	if anthropicEntry.Kind != "anthropic" || anthropicEntry.BaseURL != "https://api.anthropic.com" || anthropicEntry.Thinking != "adaptive" {
+		t.Fatalf("Anthropic native entry = %+v", anthropicEntry)
+	}
+	if anthropicEntry.Default != "claude-sonnet-4-6" || !anthropicEntry.Vision {
+		t.Fatalf("Anthropic capabilities = %+v", anthropicEntry)
+	}
+	if !containsString(anthropicEntry.Models, "claude-haiku-4-5") || containsString(anthropicEntry.SupportedEfforts, "xhigh") {
+		t.Fatalf("Anthropic adaptive preset overclaims mixed model capabilities: %+v", anthropicEntry)
+	}
+	anthropicConfig := &Config{Providers: []ProviderEntry{anthropicEntry}}
+	opus, ok := anthropicConfig.ResolveModel("anthropic/claude-opus-4-8")
+	if !ok || opus.DefaultEffort != "high" || !containsString(opus.SupportedEfforts, "xhigh") || !containsString(opus.SupportedEfforts, "max") {
+		t.Fatalf("Claude Opus 4.8 efforts = %+v, ok=%v", opus, ok)
+	}
+	haiku, ok := anthropicConfig.ResolveModel("anthropic/claude-haiku-4-5")
+	if !ok || haiku.Thinking != "" || EffortCapabilityForEntry(haiku).Supported {
+		t.Fatalf("Claude Haiku 4.5 override = %+v effort=%+v ok=%v", haiku, EffortCapabilityForEntry(haiku), ok)
 	}
 }
 
@@ -162,6 +216,21 @@ func TestCuratedProviderPresetReturnsDeepCopy(t *testing.T) {
 	}
 	if got := fresh.Entries[0].PresetID; got != "minimax-cn-api" {
 		t.Fatalf("fresh minimax preset_id = %q, want minimax-cn-api", got)
+	}
+
+	anthropic, ok := CuratedProviderPreset("anthropic-official")
+	if !ok {
+		t.Fatal("missing anthropic-official preset")
+	}
+	haiku := anthropic.Entries[0].ModelOverrides["claude-haiku-4-5"]
+	if haiku.Thinking == nil {
+		t.Fatal("Haiku thinking override missing")
+	}
+	*haiku.Thinking = "mutated"
+	freshAnthropic, _ := CuratedProviderPreset("anthropic-official")
+	freshHaiku := freshAnthropic.Entries[0].ModelOverrides["claude-haiku-4-5"]
+	if freshHaiku.Thinking == nil || *freshHaiku.Thinking != "" {
+		t.Fatalf("fresh Haiku thinking override = %+v, want explicit empty", freshHaiku.Thinking)
 	}
 }
 

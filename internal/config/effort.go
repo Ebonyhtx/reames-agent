@@ -257,11 +257,25 @@ func normalizeProviderEffortFields(e *ProviderEntry) {
 		return
 	}
 	e.Headers = normalizedProviderHeaders(e.Headers)
+	e.APIMode = normalizeProviderAPIMode(e.APIMode)
 	e.Effort = normalizeStoredEffort(e.Effort)
 	e.ReasoningProtocol = normalizeReasoningProtocol(e.ReasoningProtocol)
 	e.DefaultEffort = normalizeEffortLevel(e.DefaultEffort)
 	e.SupportedEfforts = normalizedSupportedEfforts(e)
 	e.ModelOverrides = normalizedModelOverrides(e.ModelOverrides)
+}
+
+func normalizeProviderAPIMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "auto":
+		return ""
+	case "chat", "completions", "chat_completions":
+		return "chat_completions"
+	case "responses":
+		return "responses"
+	default:
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
 }
 
 func normalizeStoredEffort(raw string) string {
@@ -449,12 +463,16 @@ func normalizedModelOverrides(overrides map[string]ProviderModelOverride) map[st
 			continue
 		}
 		ov.ReasoningProtocol = normalizeReasoningProtocol(ov.ReasoningProtocol)
+		if ov.Thinking != nil {
+			thinking := strings.ToLower(strings.TrimSpace(*ov.Thinking))
+			ov.Thinking = &thinking
+		}
 		ov.SupportedEfforts = normalizedEffortLevels(ov.SupportedEfforts)
 		ov.DefaultEffort = normalizeEffortLevel(ov.DefaultEffort)
 		if ov.DefaultEffort != "" && !containsString(ov.SupportedEfforts, ov.DefaultEffort) {
 			ov.DefaultEffort = ""
 		}
-		if ov.ReasoningProtocol == "" && len(ov.SupportedEfforts) == 0 && ov.DefaultEffort == "" && ov.Vision == nil {
+		if ov.ReasoningProtocol == "" && ov.Thinking == nil && len(ov.SupportedEfforts) == 0 && ov.DefaultEffort == "" && ov.Vision == nil {
 			continue
 		}
 		out[model] = ov

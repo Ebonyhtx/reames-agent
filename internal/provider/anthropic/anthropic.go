@@ -12,7 +12,8 @@
 //     request. Some Anthropic-compatible gateways such as LongCat instead use
 //     thinking.type enabled|disabled; those values are passed through without
 //     Anthropic's display/output_config fields. Off by default because the field is
-//     provider-specific. (redacted_thinking blocks are not yet captured/replayed.)
+//     provider-specific. Signed thinking and opaque redacted_thinking blocks are
+//     captured in original order and replayed without exposing redacted data.
 //   - No temperature/top_p. Current Claude models (Opus 4.8/4.7) reject sampling
 //     parameters with a 400; Anthropic steers behavior via prompting instead.
 package anthropic
@@ -23,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -76,6 +78,22 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	thinking = strings.ToLower(strings.TrimSpace(thinking))
 	effort, _ := cfg.Extra["effort"].(string)
 	effort = strings.ToLower(strings.TrimSpace(effort))
+	switch thinking {
+	case "", "adaptive":
+		switch effort {
+		case "", "low", "medium", "high", "xhigh", "max":
+		default:
+			return nil, fmt.Errorf("anthropic: provider %q: effort must be low, medium, high, xhigh, or max", name)
+		}
+	case "enabled", "disabled":
+		switch effort {
+		case "", "enabled", "disabled":
+		default:
+			return nil, fmt.Errorf("anthropic: provider %q uses gateway thinking; effort must be enabled or disabled", name)
+		}
+	default:
+		return nil, fmt.Errorf("anthropic: provider %q: thinking must be adaptive, enabled, or disabled", name)
+	}
 	vision, _ := cfg.Extra["vision"].(bool)
 	headers, _ := cfg.Extra["headers"].(map[string]string)
 	authHeader, _ := cfg.Extra["auth_header"].(bool)
@@ -137,6 +155,28 @@ type client struct {
 	http        *http.Client
 	idleTimeout time.Duration // SSE stall watchdog window; defaultStreamIdleTimeout unless a test overrides
 	authed      atomic.Bool   // a request has succeeded — gate transient-401 retry
+}
+
+// StreamError preserves Anthropic's structured SSE error type.
+type StreamError struct {
+	Type    string
+	Message string
+}
+
+func (e *StreamError) Error() string {
+	if e == nil {
+		return "anthropic: stream error"
+	}
+	if e.Type != "" && e.Message != "" {
+		return fmt.Sprintf("anthropic: %s: %s", e.Type, e.Message)
+	}
+	if e.Message != "" {
+		return "anthropic: " + e.Message
+	}
+	if e.Type != "" {
+		return "anthropic: " + e.Type
+	}
+	return "anthropic: stream error"
 }
 
 func (c *client) Name() string { return c.name }
@@ -279,8 +319,22 @@ func (c *client) buildRequest(req provider.Request) anthRequest {
 			// the tool_use it led to). Only when thinking is on and we have both the
 			// text and its signature — reasoning without a signature (e.g. from an
 			// openai-compatible provider) can't be replayed as a thinking block.
-			if c.thinking == "adaptive" && m.ReasoningContent != "" && m.ReasoningSignature != "" {
-				blocks = append(blocks, contentBlock{Type: "thinking", Thinking: m.ReasoningContent, Signature: m.ReasoningSignature})
+			if c.thinking == "adaptive" {
+				for _, block := range m.ReasoningBlocks {
+					switch block.Type {
+					case "thinking":
+						if block.Text != "" && block.Signature != "" {
+							blocks = append(blocks, contentBlock{Type: "thinking", Thinking: block.Text, Signature: block.Signature})
+						}
+					case "redacted_thinking":
+						if block.Data != "" {
+							blocks = append(blocks, contentBlock{Type: "redacted_thinking", Data: block.Data})
+						}
+					}
+				}
+				if len(blocks) == 0 && m.ReasoningContent != "" && m.ReasoningSignature != "" {
+					blocks = append(blocks, contentBlock{Type: "thinking", Thinking: m.ReasoningContent, Signature: m.ReasoningSignature})
+				}
 			}
 			if m.Content != "" {
 				blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
@@ -342,15 +396,18 @@ func (c *client) buildRequest(req provider.Request) anthRequest {
 	switch c.thinking {
 	case "adaptive":
 		r.Thinking = &thinkingConfig{Type: "adaptive", Display: "summarized"}
-		if c.effort != "" {
-			r.OutputConfig = &outputConfig{Effort: c.effort}
-		}
 	case "enabled", "disabled":
 		t := c.thinking
 		if c.effort == "enabled" || c.effort == "disabled" {
 			t = c.effort
 		}
 		r.Thinking = &thinkingConfig{Type: t}
+	}
+	// Anthropic effort is independent of extended thinking. Keep it available
+	// for models that support output_config even when thinking display is off;
+	// enabled/disabled compatible gateways use their own binary vocabulary.
+	if c.effort != "" && c.thinking != "enabled" && c.thinking != "disabled" {
+		r.OutputConfig = &outputConfig{Effort: c.effort}
 	}
 	return r
 }
@@ -407,9 +464,12 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	}
 
 	tools := map[int]*provider.ToolCall{} // tool_use blocks, keyed by content index
+	reasoningBlocks := map[int]*provider.ReasoningBlock{}
 	var inTok, outTok, cacheCreate, cacheRead int
 	var stopReason string
 	haveUsage := false
+	sawMessageStop := false
+	emittedModelOutput := false
 	mergeUsage := func(usage *wireUsage) {
 		if usage == nil {
 			return
@@ -457,12 +517,21 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 				mergeUsage(ev.Message.Usage)
 			}
 		case "content_block_start":
-			if ev.ContentBlock != nil && ev.ContentBlock.Type == "tool_use" {
+			if ev.ContentBlock == nil {
+				continue
+			}
+			switch ev.ContentBlock.Type {
+			case "tool_use":
 				tc := &provider.ToolCall{ID: ev.ContentBlock.ID, Name: ev.ContentBlock.Name}
 				tools[ev.Index] = tc
+				emittedModelOutput = true
 				if !send(provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: tc.ID, Name: tc.Name}}) {
 					return
 				}
+			case "thinking":
+				reasoningBlocks[ev.Index] = &provider.ReasoningBlock{Type: "thinking", Text: ev.ContentBlock.Thinking, Signature: ev.ContentBlock.Signature}
+			case "redacted_thinking":
+				reasoningBlocks[ev.Index] = &provider.ReasoningBlock{Type: "redacted_thinking", Data: ev.ContentBlock.Data}
 			}
 		case "content_block_delta":
 			if ev.Delta == nil {
@@ -471,18 +540,26 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			switch ev.Delta.Type {
 			case "text_delta":
 				if ev.Delta.Text != "" {
+					emittedModelOutput = true
 					if !send(provider.Chunk{Type: provider.ChunkText, Text: ev.Delta.Text}) {
 						return
 					}
 				}
 			case "thinking_delta":
 				if ev.Delta.Thinking != "" {
+					emittedModelOutput = true
+					if block := reasoningBlocks[ev.Index]; block != nil {
+						block.Text += ev.Delta.Thinking
+					}
 					if !send(provider.Chunk{Type: provider.ChunkReasoning, Text: ev.Delta.Thinking}) {
 						return
 					}
 				}
 			case "signature_delta":
 				if ev.Delta.Signature != "" {
+					if block := reasoningBlocks[ev.Index]; block != nil {
+						block.Signature += ev.Delta.Signature
+					}
 					if !send(provider.Chunk{Type: provider.ChunkReasoning, Signature: ev.Delta.Signature}) {
 						return
 					}
@@ -499,19 +576,29 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 				}
 				delete(tools, ev.Index)
 			}
+			if block := reasoningBlocks[ev.Index]; block != nil {
+				copyBlock := *block
+				if !send(provider.Chunk{Type: provider.ChunkReasoning, ReasoningBlock: &copyBlock}) {
+					return
+				}
+				delete(reasoningBlocks, ev.Index)
+			}
 		case "message_delta":
 			if ev.Delta != nil && ev.Delta.StopReason != "" {
 				stopReason = ev.Delta.StopReason
 			}
 			mergeUsage(ev.Usage)
 		case "message_stop":
-			// Stream complete; fall through to finalize below.
+			sawMessageStop = true
 		case "error":
-			msg := "stream error"
-			if ev.Error != nil && ev.Error.Message != "" {
-				msg = ev.Error.Message
+			streamErr := &StreamError{Message: "stream error"}
+			if ev.Error != nil {
+				streamErr.Type = ev.Error.Type
+				if ev.Error.Message != "" {
+					streamErr.Message = ev.Error.Message
+				}
 			}
-			send(provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: %s", c.name, msg)})
+			send(provider.Chunk{Type: provider.ChunkError, Err: streamErr})
 			return
 		}
 	}
@@ -525,6 +612,14 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	}
 	if err := scanner.Err(); err != nil {
 		send(provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: read stream: %w", c.name, err)})
+		return
+	}
+	if !sawMessageStop || len(tools) > 0 || len(reasoningBlocks) > 0 {
+		err := fmt.Errorf("%s: stream ended before message_stop: %w", c.name, io.ErrUnexpectedEOF)
+		if emittedModelOutput {
+			err = &provider.StreamInterruptedError{Err: err}
+		}
+		send(provider.Chunk{Type: provider.ChunkError, Err: err})
 		return
 	}
 
@@ -619,6 +714,7 @@ type contentBlock struct {
 	Text         string          `json:"text,omitempty"`        // text
 	Thinking     string          `json:"thinking,omitempty"`    // thinking
 	Signature    string          `json:"signature,omitempty"`   // thinking
+	Data         string          `json:"data,omitempty"`        // redacted_thinking (opaque replay only)
 	ID           string          `json:"id,omitempty"`          // tool_use
 	Name         string          `json:"name,omitempty"`        // tool_use
 	Input        json.RawMessage `json:"input,omitempty"`       // tool_use
@@ -649,9 +745,12 @@ type streamEvent struct {
 		Usage *wireUsage `json:"usage"`
 	} `json:"message"`
 	ContentBlock *struct {
-		Type string `json:"type"`
-		ID   string `json:"id"`
-		Name string `json:"name"`
+		Type      string `json:"type"`
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		Thinking  string `json:"thinking"`
+		Signature string `json:"signature"`
+		Data      string `json:"data"`
 	} `json:"content_block"`
 	Delta *struct {
 		Type        string `json:"type"`         // text_delta | thinking_delta | signature_delta | input_json_delta

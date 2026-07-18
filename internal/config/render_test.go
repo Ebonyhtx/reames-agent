@@ -884,6 +884,7 @@ func TestRenderTOMLRoundTripsVisionModels(t *testing.T) {
 }
 
 func TestRenderTOMLRoundTripsProviderHeadersAndModelOverrides(t *testing.T) {
+	thinkingOff := ""
 	orig := Default()
 	orig.Providers = []ProviderEntry{{
 		Name:      "gateway",
@@ -909,6 +910,7 @@ func TestRenderTOMLRoundTripsProviderHeadersAndModelOverrides(t *testing.T) {
 				ReasoningProtocol: ReasoningProtocolDeepSeek,
 				SupportedEfforts:  []string{"high", "max"},
 				DefaultEffort:     "high",
+				Thinking:          &thinkingOff,
 				Vision:            boolPtr(false),
 			},
 		},
@@ -950,7 +952,7 @@ func TestRenderTOMLRoundTripsProviderHeadersAndModelOverrides(t *testing.T) {
 		t.Fatalf("extra_body metadata after round trip = %+v", p.ExtraBody["metadata"])
 	}
 	ov := p.ModelOverrides["deepseek-v4-flash"]
-	if ov.ReasoningProtocol != ReasoningProtocolDeepSeek || !reflect.DeepEqual(ov.SupportedEfforts, []string{"high", "max"}) || ov.DefaultEffort != "high" || ov.Vision == nil || *ov.Vision {
+	if ov.ReasoningProtocol != ReasoningProtocolDeepSeek || ov.Thinking == nil || *ov.Thinking != "" || !reflect.DeepEqual(ov.SupportedEfforts, []string{"high", "max"}) || ov.DefaultEffort != "high" || ov.Vision == nil || *ov.Vision {
 		t.Fatalf("model override after round trip = %+v", ov)
 	}
 }

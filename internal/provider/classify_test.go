@@ -33,6 +33,38 @@ func TestClassifyContextOverflow(t *testing.T) {
 	}
 }
 
+func TestClassifyEmptyProviderResponseDoesNotCompact(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		body string
+	}{
+		{
+			name: "body advisory",
+			err:  errors.New("upstream failure"),
+			body: `{"error":{"message":"Provider returned an empty response despite retries. This may be due to very low max_tokens."}}`,
+		},
+		{
+			name: "wrapped error",
+			err:  errors.New("empty response stream; consider increasing max_tokens"),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ce := ClassifyError(tc.err, 500, tc.body)
+			if ce.Reason != FailServerError || !ce.Retryable || ce.ShouldCompact {
+				t.Fatalf("empty response: reason=%d retryable=%v compact=%v", ce.Reason, ce.Retryable, ce.ShouldCompact)
+			}
+		})
+	}
+}
+
+func TestClassifyMaxTokensOverflowStillCompacts(t *testing.T) {
+	ce := ClassifyError(errors.New("bad request"), 400, `{"error":{"message":"max_tokens: 65536 > context_window: 32768"}}`)
+	if ce.Reason != FailContextOverflow || !ce.ShouldCompact {
+		t.Fatalf("max_tokens overflow: reason=%d compact=%v", ce.Reason, ce.ShouldCompact)
+	}
+}
+
 func TestClassifyModelNotFound(t *testing.T) {
 	ce := ClassifyError(errors.New("not found"), 404, `{"error":{"message":"model_not_found"}}`)
 	if ce.Reason != FailModelNotFound || ce.Retryable {

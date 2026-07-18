@@ -3,6 +3,7 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -277,6 +278,62 @@ func TestReadStreamError(t *testing.T) {
 	if gotErr == nil || !strings.Contains(gotErr.Error(), "overloaded") {
 		t.Fatalf("expected an error chunk mentioning overloaded, got %v", gotErr)
 	}
+	var streamErr *StreamError
+	if !errors.As(gotErr, &streamErr) || streamErr.Type != "overloaded_error" {
+		t.Fatalf("error = %T %+v, want typed overloaded StreamError", gotErr, gotErr)
+	}
+}
+
+func TestReadStreamCleanEOFFailsClosed(t *testing.T) {
+	sse := `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}` + "\n\n"
+	c := &client{name: "anthropic"}
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(sse))}
+	ch := make(chan provider.Chunk)
+	go c.readStream(context.Background(), resp, ch)
+	var gotErr error
+	var done bool
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			gotErr = chunk.Err
+		}
+		if chunk.Type == provider.ChunkDone {
+			done = true
+		}
+	}
+	if done || gotErr == nil || !provider.IsStreamInterrupted(gotErr) || !errors.Is(gotErr, io.ErrUnexpectedEOF) {
+		t.Fatalf("done=%v err=%v, want interrupted unexpected EOF", done, gotErr)
+	}
+}
+
+func TestReadStreamPreservesRedactedThinkingBlock(t *testing.T) {
+	sse := `event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"opaque-token"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":1}}
+
+event: message_stop
+data: {"type":"message_stop"}
+`
+	c := &client{name: "anthropic"}
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(sse))}
+	ch := make(chan provider.Chunk)
+	go c.readStream(context.Background(), resp, ch)
+	var block *provider.ReasoningBlock
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+		if chunk.ReasoningBlock != nil {
+			block = chunk.ReasoningBlock
+		}
+	}
+	if block == nil || block.Type != "redacted_thinking" || block.Data != "opaque-token" || block.Text != "" {
+		t.Fatalf("redacted reasoning block = %+v", block)
+	}
 }
 
 // TestBuildRequestThinking checks that, with thinking enabled, the request carries
@@ -310,6 +367,35 @@ func TestBuildRequestThinking(t *testing.T) {
 	}
 }
 
+func TestBuildRequestReplaysOrderedReasoningBlocks(t *testing.T) {
+	c := &client{model: "claude-opus-4-8", thinking: "adaptive"}
+	r := c.buildRequest(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "continue"},
+		{
+			Role: provider.RoleAssistant,
+			ReasoningBlocks: []provider.ReasoningBlock{
+				{Type: "redacted_thinking", Data: "opaque-a"},
+				{Type: "thinking", Text: "visible", Signature: "sig-b"},
+			},
+			ToolCalls: []provider.ToolCall{{ID: "t1", Name: "read_file", Arguments: `{}`}},
+		},
+		{Role: provider.RoleTool, ToolCallID: "t1", Content: "ok"},
+	}})
+	blocks := r.Messages[1].Content
+	if len(blocks) != 3 {
+		t.Fatalf("assistant blocks = %+v", blocks)
+	}
+	if blocks[0].Type != "redacted_thinking" || blocks[0].Data != "opaque-a" {
+		t.Fatalf("redacted block = %+v", blocks[0])
+	}
+	if blocks[1].Type != "thinking" || blocks[1].Thinking != "visible" || blocks[1].Signature != "sig-b" {
+		t.Fatalf("thinking block = %+v", blocks[1])
+	}
+	if blocks[2].Type != "tool_use" {
+		t.Fatalf("tool block = %+v", blocks[2])
+	}
+}
+
 func TestBuildRequestThinkingEnabledGateway(t *testing.T) {
 	c := &client{model: "LongCat-2.0", thinking: "enabled", effort: "disabled"}
 	r := c.buildRequest(provider.Request{
@@ -328,6 +414,39 @@ func TestBuildRequestThinkingEnabledGateway(t *testing.T) {
 		if block.Type == "thinking" {
 			t.Fatalf("enabled/disabled gateway must not replay Anthropic signed thinking blocks: %+v", r.Messages[1])
 		}
+	}
+}
+
+func TestBuildRequestEffortIsIndependentOfThinking(t *testing.T) {
+	c := &client{model: "claude-opus-4-8", effort: "xhigh"}
+	r := c.buildRequest(provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "review"}}})
+	if r.Thinking != nil {
+		t.Fatalf("thinking = %+v, want omitted", r.Thinking)
+	}
+	if r.OutputConfig == nil || r.OutputConfig.Effort != "xhigh" {
+		t.Fatalf("output_config = %+v, want xhigh without thinking", r.OutputConfig)
+	}
+}
+
+func TestNewValidatesNativeAndGatewayThinkingControls(t *testing.T) {
+	base := provider.Config{Name: "claude", Model: "claude-opus-4-8", Extra: map[string]any{}}
+	base.Extra["thinking"] = "adaptive"
+	base.Extra["effort"] = "xhigh"
+	if _, err := New(base); err != nil {
+		t.Fatalf("native controls: %v", err)
+	}
+	base.Extra["effort"] = "ultracode"
+	if _, err := New(base); err == nil || !strings.Contains(err.Error(), "effort") {
+		t.Fatalf("invalid native effort error = %v", err)
+	}
+	base.Extra["thinking"] = "enabled"
+	base.Extra["effort"] = "disabled"
+	if _, err := New(base); err != nil {
+		t.Fatalf("gateway controls: %v", err)
+	}
+	base.Extra["effort"] = "high"
+	if _, err := New(base); err == nil || !strings.Contains(err.Error(), "gateway thinking") {
+		t.Fatalf("invalid gateway effort error = %v", err)
 	}
 }
 
@@ -433,10 +552,14 @@ func TestReadStreamThinking(t *testing.T) {
 
 	var reasoning, text strings.Builder
 	var sig string
+	var nativeBlock *provider.ReasoningBlock
 	for ck := range ch {
 		switch ck.Type {
 		case provider.ChunkReasoning:
 			reasoning.WriteString(ck.Text)
+			if ck.ReasoningBlock != nil {
+				nativeBlock = ck.ReasoningBlock
+			}
 			if ck.Signature != "" {
 				sig = ck.Signature
 			}
@@ -449,6 +572,9 @@ func TestReadStreamThinking(t *testing.T) {
 	}
 	if sig != "SIG123" {
 		t.Fatalf("signature = %q", sig)
+	}
+	if nativeBlock == nil || nativeBlock.Type != "thinking" || nativeBlock.Text != "Let me think." || nativeBlock.Signature != "SIG123" {
+		t.Fatalf("native reasoning block = %+v", nativeBlock)
 	}
 	if text.String() != "Hi" {
 		t.Fatalf("text = %q", text.String())

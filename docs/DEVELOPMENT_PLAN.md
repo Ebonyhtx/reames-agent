@@ -383,21 +383,36 @@ notarization、公开主题 registry
 - Server/Web：作为可选远程控制面，提供鉴权、CSRF/Origin、租约、SSE/WS 重连、速率限制和审计。
 - 部署：Docker、systemd、反向代理和健康检查已有基线；敏感的 home/state `backup create/verify/restore`、仅新目标恢复、候选/安装后健康检查、保留 immediate predecessor 的 updater 与 `upgrade --rollback` 已有本地自动证据。内嵌 manifest 只证明自洽，多根恢复没有 durable crash journal，公开签名 release 和干净云节点实启仍需外部证据。
 - 反馈中心：已建立 `internal/feedback` schema、本地 JSONL 账本、`serve` 的 `POST /api/feedback`、`GET /api/feedback/summary` 与 `POST /api/feedback/draft`，以及 SSH 运维可用的 `reames-agent feedback submit|summary|draft --home PATH`，先完成脱敏、去重、本地聚合和维护草稿，再接人工确认后的 Issue 发布。
-- Gateway：统一消息 envelope；渠道 metadata 不进入 provider prompt。
-- 每个渠道先完成文本 + 审批 + 取消 + 恢复，再扩展媒体与富交互。
+- Gateway：统一消息 envelope；渠道 metadata 不进入 provider prompt。按 Hermes `862b1b37..7a43ab04`
+  的 Discord 断线恢复信号补 durable per-channel cursor、原消息身份、claim/去重账本、全局扫描上限和
+  “最终投递成功后才推进 cursor”合同；账本损坏或写失败必须 fail closed，不能把重新连上等同于消息已交付。
+- 每个渠道先完成文本 + 审批 + 取消 + 断线补偿/恢复，再扩展媒体与富交互。
 - 阿里云等自有服务器形态按 [云端 Agent 计划](CLOUD_AGENT_PLAN.md) 推进，先完成 SSH/CLI 与独立 Gateway service，再按需开启 `serve`，最后承载后台研究任务。
 
 ## P8：官方 GPT / Claude Provider parity
 
-- OpenAI Codex 与 Claude Code 已提升为二级战略代码上游；P8/P9 必须从真实源码 diff 建立 capability
-  matrix，不只读取 release notes。OpenAI 不再只停留在兼容 `/chat/completions`：实现独立 Responses API transport，覆盖 GPT reasoning、
-  流式 item/event、工具调用、并行调用、多模态输入、usage/cache、结构化错误、取消与重试边界。
-- 对 Anthropic Messages 做完整能力矩阵：Claude thinking、tool use/result、vision、prompt cache、usage 合并、
-  stream interruption 和 model capability；已有能力必须由测试证明，缺口不能用兼容网关推断为完成。
-- CLI/Desktop/Serve/Gateway 只通过现有 Controller/boot 装配选择 Provider；不得为 GPT/Claude 建立前端专用
-  Agent loop，也不得把动态模型/UI 状态注入 cache-stable system prompt/tool schema。
-- 无真实 key 时先完成 localhost fixture、golden stream、错误/取消/重试/usage/多模态合同；真实 API 回环
-  单独标记 external-blocked，不用 mock 冒充。
+- [x] OpenAI Codex 与 Claude Code 提升为二级战略代码上游；从 Codex Responses 源码和 Claude Code
+  可公开代码/协议信号建立 capability matrix，不把 release note 本身当完成证据。
+- [x] OpenAI 增加显式 `api_mode = "responses"` 的独立 transport；覆盖 instructions/input item、GPT
+  reasoning summary、文本、单/并行工具、图像、usage/cache/reasoning tokens、typed failed/incomplete、
+  cancel、无输出 reconnect、已输出 interruption 和 clean EOF fail-closed；保留向后兼容 include 并持久化
+  opaque `reasoning.encrypted_content`（当前 `store=false` API 默认也会返回），在工具续轮回放且不进入展示/导出。历史空值继续使用
+  `chat_completions`，不根据模型名或 URL 猜协议。
+- [x] Anthropic Messages 覆盖 thinking、独立 effort、tool use/result、vision、prompt cache、usage 合并、
+  typed SSE error、`message_stop`/未闭合 block 中断门禁；signed thinking 与 opaque
+  `redacted_thinking` 按原始顺序持久化和回放，后者不进入展示 DTO。
+- [x] Anthropic 第一方预设按模型限制协议能力：Sonnet/Opus 使用 adaptive thinking，仅 Opus 暴露
+  xhigh/max；Haiku 4.5 通过可持久化的模型级 `thinking=""` + `reasoning_protocol="none"` override
+  省略不兼容 wire，并经 TOML/Desktop round-trip 验证。
+- [x] CLI/Desktop/Serve/Gateway 继续只通过现有 Controller/boot 装配；Desktop/TOML 保留显式
+  `api_mode`，OpenAI/Anthropic 第一方预设可编辑，未建立 GPT/Claude 专用 Agent loop，也未改变稳定
+  system prompt/tool schema。
+- [x] 审查 Hermes `bf391030..862b1b37` 的空响应误分类修复；Reames 共享 Provider classifier 已保证
+  empty-response advisory 即使提到 `max_tokens` 也返回 `ShouldCompact=false`，真实 context-window 溢出
+  仍返回压缩建议；当前 Agent 仍按 usage 阈值压缩，未把该合同冒充运行时恢复证据。
+- [x] P8 仓库内门槛已通过 Root/Desktop/Frontend 全量、Provider/Agent/plugin/control race、六目标 CLI +
+  六目标 Guard、clean clone 与治理合同并关闭；最终公开交付仍以该 push 对应 CI/CodeQL 为准。真实
+  OpenAI/Anthropic API 回环继续单独标记 `external-blocked`，不以 localhost fixture 冒充。
 
 ## P9：Codex-class extensibility 与 headless 协议
 
@@ -407,6 +422,18 @@ notarization、公开主题 registry
   fresh-human、generation identity、TUF/provenance、OS sandbox 和进程树回收，不接入无治理 marketplace。
 - 审计 Codex App-Server/headless 线程、命令、事件、审批和 MCP runtime 语义，只扩展现有
   `internal/control`/event wire；不引入第二套 Agent/runtime 或破坏传输无关边界。
+- 将 Codex `ultra` 的自动任务委派作为 Agent/runtime 能力单独验收；P8 只支持已证明的 Responses wire
+  effort，不能把 `ultra -> max` 的兼容别名写成自动委派 parity。
+- OpenAI 官方预设已按 2026-07-19 公共 API 文档开放 `gpt-5.6-sol`、`gpt-5.6-terra`、
+  `gpt-5.6-luna` 与 `gpt-5.4` 的普通 function-tool Responses；Codex catalog 的 `code_mode_only` 是产品
+  runtime 选择，不能反推公开 API 不支持 function calling，也不能据此宣称 Reames 已有 Codex 产品 parity。
+- P9 继续代码级跟进并实现 Codex freeform/code-mode、Responses Lite/WebSocket、hosted tool item、
+  programmatic tool calling、显式 prompt caching/写入计费、`reasoning.context`、pro mode、Responses
+  multi-agent 与 App-Server/headless 投影；每项必须有 wire fixture、恢复/权限/沙箱/evidence 合同。
+- Codex `35eaf3ff..312caf17` 已增加 Realtime V3 `initial_items`：最多 128 个完整 role-bearing 文本项，
+  总计和单项均受 8192 估算 token 门槛约束，并只在 Frameless Bidi V3 启用。Reames 将其作为 P9
+  Realtime/App-Server 会话播种合同，不回填到 P8 HTTP Responses；Hermes 的 `/model --once` 作为单轮
+  root 模型覆盖候选，必须证明不污染持久默认模型、并发会话或后续 turn 后才可采用。
 
 ## P10：第一方 Browser Control / CDP
 
@@ -414,6 +441,9 @@ notarization、公开主题 registry
   双栈 loopback、目标协议和端口占用者，不能把普通 TCP listener 当作浏览器就绪。
 - 首个纵向闭环覆盖 browser/tab 生命周期、navigate、DOM/query、click/type、screenshot、download、取消和
   session 恢复；后续再扩展复杂 Playwright 语义。
+- 输入动作采用“后台投递 → 结果验证 → 仅在结构化 `suspected_noop`/`background_unavailable` 信号后建议
+  前台升级”的阶梯；前台焦点变更使用独立、按会话和投递模式隔离的审批，不继承后台 action 授权。
+  浏览器/驱动 transport 退出必须清除 started 状态，下一次调用有界重建，不得在失效 session 上挂死。
 - 浏览器网络、cookie/登录态、下载和页面文本全部接入 permission、sandbox、credential isolation、
   prompt-injection 标注、evidence 与 redaction。`web_search`、`web_fetch` 或可选 Playwright MCP 不算 P10 完成。
 

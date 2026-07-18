@@ -1115,6 +1115,7 @@ type ProviderEntry struct {
 	Name           string            `toml:"name"`
 	Kind           string            `toml:"kind"`
 	BaseURL        string            `toml:"base_url"`
+	APIMode        string            `toml:"api_mode"` // openai: chat_completions (default) or responses; explicit to avoid model-name guessing.
 	ChatURL        string            `toml:"chat_url"`
 	Model          string            `toml:"model"`      // a single model (back-compat)
 	Models         []string          `toml:"models"`     // a vendor's model list (one base_url/key, many models)
@@ -1150,7 +1151,7 @@ type ProviderEntry struct {
 	// provider. This lets one provider expose both text-only and multimodal chat
 	// models without enabling image payloads for every model.
 	VisionModels []string `toml:"vision_models"`
-	// VisionDetail sets the openai image_url detail hint (low|high); empty = auto
+	// VisionDetail sets the openai image_url detail hint (low|high|original); empty = auto
 	// (the field is omitted). "low" caps an image to a fixed ~85 tokens for cheap
 	// coarse reads; ignored by providers without the knob (e.g. anthropic).
 	VisionDetail string `toml:"vision_detail"`
@@ -1179,10 +1180,13 @@ type ProviderEntry struct {
 }
 
 type ProviderModelOverride struct {
-	ReasoningProtocol string   `toml:"reasoning_protocol"`
-	SupportedEfforts  []string `toml:"supported_efforts"`
-	DefaultEffort     string   `toml:"default_effort"`
-	Vision            *bool    `toml:"vision"`
+	ReasoningProtocol string `toml:"reasoning_protocol"`
+	// Thinking overrides the provider-wide thinking mode for one model. A
+	// non-nil pointer to "" explicitly omits thinking from the wire; nil inherits.
+	Thinking         *string  `toml:"thinking"`
+	SupportedEfforts []string `toml:"supported_efforts"`
+	DefaultEffort    string   `toml:"default_effort"`
+	Vision           *bool    `toml:"vision"`
 }
 
 // ModelList returns the models this provider exposes: the explicit `models` list,
@@ -1316,8 +1320,12 @@ func (e *ProviderEntry) applyModelOverride() {
 	if !ok {
 		return
 	}
+	hardNoReasoning := ov.ReasoningProtocol == ReasoningProtocolNone
 	if ov.ReasoningProtocol != "" {
 		e.ReasoningProtocol = ov.ReasoningProtocol
+	}
+	if ov.Thinking != nil {
+		e.Thinking = *ov.Thinking
 	}
 	if ov.SupportedEfforts != nil {
 		e.SupportedEfforts = append([]string(nil), ov.SupportedEfforts...)
@@ -1327,6 +1335,15 @@ func (e *ProviderEntry) applyModelOverride() {
 	}
 	if ov.Vision != nil {
 		e.visionOverride = ov.Vision
+	}
+	if hardNoReasoning {
+		// A model-level "none" is a hard capability override. Clear every
+		// provider-level or contradictory override effort value so boot cannot
+		// reintroduce an unsupported output_config/reasoning parameter after the
+		// UI has correctly hidden the control.
+		e.Effort = ""
+		e.SupportedEfforts = nil
+		e.DefaultEffort = ""
 	}
 }
 

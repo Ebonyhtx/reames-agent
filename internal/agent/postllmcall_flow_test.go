@@ -117,7 +117,10 @@ func TestPostLLMCallConfiguredButNoReasoning(t *testing.T) {
 func TestPostLLMCallKeepsSignedReasoningOriginal(t *testing.T) {
 	prov := &scriptedProvider{name: "p", turns: [][]provider.Chunk{{
 		{Type: provider.ChunkReasoning, Text: "think A "},
-		{Type: provider.ChunkReasoning, Text: "think B", Signature: "sig-xyz"},
+		{Type: provider.ChunkReasoning, Text: "think B", Signature: "sig-"},
+		{Type: provider.ChunkReasoning, Signature: "xyz"},
+		{Type: provider.ChunkReasoning, ReasoningBlock: &provider.ReasoningBlock{Type: "thinking", Text: "think A think B", Signature: "sig-xyz"}},
+		{Type: provider.ChunkReasoning, ReasoningBlock: &provider.ReasoningBlock{Type: "redacted_thinking", Data: "opaque"}},
 		{Type: provider.ChunkText, Text: "answer"},
 		{Type: provider.ChunkDone},
 	}}}
@@ -135,8 +138,14 @@ func TestPostLLMCallKeepsSignedReasoningOriginal(t *testing.T) {
 		t.Fatalf("stored reasoning = %q, want the original (signature pins it)", got)
 	}
 	for _, m := range a.session.Messages {
-		if m.Role == provider.RoleAssistant && m.ReasoningSignature != "sig-xyz" {
+		if m.Role != provider.RoleAssistant {
+			continue
+		}
+		if m.ReasoningSignature != "sig-xyz" {
 			t.Fatalf("stored signature = %q, want sig-xyz alongside its original text", m.ReasoningSignature)
+		}
+		if len(m.ReasoningBlocks) != 2 || m.ReasoningBlocks[0].Signature != "sig-xyz" || m.ReasoningBlocks[1].Data != "opaque" {
+			t.Fatalf("stored native reasoning blocks = %+v", m.ReasoningBlocks)
 		}
 	}
 }

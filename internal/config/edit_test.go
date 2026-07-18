@@ -697,6 +697,7 @@ func TestEffectiveVisionUsesPerModelVisionList(t *testing.T) {
 
 func TestResolveModelAppliesModelOverrides(t *testing.T) {
 	visionOff := false
+	thinkingOff := ""
 	c := &Config{Providers: []ProviderEntry{{
 		Name:              "gateway",
 		Kind:              "openai",
@@ -704,6 +705,7 @@ func TestResolveModelAppliesModelOverrides(t *testing.T) {
 		Models:            []string{"deepseek-v4-flash", "plain-chat"},
 		Default:           "plain-chat",
 		ReasoningProtocol: ReasoningProtocolOpenAI,
+		Thinking:          "adaptive",
 		SupportedEfforts:  []string{"low", "medium", "high"},
 		ModelOverrides: map[string]ProviderModelOverride{
 			"deepseek-v4-flash": {
@@ -711,6 +713,7 @@ func TestResolveModelAppliesModelOverrides(t *testing.T) {
 				SupportedEfforts:  []string{"high", "max"},
 				DefaultEffort:     "max",
 				Vision:            &visionOff,
+				Thinking:          &thinkingOff,
 			},
 		},
 	}}}
@@ -729,6 +732,9 @@ func TestResolveModelAppliesModelOverrides(t *testing.T) {
 	if EffectiveVision(deepseek) {
 		t.Fatalf("vision override false should disable image input")
 	}
+	if deepseek.Thinking != "" {
+		t.Fatalf("thinking override = %q, want explicit off", deepseek.Thinking)
+	}
 
 	plain, ok := c.ResolveModel("gateway/plain-chat")
 	if !ok {
@@ -736,6 +742,9 @@ func TestResolveModelAppliesModelOverrides(t *testing.T) {
 	}
 	if protocol := ReasoningProtocolForEntry(plain); protocol != ReasoningProtocolOpenAI {
 		t.Fatalf("plain protocol = %q, want provider-level openai", protocol)
+	}
+	if plain.Thinking != "adaptive" {
+		t.Fatalf("plain thinking = %q, want inherited adaptive", plain.Thinking)
 	}
 }
 

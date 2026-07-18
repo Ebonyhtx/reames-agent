@@ -44,16 +44,18 @@ func CuratedProviderPreset(id string) (ProviderPreset, bool) {
 
 func providerPresetDisplayRank(id string) int {
 	switch {
-	case id == "glm-cn" || id == "zai-global" || strings.HasPrefix(id, "glm-coding-plan-") || strings.HasPrefix(id, "zai-coding-plan-"):
+	case id == "openai-official" || id == "anthropic-official":
 		return 0
-	case strings.HasPrefix(id, "longcat-"):
+	case id == "glm-cn" || id == "zai-global" || strings.HasPrefix(id, "glm-coding-plan-") || strings.HasPrefix(id, "zai-coding-plan-"):
 		return 1
-	case strings.HasPrefix(id, "kimi-"):
+	case strings.HasPrefix(id, "longcat-"):
 		return 2
-	case strings.HasPrefix(id, "minimax-"):
+	case strings.HasPrefix(id, "kimi-"):
 		return 3
-	default:
+	case strings.HasPrefix(id, "minimax-"):
 		return 4
+	default:
+		return 5
 	}
 }
 
@@ -96,6 +98,85 @@ var (
 )
 
 var curatedProviderPresets = []ProviderPreset{
+	{
+		ID:          "openai-official",
+		Label:       "OpenAI",
+		Description: "First-party OpenAI Responses API for GPT coding models.",
+		KeyEnv:      "OPENAI_API_KEY",
+		Entries: []ProviderEntry{{
+			Name:      "openai",
+			Kind:      "openai",
+			BaseURL:   "https://api.openai.com/v1",
+			APIMode:   "responses",
+			ModelsURL: "https://api.openai.com/v1/models",
+			// The public Responses API supports ordinary function tools on the
+			// GPT-5.6 family. Codex's code_mode_only catalog flag describes its
+			// richer product runtime and is tracked separately under P9.
+			Models:            []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4"},
+			Default:           "gpt-5.6-sol",
+			APIKeyEnv:         "OPENAI_API_KEY",
+			PresetID:          "openai-official",
+			PresetVersion:     ProviderPresetVersion,
+			ContextWindow:     1_050_000,
+			Vision:            true,
+			VisionModels:      []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4"},
+			ReasoningProtocol: ReasoningProtocolOpenAI,
+			// "ultra" remains a legacy local alias for wire "max" and is not
+			// advertised: Codex ultra also carries automatic-delegation semantics.
+			SupportedEfforts: []string{"none", "low", "medium", "high", "xhigh"},
+			DefaultEffort:    "medium",
+			ModelOverrides: map[string]ProviderModelOverride{
+				"gpt-5.6-sol": {
+					SupportedEfforts: []string{"none", "low", "medium", "high", "xhigh", "max"},
+					DefaultEffort:    "medium",
+				},
+				"gpt-5.6-terra": {
+					SupportedEfforts: []string{"none", "low", "medium", "high", "xhigh", "max"},
+					DefaultEffort:    "medium",
+				},
+				"gpt-5.6-luna": {
+					SupportedEfforts: []string{"none", "low", "medium", "high", "xhigh", "max"},
+					DefaultEffort:    "medium",
+				},
+				"gpt-5.4": {
+					SupportedEfforts: []string{"none", "low", "medium", "high", "xhigh"},
+					DefaultEffort:    "none",
+				},
+			},
+		}},
+	},
+	{
+		ID:          "anthropic-official",
+		Label:       "Anthropic",
+		Description: "First-party Anthropic Messages API for Claude coding models.",
+		KeyEnv:      "ANTHROPIC_API_KEY",
+		Entries: []ProviderEntry{{
+			Name:             "anthropic",
+			Kind:             "anthropic",
+			BaseURL:          "https://api.anthropic.com",
+			Models:           []string{"claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5"},
+			Default:          "claude-sonnet-4-6",
+			APIKeyEnv:        "ANTHROPIC_API_KEY",
+			PresetID:         "anthropic-official",
+			PresetVersion:    ProviderPresetVersion,
+			ContextWindow:    200_000,
+			Thinking:         "adaptive",
+			Vision:           true,
+			VisionModels:     []string{"claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5"},
+			SupportedEfforts: []string{"low", "medium", "high"},
+			DefaultEffort:    "high",
+			ModelOverrides: map[string]ProviderModelOverride{
+				"claude-opus-4-8": {
+					SupportedEfforts: []string{"low", "medium", "high", "xhigh", "max"},
+					DefaultEffort:    "high",
+				},
+				"claude-haiku-4-5": {
+					ReasoningProtocol: ReasoningProtocolNone,
+					Thinking:          providerStringPtr(""),
+				},
+			},
+		}},
+	},
 	{
 		ID:          "longcat-openai",
 		Label:       "LongCat OpenAI",
@@ -884,7 +965,13 @@ func cloneModelOverrideMap(in map[string]ProviderModelOverride) map[string]Provi
 	out := make(map[string]ProviderModelOverride, len(in))
 	for k, v := range in {
 		v.SupportedEfforts = append([]string(nil), v.SupportedEfforts...)
+		if v.Thinking != nil {
+			thinking := *v.Thinking
+			v.Thinking = &thinking
+		}
 		out[k] = v
 	}
 	return out
 }
+
+func providerStringPtr(value string) *string { return &value }

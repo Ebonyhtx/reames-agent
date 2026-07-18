@@ -56,6 +56,29 @@ func TestImageURLDetailFromConfig(t *testing.T) {
 	}
 }
 
+func TestNewAcceptsOriginalImageDetail(t *testing.T) {
+	p, err := New(provider.Config{
+		Name:    "openai",
+		BaseURL: "https://api.openai.com/v1",
+		Model:   "gpt-5.6-sol",
+		Extra: map[string]any{
+			"api_mode":      "responses",
+			"vision":        true,
+			"vision_detail": "original",
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	c, ok := p.(*client)
+	if !ok {
+		t.Fatalf("provider = %T, want *client", p)
+	}
+	if c.visionDetail != "original" {
+		t.Fatalf("detail = %q, want original", c.visionDetail)
+	}
+}
+
 func TestImageURLDetailOmittedByDefault(t *testing.T) {
 	c := &client{model: "gpt-4o", vision: true}
 	req := c.buildRequest(provider.Request{
