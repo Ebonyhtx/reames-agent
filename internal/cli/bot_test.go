@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"reames-agent/internal/bot"
 	"reames-agent/internal/botruntime"
@@ -602,11 +604,145 @@ func TestGatewayUsageDocumentsForegroundAndBackgroundEntrypoints(t *testing.T) {
 		"<Reames Agent home>/.env",
 		"do not embed secret values",
 		"only secret environment variable names",
+		"--watchdog-sec DURATION",
+		"--watchdog-sec 60s",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("gateway help output missing %q:\n%s", want, out)
 		}
 	}
+}
+
+func TestGatewayWatchdogStatusRequiresAnActiveAdapter(t *testing.T) {
+	cases := []struct {
+		name    string
+		health  []bot.AdapterHealthSnapshot
+		healthy bool
+		want    string
+	}{
+		{name: "none", healthy: false, want: "no configured adapters"},
+		{name: "disabled only", health: []bot.AdapterHealthSnapshot{{Status: "disabled"}}, healthy: false, want: "no configured adapters"},
+		{name: "all closed", health: []bot.AdapterHealthSnapshot{{Status: "closed"}, {Status: "error"}}, healthy: false, want: "0/2 adapters active"},
+		{name: "running", health: []bot.AdapterHealthSnapshot{{Status: "running"}, {Status: "closed"}}, healthy: true, want: "1/2 adapters active"},
+		{name: "degraded remains useful", health: []bot.AdapterHealthSnapshot{{Status: "degraded"}, {Status: "disabled"}}, healthy: true, want: "1/1 adapters active"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			healthy, status := gatewayWatchdogStatus(tc.health)
+			if healthy != tc.healthy || !strings.Contains(status, tc.want) {
+				t.Fatalf("status = %t %q, want %t containing %q", healthy, status, tc.healthy, tc.want)
+			}
+		})
+	}
+}
+
+type testGatewayLifecycle struct {
+	health func() []bot.AdapterHealthSnapshot
+	stop   func()
+}
+
+func (g testGatewayLifecycle) AdapterHealth() []bot.AdapterHealthSnapshot { return g.health() }
+func (g testGatewayLifecycle) Stop()                                      { g.stop() }
+
+type testGatewayNotifier struct {
+	cadence    time.Duration
+	events     []string
+	onStatus   func()
+	onWatchdog func()
+}
+
+func (n *testGatewayNotifier) Ready(status string) (bool, error) {
+	n.events = append(n.events, "ready:"+status)
+	return true, nil
+}
+
+func (n *testGatewayNotifier) Watchdog(status string) (bool, error) {
+	n.events = append(n.events, "watchdog:"+status)
+	if n.onWatchdog != nil {
+		n.onWatchdog()
+	}
+	return true, nil
+}
+
+func (n *testGatewayNotifier) Status(status string) (bool, error) {
+	n.events = append(n.events, "status:"+status)
+	if n.onStatus != nil {
+		n.onStatus()
+	}
+	return true, nil
+}
+
+func (n *testGatewayNotifier) Stopping(status string) (bool, error) {
+	n.events = append(n.events, "stopping:"+status)
+	return true, nil
+}
+
+func (n *testGatewayNotifier) WatchdogCadence() time.Duration { return n.cadence }
+
+func TestGatewayLifecycleNotifiesReadyWatchdogAndStopping(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	stopped := false
+	notifier := &testGatewayNotifier{cadence: time.Millisecond, onWatchdog: cancel}
+	gw := testGatewayLifecycle{
+		health: func() []bot.AdapterHealthSnapshot {
+			return []bot.AdapterHealthSnapshot{{Status: "running"}}
+		},
+		stop: func() { stopped = true },
+	}
+	if code := runGatewayLifecycle(ctx, gw, notifier, time.Second, io.Discard); code != 0 {
+		t.Fatalf("lifecycle exit = %d", code)
+	}
+	if !stopped {
+		t.Fatal("gateway stop was not called")
+	}
+	got := strings.Join(notifier.events, "|")
+	for _, want := range []string{"ready:Gateway running: 1/1 adapters active", "watchdog:Gateway running: 1/1 adapters active", "stopping:Gateway stopping"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("events = %q, missing %q", got, want)
+		}
+	}
+}
+
+func TestGatewayLifecycleStopsWatchdogWhenAllAdaptersBecomeUnhealthy(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	healthChecks := 0
+	notifier := &testGatewayNotifier{cadence: time.Millisecond, onStatus: cancel}
+	gw := testGatewayLifecycle{
+		health: func() []bot.AdapterHealthSnapshot {
+			healthChecks++
+			if healthChecks == 1 {
+				return []bot.AdapterHealthSnapshot{{Status: "running"}}
+			}
+			return []bot.AdapterHealthSnapshot{{Status: "closed"}}
+		},
+		stop: func() {},
+	}
+	if code := runGatewayLifecycle(ctx, gw, notifier, time.Second, io.Discard); code != 0 {
+		t.Fatalf("lifecycle exit = %d", code)
+	}
+	got := strings.Join(notifier.events, "|")
+	if !strings.Contains(got, "ready:Gateway running: 1/1 adapters active") ||
+		!strings.Contains(got, "status:watchdog unhealthy: 0/1 adapters active") ||
+		!strings.Contains(got, "stopping:Gateway stopping") {
+		t.Fatalf("events = %q", got)
+	}
+	if strings.Contains(got, "watchdog:") {
+		t.Fatalf("unhealthy lifecycle sent watchdog heartbeat: %q", got)
+	}
+}
+
+func TestStopGatewayBounded(t *testing.T) {
+	if !stopGatewayBounded(func() {}, time.Second) {
+		t.Fatal("immediate stop timed out")
+	}
+	blocked := make(chan struct{})
+	if stopGatewayBounded(func() { <-blocked }, 20*time.Millisecond) {
+		close(blocked)
+		t.Fatal("blocked stop unexpectedly completed")
+	}
+	close(blocked)
 }
 
 func TestGatewayRunHomeOverridesAmbientHome(t *testing.T) {

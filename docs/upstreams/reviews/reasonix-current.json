@@ -2,29 +2,32 @@
   "version": 1,
   "upstream": "reasonix",
   "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-  "reviewed": "40ef98de92a30a273ee582ec682ab338483109d2",
-  "updated_at": "2026-07-18T17:56:52+08:00",
+  "reviewed": "2335d0df9ea4029108ed965f76c2efff30fe6cf4",
+  "updated_at": "2026-07-19T00:35:35+08:00",
   "areas": {
     "source-baseline": {
       "status": "complete",
       "evidence": [
         "ef3a132 records the Reames import from Reasonix main-v2 at 07c65c22226e4886004215168230e1e1edad734b",
         "docs/audits/2026-07-18-reasonix-generation-parity.md fixes the three-way source baseline",
-        "docs/audits/2026-07-18-reasonix-3637d0f-40ef98d.md closes the latest incremental review"
+        "docs/audits/2026-07-18-reasonix-3637d0f-40ef98d.md closes the prior incremental review",
+        "docs/audits/2026-07-19-p7-upstream-gateway-watchdog.md closes 40ef98de..2335d0df at the code and product-boundary level"
       ]
     },
     "active-refs-tags": {
       "status": "complete",
       "evidence": [
         "reasonix-generation-07c65c2-3637d0f.json records the full earlier generation and active refs",
-        "reasonix-generation-3637d0f-40ef98d.json records v1.17.15 tags, current unmerged refs, all five commits, paths and areas"
+        "reasonix-generation-3637d0f-40ef98d.json records v1.17.15 tags, prior unmerged refs, all five commits, paths and areas",
+        "reasonix-generation-40ef98d-2335d0d.json records the two P7 commits, 56 files, active refs and current merged tags"
       ]
     },
     "agent-runtime": {
       "status": "complete",
       "evidence": [
         "internal/agent/agent.go and empty_final_test.go absorb d3cfa5c2 behind explicit DeepSeek reasoning capability",
-        "M4 audits cover Goal/Todo/evidence, durable child effects, writer worktrees, and crash recovery"
+        "M4 audits cover Goal/Todo/evidence, durable child effects, writer worktrees, and crash recovery",
+        "2335d0df Fleet scheduler/write claims were reviewed and not substituted for Reames worktree delivery, rooted effects, and tree-wide budgets"
       ]
     },
     "controller-transports": {
@@ -46,7 +49,8 @@
       "status": "complete",
       "evidence": [
         "docs/audits/2026-07-17-m5-mcp-identity-trust.md closes identity receipts, launcher pins, drift revocation, and fresh-human trust",
-        "2026-07-18 parity audit adopts persistent-session fixes but explicitly rejects upstream trust simplification"
+        "2026-07-18 parity audit adopts persistent-session fixes but explicitly rejects upstream trust simplification",
+        "2335d0df named profile discovery remains a future UX candidate and cannot create a second plugin/tool or scheduler runtime"
       ]
     },
     "permissions-sandbox": {
@@ -68,13 +72,15 @@
       "evidence": [
         "internal/boot/token_profile.go implements economy, balanced, and delivery with a stable delivery contract",
         "Desktop, CLI /work-mode and --profile, Serve startup profile, ACP work_mode, and Bot balanced default have focused tests"
+        ,"2335d0df subagent profiles were classified separately from Reames work modes; future role UX must assemble through internal/boot and existing delegation budgets"
       ]
     },
     "desktop-ui-accessibility": {
       "status": "complete",
       "evidence": [
         "Desktop implements three-state work mode UI and session persistence with frontend and Go tests",
-        "navigation failure toast, streaming reasoning jank, history timestamps, Windows openers, status item customization, and P5 Theme Pack decision are classified"
+        "navigation failure toast, streaming reasoning jank, history timestamps, Windows openers, status item customization, and P5 Theme Pack decision are classified",
+        "5eac2d79 regional typography is deferred until an independent cross-platform font fallback, CJK overflow, accessibility, and Safe Mode contract exists"
       ]
     },
     "cli-acp": {
@@ -82,7 +88,8 @@
       "evidence": [
         "interactive CLI, run, serve, and acp accept --profile economy|balanced|delivery; resumed CLI sessions inherit the saved profile",
         "40ef98de right-click text paste, SSH clipboard boundary, assistant identity and semantic spacing are adapted with focused internal/cli tests",
-        "composer app-owned selection and Reasonix footer layout are explicitly deferred/not-applicable rather than silently marked adopted"
+        "composer app-owned selection and Reasonix footer layout are explicitly deferred/not-applicable rather than silently marked adopted",
+        "40ef98de..2335d0df contains no new CLI runtime requirement beyond the separately classified Fleet profile UX"
       ]
     },
     "serve-gateway": {
@@ -104,6 +111,7 @@
       "evidence": [
         "3637d0f0 and e7a0f116 release authorization changes are classified not applicable while Reames production release remains disabled",
         "8a36da8d, 315f6f30 and 840cb6ca website/release-note changes do not enter the Reames product tree",
+        "40ef98de..2335d0df contains no production release or publication mechanism to adopt",
         "CI, CodeQL, cross-build, candidate, public-readiness, and release workflow ratchets remain the accepted repository evidence"
       ]
     },
@@ -112,7 +120,8 @@
       "evidence": [
         "reasonix-generation-07c65c2-3637d0f.json enumerates the earlier 498 non-merge commits and 314 exact fix/perf commits",
         "reasonix-generation-3637d0f-40ef98d.json adds all five latest non-merge commits and both exact fix commits with paths and review areas",
-        "scripts/test_audit_reasonix_generation.py verifies deterministic enumeration, fix/perf selection, and area classification"
+        "scripts/test_audit_reasonix_generation.py verifies deterministic enumeration, fix/perf selection, and area classification",
+        "reasonix-generation-40ef98d-2335d0d.json enumerates both latest non-merge commits and proves the interval contains zero conventional fix/perf commits"
       ]
     }
   }

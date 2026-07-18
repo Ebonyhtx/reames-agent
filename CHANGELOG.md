@@ -54,12 +54,15 @@
 - Added `reames-agent gateway install/start/stop/restart/status/uninstall` with dry-run service plans for systemd, launchd, and Windows Scheduled Task.
 - Added `reames-agent gateway setup` for atomic, idempotent, fail-closed headless connection configuration across Feishu/Lark, QQ, and WeChat. It accepts secret environment-variable names only and provides redacted no-write previews.
 - Hardened Linux Gateway user services with directive-aware systemd rendering, absolute persistent paths, atomic unit writes, immediate same-name reinstall restart/readiness checks, correct uninstall reload ordering, and a credential-free installed lifecycle smoke.
+- Added opt-in Linux Gateway systemd watchdog support with pure-Go `sd_notify` datagrams, readiness only after recovery preflight and an adapter start, adapter-health-gated heartbeats, `STOPPING=1`, and bounded shutdown. The default remains `Type=simple`; non-Linux or unsafe watchdog settings fail closed.
 - Repaired CLI self-upgrade discovery to use the official Reames Agent repository and exact six-platform GoReleaser archive/binary names.
 - Replaced inherited Hermes installer scripts with Reames source-build installers for Unix, PowerShell, and CMD.
 - Audited Reasonix, Hermes, and Reames install/deploy entrypoints; fixed stale Chinese README gateway and API-key examples.
 
 ### Upstream
 
+- Reviewed DeepSeek Reasonix through `2335d0df` and classified its regional typography and profile-aware Fleet without replacing Reames writer worktrees, delivery transactions, durable child effects, or delegation budgets. Reviewed OpenAI Codex through `b8b61bc6`: compressed-rollout inventory is not applicable to Reames' current uncompressed sessions but its logical-path and corruption semantics are retained as future storage contracts. Reviewed the latest Hermes, MiMo, Scream Code, and Kimi Code increments; only the Gateway systemd lifecycle mechanism was adopted in this batch.
+- Recorded the next product tracks explicitly: native OpenAI Responses/GPT and Claude capability parity, Codex-class plugin/headless parity, and first-party permissioned CDP Browser Control. Existing Chat Completions, MCP/Skill/Hook support, `web_search`, `web_fetch`, or optional Playwright MCP do not by themselves satisfy those tracks.
 - Completed a code-level freeze of all 11 tracked upstream/reference repositories. DeepSeek Reasonix is reviewed through `40ef98de`; applicable CLI interaction and transcript fixes were adapted, while website, registry UI, branding, production publishing, telemetry, managed services, and second-runtime changes remain explicitly rejected, deferred, or not applicable. Code-oriented references now use path-level diff classification, and every accepted SHA is pinned in the repository lock file.
 - Kept upstream/reference tracking issue-driven; automatic discovery may propose review work but must not auto-merge upgrades.
 - Reviewed Reasonix Theme Pack V2 at the source/test/schema level and implemented the independently verified manifest, storage, preview, and recovery mechanisms without importing its branding, assets, marketplace, or production release infrastructure.

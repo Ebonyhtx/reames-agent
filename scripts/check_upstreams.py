@@ -213,6 +213,8 @@ def recommendation(up: dict[str, Any], changed: bool, risk: str, areas: Counter[
         if risk == "high":
             return "Human review required. Prioritize cache/provider/runtime/security diffs; do not auto-merge."
         return "Review for staged adoption into Reames Agent after desktop/UI baseline remains green."
+    if up.get("importance") == "strategic-code-upstream":
+        return "Human code-level capability review required. Compare native model protocol and product/runtime behavior; do not rely on release notes or auto-merge."
     if risk == "high":
         return "Open an advisory task only; cherry-pick concepts after review."
     if "desktop-ui" in areas or "docs" in areas:
@@ -227,6 +229,8 @@ def decision_for(up: dict[str, Any], changed: bool, risk: str, error: str = "") 
         return "up-to-date"
     if up.get("importance") == "primary-base":
         return "review-required" if risk == "high" else "adoption-candidate"
+    if up.get("importance") == "strategic-code-upstream":
+        return "review-required"
     if risk == "high":
         return "security-signal"
     if risk == "low":

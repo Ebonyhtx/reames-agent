@@ -2,7 +2,7 @@
 
 > 状态：当前产品方向的权威说明
 >
-> 更新：2026-07-18
+> 更新：2026-07-19
 
 ## 一句话定位
 
@@ -27,7 +27,9 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 
 - [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) `main-v2` 是源码主上游。
 - `F:\Reames-Lite` 是前身，只保留公共边界、缓存纪律、中文体验和接口契约等思想。
-- `F:\code-reference` 中的其他官方项目提供机制和体验参考，不作为可直接拼接的代码集合。
+- OpenAI Codex 与 Claude Code 是二级战略代码上游：分别跟进 GPT/OpenAI 与 Claude/Anthropic 的原生
+  模型协议和代码级产品能力，但仍按 Reames Go/Wails 架构重构，不作为可直接拼接的 runtime。
+- `F:\code-reference` 中的其余官方项目提供机制和体验参考，不作为可直接拼接的代码集合。
 - 详细来源、许可证和升级规则见 [REFERENCE_GOVERNANCE.md](REFERENCE_GOVERNANCE.md)。
 
 ## 核心原则
@@ -39,6 +41,8 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 5. **桌面优先但不绑死桌面**：桌面是主产品，核心能力仍保持传输无关。
 6. **上游人工决策**：自动发现、分类和建单；由维护者审查、移植和接受版本。
 7. **证据先于完成声明**：构建、测试、真实交互或发布证据齐备后，事项才算完成。
+8. **模型与产品能力解耦**：支持 GPT/Claude 不只等于兼容聊天端点；Provider、插件、headless 和浏览器能力
+   分别建立明确合同，并继续复用统一 Controller、权限、沙箱和 evidence。
 
 ## 当前事实
 
@@ -57,6 +61,19 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 - P5 已关闭受控 Theme Pack 交付：`.reames-theme` v1 只允许严格 JSON、语义颜色、有限 recipe 和最多两张本地 raster scene；ZIP/path/symlink/Windows 名称/数量/尺寸/压缩比/像素炸弹、图片 magic/解码与完整 SHA-256 均 fail closed。用户包使用内容寻址 Store、原子 pack/state、可恢复 install/delete journal 和故障注入；替换 active 包会原子推进活动摘要。Desktop Appearance/Gallery 延迟加载，选择、预览和应用分离，预览不落盘且重启撤销；Safe Mode 不读主题 Store、所有 Wails mutation 入口后端拒绝，并强制 Graphite。两套只读官方主题使用 Reames 原创内嵌 JPEG，ID、许可证、生成记录和 digest 可检查，不继承 Reasonix 品牌、图片、marketplace、endpoint 或发布运行时。`b4815ba9` 完成交付，`7396faf4` 修复 recovery smoke 的 detached 进程树竞态；CI `29635818559` 8/8、CodeQL `29635818555` 3/3、Desktop candidate `29635823162` Linux/macOS/Windows 全绿。当前并发写保证限于受单实例保护的 Desktop 进程；未来开放 CLI/Serve 写入口前必须增加跨进程 Store lock。用户与资产文档见 `THEME_PACKS.md`，验收审计见 `audits/2026-07-18-p5-controlled-theme-pack-design.md`。
 - Grok Build 已作为第 10 个正式机制参考项目纳入 Upstream Watch：官方 `xai-org/grok-build` `main` 首次锁定 `98c3b24`，本地镜像位于 `F:\code-reference\Grok-Build`。优先研究权限/sandbox、持久 session/subagent、TUI/ACP/headless 和终端恢复；不引入其 Rust 第二 runtime、xAI auth/model endpoint、遥测、在线 memory、managed policy 或 marketplace。其 Plan Mode 明确不拦 shell 重定向及可写 child，因此只作为负面回归信号，不降低 Reames 的 planmode/permission 边界。
 - P6 已完成 11 个上游/参考仓库的最新版代码级冻结。Reasonix `3637d0f0..40ef98de` 的 5 个提交和其他发生变化的参考区间均已逐文件分类；Reames 直接吸收 CLI 右键文本粘贴、SSH 剪贴板边界、assistant transcript hierarchy/语义间距，以及 Hermes 暴露的 Windows cron JSON UTF-8 BOM 兼容缺口。站点、品牌、registry UI、生产发布授权、billing/subscription、音频/远程 executor、Rust/Python/Electron 第二 runtime 等均记录为拒绝、不适用或未来候选。11 个 reviewed SHA 已由逐项 `--accept` 固定在 `docs/upstreams/upstreams.lock.json`，代码型参考默认启用路径级 diff；完整结论见 `audits/2026-07-18-reasonix-3637d0f-40ef98d.md` 与 `audits/2026-07-18-upstream-reference-freeze.md`。
+- P7 已完成 Reasonix `40ef98de..2335d0df`、Codex `56395bdd..b8b61bc6` 与 Hermes/MiMo/Scream/Kimi
+  最新增量的代码级分类。Codex 的压缩 rollout inventory 对当前未压缩 Reames session 不适用，但其
+  canonical logical path、plain/compressed sibling、损坏压缩件和临时文件语义已固定为未来回归信号。Reasonix
+  Fleet 不替换 Reames 独立 writer worktree、delivery transaction、durable effects 和整树预算；区域字体与
+  named profile 保留为 UX 候选。Hermes 的 systemd 生命周期信号已转成纯 Go `internal/systemdnotify`：
+  Linux 安装可 opt-in watchdog，Gateway 在 recovery preflight 与 adapter start 后发 `READY=1`，adapter
+  健康时发 `WATCHDOG=1`，全部 unhealthy 后停止心跳，退出发 `STOPPING=1` 并做有界停止。真实 systemd
+  watchdog restart 和 IM 远端 liveness 仍需外部证据。完整结论见
+  `audits/2026-07-19-p7-upstream-gateway-watchdog.md`。
+- 用户后续产品方向已固定：P8 补官方 OpenAI Responses/GPT 与 Anthropic Claude 能力矩阵；P9 以 Codex
+  审计并补齐插件/Skill/Hook/MCP/headless 能力；P10 实现第一方 CDP Browser Control。当前已有
+  OpenAI-compatible Chat Completions、Anthropic Messages 和受治理插件基础，但不能据此宣称 Codex/Claude
+  parity；`web_search`、`web_fetch` 与可选 Playwright MCP 也不算内置浏览器控制。
 - 参考项目最新增量已按锁文件人工接受：Kimi 的 Auto/YOLO 文案准确性已转化为三语权限契约测试；Hermes 的 session-state 单一投影、profile prewarm 和 best-effort stream fence、Codex 的集中 MCP runtime、MiMo 的 CLI-only 演示脚本路径均只作为架构回归信号，不引入 Python/Electron/Rust 或第二套 runtime。Reasonix 新增的多套生产 release workflow 不继承；Reames 反而增加全 workflow 发布写权限/动作棘轮，继续只允许无 secrets、`contents: read` 的候选构建。外部风险仍是公开 registry 运营、干净云节点 logout/reboot、真实 IM 回环和生产签名链。
 - 继承自早期迁移的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package 元数据以及 `site/`、`workers/` 已在完成运行引用和替代实现审计后从当前树删除；参考机制只保留在 Git 历史和 `F:\code-reference`，不得重新整套 vendor。
 

@@ -1,0 +1,305 @@
+{
+  "version": 1,
+  "upstream": "reasonix",
+  "baseline": "40ef98de92a30a273ee582ec682ab338483109d2",
+  "reviewed": "2335d0df9ea4029108ed965f76c2efff30fe6cf4",
+  "reviewed_at": "2026-07-18T22:18:44+08:00",
+  "counts": {
+    "all_commits": 2,
+    "non_merge_commits": 2,
+    "fix_perf_commits": 0,
+    "diff_shortstat": "56 files changed, 4595 insertions(+), 205 deletions(-)"
+  },
+  "area_counts": {
+    "agent-runtime": 1,
+    "build-release": 1,
+    "cli-acp": 1,
+    "desktop-ui-accessibility": 2,
+    "tools-mcp-plugins": 1
+  },
+  "fix_perf_area_counts": {},
+  "unmerged_remote_refs": [
+    {
+      "ref": "origin/dependabot/go_modules/desktop/go-9b87d4a103",
+      "sha": "388ebce31fedfb8a70564cd00fcb9ae9177a2a07",
+      "ahead": 1,
+      "subject": "chore(deps): bump the go group across 1 directory with 5 updates"
+    },
+    {
+      "ref": "origin/dependabot/go_modules/go-40ad0753b6",
+      "sha": "ee67206eb0a19c2924852e4cf39dc2991d48a1f0",
+      "ahead": 1,
+      "subject": "chore(deps): bump the go group across 1 directory with 13 updates"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/desktop/frontend/npm-aab5777841",
+      "sha": "0ec3428c73393143a6275b741156b280c84cf7c1",
+      "ahead": 1,
+      "subject": "chore(deps): bump the npm group across 1 directory with 8 updates"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/site/astro-7.0.7",
+      "sha": "f33a3779b9e230b4a2ecf719a880709d354ddd43",
+      "ahead": 1,
+      "subject": "build(deps): bump astro from 6.4.8 to 7.0.7 in /site"
+    },
+    {
+      "ref": "origin/feature/inline-renderer",
+      "sha": "217fb750362693f5a0c2cb240351131241275c87",
+      "ahead": 4,
+      "subject": "feat(cli)!: default the transcript renderer to inline"
+    },
+    {
+      "ref": "origin/feature/macos-home-migration-pr",
+      "sha": "410d2e12fb2c2883f52ec73baaa89c3df38d050a",
+      "ahead": 1,
+      "subject": "feat(config): add macOS home migration command"
+    },
+    {
+      "ref": "origin/feature/status-bar-display-options",
+      "sha": "e30bac56ec4faf3edd7431bd6401f0f71c00e8f5",
+      "ahead": 1,
+      "subject": "feat(desktop): customize status bar items"
+    },
+    {
+      "ref": "origin/fix/chrome-tab-strip-max-width",
+      "sha": "4a381fc84c301efcc1e0a2d76539397601ef228d",
+      "ahead": 3,
+      "subject": "fix(desktop): pin mac chrome new tab button"
+    },
+    {
+      "ref": "origin/fix/chrome-tabs-reserve-right-dock",
+      "sha": "dde01b723d1d6a8d82e4e5ef6ff534528a2bd1f6",
+      "ahead": 2,
+      "subject": "fix(desktop): bound chrome tab strip overflow"
+    },
+    {
+      "ref": "origin/fix/desktop-open-tab-crash-missing-drive",
+      "sha": "92c2df5efd2e082a5a1e5893ead351758ccb1fda",
+      "ahead": 1,
+      "subject": "fix(desktop): toast instead of crash when a tab opens on an unreachable path"
+    },
+    {
+      "ref": "origin/fix/desktop-streaming-reasoning-jank",
+      "sha": "0e3eb72d0bcb545e391253cf54dc72b8e13bc471",
+      "ahead": 2,
+      "subject": "Handle display mode changes during reasoning streams"
+    },
+    {
+      "ref": "origin/v1",
+      "sha": "50b1bf4a5061ad22abb97774a424b5962abab79f",
+      "ahead": 1561,
+      "subject": "fix(cli): don't crash session hydration on a tool_call missing its function"
+    }
+  ],
+  "recent_merged_tags": [
+    {
+      "name": "desktop-v1.17.15",
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a"
+    },
+    {
+      "name": "npm-v1.17.15",
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a"
+    },
+    {
+      "name": "v1.17.15",
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a"
+    },
+    {
+      "name": "desktop-v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "npm-v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "desktop-v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "npm-v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "desktop-v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "npm-v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "desktop-v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "npm-v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "desktop-v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "npm-v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "desktop-v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "npm-v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "desktop-v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "npm-v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "desktop-v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "npm-v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "desktop-v1.17.6",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "npm-v1.17.6",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "npm-v1.17.6-rc.1",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    }
+  ],
+  "commits": [
+    {
+      "sha": "5eac2d7978e0ba6453ee5ff1b39c1ed72928ba1f",
+      "authored_at": "2026-07-18T22:18:20+08:00",
+      "subject": "Add regional typography controls / 新增分区域字体设置 (#6634)",
+      "fix_perf": false,
+      "files": [
+        "desktop/frontend/package.json",
+        "desktop/frontend/src/__tests__/theme-pack.test.ts",
+        "desktop/frontend/src/__tests__/typography-overflow-contract.test.ts",
+        "desktop/frontend/src/__tests__/typography-preferences.test.ts",
+        "desktop/frontend/src/components/AppearanceOverview.tsx",
+        "desktop/frontend/src/components/SettingsPanel.tsx",
+        "desktop/frontend/src/components/TypographySettings.tsx",
+        "desktop/frontend/src/lib/typographyPreferences.ts",
+        "desktop/frontend/src/locales/en.ts",
+        "desktop/frontend/src/locales/zh-TW.ts",
+        "desktop/frontend/src/locales/zh.ts",
+        "desktop/frontend/src/main.tsx",
+        "desktop/frontend/src/styles.css"
+      ],
+      "areas": [
+        "build-release",
+        "desktop-ui-accessibility"
+      ]
+    },
+    {
+      "sha": "2335d0df9ea4029108ed965f76c2efff30fe6cf4",
+      "authored_at": "2026-07-18T22:18:44+08:00",
+      "subject": "Add profile-aware parallel subagent fleets / 新增可配置并行子智能体 Fleet (#6636)",
+      "fix_perf": false,
+      "files": [
+        "desktop/app.go",
+        "desktop/frontend/src/__tests__/settings-refresh-snapshot.test.tsx",
+        "desktop/frontend/src/components/SettingsPanel.tsx",
+        "desktop/frontend/src/components/SubagentsPanel.tsx",
+        "desktop/frontend/src/lib/bridge.ts",
+        "desktop/frontend/src/lib/types.ts",
+        "desktop/frontend/src/locales/en.ts",
+        "desktop/frontend/src/locales/zh-TW.ts",
+        "desktop/frontend/src/locales/zh.ts",
+        "desktop/settings_app.go",
+        "desktop/subagents_app.go",
+        "desktop/subagents_app_test.go",
+        "docs/GUIDE.md",
+        "docs/GUIDE.zh-CN.md",
+        "docs/SPEC.md",
+        "docs/SUBAGENT_PROFILES.md",
+        "docs/SUBAGENT_PROFILES.zh-CN.md",
+        "docs/TOOL_CONTRACT.md",
+        "docs/TOOL_CONTRACT.zh-CN.md",
+        "internal/agent/agent.go",
+        "internal/agent/fleet.go",
+        "internal/agent/fleet_test.go",
+        "internal/agent/parallel_tasks.go",
+        "internal/agent/path_bound_tools.go",
+        "internal/agent/path_bound_tools_test.go",
+        "internal/agent/profile_spec.go",
+        "internal/agent/profile_spec_test.go",
+        "internal/agent/scheduler.go",
+        "internal/agent/scheduler_test.go",
+        "internal/agent/subagent_registry_test.go",
+        "internal/agent/task.go",
+        "internal/agent/task_background_queue_test.go",
+        "internal/agent/task_profile_test.go",
+        "internal/agent/write_claims.go",
+        "internal/agent/write_claims_test.go",
+        "internal/boot/boot.go",
+        "internal/boot/boot_test.go",
+        "internal/cli/subagent.go",
+        "internal/cli/subagent_test.go",
+        "internal/config/config.go",
+        "internal/config/render.go",
+        "internal/doctor/skill_health.go",
+        "internal/skill/profile.go",
+        "internal/skill/tools.go",
+        "internal/tool/builtin/confine.go",
+        "internal/tool/builtin/confine_test.go",
+        "reasonix.example.toml"
+      ],
+      "areas": [
+        "tools-mcp-plugins",
+        "desktop-ui-accessibility",
+        "cli-acp",
+        "agent-runtime"
+      ]
+    }
+  ]
+}

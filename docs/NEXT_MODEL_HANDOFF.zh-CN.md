@@ -1,6 +1,6 @@
 # Reames Agent 新会话无痛交接
 
-> 日期：2026-07-18
+> 日期：2026-07-19
 >
 > 仓库：`F:\reames-agent`
 >
@@ -24,7 +24,8 @@
 
 ## 2. 用户目标和工作节奏
 
-持续把 Reames Agent 推进到高可信可交付状态；Reasonix 是唯一主源码上游，其他项目只吸收适用机制。
+持续把 Reames Agent 推进到高可信可交付状态；Reasonix 是一级主源码上游，Codex/Claude Code 是二级
+战略代码上游，其他项目只吸收适用机制。
 每个大批同步实现、测试、文档和证据；充分本地验证后集中 commit/push，避免碎片 push 浪费 CI。
 
 永久边界：
@@ -46,6 +47,13 @@
   Desktop candidate `29635823162` 全绿。
 - P6 已在本批关闭：全部 11 个上游/参考仓库更新、代码级分类并冻结；Reasonix 最新 CLI 缺口和
   Hermes BOM 信号已适配。
+- P7 已完成仓库内实现与代码级审计：Reasonix 最新 Fleet/区域字体没有机械复制；Codex compressed
+  rollout inventory 已完成战略审查；Hermes 的 systemd
+  `READY/WATCHDOG/STOPPING`、adapter-health gate 和 bounded shutdown 已按 Go runtime 采用。最终完成
+  声明仍以包含本文件的 main 提交对应 CI/CodeQL 为准。
+- 后续方向已由用户明确：P8 官方 OpenAI Responses/GPT 与 Claude parity；P9 Codex-class
+  Plugin/Skill/Hook/MCP/headless；P10 第一方 CDP Browser Control。现有兼容端点、插件基础或
+  `web_search`/`web_fetch`/Playwright MCP 不能冒充这些阶段完成。
 - 当前树只保留 Go/Wails 产品；旧 Hermes/Python/Electron/TUI/plugin/test/package、`site/`、`workers/`
   已删除，public-readiness 会阻止其回归。
 - 内置工具 24 个；CLI 与 Guard 均支持 linux/darwin/windows × amd64/arm64、`CGO_ENABLED=0`。
@@ -57,15 +65,15 @@
 
 | 项目 | reviewed SHA | 决策角色 |
 |---|---|---|
-| DeepSeek Reasonix | `40ef98de92a30a273ee582ec682ab338483109d2` | 唯一主源码上游 |
-| Hermes | `4c96172d9bee8542a356610802b9aabc1419f650` | Gateway/错误/运维参考 |
-| Codex | `56395bddaf26eb2829387ca6a417bf9128e5b239` | 协议/Hook/LSP/交互参考 |
-| MiMo Code | `72e9002e48a71b383b8851b23d65e30c692d68fb` | 设计/技能体验参考 |
+| DeepSeek Reasonix | `2335d0df9ea4029108ed965f76c2efff30fe6cf4` | 唯一主源码上游 |
+| Hermes | `581e92e42c89645b5dacf8263abebb15348c791b` | Gateway/错误/运维参考 |
+| Codex | `b8b61bc692517adcd18622df260f2ddd80635122` | 二级战略；GPT/Responses、协议、插件、Hook/LSP/CDP |
+| MiMo Code | `d48888f7b1d22e830ee5c10faf2b9e455f3cd881` | 设计/技能体验参考 |
 | Impeccable | `8967edc988ee146823bca3c51fcf51296e9dec18` | 品牌设计语言参考 |
-| Scream Code | `6474e33ad13ffcf11c8eb8a1691af943fe707b2d` | Goal/TUI/主题机制参考 |
+| Scream Code | `53fa61b2a9b1bbc1914949f328928fe8f03b16d2` | Goal/TUI/主题机制参考 |
 | AgentArk | `63985cf819d1760f50f2a5c0dc11d82815e74623` | 安全架构参考 |
-| Claude Code | `07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60` | 插件生态 UX 参考 |
-| Kimi Code | `3086e4703992fbbe7a41379405ee243713ad9ced` | Desktop Shell/权限文案参考 |
+| Claude Code | `07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60` | 二级战略；Claude/Messages、Thinking、工具/视觉/缓存、插件 |
+| Kimi Code | `4f3c7240c4adc7c748e536bf578e468c1b5bcd7b` | Desktop Shell/权限文案参考 |
 | Grok Build | `98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce` | 安全/终端/ACP 机制参考 |
 | awesome-design-md | `664b3e78fd1a298ba11973822da988483256d4b4` | 设计资料参考 |
 
@@ -80,7 +88,13 @@ Reasonix `3637d0f0..40ef98de` 共 5 个非 merge 提交、49 文件、`+1658/-41
 - `docs/audits/2026-07-18-upstream-reference-freeze.md`
 - `docs/audits/2026-07-18-grok-build-reference-intake.md`
 
-## 5. 本批代码变化
+P7 新增区间和机器账本：
+
+- `docs/audits/2026-07-19-p7-upstream-gateway-watchdog.md`
+- `docs/upstreams/reviews/reasonix-generation-40ef98d-2335d0d.json`
+- `docs/upstreams/reviews/reasonix-current.json`
+
+## 5. P7 本批代码变化
 
 Reasonix `40ef98de` 的适用部分已按 Reames 状态机重构：
 
@@ -97,6 +111,25 @@ browser-connect runtime 而明确不适用。
 上游追踪方面，Reasonix、Hermes、Codex、MiMo、Scream Code、AgentArk、Kimi Code、Grok Build 已启用
 路径级 `diff=true`；以后只比较 lock → latest，仍然只自动发现/建单，不自动 merge/cherry-pick。
 
+本批新增 `internal/systemdnotify`，无 CGO/libsystemd 依赖：
+
+- `gateway install --watchdog-sec 60s` 在 Linux 渲染 `Type=notify`、`NotifyAccess=main`、
+  `WatchdogSec=60s`；默认仍为 `Type=simple`，非 Linux/非 install/小于 2 秒 fail closed；
+- Gateway recovery preflight 和至少一个 adapter 启动后才发送 `READY=1`；
+- systemd 提供 watchdog 环境且至少一个 adapter 为 running/degraded 时发送 `WATCHDOG=1`，全部
+  closed/error 后发送 unhealthy status 并停止心跳；
+- SIGINT/SIGTERM 发送 `STOPPING=1`，Gateway stop 以 30 秒为上限；
+- filesystem 与 Linux abstract Unix datagram、`WATCHDOG_PID`、报文清洗、unit 渲染和完整生命周期均有测试。
+
+Codex `b8b61bc6` 的 compressed rollout inventory 已做代码级审查；Reames 当前没有 compressed session
+或 SQLite thread inventory，因此不引入 zstd，但未来若压缩会话必须保留 logical path、plain sibling 优先、
+corruption 与 temp-file 的独立诊断语义。Reasonix `2335d0df` Fleet 没有整体移植，因为 Reames writer child 已使用独立 worktree、显式交付事务、
+durable effect journal 和整树预算；Reasonix named profile/字体只保留为 UX 候选。Hermes 的最终 Electron
+full-load/resize zoom 修复缺少 Wails/WebView2 同构证据，只作为 native resize/跨显示器/recovery smoke
+信号；其 Provider
+stream/multimodal 信号转入 P8；MiMo/Kimi 无同构缺口，Scream Goal wizard、Provider/多代理帮助入口为
+P8/P9 体验候选，品牌 welcome/Think badge 不复制。
+
 ## 6. 本批本地验证
 
 冻结提交形成前已通过：
@@ -104,7 +137,7 @@ browser-connect runtime 而明确不适用。
 - Root：`go build ./...`、`go vet ./...`、`go test ./internal/... -count=1 -timeout 300s`；
 - Desktop：`go build ./...`、`go vet ./...`、`go test ./... -count=1 -timeout 300s`；
 - Frontend：`corepack pnpm test:all`、`corepack pnpm build`、bundle budget；
-- Race：`go test -race ./internal/cli ./internal/cron -count=1 -timeout 600s`；
+- Race：`go test -race ./internal/systemdnotify ./internal/gatewayservice ./internal/cli -count=1 -timeout 600s`；
 - Python：143 项脚本/合同测试通过，2 项平台条件跳过；
 - 上游：Reasonix generation、19 项 upstream、Node Issue reconciliation、显式逐项目接受；
 - 治理：tool 文档、docs/public/deploy/release 合同、actionlint v1.7.7、Git Bash shell syntax；
@@ -128,7 +161,8 @@ gh run list --commit (git rev-parse HEAD) --limit 20
   freshness monitor、真实轮换与 compromise drill；
 - 声明 builder identity/SLSA level 时的独立 DSSE/SLSA policy verifier；
 - 干净 Linux 云节点上的 linger-enabled logout/reboot 与 Gateway recovery/system service 实启；
-- 真实 Provider 和飞书/QQ/微信的文本、审批、取消、恢复回环；
+- 真实 OpenAI/Anthropic Provider 和飞书/QQ/微信的文本、审批、取消、恢复回环；
+- 真实 systemd watchdog kill/restart、IM 远端掉线/重连和第一方 CDP 对真实登录态浏览器的控制；
 - 公开签名 release、Windows/macOS signing/notarization 与真实升级失败/断电点演练；
 - NVDA/Narrator 实际听感和 Windows High Contrast 人工验收。
 
@@ -151,10 +185,11 @@ gh run list --commit (git rev-parse HEAD) --limit 20
 判断规则：
 
 1. 工作树应干净，当前分支应为 `main`，`main...origin/main` 应为 `0 0`；否则先审查，不 reset/丢弃。
-2. Upstream Watch 若无新提交，不重开 P6；若有新提交，只审 lock → latest。
+2. Upstream Watch 若无新提交，不重开 P6/P7；若有新提交，只审 lock → latest。
 3. 本批 CI/CodeQL 若失败，先在同一批修复，不用碎片 push 消耗 CI。
 4. 电脑清理后若 `F:\code-reference` 丢失，按 `docs/upstreams/upstreams.json` 重建；不要从旧聊天猜 SHA。
-5. 远端全绿且用户未提供外部环境时，项目保持暂时冻结；下一主线是 M6 外部证据，不降低门槛。
+5. 远端全绿且用户未提供外部环境时，M6 外部证据保持等待；仓库内下一主线按 P8 → P9 → P10，
+   不降低真实 API、真实 IM、systemd reboot 或浏览器登录态证据门槛。
 
 ## 9. Git 与清洁约束
 

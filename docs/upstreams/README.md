@@ -1,6 +1,6 @@
 # Upstream Watch：官方上游自动追踪
 
-Upstream Watch 自动追踪 Reasonix 主上游和其他官方参考仓库，生成风险与采用建议，并通过一个去重的 GitHub Issue 驱动人工审查。
+Upstream Watch 自动追踪 Reasonix 一级主源码上游、Codex/Claude Code 二级战略代码上游和其他官方机制参考仓库，生成风险与采用建议，并通过一个去重的 GitHub Issue 驱动人工审查。
 
 它是“自动发现 + 自动初判 + 自动建单”系统，不是自动合并器。
 
@@ -44,7 +44,7 @@ reviewed → 官方分支最新提交
 | Decision | 含义 |
 |---|---|
 | `up-to-date` | 官方分支与已审查版本一致，且 primary-base 覆盖记录完整 |
-| `review-required` | Reasonix 主上游涉及 runtime/provider/cache/security 等高风险区域 |
+| `review-required` | Reasonix 必需覆盖尚未关闭，或 Codex/Claude Code 二级战略代码上游出现任何新提交 |
 | `adoption-candidate` | Reasonix 有变化，但风险较低，可进入采用评估 |
 | `security-signal` | 其他参考项目出现高风险安全机制变化 |
 | `reference-review` | 参考项目有可研究的机制或体验变化 |
@@ -52,6 +52,10 @@ reviewed → 官方分支最新提交
 | `check-failed` | 仓库、网络或分支检查失败，需要运维介入 |
 
 自动判定只决定审查队列，不代表代码兼容或应当升级。
+
+Codex 与 Claude Code 使用 `strategic-code-upstream`：只要官方分支有新提交，无论自动路径风险是高、
+中还是低，都必须进入 `review-required`。维护者要读真实代码 diff 并比较原生模型协议和产品/runtime
+能力；CHANGELOG-only 变化也必须人工确认确实只有文档，不能自动降为普通参考。
 
 ## 4. 日常运行
 

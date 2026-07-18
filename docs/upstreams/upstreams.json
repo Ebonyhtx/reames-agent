@@ -48,7 +48,7 @@
       "branch": "main",
       "tag_patterns": ["v*"],
       "local_reference": "F:\\code-reference\\codex",
-      "importance": "interaction-reference",
+      "importance": "strategic-code-upstream",
       "policy": "advisory-report",
       "diff": true
     },
@@ -103,9 +103,9 @@
       "branch": "main",
       "tag_patterns": ["v*"],
       "local_reference": "F:\\code-reference\\claude-code",
-      "importance": "plugin-ux-reference",
+      "importance": "strategic-code-upstream",
       "policy": "advisory-report",
-      "diff": false
+      "diff": true
     },
     {
       "id": "kimi-code",

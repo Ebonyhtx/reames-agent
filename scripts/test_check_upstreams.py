@@ -95,8 +95,16 @@ class ManifestValidationTests(unittest.TestCase):
         manifest = json.loads(watch.DEFAULT_MANIFEST.read_text(encoding="utf-8-sig"))
         by_id = {up["id"]: up for up in manifest["upstreams"]}
 
-        for upstream_id in ("reasonix", "hermes", "codex", "mimo", "scream-code", "agentark", "kimi-code", "grok-build"):
+        for upstream_id in ("reasonix", "hermes", "codex", "mimo", "scream-code", "agentark", "claude-code", "kimi-code", "grok-build"):
             self.assertTrue(by_id[upstream_id]["diff"], upstream_id)
+
+    def test_codex_and_claude_are_strategic_code_upstreams(self):
+        manifest = json.loads(watch.DEFAULT_MANIFEST.read_text(encoding="utf-8-sig"))
+        by_id = {up["id"]: up for up in manifest["upstreams"]}
+
+        for upstream_id in ("codex", "claude-code"):
+            self.assertEqual("strategic-code-upstream", by_id[upstream_id]["importance"])
+            self.assertTrue(by_id[upstream_id]["diff"])
 
 
 class AnalysisTests(unittest.TestCase):
@@ -126,6 +134,24 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(result["decision"], "review-required")
         self.assertEqual(result["baseline"], "a" * 40)
         self.assertEqual(result["reviewed"], "b" * 40)
+
+    @mock.patch.object(watch, "diff_changed_files")
+    @mock.patch.object(watch, "git_ls_remote")
+    def test_strategic_code_upstream_always_requires_code_review(self, ls_remote, changed_files):
+        ls_remote.return_value = {"refs/heads/main": "c" * 40}
+        changed_files.return_value = [{"status": "M", "path": "CHANGELOG.md"}]
+        upstream = {
+            **self.upstream,
+            "id": "codex",
+            "name": "OpenAI Codex",
+            "branch": "main",
+            "importance": "strategic-code-upstream",
+        }
+
+        result = watch.analyze_upstream(upstream, self.lock)
+
+        self.assertEqual("review-required", result["decision"])
+        self.assertIn("code-level capability review", result["recommendation"])
 
     @mock.patch.object(watch, "comparison_evidence")
     @mock.patch.object(watch, "git_ls_remote")

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
@@ -37,6 +38,7 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 		"/home/reames/.reames-agent/.env",
 		"service definitions do not embed secret values",
 		"Restart=always",
+		"Type=simple",
 	} {
 		if !strings.Contains(FormatPlan(plan), want) {
 			t.Fatalf("systemd plan missing %q:\n%s", want, FormatPlan(plan))
@@ -58,6 +60,54 @@ func TestLinuxInstallPlanRendersSystemdUserService(t *testing.T) {
 		if !strings.Contains(formatted, want) {
 			t.Fatalf("install plan missing %q:\n%s", want, formatted)
 		}
+	}
+}
+
+func TestLinuxInstallPlanCanEnableSystemdWatchdog(t *testing.T) {
+	plan, err := BuildPlan("linux", Options{
+		Action:      "install",
+		Executable:  "/opt/reames/reames-agent",
+		Home:        "/home/reames/.reames-agent",
+		WatchdogSec: 60 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	formatted := FormatPlan(plan)
+	for _, want := range []string{
+		"Type=notify",
+		"NotifyAccess=main",
+		"WatchdogSec=60s",
+		"readiness begins only after recovery preflight",
+		"heartbeats stop when every configured adapter is unhealthy",
+	} {
+		if !strings.Contains(formatted, want) {
+			t.Fatalf("watchdog plan missing %q:\n%s", want, formatted)
+		}
+	}
+	if strings.Contains(formatted, "Type=simple") {
+		t.Fatalf("watchdog plan retained Type=simple:\n%s", formatted)
+	}
+}
+
+func TestGatewayWatchdogValidationIsFailClosed(t *testing.T) {
+	base := Options{Action: "install", Executable: "/opt/reames/reames-agent"}
+	tooShort := base
+	tooShort.WatchdogSec = time.Second
+	if _, err := BuildPlan("linux", tooShort); err == nil || !strings.Contains(err.Error(), "at least 2s") {
+		t.Fatalf("short watchdog error = %v", err)
+	}
+	nonLinux := base
+	nonLinux.Executable = "/Applications/Reames Agent/reames-agent"
+	nonLinux.WatchdogSec = 30 * time.Second
+	if _, err := BuildPlan("darwin", nonLinux); err == nil || !strings.Contains(err.Error(), "requires Linux systemd") {
+		t.Fatalf("darwin watchdog error = %v", err)
+	}
+	nonInstall := base
+	nonInstall.Action = "status"
+	nonInstall.WatchdogSec = 30 * time.Second
+	if _, err := BuildPlan("linux", nonInstall); err == nil || !strings.Contains(err.Error(), "only configurable during install") {
+		t.Fatalf("status watchdog error = %v", err)
 	}
 }
 

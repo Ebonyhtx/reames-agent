@@ -12,25 +12,28 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
 	defaultServiceName = "reames-agent-gateway"
 	defaultScope       = "user"
+	minWatchdogSec     = 2 * time.Second
 )
 
 // Options describes one gateway service lifecycle operation.
 type Options struct {
-	Action     string
-	Name       string
-	Scope      string
-	Executable string
-	Home       string
-	Channels   string
-	Dir        string
-	Model      string
-	StartNow   bool
-	DryRun     bool
+	Action      string
+	Name        string
+	Scope       string
+	Executable  string
+	Home        string
+	Channels    string
+	Dir         string
+	Model       string
+	WatchdogSec time.Duration
+	StartNow    bool
+	DryRun      bool
 }
 
 // File is a service definition file that an install operation writes.
@@ -91,6 +94,17 @@ func NormalizeOptions(opts Options) (Options, error) {
 	if opts.Home = strings.TrimSpace(opts.Home); opts.Home != "" {
 		opts.Home = cleanPath(opts.Home)
 	}
+	if opts.WatchdogSec < 0 {
+		return opts, fmt.Errorf("gateway watchdog duration cannot be negative")
+	}
+	if opts.WatchdogSec > 0 {
+		if opts.Action != "install" {
+			return opts, fmt.Errorf("gateway watchdog is only configurable during install")
+		}
+		if opts.WatchdogSec < minWatchdogSec {
+			return opts, fmt.Errorf("gateway watchdog duration must be at least %s", minWatchdogSec)
+		}
+	}
 	return opts, nil
 }
 
@@ -102,6 +116,9 @@ func BuildPlan(goos string, opts Options) (Plan, error) {
 	}
 	if goos == "" {
 		goos = runtime.GOOS
+	}
+	if opts.WatchdogSec > 0 && goos != "linux" {
+		return Plan{}, fmt.Errorf("gateway watchdog requires Linux systemd; %s services do not support --watchdog-sec", goos)
 	}
 	if err := validateInstallPaths(goos, opts); err != nil {
 		return Plan{}, err
@@ -205,6 +222,9 @@ func linuxPlan(opts Options) (Plan, error) {
 	}
 	if opts.Scope == "user" {
 		plan.Notes = append(plan.Notes, "user services may require: loginctl enable-linger $USER")
+	}
+	if opts.WatchdogSec > 0 {
+		plan.Notes = append(plan.Notes, "systemd watchdog readiness begins only after recovery preflight and at least one adapter start; heartbeats stop when every configured adapter is unhealthy")
 	}
 	return plan, nil
 }
@@ -311,14 +331,17 @@ func gatewayArgs(opts Options) []string {
 }
 
 func systemdUnit(opts Options) string {
+	serviceType := "Type=simple\n"
+	if opts.WatchdogSec > 0 {
+		serviceType = "Type=notify\nNotifyAccess=main\nWatchdogSec=" + systemdDuration(opts.WatchdogSec) + "\n"
+	}
 	return `[Unit]
 Description=Reames Agent social gateway
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
-ExecStart=` + joinSystemdExecArgs(gatewayArgs(opts)) + `
+` + serviceType + `ExecStart=` + joinSystemdExecArgs(gatewayArgs(opts)) + `
 ` + systemdEnvironment(opts) + `Restart=always
 RestartSec=5
 WorkingDirectory=` + systemdWorkingDirectory(opts) + `
@@ -326,6 +349,14 @@ WorkingDirectory=` + systemdWorkingDirectory(opts) + `
 [Install]
 WantedBy=default.target
 `
+}
+
+func systemdDuration(value time.Duration) string {
+	if value%time.Second == 0 {
+		return strconv.FormatInt(int64(value/time.Second), 10) + "s"
+	}
+	milliseconds := (value + time.Millisecond - 1) / time.Millisecond
+	return strconv.FormatInt(int64(milliseconds), 10) + "ms"
 }
 
 func launchdPlist(opts Options) string {

@@ -159,6 +159,7 @@ reames-agent gateway doctor --deep --home ~/.reames-agent
 reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
 reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
 reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu --dir /path/to/project
+reames-agent gateway install --start-now --watchdog-sec 60s --home ~/.reames-agent --channels feishu --dir /path/to/project
 ```
 
 `gateway setup` is the headless configuration entrypoint for `feishu`, `lark`,
@@ -194,6 +195,15 @@ as `bot doctor`: it checks configuration, credential environment variables,
 access control, connection records, queue settings, and pairing state without
 starting the gateway or printing secret values. Use `--home PATH` to inspect the
 same `REAMES_AGENT_HOME` that a background Gateway service will use.
+
+On Linux systemd, `gateway install` accepts an optional `--watchdog-sec 60s`.
+The default `0` keeps `Type=simple`; a positive value uses `Type=notify`, sends
+`READY=1` only after recovery preflight and at least one adapter start, feeds
+`WATCHDOG=1` only while an adapter remains running/degraded, and sends
+`STOPPING=1` before a bounded shutdown. The minimum is two seconds and the flag
+is rejected on launchd, Windows Scheduled Task, or non-install operations. This
+is local process/adapter-state evidence, not proof that a real IM service is
+reachable; production deployments still need a real channel round trip.
 
 The headless gateway uses the same config records as the desktop app:
 

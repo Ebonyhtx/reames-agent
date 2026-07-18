@@ -87,18 +87,18 @@ python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
 
 ## 参考项目
 
-项目源流：`esengine/DeepSeek-Reasonix` 的 `main-v2` 是主源码上游；`F:\code-reference` 下其他仓库只提供机制与体验参考；`F:\Reames-Lite` 是项目前身和契约参考。详细规则见 `docs/REFERENCE_GOVERNANCE.md`。
+项目源流分三级：`esengine/DeepSeek-Reasonix` 的 `main-v2` 是一级主源码上游；OpenAI Codex 与 Claude Code 是二级战略代码上游，分别跟进 GPT/OpenAI 与 Claude/Anthropic 的原生模型协议和代码级能力；`F:\code-reference` 下其余仓库只提供机制与体验参考。`F:\Reames-Lite` 是项目前身和契约参考。详细规则见 `docs/REFERENCE_GOVERNANCE.md`。
 
 | 项目 | 路径 | 复用方向 |
 |---|---|---|
 | DeepSeek Reasonix | `F:\code-reference\DeepSeek-Reasonix` | 源码基座（Go, Wails, Bubble Tea） |
 | Hermes | `F:\code-reference\Hermes` | 频道/社交集成、错误分类器 |
-| Codex CLI | `F:\code-reference\codex` | App-Server 协议、Hook 系统、LSP Delta |
+| Codex CLI | `F:\code-reference\codex` | 二级战略代码上游；GPT/Responses、App-Server、插件、Hook、LSP、CDP/自动化能力 |
 | MiMo Code | `F:\code-reference\MiMo-Code` | 设计系统、OKLCH 颜色工具 |
 | Impeccable | `F:\code-reference\impeccable` | 品牌设计语言 |
 | Scream Code | `F:\code-reference\scream-code` | 主题系统、Goal Loop |
 | AgentArk | `F:\code-reference\AgentArk` | 安全架构、Intent Classifier |
-| Claude Code | `F:\code-reference\claude-code` | 插件生态/市场 |
+| Claude Code | `F:\code-reference\claude-code` | 二级战略代码上游；Claude/Messages、Thinking、工具/视觉/缓存与插件生态 |
 | Kimi Code | `F:\code-reference\kimi-code` | 桌面 Shell 设计 |
 | Grok Build | `F:\code-reference\Grok-Build` | 权限/沙箱、持久会话与子代理、TUI/ACP/headless 交互 |
 | Reames Lite | `F:\Reames-Lite` | 旧版 Python 项目（合约参考） |

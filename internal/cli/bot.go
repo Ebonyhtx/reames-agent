@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -19,7 +20,23 @@ import (
 	"reames-agent/internal/gatewayservice"
 	"reames-agent/internal/gatewaysetup"
 	"reames-agent/internal/repair"
+	"reames-agent/internal/systemdnotify"
 )
+
+const gatewayStopTimeout = 30 * time.Second
+
+type gatewayLifecycle interface {
+	AdapterHealth() []bot.AdapterHealthSnapshot
+	Stop()
+}
+
+type gatewayLifecycleNotifier interface {
+	Ready(string) (bool, error)
+	Watchdog(string) (bool, error)
+	Status(string) (bool, error)
+	Stopping(string) (bool, error)
+	WatchdogCadence() time.Duration
+}
 
 func botCommand(args []string, version string) int {
 	if len(args) < 1 {
@@ -237,6 +254,7 @@ func gatewayService(action string, args []string) int {
 	channels := fs.String("channels", "", "gateway channels for install: qq,feishu,lark,weixin")
 	dir := fs.String("dir", "", "gateway working directory for install")
 	model := fs.String("model", "", "gateway model override for install")
+	watchdogSec := fs.Duration("watchdog-sec", 0, "Linux systemd watchdog timeout for install (0 disables; minimum 2s)")
 	startNow := fs.Bool("start-now", false, "install: start the service immediately")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -249,16 +267,17 @@ func gatewayService(action string, args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	result, err := gatewayservice.Apply(ctx, gatewayservice.Options{
-		Action:     action,
-		Name:       *name,
-		Scope:      *scope,
-		Executable: *exe,
-		Home:       *home,
-		Channels:   *channels,
-		Dir:        *dir,
-		Model:      *model,
-		StartNow:   *startNow,
-		DryRun:     *dryRun,
+		Action:      action,
+		Name:        *name,
+		Scope:       *scope,
+		Executable:  *exe,
+		Home:        *home,
+		Channels:    *channels,
+		Dir:         *dir,
+		Model:       *model,
+		WatchdogSec: *watchdogSec,
+		StartNow:    *startNow,
+		DryRun:      *dryRun,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -314,8 +333,8 @@ func runGatewayForeground(args []string, version, flagSetName, displayName strin
 	// one-time config upgrades only after recovery evidence says it is safe.
 	migrateLegacyConfigForCLI()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
 
 	cfg, err := loadBotCommandConfig()
 	if err != nil {
@@ -412,17 +431,6 @@ func runGatewayForeground(args []string, version, flagSetName, displayName strin
 	feishuDomains := botruntime.RequestedFeishuDomains(requestedChannels)
 	gw := bot.NewGatewayWithAdapterBindings(gwCfg, botruntime.AdapterBindings(cfg, enabledPlatforms, feishuDomains, logger), logger)
 
-	// 信号处理
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		<-sigCh
-		fmt.Fprintln(os.Stderr, "\nshutting down...")
-		cancel()
-		gw.Stop()
-	}()
-
 	fmt.Fprintf(os.Stderr, "reames-agent %s starting (model: %s, channels: %s)...\n", displayName, modelName, *channels)
 	fmt.Fprintf(os.Stderr, "version: %s\n", version)
 
@@ -431,9 +439,97 @@ func runGatewayForeground(args []string, version, flagSetName, displayName strin
 		return 1
 	}
 
-	// 等待信号或 context 取消
-	<-ctx.Done()
-	return 0
+	return runGatewayLifecycle(ctx, gw, systemdnotify.FromEnvironment(), gatewayStopTimeout, os.Stderr)
+}
+
+func runGatewayLifecycle(ctx context.Context, gw gatewayLifecycle, notifier gatewayLifecycleNotifier, stopTimeout time.Duration, stderr io.Writer) int {
+	healthy, watchdogStatus := gatewayWatchdogStatus(gw.AdapterHealth())
+	if healthy {
+		if _, err := notifier.Ready(watchdogStatus); err != nil {
+			fmt.Fprintf(stderr, "warning: systemd readiness notification failed: %v\n", err)
+		}
+	} else if _, err := notifier.Status("startup unhealthy: " + watchdogStatus); err != nil {
+		fmt.Fprintf(stderr, "warning: systemd startup status notification failed: %v\n", err)
+	}
+	var watchdogTicker *time.Ticker
+	var watchdogTick <-chan time.Time
+	if cadence := notifier.WatchdogCadence(); cadence > 0 {
+		watchdogTicker = time.NewTicker(cadence)
+		watchdogTick = watchdogTicker.C
+		defer watchdogTicker.Stop()
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			if _, err := notifier.Stopping("Gateway stopping"); err != nil {
+				fmt.Fprintf(stderr, "warning: systemd stopping notification failed: %v\n", err)
+			}
+			fmt.Fprintln(stderr, "\nshutting down...")
+			if !stopGatewayBounded(gw.Stop, stopTimeout) {
+				fmt.Fprintf(stderr, "warning: gateway shutdown exceeded %s; exiting so the service manager can recover\n", stopTimeout)
+			}
+			return 0
+		case <-watchdogTick:
+			healthy, watchdogStatus = gatewayWatchdogStatus(gw.AdapterHealth())
+			if !healthy {
+				if _, err := notifier.Status("watchdog unhealthy: " + watchdogStatus); err != nil {
+					fmt.Fprintf(stderr, "warning: systemd watchdog status notification failed: %v\n", err)
+				}
+				watchdogTicker.Stop()
+				watchdogTick = nil
+				continue
+			}
+			if _, err := notifier.Watchdog(watchdogStatus); err != nil {
+				fmt.Fprintf(stderr, "warning: systemd watchdog notification failed: %v\n", err)
+			}
+		}
+	}
+}
+
+func gatewayWatchdogStatus(health []bot.AdapterHealthSnapshot) (bool, string) {
+	active := 0
+	configured := 0
+	for _, item := range health {
+		status := strings.ToLower(strings.TrimSpace(item.Status))
+		if status == "disabled" {
+			continue
+		}
+		configured++
+		if status == "running" || status == "degraded" {
+			active++
+		}
+	}
+	if configured == 0 {
+		return false, "no configured adapters"
+	}
+	if active == 0 {
+		return false, fmt.Sprintf("0/%d adapters active", configured)
+	}
+	return true, fmt.Sprintf("Gateway running: %d/%d adapters active", active, configured)
+}
+
+func stopGatewayBounded(stop func(), timeout time.Duration) bool {
+	if stop == nil {
+		return true
+	}
+	if timeout <= 0 {
+		stop()
+		return true
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		stop()
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 func splitBotChannels(raw string) []string {
@@ -886,7 +982,7 @@ Usage:
   reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME] [--home PATH]
   reames-agent gateway doctor [--json] [--deep] [--home PATH]
   reames-agent gateway recovery-status [--json] [--home PATH] [--root PATH]
-  reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--home PATH] [--channels LIST] [--dir PATH] [--model NAME]
+  reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--home PATH] [--channels LIST] [--dir PATH] [--model NAME] [--watchdog-sec DURATION]
   reames-agent gateway start|stop|restart|status|uninstall [--dry-run] [--scope user|system]
 
 Subcommands:
@@ -908,6 +1004,7 @@ Examples:
   reames-agent gateway recovery-status --json --home ~/.reames-agent
   reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
   reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu
+  reames-agent gateway install --start-now --watchdog-sec 60s --home ~/.reames-agent --channels feishu
   reames-agent gateway run --dir /path/to/project --model deepseek-pro
 
 Secrets:

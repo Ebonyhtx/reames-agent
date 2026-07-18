@@ -1,30 +1,30 @@
 {
   "version": 2,
-  "updated_at": "2026-07-18T10:00:32Z",
+  "updated_at": "2026-07-18T16:51:57Z",
   "upstreams": {
     "reasonix": {
       "branch": "main-v2",
       "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-      "reviewed": "40ef98de92a30a273ee582ec682ab338483109d2",
-      "latest_seen": "40ef98de92a30a273ee582ec682ab338483109d2"
+      "reviewed": "2335d0df9ea4029108ed965f76c2efff30fe6cf4",
+      "latest_seen": "2335d0df9ea4029108ed965f76c2efff30fe6cf4"
     },
     "hermes": {
       "branch": "main",
       "baseline": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
-      "reviewed": "4c96172d9bee8542a356610802b9aabc1419f650",
-      "latest_seen": "4c96172d9bee8542a356610802b9aabc1419f650"
+      "reviewed": "581e92e42c89645b5dacf8263abebb15348c791b",
+      "latest_seen": "581e92e42c89645b5dacf8263abebb15348c791b"
     },
     "codex": {
       "branch": "main",
       "baseline": "f6e251c3ac6573a4d6eccddea6ad12587868485f",
-      "reviewed": "56395bddaf26eb2829387ca6a417bf9128e5b239",
-      "latest_seen": "56395bddaf26eb2829387ca6a417bf9128e5b239"
+      "reviewed": "b8b61bc692517adcd18622df260f2ddd80635122",
+      "latest_seen": "b8b61bc692517adcd18622df260f2ddd80635122"
     },
     "mimo": {
       "branch": "main",
       "baseline": "ba87f5d48d7d3e77145fce6797faebf016fd23c6",
-      "reviewed": "72e9002e48a71b383b8851b23d65e30c692d68fb",
-      "latest_seen": "72e9002e48a71b383b8851b23d65e30c692d68fb"
+      "reviewed": "d48888f7b1d22e830ee5c10faf2b9e455f3cd881",
+      "latest_seen": "d48888f7b1d22e830ee5c10faf2b9e455f3cd881"
     },
     "impeccable": {
       "branch": "main",
@@ -35,8 +35,8 @@
     "scream-code": {
       "branch": "main",
       "baseline": "946eda69896ac161223bdb830acc62e4b6c8228e",
-      "reviewed": "6474e33ad13ffcf11c8eb8a1691af943fe707b2d",
-      "latest_seen": "6474e33ad13ffcf11c8eb8a1691af943fe707b2d"
+      "reviewed": "53fa61b2a9b1bbc1914949f328928fe8f03b16d2",
+      "latest_seen": "53fa61b2a9b1bbc1914949f328928fe8f03b16d2"
     },
     "agentark": {
       "branch": "main",
@@ -53,8 +53,8 @@
     "kimi-code": {
       "branch": "main",
       "baseline": "f30781bb273321f3e3bbb548a9d0724ab6299fc6",
-      "reviewed": "3086e4703992fbbe7a41379405ee243713ad9ced",
-      "latest_seen": "3086e4703992fbbe7a41379405ee243713ad9ced"
+      "reviewed": "4f3c7240c4adc7c748e536bf578e468c1b5bcd7b",
+      "latest_seen": "4f3c7240c4adc7c748e536bf578e468c1b5bcd7b"
     },
     "awesome-design-md": {
       "branch": "main",

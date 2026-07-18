@@ -2,7 +2,7 @@
 
 > 状态：当前唯一执行路线
 >
-> 更新：2026-07-17
+> 更新：2026-07-19
 >
 > 规划方式：先关闭真实用户闭环，再扩展能力面
 
@@ -354,16 +354,68 @@ notarization、公开主题 registry
 - [x] Reasonix、Hermes、Codex、MiMo、Scream Code、AgentArk、Kimi Code、Grok Build 开启路径级
   `diff=true`，以后只审新 lock → latest，不重复打开本冻结点以前的提交。
 
+## P7：Reasonix Fleet 增量与 Gateway watchdog 收口
+
+- [x] 对 Reasonix `40ef98de..2335d0df` 的区域字体和 profile-aware parallel Fleet 完成逐提交、逐文件
+  审查并生成机器账本；不以共享工作区 `write_paths` 锁替代 Reames writer worktree、delivery transaction、
+  durable effects 和整树预算，named profile/字体偏好只保留为显式 UX 候选。
+- [x] 对 Codex `56395bdd..b8b61bc6` 的压缩 rollout inventory 完成战略代码审查；Reames 当前无压缩
+  session/SQLite thread inventory，因此不引入 zstd，但固定 logical-path/plain-sibling/corruption/temp-file 回归信号。
+- [x] 对 Hermes `4c96172d..581e92e4` 的 38 个提交完成代码级分类；采用与 Reames M6 同构的纯 Go
+  systemd notification、watchdog 和 bounded shutdown，不复制 Python/Electron/billing runtime。
+- [x] Linux `gateway install` 增加 opt-in `--watchdog-sec`；启用后使用 `Type=notify`、`NotifyAccess=main`
+  和 `WatchdogSec=`，默认关闭时继续使用 `Type=simple`。非 Linux、非 install、负值和小于 2 秒均 fail closed。
+- [x] `gateway run` 只在 recovery preflight 和至少一个 adapter 启动后发送 `READY=1`；仅在至少一个
+  adapter 为 running/degraded 时发送 `WATCHDOG=1`，全部 closed/error 后停止心跳；退出发送
+  `STOPPING=1` 并以 30 秒上限停止 Gateway。
+- [x] 聚焦测试覆盖 filesystem/abstract Unix datagram、`WATCHDOG_PID`、通知报文、unit 渲染、完整
+  `READY → WATCHDOG/unhealthy → STOPPING` 生命周期和有界停止。真实 systemd kill/restart、logout/reboot
+  与远端渠道 liveness 仍需干净节点和真实 IM，保持 external-blocked。
+- [x] Hermes Electron reload/resize zoom、MiMo 技能重命名、Scream `6474e33a..53fa61b2` 的 Goal/WolfPack/
+  Provider/多代理帮助与 Kimi Web 前台默认完成
+  采用/已有等价/延后/不适用分类；
+  详细边界见 `audits/2026-07-19-p7-upstream-gateway-watchdog.md`。
+
 ## M6：远程与多渠道
 
 - 服务器 CLI/TUI：单二进制安装、SSH/tmux 交互、`run` 一次性任务、服务器用户级 `REAMES_AGENT_HOME` 与真实 API key。
-- Gateway service：独立后台进程承载飞书/微信/QQ/Telegram 等社交通道；已补 Linux systemd、Windows Scheduled Task、macOS launchd 生命周期、`REAMES_AGENT_HOME` service 绑定、`gateway run --home`、headless smoke，以及 `gateway setup` 的四渠道 secret-env-only、fail-closed access、redacted dry-run、原子幂等配置事务。credential-free 预检现用同一实际 CLI 二进制和隔离 home 覆盖 setup → doctor → service-plan、localhost Provider 一次性任务/会话持久化、feedback submit → summary → draft 和敏感值脱敏；新增 `gateway recovery-status`，且 `gateway run` 在普通 runtime 前强制执行共享 Guard preflight。WSL2 的真实 systemd user manager又覆盖 unit 静态验证、带空格路径、install、同名重装立即生效、status、restart、stop/start、journal、webhook readiness、卸载后 `LoadState=not-found`，并修复 uninstall 顺序与 service unit 编码。Linux user-scope install 现进一步以旧 unit bytes/mode 和 enabled/active 快照做自动事务，`systemd-analyze --user verify`、前向命令、取消和回滚失败均有 fail-closed 故障注入；该保证不外推到 system scope、macOS launchd 或 Windows Scheduled Task（见 `audits/2026-07-10-headless-gateway-smoke.md`、`audits/2026-07-13-m6-gateway-setup.md`、`audits/2026-07-13-m6-clean-node-operations-preflight.md`、`audits/2026-07-13-m6-linux-systemd-lifecycle.md`、`audits/2026-07-14-m6-recovery-transactions.md`、`audits/2026-07-17-p2-offline-guard-safe-mode.md`）。该 WSL 用户 `Linger=no`，下一步仍需在干净 Linux 云节点验证 logout/reboot 常驻和新恢复命令实启，再做真实 Provider 与 IM 渠道回环。
+- Gateway service：独立后台进程承载飞书/微信/QQ/Telegram 等社交通道；已补 Linux systemd、Windows Scheduled Task、macOS launchd 生命周期、`REAMES_AGENT_HOME` service 绑定、`gateway run --home`、headless smoke，以及 `gateway setup` 的四渠道 secret-env-only、fail-closed access、redacted dry-run、原子幂等配置事务。credential-free 预检现用同一实际 CLI 二进制和隔离 home 覆盖 setup → doctor → service-plan、localhost Provider 一次性任务/会话持久化、feedback submit → summary → draft 和敏感值脱敏；新增 `gateway recovery-status`，且 `gateway run` 在普通 runtime 前强制执行共享 Guard preflight。Linux systemd 安装可 opt-in `--watchdog-sec`：preflight 和至少一个 adapter 启动后才 `READY=1`，adapter 状态健康时喂 `WATCHDOG=1`，全部关闭/错误后停止心跳，SIGINT/SIGTERM 发送 `STOPPING=1` 并做 30 秒 bounded shutdown。WSL2 的真实 systemd user manager又覆盖 unit 静态验证、带空格路径、install、同名重装立即生效、status、restart、stop/start、journal、webhook readiness、卸载后 `LoadState=not-found`，并修复 uninstall 顺序与 service unit 编码。Linux user-scope install 现进一步以旧 unit bytes/mode 和 enabled/active 快照做自动事务，`systemd-analyze --user verify`、前向命令、取消和回滚失败均有 fail-closed 故障注入；该保证不外推到 system scope、macOS launchd 或 Windows Scheduled Task（见 `audits/2026-07-10-headless-gateway-smoke.md`、`audits/2026-07-13-m6-gateway-setup.md`、`audits/2026-07-13-m6-clean-node-operations-preflight.md`、`audits/2026-07-13-m6-linux-systemd-lifecycle.md`、`audits/2026-07-14-m6-recovery-transactions.md`、`audits/2026-07-17-p2-offline-guard-safe-mode.md`、`audits/2026-07-19-p7-upstream-gateway-watchdog.md`）。该 WSL 用户 `Linger=no`，下一步仍需在干净 Linux 云节点验证 logout/reboot 常驻、真实 watchdog kill/restart 和新恢复命令实启，再做真实 Provider 与 IM 渠道回环。
 - Server/Web：作为可选远程控制面，提供鉴权、CSRF/Origin、租约、SSE/WS 重连、速率限制和审计。
 - 部署：Docker、systemd、反向代理和健康检查已有基线；敏感的 home/state `backup create/verify/restore`、仅新目标恢复、候选/安装后健康检查、保留 immediate predecessor 的 updater 与 `upgrade --rollback` 已有本地自动证据。内嵌 manifest 只证明自洽，多根恢复没有 durable crash journal，公开签名 release 和干净云节点实启仍需外部证据。
 - 反馈中心：已建立 `internal/feedback` schema、本地 JSONL 账本、`serve` 的 `POST /api/feedback`、`GET /api/feedback/summary` 与 `POST /api/feedback/draft`，以及 SSH 运维可用的 `reames-agent feedback submit|summary|draft --home PATH`，先完成脱敏、去重、本地聚合和维护草稿，再接人工确认后的 Issue 发布。
 - Gateway：统一消息 envelope；渠道 metadata 不进入 provider prompt。
 - 每个渠道先完成文本 + 审批 + 取消 + 恢复，再扩展媒体与富交互。
 - 阿里云等自有服务器形态按 [云端 Agent 计划](CLOUD_AGENT_PLAN.md) 推进，先完成 SSH/CLI 与独立 Gateway service，再按需开启 `serve`，最后承载后台研究任务。
+
+## P8：官方 GPT / Claude Provider parity
+
+- OpenAI Codex 与 Claude Code 已提升为二级战略代码上游；P8/P9 必须从真实源码 diff 建立 capability
+  matrix，不只读取 release notes。OpenAI 不再只停留在兼容 `/chat/completions`：实现独立 Responses API transport，覆盖 GPT reasoning、
+  流式 item/event、工具调用、并行调用、多模态输入、usage/cache、结构化错误、取消与重试边界。
+- 对 Anthropic Messages 做完整能力矩阵：Claude thinking、tool use/result、vision、prompt cache、usage 合并、
+  stream interruption 和 model capability；已有能力必须由测试证明，缺口不能用兼容网关推断为完成。
+- CLI/Desktop/Serve/Gateway 只通过现有 Controller/boot 装配选择 Provider；不得为 GPT/Claude 建立前端专用
+  Agent loop，也不得把动态模型/UI 状态注入 cache-stable system prompt/tool schema。
+- 无真实 key 时先完成 localhost fixture、golden stream、错误/取消/重试/usage/多模态合同；真实 API 回环
+  单独标记 external-blocked，不用 mock 冒充。
+
+## P9：Codex-class extensibility 与 headless 协议
+
+- 以 Codex 最新源码做能力矩阵，审计 Reames 现有 MCP、Plugin Package、Skill、Hook、TUF registry、
+  package sandbox 与 M5 lifecycle，逐项标记已有/缺口/不适用，而不是因“已有插件目录”直接宣称 parity。
+- 补齐用户需要的发现、安装、精确权限、更新/回滚、禁用/撤销、诊断、版本兼容和会话投影；继续复用
+  fresh-human、generation identity、TUF/provenance、OS sandbox 和进程树回收，不接入无治理 marketplace。
+- 审计 Codex App-Server/headless 线程、命令、事件、审批和 MCP runtime 语义，只扩展现有
+  `internal/control`/event wire；不引入第二套 Agent/runtime 或破坏传输无关边界。
+
+## P10：第一方 Browser Control / CDP
+
+- 建立 CLI/Desktop/Serve 共用的浏览器控制 runtime，支持受管 Chromium 与显式 attach；CDP 连接必须验证
+  双栈 loopback、目标协议和端口占用者，不能把普通 TCP listener 当作浏览器就绪。
+- 首个纵向闭环覆盖 browser/tab 生命周期、navigate、DOM/query、click/type、screenshot、download、取消和
+  session 恢复；后续再扩展复杂 Playwright 语义。
+- 浏览器网络、cookie/登录态、下载和页面文本全部接入 permission、sandbox、credential isolation、
+  prompt-injection 标注、evidence 与 redaction。`web_search`、`web_fetch` 或可选 Playwright MCP 不算 P10 完成。
 
 ## M7：通用工作能力
 
@@ -408,13 +460,15 @@ notarization、公开主题 registry
 
 ```text
 P1/P2/P3/P4/P5 已关闭；P5 的 CI、CodeQL 与三平台 Desktop candidate 全绿
-→ P6 已关闭：11 个上游/参考仓库已更新、代码级分类并冻结；Reasonix 锁定 `40ef98de`，后续只比较新增提交
+→ P6 已关闭；P7 已审查 Reasonix `40ef98de..2335d0df`、Codex 战略增量与 4 个机制参考增量，并收口 Gateway systemd
+  READY/WATCHDOG/STOPPING、adapter-health gate 和 bounded shutdown；权威 reviewed SHA 以 lock 为准
 → Grok Build `98c3b24` 已纳入机制参考；后续增量重点比较 shell/permission/sandbox、
 durable session/subagent、TUI queue/interject、ACP/headless。不得照搬其 Plan Mode 的 shell/subagent 写入缺口，
 也不接入 xAI auth、telemetry、online memory、managed policy、marketplace 或 Rust 第二 runtime
-→ 下一仓库内主线暂时冻结，避免电脑清理前打开新架构批次；恢复工作后先确认 main/CI/CodeQL 与 upstream watch，
-再进入 M6：优先干净 Linux linger-enabled logout/reboot、Gateway recovery-status/system service 实启，
-再做真实 Provider 与飞书/微信/QQ 文本、审批、取消、恢复回环
+→ 当前 M6 继续等待/准备干净 Linux linger-enabled logout/reboot、真实 watchdog kill/restart、Gateway
+  recovery-status/system service 实启，以及真实 Provider 与飞书/微信/QQ 文本、审批、取消、恢复回环
+→ 无需外部凭据的下一仓库主线按 P8 → P9 → P10：官方 GPT/Claude Provider parity、Codex-class
+  插件/headless 能力矩阵、第一方 CDP Browser Control；每条先完成 fixture/权限/沙箱/evidence 再补真实回环
 → 体验候选：历史消息时间、Windows 外部打开器、Subagent profile、workspace 面板偏好按真实用户缺口进入
 → external-blocked：真实运营 registry 的生产 endpoint、人员/HSM 密钥仪式、online custody、
 实际轮换/compromise drill，以及声明 provenance 时的独立 DSSE/SLSA policy verifier
