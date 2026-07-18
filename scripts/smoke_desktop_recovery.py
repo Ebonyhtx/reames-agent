@@ -119,6 +119,20 @@ def smoke_environment(home: Path) -> dict[str, str]:
     return env
 
 
+def guard_launch_command(guard: Path, executable: Path) -> list[str]:
+    # The recovery smoke must own the Guard and Desktop as one foreground
+    # process tree. The packaged launcher defaults to detached mode, which can
+    # leave the Safe Mode child alive and racing the derived-state fixtures.
+    return [
+        str(guard),
+        "launch",
+        "--detach=false",
+        "--app",
+        str(executable),
+        "--safe-mode",
+    ]
+
+
 def default_boundary_roots(platform_name: str, executable_name: str) -> dict[str, Path]:
     user_home = Path.home()
     if platform_name == "windows":
@@ -480,7 +494,7 @@ def run_smoke(
         else:
             launch_options["start_new_session"] = True
         launch_proc = subprocess.Popen(
-            [str(guard), "launch", "--app", str(executable), "--safe-mode"],
+            guard_launch_command(guard, executable),
             cwd=workspace,
             env=env,
             stdout=subprocess.DEVNULL,

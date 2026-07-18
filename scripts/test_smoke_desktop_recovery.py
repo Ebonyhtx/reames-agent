@@ -60,6 +60,13 @@ class RecoverySmokeTests(unittest.TestCase):
         self.assertEqual(env["REAMES_AGENT_CACHE_HOME"], str(home / "cache"))
         self.assertNotIn("REAMES_AGENT_PENDING_HELPER", env)
 
+    def test_safe_mode_launch_stays_attached_to_smoke_process_tree(self) -> None:
+        command = smoke.guard_launch_command(Path("guard"), Path("desktop"))
+        self.assertEqual(
+            command,
+            ["guard", "launch", "--detach=false", "--app", "desktop", "--safe-mode"],
+        )
+
     def test_report_summary_drops_paths_and_messages(self) -> None:
         summary = smoke.summarize_report(
             {
