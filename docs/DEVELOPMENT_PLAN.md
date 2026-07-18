@@ -334,9 +334,10 @@ Reasonix `7f00d2c2` 的 Theme Pack V2 提供了值得吸收的安全和体验机
   创建、限额、恢复和 Safe Mode；设计审计记录跨进程并发边界。当前只有受单实例保护的 Desktop 写 Store，
   若未来向 CLI/Serve 开放写入口，必须先增加跨进程锁。
 
-P5 仓库内实现和本地全量/race/六目标/真实 Chromium/Windows production Wails normal + Safe Mode
-门槛已通过，关闭仍以集中 push 后的 CI、CodeQL 和三平台 Desktop candidate 为准；主题功能不能替代
-上游核心 bug-fix parity。真实签名、notarization、公开主题 registry
+P5 已关闭：`b4815ba9` 交付受控 Theme Pack，`7396faf4` 修复 installed recovery smoke 的 detached
+进程树竞态；最终 CI `29635818559` 8/8、CodeQL `29635818555` 3/3、Desktop candidate
+`29635823162` 的 Linux/macOS/Windows 全绿。主题功能不能替代上游核心 bug-fix parity。真实签名、
+notarization、公开主题 registry
 或 marketplace 不属于 P5 依赖并保持 `external-blocked`。
 
 ## M6：远程与多渠道
@@ -392,11 +393,9 @@ P5 仓库内实现和本地全量/race/六目标/真实 Chromium/Windows product
 当前执行顺序：
 
 ```text
-P1/P2/P3/P4 已关闭，P4 的 CI、CodeQL 与三平台 Desktop candidate 全绿
-→ 当前交付 P5（受控 Theme Pack）：安全 manifest、原子内容寻址 Store、延迟 Gallery、可撤销预览、
-Safe Mode、两套原创官方资产、schema/用户文档、故障注入和本地全量/race/六目标/浏览器/Windows 原生
-smoke 已完成；集中单次 push，并核验 CI、CodeQL 与三平台 Desktop candidate；不复制 Reasonix 品牌、图片、marketplace
-或发布基础设施
+P1/P2/P3/P4/P5 已关闭；P5 的 CI、CodeQL 与三平台 Desktop candidate 全绿
+→ 下一优先级：代码级审查 Reasonix `3637d0f0..40ef98de`，先处理 security、cache/provider/runtime 与
+Desktop/CLI bug-fix，再决定哪些机制进入 Reames；release workflow、品牌站点和生产发布授权继续按治理规则分歧
 → M6：优先干净 Linux linger-enabled logout/reboot、Gateway recovery-status/system service 实启，
 再做真实 Provider 与飞书/微信/QQ 文本、审批、取消、恢复回环
 → 体验候选：历史消息时间、Windows 外部打开器、Subagent profile、workspace 面板偏好按真实用户缺口进入

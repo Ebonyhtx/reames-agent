@@ -2,7 +2,7 @@
 
 日期：2026-07-18
 
-状态：仓库内实现与本地门槛通过；远端 CI、CodeQL 和三平台 Desktop candidate 待集中提交后核验
+状态：已关闭
 
 ## 上游范围
 
@@ -132,12 +132,33 @@ journal。没有把这一结论外推为通用跨进程原子性：若 CLI/Serve
   524,736 B；browser mock 980,045 B；virtual menu 905,148 B；settings 1,059,157 B JS + 624,908 B CSS；
   largest JS 704,186 B。所有数值均低于既有硬预算，没有继续放宽门槛。
 
+## 远端关闭证据
+
+- 主交付提交：`b4815ba9`（`feat(desktop): add controlled theme packs`）；恢复 smoke 进程所有权修复：
+  `7396faf4`（`fix(ci): own safe mode recovery smoke process`）。
+- 最终普通 [CI `29635818559`](https://github.com/Ebonyhtx/reames-agent/actions/runs/29635818559)
+  8/8 通过：Core Go、Desktop Go、Desktop frontend、六目标交叉编译、文档/公开清洁、release、deployment
+  与 upstream-watch contracts 全绿。
+- 最终 [CodeQL `29635818555`](https://github.com/Ebonyhtx/reames-agent/actions/runs/29635818555)
+  3/3 通过：Go、JavaScript/TypeScript、GitHub Actions 均无阻断。
+- [Desktop candidate `29635823162`](https://github.com/Ebonyhtx/reames-agent/actions/runs/29635823162)
+  最终通过 Linux/amd64、darwin/universal 和 Windows/amd64。Linux 安装 `.deb` 后完成窗口与 recovery
+  smoke；macOS 挂载 DMG、复制 universal app、验证 ad-hoc 签名与双架构后完成 state-ready 与 recovery smoke；
+  Windows 静默安装 NSIS 后完成 cold/warm native、19 请求 interaction/failure recovery、strict accessibility、
+  plugin lifecycle、Safe Mode recovery，再静默卸载并验证文件与 HKCU 注册清理。
+- 首轮候选暴露 recovery smoke 使用 Guard 默认 detached 启动、只清理 Guard 父进程的 macOS 竞态；修复为
+  `--detach=false` 后 macOS 通过。第二轮 Windows plugin lifecycle 曾遇到一次 React 重挂载期间的瞬时
+  `ElementNotAvailable`，同 commit failed-job 重跑通过；未削弱任何产品、恢复或 UIA 断言。
+
 ## 完成门槛
 
 P5 只有在以下证据同时存在后关闭：恶意 ZIP/图像/路径矩阵、事务故障注入、preview/apply/relaunch
 合同、Safe Mode 合同、Frontend 交互与 bundle budget、现有 305 项主题对比度门禁、Go race、六目标
 CGO=0 构建、Desktop Go/前端全量、浏览器与三平台 candidate。真实签名、notarization、公开主题
 registry 或 marketplace 保持 `external-blocked`，不使用用户服务器，也不恢复任何遥测上传。
+
+上述本地与远端证据现已同时存在，P5 于 `7396faf4` 关闭。公开主题 registry、签名、notarization 和
+marketplace 仍是明确的外部运营边界，不影响离线受控 Theme Pack 交付。
 
 主题启动恢复本身只在现有 initial graph 中增加一个动态入口触发器；Theme Pack runtime、CSS、Gallery 和
 browser mock 数据均保持独立 lazy chunk。生产构建仍低于既有 640,000 B entry、900,000 B initial JS
