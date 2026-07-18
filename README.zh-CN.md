@@ -2,7 +2,7 @@
 
 多平台 AI 编程助手。终端原生 CLI、桌面应用、云端部署服务、IM 机器人网关 — 全部来自单个 Go 二进制文件。
 
-**基于 DeepSeek Reasonix（MIT），吸收 9 个参考项目和 Reames Lite 的优点。**
+**基于 DeepSeek Reasonix（MIT），吸收 10 个参考项目和 Reames Lite 的优点。**
 
 ## 快速开始
 

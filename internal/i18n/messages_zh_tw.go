@@ -185,6 +185,8 @@ var ChineseTraditional = Messages{
 	CompHintSlash:                "↑/↓ 移動 · Tab/Enter 選中 · Esc 關閉",
 	CompHintFile:                 "↑/↓ 移動 · Tab/Enter 進入資料夾或選中檔案 · Esc 關閉",
 	MouseCopiedHint:              "已複製到剪貼簿",
+	ClipboardTextPasteRemoteHint: "SSH 下右鍵貼上無法讀取本機剪貼簿 — 請使用終端貼上快捷鍵或 /mouse",
+	ClipboardTextPasteFailedFmt:  "貼上文字失敗：%v",
 	MouseCaptureOnHint:           "滑鼠接管已開啟 — 應用內拖拽選取/捲軸/滾輪生效",
 	MouseCaptureOffHint:          "滑鼠接管已關閉 — 由終端原生處理選取與右鍵選單",
 	MouseCaptureTag:              "終端原生滑鼠",

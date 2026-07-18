@@ -340,6 +340,20 @@ P5 已关闭：`b4815ba9` 交付受控 Theme Pack，`7396faf4` 修复 installed 
 notarization、公开主题 registry
 或 marketplace 不属于 P5 依赖并保持 `external-blocked`。
 
+## P6：上游最新版代码级冻结与 CLI 增量收口
+
+- [x] 11 个上游/参考仓库均执行 `fetch --prune --tags` 与 `pull --ff-only`，干净镜像和精确 SHA 固定在
+  `docs/upstreams/upstreams.lock.json`；接受过程逐项列出项目，没有使用 `--accept-all`。
+- [x] 完成 Reasonix `3637d0f0..40ef98de` 5 个提交/49 文件的逐提交、逐文件和 required-area 审查，
+  同步生成可机器校验的 generation 账本并把 `reasonix-current.json` 推进到 `40ef98de`。
+- [x] 适配 CLI 鼠标接管下的右键文本粘贴、活动 transcript selection 复制优先、SSH 剪贴板边界、统一
+  `tea.PasteMsg` 路径、assistant identity/gutter 和 reasoning/answer/usage 语义间距；live/resume 使用同一投影。
+- [x] 吸收 Hermes 暴露的 Windows UTF-8 BOM 兼容信号：`cron.json` 可读取 BOM，后续保存自动愈合为无 BOM。
+- [x] 对 Hermes、Codex、MiMo、Scream Code、Claude Code 的新增源码完成采用/已有等价/延后/拒绝分类；
+  Hermes 最终 `4c96172d` 的 CDP 双栈/端口占用修复因 Reames 无 browser-connect runtime 而明确不适用。
+- [x] Reasonix、Hermes、Codex、MiMo、Scream Code、AgentArk、Kimi Code、Grok Build 开启路径级
+  `diff=true`，以后只审新 lock → latest，不重复打开本冻结点以前的提交。
+
 ## M6：远程与多渠道
 
 - 服务器 CLI/TUI：单二进制安装、SSH/tmux 交互、`run` 一次性任务、服务器用户级 `REAMES_AGENT_HOME` 与真实 API key。
@@ -394,9 +408,12 @@ notarization、公开主题 registry
 
 ```text
 P1/P2/P3/P4/P5 已关闭；P5 的 CI、CodeQL 与三平台 Desktop candidate 全绿
-→ 下一优先级：代码级审查 Reasonix `3637d0f0..40ef98de`，先处理 security、cache/provider/runtime 与
-Desktop/CLI bug-fix，再决定哪些机制进入 Reames；release workflow、品牌站点和生产发布授权继续按治理规则分歧
-→ M6：优先干净 Linux linger-enabled logout/reboot、Gateway recovery-status/system service 实启，
+→ P6 已关闭：11 个上游/参考仓库已更新、代码级分类并冻结；Reasonix 锁定 `40ef98de`，后续只比较新增提交
+→ Grok Build `98c3b24` 已纳入机制参考；后续增量重点比较 shell/permission/sandbox、
+durable session/subagent、TUI queue/interject、ACP/headless。不得照搬其 Plan Mode 的 shell/subagent 写入缺口，
+也不接入 xAI auth、telemetry、online memory、managed policy、marketplace 或 Rust 第二 runtime
+→ 下一仓库内主线暂时冻结，避免电脑清理前打开新架构批次；恢复工作后先确认 main/CI/CodeQL 与 upstream watch，
+再进入 M6：优先干净 Linux linger-enabled logout/reboot、Gateway recovery-status/system service 实启，
 再做真实 Provider 与飞书/微信/QQ 文本、审批、取消、恢复回环
 → 体验候选：历史消息时间、Windows 外部打开器、Subagent profile、workspace 面板偏好按真实用户缺口进入
 → external-blocked：真实运营 registry 的生产 endpoint、人员/HSM 密钥仪式、online custody、

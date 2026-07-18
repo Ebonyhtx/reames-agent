@@ -1,6 +1,6 @@
 # Reames Agent
 
-Go 1.25+ 多平台 AI 编程助手。基于 DeepSeek Reasonix (MIT)，融合 9 个参考项目优点。
+Go 1.25+ 多平台 AI 编程助手。基于 DeepSeek Reasonix (MIT)，融合 10 个参考项目优点。
 
 ## 项目结构
 
@@ -100,6 +100,7 @@ python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
 | AgentArk | `F:\code-reference\AgentArk` | 安全架构、Intent Classifier |
 | Claude Code | `F:\code-reference\claude-code` | 插件生态/市场 |
 | Kimi Code | `F:\code-reference\kimi-code` | 桌面 Shell 设计 |
+| Grok Build | `F:\code-reference\Grok-Build` | 权限/沙箱、持久会话与子代理、TUI/ACP/headless 交互 |
 | Reames Lite | `F:\Reames-Lite` | 旧版 Python 项目（合约参考） |
 
 ## 当前状态

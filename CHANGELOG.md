@@ -4,6 +4,8 @@
 
 ### Agent Reliability
 
+- Added captured-mouse right-click text paste to the CLI while preserving transcript-copy precedence, refusing misleading remote-host clipboard reads over SSH, and routing accepted text back through the canonical paste pipeline. Assistant replies now use a consistent Reames identity/gutter and semantic spacing in both live and resumed transcripts.
+- Made persisted cron JSON tolerant of a UTF-8 BOM produced by common Windows editors; the next successful save heals the file back to BOM-less JSON.
 - Made Goal completion evidence-gated in every mode; repeated completion claims can no longer override incomplete canonical todos or project checks, and the host no longer fabricates final todo events.
 - Added a versioned session runtime projection for recoverable Goal/Plan/Todo state, continuation budgets, strict self-checks, transcript-digest freshness, and per-path monotonic revisions across resume, branch, fork, switch, and rewind.
 - Hardened checkpoint rewind with transcript-prefix digests, runtime preflight, durable truncate tombstones, workspace/symlink confinement, path-alias handling, transactional file rollback including a partially written failing target, and relative-path mode restoration. Checkpoint writes use `AtomicWriteFile`; its Windows cross-device fallback and the remaining path/dual-resource crash windows are documented rather than described as unconditionally crash-safe.
@@ -58,6 +60,7 @@
 
 ### Upstream
 
+- Completed a code-level freeze of all 11 tracked upstream/reference repositories. DeepSeek Reasonix is reviewed through `40ef98de`; applicable CLI interaction and transcript fixes were adapted, while website, registry UI, branding, production publishing, telemetry, managed services, and second-runtime changes remain explicitly rejected, deferred, or not applicable. Code-oriented references now use path-level diff classification, and every accepted SHA is pinned in the repository lock file.
 - Kept upstream/reference tracking issue-driven; automatic discovery may propose review work but must not auto-merge upgrades.
 - Reviewed Reasonix Theme Pack V2 at the source/test/schema level and implemented the independently verified manifest, storage, preview, and recovery mechanisms without importing its branding, assets, marketplace, or production release infrastructure.
 

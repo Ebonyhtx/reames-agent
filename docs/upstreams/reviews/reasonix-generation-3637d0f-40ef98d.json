@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "upstream": "reasonix",
+  "baseline": "3637d0f028bb8223d50ba9490a0ab5140eada4f3",
+  "reviewed": "40ef98de92a30a273ee582ec682ab338483109d2",
+  "reviewed_at": "2026-07-18T05:11:47Z",
+  "counts": {
+    "all_commits": 5,
+    "non_merge_commits": 5,
+    "fix_perf_commits": 2,
+    "diff_shortstat": "49 files changed, 1658 insertions(+), 410 deletions(-)"
+  },
+  "area_counts": {
+    "build-release": 4,
+    "cli-acp": 1,
+    "desktop-ui-accessibility": 3,
+    "provider-cache": 1,
+    "session-memory-compaction": 1,
+    "tools-mcp-plugins": 2
+  },
+  "fix_perf_area_counts": {
+    "build-release": 2,
+    "desktop-ui-accessibility": 1,
+    "tools-mcp-plugins": 1
+  },
+  "unmerged_remote_refs": [
+    {
+      "ref": "origin/dependabot/go_modules/desktop/go-9b87d4a103",
+      "sha": "388ebce31fedfb8a70564cd00fcb9ae9177a2a07",
+      "ahead": 1,
+      "subject": "chore(deps): bump the go group across 1 directory with 5 updates"
+    },
+    {
+      "ref": "origin/dependabot/go_modules/go-40ad0753b6",
+      "sha": "ee67206eb0a19c2924852e4cf39dc2991d48a1f0",
+      "ahead": 1,
+      "subject": "chore(deps): bump the go group across 1 directory with 13 updates"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/desktop/frontend/npm-aab5777841",
+      "sha": "b65d80c1d5ce116613c0f737e97a6a9b2e2d5223",
+      "ahead": 1,
+      "subject": "chore(deps): bump the npm group across 1 directory with 8 updates"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/site/astro-7.0.7",
+      "sha": "f33a3779b9e230b4a2ecf719a880709d354ddd43",
+      "ahead": 1,
+      "subject": "build(deps): bump astro from 6.4.8 to 7.0.7 in /site"
+    },
+    {
+      "ref": "origin/feature/inline-renderer",
+      "sha": "217fb750362693f5a0c2cb240351131241275c87",
+      "ahead": 4,
+      "subject": "feat(cli)!: default the transcript renderer to inline"
+    },
+    {
+      "ref": "origin/feature/macos-home-migration-pr",
+      "sha": "410d2e12fb2c2883f52ec73baaa89c3df38d050a",
+      "ahead": 1,
+      "subject": "feat(config): add macOS home migration command"
+    },
+    {
+      "ref": "origin/feature/status-bar-display-options",
+      "sha": "e30bac56ec4faf3edd7431bd6401f0f71c00e8f5",
+      "ahead": 1,
+      "subject": "feat(desktop): customize status bar items"
+    },
+    {
+      "ref": "origin/fix/chrome-tab-strip-max-width",
+      "sha": "4a381fc84c301efcc1e0a2d76539397601ef228d",
+      "ahead": 3,
+      "subject": "fix(desktop): pin mac chrome new tab button"
+    },
+    {
+      "ref": "origin/fix/chrome-tabs-reserve-right-dock",
+      "sha": "dde01b723d1d6a8d82e4e5ef6ff534528a2bd1f6",
+      "ahead": 2,
+      "subject": "fix(desktop): bound chrome tab strip overflow"
+    },
+    {
+      "ref": "origin/fix/desktop-open-tab-crash-missing-drive",
+      "sha": "92c2df5efd2e082a5a1e5893ead351758ccb1fda",
+      "ahead": 1,
+      "subject": "fix(desktop): toast instead of crash when a tab opens on an unreachable path"
+    },
+    {
+      "ref": "origin/fix/desktop-streaming-reasoning-jank",
+      "sha": "0e3eb72d0bcb545e391253cf54dc72b8e13bc471",
+      "ahead": 2,
+      "subject": "Handle display mode changes during reasoning streams"
+    },
+    {
+      "ref": "origin/v1",
+      "sha": "50b1bf4a5061ad22abb97774a424b5962abab79f",
+      "ahead": 1561,
+      "subject": "fix(cli): don't crash session hydration on a tool_call missing its function"
+    }
+  ],
+  "recent_merged_tags": [
+    {
+      "name": "desktop-v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "npm-v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "desktop-v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "npm-v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "desktop-v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "npm-v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "desktop-v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "npm-v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "desktop-v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "npm-v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "desktop-v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "npm-v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "desktop-v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "npm-v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "desktop-v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "npm-v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "desktop-v1.17.6",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "npm-v1.17.6",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "npm-v1.17.6-rc.1",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "v1.17.6",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "desktop-v1.17.5",
+      "sha": "221a7645b6cb8b0b1a77a3fa4e98f2d19dcf70d1"
+    },
+    {
+      "name": "npm-v1.17.5",
+      "sha": "221a7645b6cb8b0b1a77a3fa4e98f2d19dcf70d1"
+    }
+  ],
+  "commits": [
+    {
+      "sha": "8a36da8db87fc688d854f59b6897268995190bf7",
+      "authored_at": "2026-07-18T07:34:25+08:00",
+      "subject": "Site dark mode, cache-block motif & changelog format / 官网暗色模式、缓存方块母题与更新日志改版 (#6627)",
+      "fix_perf": false,
+      "files": [
+        "site/src/components/ChangelogPage.astro",
+        "site/src/components/SiteHeader.astro",
+        "site/src/layouts/Base.astro",
+        "site/src/layouts/Community.astro",
+        "site/src/pages/404.astro",
+        "site/src/pages/changelog/index.astro",
+        "site/src/pages/index.astro",
+        "site/src/pages/skills.astro",
+        "site/src/scripts/community.js",
+        "site/src/scripts/fx.js",
+        "site/src/scripts/mobile-nav-contract.test.mjs",
+        "site/src/scripts/release-title.js",
+        "site/src/scripts/release-title.test.mjs",
+        "site/src/scripts/site.js",
+        "site/src/scripts/theme.js",
+        "site/src/styles/changelog.css",
+        "site/src/styles/community.css",
+        "site/src/styles/global.css"
+      ],
+      "areas": [
+        "build-release",
+        "provider-cache",
+        "tools-mcp-plugins",
+        "desktop-ui-accessibility"
+      ]
+    },
+    {
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a",
+      "authored_at": "2026-07-18T07:52:33+08:00",
+      "subject": "chore(release): prepare v1.17.15 notes",
+      "fix_perf": false,
+      "files": [
+        "release-notes/releases.json"
+      ],
+      "areas": [
+        "build-release"
+      ]
+    },
+    {
+      "sha": "e7a0f1163b82a235fb975c85a1fe9f90ac57d1ee",
+      "authored_at": "2026-07-18T08:36:22+08:00",
+      "subject": "fix(release): prevent skipped stable publishers (#6629)",
+      "fix_perf": true,
+      "files": [
+        ".github/workflows/release-desktop.yml",
+        ".github/workflows/release-npm.yml",
+        ".github/workflows/release-stable.yml",
+        ".github/workflows/release.yml",
+        "docs/RELEASING.md",
+        "scripts/release-workflows.test.sh",
+        "scripts/resolve-stable-release.sh",
+        "scripts/verify-release-authorization.sh",
+        "scripts/verify-release-tag.sh",
+        "scripts/verify-stable-release-artifacts.sh"
+      ],
+      "areas": [
+        "build-release",
+        "desktop-ui-accessibility"
+      ]
+    },
+    {
+      "sha": "840cb6cad2a2b01738141e0a0380ffdf5a707552",
+      "authored_at": "2026-07-18T10:50:42+08:00",
+      "subject": "fix(site): restore registry publish button layout (#6630)",
+      "fix_perf": true,
+      "files": [
+        "site/src/pages/skills.astro",
+        "site/src/scripts/skills-layout-contract.test.mjs"
+      ],
+      "areas": [
+        "build-release",
+        "tools-mcp-plugins"
+      ]
+    },
+    {
+      "sha": "40ef98de92a30a273ee582ec682ab338483109d2",
+      "authored_at": "2026-07-18T13:11:47+08:00",
+      "subject": "Fix CLI terminal interactions and transcript hierarchy / 修复 CLI 终端交互与消息层级 (#6632)",
+      "fix_perf": false,
+      "files": [
+        "CHANGELOG.md",
+        "docs/CLI.md",
+        "docs/CLI.zh-CN.md",
+        "docs/GUIDE.md",
+        "docs/GUIDE.zh-CN.md",
+        "internal/cli/chat_render_test.go",
+        "internal/cli/chat_tui.go",
+        "internal/cli/chat_tui_paste.go",
+        "internal/cli/chat_tui_test.go",
+        "internal/cli/composer_selection_test.go",
+        "internal/cli/status_footer.go",
+        "internal/cli/status_footer_test.go",
+        "internal/cli/statusline_test.go",
+        "internal/cli/transcript.go",
+        "internal/cli/transcript_test.go",
+        "internal/i18n/i18n.go",
+        "internal/i18n/messages_en.go",
+        "internal/i18n/messages_zh.go",
+        "internal/i18n/messages_zh_tw.go"
+      ],
+      "areas": [
+        "session-memory-compaction",
+        "desktop-ui-accessibility",
+        "cli-acp"
+      ]
+    }
+  ]
+}

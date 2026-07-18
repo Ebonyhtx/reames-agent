@@ -1,7 +1,10 @@
 package cron
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -86,6 +89,35 @@ func TestPersistence(t *testing.T) {
 	jobs := s2.List()
 	if len(jobs) != 1 || jobs[0].ID != "persist-1" {
 		t.Fatalf("persistence failed: %+v", jobs)
+	}
+}
+
+func TestOpenToleratesUTF8BOMAndNextSaveHealsStore(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cron.json")
+	payload := []byte(`{"bom-job":{"id":"bom-job","name":"from Windows editor","prompt":"hello","enabled":true,"schedule":{"kind":"interval","minutes":60}}}`)
+	if err := os.WriteFile(path, append([]byte{0xEF, 0xBB, 0xBF}, payload...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open BOM-prefixed cron store: %v", err)
+	}
+	jobs := store.List()
+	if len(jobs) != 1 || jobs[0].ID != "bom-job" {
+		t.Fatalf("BOM-prefixed cron jobs = %+v", jobs)
+	}
+	if err := store.Add(Job{ID: "plain-job", Name: "plain", Enabled: true, Schedule: Schedule{Kind: KindInterval, Minutes: 30}}); err != nil {
+		t.Fatal(err)
+	}
+
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.HasPrefix(written, []byte{0xEF, 0xBB, 0xBF}) {
+		t.Fatal("successful cron save should heal the UTF-8 BOM")
 	}
 }
 

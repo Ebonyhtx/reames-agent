@@ -113,6 +113,34 @@ func pasteClipboardImage() tea.Cmd {
 	}
 }
 
+type clipboardTextPasteMsg struct {
+	text   string
+	err    error
+	remote bool
+}
+
+var readNativeClipboardText = clipboard.ReadAll
+
+func remoteClipboardSession() bool {
+	return strings.TrimSpace(os.Getenv("SSH_CONNECTION")) != "" ||
+		strings.TrimSpace(os.Getenv("SSH_CLIENT")) != "" ||
+		strings.TrimSpace(os.Getenv("SSH_TTY")) != ""
+}
+
+// pasteClipboardText backs the captured-mouse right-click path. Keyboard paste
+// still arrives as tea.PasteMsg. Keep this text-only so right-click never probes
+// the image clipboard first, and do not pretend a remote host can read the
+// user's local terminal clipboard over SSH.
+func pasteClipboardText() tea.Cmd {
+	return func() tea.Msg {
+		if remoteClipboardSession() {
+			return clipboardTextPasteMsg{remote: true}
+		}
+		text, err := readNativeClipboardText()
+		return clipboardTextPasteMsg{text: text, err: err}
+	}
+}
+
 func pasteClipboard() tea.Cmd {
 	return func() tea.Msg {
 		path, imageErr := control.SaveClipboardImage()

@@ -1,30 +1,30 @@
 {
   "version": 2,
-  "updated_at": "2026-07-17T19:45:29Z",
+  "updated_at": "2026-07-18T10:00:32Z",
   "upstreams": {
     "reasonix": {
       "branch": "main-v2",
       "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-      "reviewed": "3637d0f028bb8223d50ba9490a0ab5140eada4f3",
-      "latest_seen": "3637d0f028bb8223d50ba9490a0ab5140eada4f3"
+      "reviewed": "40ef98de92a30a273ee582ec682ab338483109d2",
+      "latest_seen": "40ef98de92a30a273ee582ec682ab338483109d2"
     },
     "hermes": {
       "branch": "main",
       "baseline": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
-      "reviewed": "11d36232c03dd950942a97a08003aeca18eb4b2e",
-      "latest_seen": "11d36232c03dd950942a97a08003aeca18eb4b2e"
+      "reviewed": "4c96172d9bee8542a356610802b9aabc1419f650",
+      "latest_seen": "4c96172d9bee8542a356610802b9aabc1419f650"
     },
     "codex": {
       "branch": "main",
       "baseline": "f6e251c3ac6573a4d6eccddea6ad12587868485f",
-      "reviewed": "b9680065b05accae1d2093de1ada06e009abb128",
-      "latest_seen": "b9680065b05accae1d2093de1ada06e009abb128"
+      "reviewed": "56395bddaf26eb2829387ca6a417bf9128e5b239",
+      "latest_seen": "56395bddaf26eb2829387ca6a417bf9128e5b239"
     },
     "mimo": {
       "branch": "main",
       "baseline": "ba87f5d48d7d3e77145fce6797faebf016fd23c6",
-      "reviewed": "b48fdba6a15a857e76130ac76d5967b28ad2b99f",
-      "latest_seen": "b48fdba6a15a857e76130ac76d5967b28ad2b99f"
+      "reviewed": "72e9002e48a71b383b8851b23d65e30c692d68fb",
+      "latest_seen": "72e9002e48a71b383b8851b23d65e30c692d68fb"
     },
     "impeccable": {
       "branch": "main",
@@ -35,8 +35,8 @@
     "scream-code": {
       "branch": "main",
       "baseline": "946eda69896ac161223bdb830acc62e4b6c8228e",
-      "reviewed": "b37627ad8e3b4b8f2b56ab51c48fd891d59f7a8b",
-      "latest_seen": "b37627ad8e3b4b8f2b56ab51c48fd891d59f7a8b"
+      "reviewed": "6474e33ad13ffcf11c8eb8a1691af943fe707b2d",
+      "latest_seen": "6474e33ad13ffcf11c8eb8a1691af943fe707b2d"
     },
     "agentark": {
       "branch": "main",
@@ -47,8 +47,8 @@
     "claude-code": {
       "branch": "main",
       "baseline": "7930e1c82d997b013af28673501f3b95569a71cb",
-      "reviewed": "67f390c9a0b1440d369aebe2ff6a5023db35bf8e",
-      "latest_seen": "67f390c9a0b1440d369aebe2ff6a5023db35bf8e"
+      "reviewed": "07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60",
+      "latest_seen": "07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60"
     },
     "kimi-code": {
       "branch": "main",
@@ -61,6 +61,12 @@
       "baseline": "664b3e78fd1a298ba11973822da988483256d4b4",
       "reviewed": "664b3e78fd1a298ba11973822da988483256d4b4",
       "latest_seen": "664b3e78fd1a298ba11973822da988483256d4b4"
+    },
+    "grok-build": {
+      "branch": "main",
+      "baseline": "98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce",
+      "reviewed": "98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce",
+      "latest_seen": "98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce"
     }
   }
 }

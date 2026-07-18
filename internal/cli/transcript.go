@@ -31,6 +31,44 @@ func copyToClipboard(text string) tea.Cmd {
 	return tea.SetClipboard(text)
 }
 
+const assistantTranscriptIndent = "  "
+
+// renderAssistantMarkdown gives assistant prose an explicit identity distinct
+// from reasoning, tools and receipts. The restrained two-cell gutter keeps the
+// hierarchy readable without introducing a second heavy card surface.
+func renderAssistantMarkdown(raw string, contentWidth int) string {
+	contentWidth = max(contentWidth, 1)
+	indent := assistantTranscriptIndent
+	if contentWidth <= visibleWidth(indent) {
+		indent = ""
+	}
+	bodyWidth := max(contentWidth-visibleWidth(indent), 1)
+	renderer := newMarkdownRenderer(bodyWidth)
+	rendered := renderer.Render(raw)
+	if rendered == "" {
+		rendered = raw
+	}
+	body := strings.TrimRight(rendered, "\n")
+	header := indent + accent("◆") + " " + bold("Reames")
+	if body == "" {
+		return header
+	}
+	return header + "\n\n" + indentTranscriptBlock(body, indent)
+}
+
+func indentTranscriptBlock(block, indent string) string {
+	if indent == "" || block == "" {
+		return block
+	}
+	lines := strings.Split(block, "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = indent + line
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // copyNoticeTTL is how long the "copied to clipboard" status-line hint stays
 // visible after a selection copy (mouse drag, right-click, or Ctrl+C) before
 // copyNoticeExpireMsg clears it.

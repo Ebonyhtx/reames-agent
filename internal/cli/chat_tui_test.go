@@ -1147,6 +1147,108 @@ func TestMouseDragReleaseAutoCopies(t *testing.T) {
 	}
 }
 
+func clipboardTextPasteResultFromCmd(t *testing.T, cmd tea.Cmd) clipboardTextPasteMsg {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("expected clipboard paste command")
+	}
+	msg := cmd()
+	switch msg := msg.(type) {
+	case clipboardTextPasteMsg:
+		return msg
+	case tea.BatchMsg:
+		for _, child := range msg {
+			if child == nil {
+				continue
+			}
+			if result, ok := child().(clipboardTextPasteMsg); ok {
+				return result
+			}
+		}
+	}
+	t.Fatalf("clipboard paste command returned %T, want clipboardTextPasteMsg", msg)
+	return clipboardTextPasteMsg{}
+}
+
+func setLocalClipboardSession(t *testing.T) {
+	t.Helper()
+	t.Setenv("SSH_CONNECTION", "")
+	t.Setenv("SSH_CLIENT", "")
+	t.Setenv("SSH_TTY", "")
+}
+
+func TestMouseRightClickWithoutSelectionPastesClipboardText(t *testing.T) {
+	setLocalClipboardSession(t)
+	m := newTestChatTUI()
+	m.input.SetValue("before ")
+
+	previous := readNativeClipboardText
+	t.Cleanup(func() { readNativeClipboardText = previous })
+	readNativeClipboardText = func() (string, error) { return "pasted text", nil }
+
+	next, cmd := m.Update(tea.MouseClickMsg{Button: tea.MouseRight})
+	m = next.(chatTUI)
+	result := clipboardTextPasteResultFromCmd(t, cmd)
+	next, _ = m.Update(result)
+	m = next.(chatTUI)
+
+	if got := m.input.Value(); got != "before pasted text" {
+		t.Fatalf("right-click paste produced %q, want %q", got, "before pasted text")
+	}
+}
+
+func TestMouseRightClickPasteOverSSHDoesNotReadRemoteClipboard(t *testing.T) {
+	t.Setenv("SSH_CONNECTION", "host 22 client 1234")
+	t.Setenv("SSH_CLIENT", "")
+	t.Setenv("SSH_TTY", "")
+
+	m := newTestChatTUI()
+	m.input.SetValue("before ")
+	previous := readNativeClipboardText
+	t.Cleanup(func() { readNativeClipboardText = previous })
+	readNativeClipboardText = func() (string, error) {
+		t.Fatal("SSH right-click paste must not read the remote host clipboard")
+		return "", nil
+	}
+
+	next, cmd := m.Update(tea.MouseClickMsg{Button: tea.MouseRight})
+	m = next.(chatTUI)
+	result := clipboardTextPasteResultFromCmd(t, cmd)
+	if !result.remote {
+		t.Fatalf("SSH right-click paste result = %+v, want remote hint", result)
+	}
+	next, _ = m.Update(result)
+	m = next.(chatTUI)
+	if got := m.input.Value(); got != "before " {
+		t.Fatalf("SSH right-click paste changed composer to %q", got)
+	}
+	if got := strings.Join(m.transcript, "\n"); !strings.Contains(got, i18n.M.ClipboardTextPasteRemoteHint) {
+		t.Fatalf("SSH right-click paste notice = %q, want %q", got, i18n.M.ClipboardTextPasteRemoteHint)
+	}
+}
+
+func TestMouseRightClickPasteUsesCanonicalFoldedPastePath(t *testing.T) {
+	setLocalClipboardSession(t)
+	m := newTestChatTUI()
+	pasted := "one\ntwo\nthree\nfour\nfive"
+	previous := readNativeClipboardText
+	t.Cleanup(func() { readNativeClipboardText = previous })
+	readNativeClipboardText = func() (string, error) { return pasted, nil }
+
+	next, cmd := m.Update(tea.MouseClickMsg{Button: tea.MouseRight})
+	m = next.(chatTUI)
+	result := clipboardTextPasteResultFromCmd(t, cmd)
+	next, _ = m.Update(result)
+	m = next.(chatTUI)
+
+	if got := m.input.Value(); got != "[Pasted text #1 · 5 lines] " {
+		t.Fatalf("right-click folded paste display = %q", got)
+	}
+	if len(m.pastedBlocks) != 1 || m.pastedBlocks[0].text != pasted {
+		t.Fatalf("right-click folded paste block = %+v", m.pastedBlocks)
+	}
+}
+
 // TestMousePlainClickReleaseDoesNotCopy verifies that a plain click (no drag,
 // empty selection) does not copy an empty string to the clipboard or show the
 // copied notice — only clears the zero-width selection, as before.

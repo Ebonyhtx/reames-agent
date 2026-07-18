@@ -1,4 +1,4 @@
-﻿{
+{
   "version": 1,
   "upstreams": [
     {
@@ -39,7 +39,7 @@
       "local_reference": "F:\\code-reference\\Hermes",
       "importance": "gateway-reference",
       "policy": "advisory-report",
-      "diff": false
+      "diff": true
     },
     {
       "id": "codex",
@@ -50,7 +50,7 @@
       "local_reference": "F:\\code-reference\\codex",
       "importance": "interaction-reference",
       "policy": "advisory-report",
-      "diff": false
+      "diff": true
     },
     {
       "id": "mimo",
@@ -61,7 +61,7 @@
       "local_reference": "F:\\code-reference\\MiMo-Code",
       "importance": "interaction-reference",
       "policy": "advisory-report",
-      "diff": false
+      "diff": true
     },
     {
       "id": "impeccable",
@@ -83,7 +83,7 @@
       "local_reference": "F:\\code-reference\\scream-code",
       "importance": "agent-mechanism-reference",
       "policy": "advisory-report",
-      "diff": false
+      "diff": true
     },
     {
       "id": "agentark",
@@ -94,7 +94,7 @@
       "local_reference": "F:\\code-reference\\AgentArk",
       "importance": "security-reference",
       "policy": "advisory-report",
-      "diff": false
+      "diff": true
     },
     {
       "id": "claude-code",
@@ -116,7 +116,18 @@
       "local_reference": "F:\\code-reference\\kimi-code",
       "importance": "shell-ux-reference",
       "policy": "advisory-report",
-      "diff": false
+      "diff": true
+    },
+    {
+      "id": "grok-build",
+      "name": "Grok Build",
+      "repo": "https://github.com/xai-org/grok-build.git",
+      "branch": "main",
+      "tag_patterns": ["v*"],
+      "local_reference": "F:\\code-reference\\Grok-Build",
+      "importance": "security-interaction-reference",
+      "policy": "advisory-report",
+      "diff": true
     },
     {
       "id": "awesome-design-md",

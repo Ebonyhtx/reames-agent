@@ -196,8 +196,8 @@ def check_readme(failures: list[str]) -> None:
     require("Release Status" in readme, "README.md must describe pre-stable release status.", failures)
     require("docs/PUBLIC_READINESS.md" in readme, "README.md must link public readiness gates.", failures)
     require("NOTICE.md" in readme, "README.md must link attribution notices.", failures)
-    require("9 reference projects" in readme, "README.md must match the 9-reference-project governance count.", failures)
-    require("9 个参考项目" in readme_zh, "README.zh-CN.md must match the 9-reference-project governance count.", failures)
+    require("10 reference projects" in readme, "README.md must match the 10-reference-project governance count.", failures)
+    require("10 个参考项目" in readme_zh, "README.zh-CN.md must match the 10-reference-project governance count.", failures)
     require("npm i -g reames-agent" not in readme, "README.md must not imply npm stable distribution is enabled.", failures)
     require("brew install" not in readme, "README.md must not imply Homebrew stable distribution is enabled.", failures)
 

@@ -129,6 +129,9 @@
 | [M5 Registry 运维审计与轮换演练](audits/2026-07-16-m5-registry-operations-audit.md) | 只读生产策略审计、2-of-3 角色隔离、连续双阈值 root、完整 target 字节与 external-required 边界 |
 | [Reasonix 与参考项目增量同步审计](audits/2026-07-17-reasonix-upstream-sync.md) | Reasonix 525 提交分类、MCP schema/凭据/Provider 采用证据、其他参考仓库增量与下一阶段 P0/P1 方向 |
 | [Reasonix 全量代际与 bug-fix parity 审计](audits/2026-07-18-reasonix-generation-parity.md) | 从导入基线到当前 main-v2 的完整提交账本、required-area 证据、工作模式与明确产品分歧 |
+| [Reasonix 3637d0f0..40ef98de 增量收口审计](audits/2026-07-18-reasonix-3637d0f-40ef98d.md) | 5 提交逐项决策、CLI 右键粘贴/SSH/assistant hierarchy 采用与发布/站点分歧 |
+| [全参考上游最新版冻结审计](audits/2026-07-18-upstream-reference-freeze.md) | 11 仓库冻结 SHA、6 组代码级差距、采用/等价/延后/拒绝和 future diff 跟踪 |
+| [Grok Build 参考项目首次纳入审计](audits/2026-07-18-grok-build-reference-intake.md) | 官方仓库、许可证/同步模型、权限/沙箱/session/subagent/TUI/ACP 候选与明确不采用边界 |
 | [P5 受控 Theme Pack 设计与交付审计](audits/2026-07-18-p5-controlled-theme-pack-design.md) | manifest/schema、恶意包防护、原子 Store、可撤销预览、Safe Mode、原创官方资产与验证边界 |
 | [M5 MCP 身份绑定信任审计](audits/2026-07-17-m5-mcp-identity-trust.md) | Reasonix MCP identity receipt、capability drift、launcher exact lock、Desktop reverify 与 destructive fresh-human 闭环 |
 | [P2 Offline Guard / Safe Mode 审计](audits/2026-07-17-p2-offline-guard-safe-mode.md) | Guard 启动账本、安装单元回滚、Safe Mode、统一恢复投影及 Reasonix 最新可靠性吸收证据 |

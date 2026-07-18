@@ -1,143 +1,165 @@
-# 下一位模型接手交接文档
+# Reames Agent 新会话无痛交接
 
-日期：2026-07-17
+> 日期：2026-07-18
+>
+> 仓库：`F:\reames-agent`
+>
+> 分支：`main`，不保留第二开发分支
+>
+> 用途：即使 Codex 会话、`F:\code-reference` 或本机缓存在电脑清理后丢失，新会话也只凭 Git
+> 仓库恢复当前边界、证据和下一步。
 
-仓库：`F:\reames-agent`
+## 1. 权威信息顺序
 
-分支：`main`
+发生冲突时按以下顺序判断，不依赖旧聊天记录：
 
-本页只记录当前接手边界。实际工作树、`docs/PROJECT.md`、`docs/DEVELOPMENT_PLAN.md`、
-审计记录和 GitHub Actions 比本文更权威。
+1. `git status --short --branch`、`git log -1 --oneline --decorate` 与远端 Actions；
+2. `docs/PROJECT.md`：产品方向和当前事实；
+3. `docs/DEVELOPMENT_PLAN.md`：执行顺序和关闭门槛；
+4. `docs/REFERENCE_GOVERNANCE.md`、`docs/upstreams/upstreams.lock.json`：上游来源和 reviewed SHA；
+5. `docs/audits/`：完成声明、限制和实际证据。
 
-## 用户目标与交付节奏
+冻结提交就是“包含本文件最终版本的 `main` 提交”。提交不能可靠地自引用自身 SHA；新会话执行
+`git log -1 --format="%H %s"` 即可取得精确值。不要用聊天摘要中的短 SHA 覆盖 Git。
 
-持续大步推进到高可信可交付状态。参考 DeepSeek Reasonix、`F:\code-reference` 和
-`F:\Reames-Lite` 时遵守 `docs/REFERENCE_GOVERNANCE.md`，只吸收适用机制。每个实质批次
-同步实现、生产测试、文档和证据；充分本地验证后集中 commit/push，并守候远端 CI，避免
-碎片 push 重复消耗资源。
+## 2. 用户目标和工作节奏
 
-单元/合同测试、localhost fixture、真实浏览器、原生 Desktop、远端 candidate 和真实
-Provider/IM/云节点证据必须分层表述，不能互相冒充。
+持续把 Reames Agent 推进到高可信可交付状态；Reasonix 是唯一主源码上游，其他项目只吸收适用机制。
+每个大批同步实现、测试、文档和证据；充分本地验证后集中 commit/push，避免碎片 push 浪费 CI。
 
-## 工作树纪律
+永久边界：
 
-每次开始工作先执行 `git status --short --branch`，区分 tracked 改动、生成产物和用户文件。
-大批删除或清理必须使用显式路径和 clean clone 复验，不使用宽泛 `git clean -fdX`；提交前
-确认只有当前批次文件进入索引。
+- 不恢复启动、metrics、crash、performance 或用户使用数据的远端上传；
+- 不使用用户服务器承担 Reames 遥测或反馈接收；反馈默认本地落盘、由用户显式导出；
+- 不整体复制 Python/Electron/Rust runtime、品牌站点、生产 endpoint、xAI auth、online memory、
+  managed policy、marketplace 或上游发布权限；
+- Controller 保持传输无关，system prompt/tool schema 保持缓存稳定；
+- Safe Mode、permission、sandbox、evidence、writer worktree 和 fresh-human 边界不能因参考项目而放宽。
 
-## 已验证基线
+## 3. 当前项目状态
 
-- M0、M1、M2、M3、M4 已按路线图门槛关闭。
-- 本修复批的父提交/推送前远端 `main` 为 `36d77a3 docs: index recovery closeout audit`；P3 Recovery
-  Center、三平台 recovery smoke、Reasonix reasoning-only stop 与发布棘轮已提交。首轮远端验证随后
-  暴露的 Windows Recovery DTO 空数组回归由当前批修复，必须以本批最终提交和新远端 run 为准。
-- 同批 workflow 已迁移到 Node.js 24 action majors；上述远端日志未再出现 Node.js 20
-  弃用告警。public-readiness 合同扫描 `.yml/.yaml`，拒绝旧 major、未知 ref 和未经审计的
-  commit pin。
-- Desktop candidate `29608825378` 已包含 recovery smoke：Linux/macOS 通过；Windows 在运行 recovery
-  smoke 前被全交互 smoke 拦截。失败已用同一 candidate 本机复现，根因是 Recovery 显示脱敏把空数组
-  变成 JSON `null`，导致 Frontend 渲染崩溃。修复后真实 Wails 全交互与 Recovery smoke 均已通过，
-  但仍须等待下一次单次 push 的三平台远端证据。
-- 初始迁移中隔离的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package、
-  `site/` 和 `workers/` 已完成依赖审计并从当前树删除；Git 历史和
-  `F:\code-reference\Hermes` 保留参考。public-readiness 会阻止 legacy 根目录和运行品牌回归，
-  详见 `docs/audits/2026-07-17-repository-cleanup.md`。
+- M0、M1、M2、M3、M4 已按路线图关闭。
+- M5 所有仓库内、clean-clone 和 CI/CodeQL 可验证事项已关闭；真实运营 registry 的 endpoint、人员/HSM
+  密钥仪式、轮换/compromise drill 与独立 DSSE/SLSA policy verifier 保持 `external-blocked`。
+- P1 writer worktree、P2 Offline Guard/Safe Mode、P3 Recovery Center、P4 Reasonix 代际 parity、
+  P5 受控 Theme Pack 已关闭。P5 最近远端证据：CI `29635818559`、CodeQL `29635818555`、
+  Desktop candidate `29635823162` 全绿。
+- P6 已在本批关闭：全部 11 个上游/参考仓库更新、代码级分类并冻结；Reasonix 最新 CLI 缺口和
+  Hermes BOM 信号已适配。
+- 当前树只保留 Go/Wails 产品；旧 Hermes/Python/Electron/TUI/plugin/test/package、`site/`、`workers/`
+  已删除，public-readiness 会阻止其回归。
+- 内置工具 24 个；CLI 与 Guard 均支持 linux/darwin/windows × amd64/arm64、`CGO_ENABLED=0`。
 
-## M5 当前边界
+## 4. 上游冻结点
 
-已经关闭的可本地/可远端验证链路包括：
+所有本地镜像在冻结时均 clean，并执行 `fetch --prune --tags`、`pull --ff-only`。本机镜像只是便利缓存；
+丢失后按 manifest URL/branch 重新 clone，Git 内的 lock 和审计才是权威。
 
-- 原生 plugin schema、语义版本、精确权限、不可变 generation、新安装默认禁用，以及
-  install/update/rollback/uninstall 的 `preview -> planId -> apply`；
-- Desktop、CLI、Bot、Serve/event wire 和 ACP 共用 fresh-human 结构化审批，自动策略和
-  headless apply 不能代答；
-- generation 变化或禁用会阻止新 work 起跑，串行 rebuild，并撤销旧 MCP/Hook/Skill runtime；
-- package-owned Hook/MCP 使用最小环境、独立 state/tmp、严格 OS sandbox、敏感读取阻断和
-  进程树回收；真实固定 revision `obra/superpowers` 已完成 Windows sandbox E2E；
-- 无默认 endpoint/TOFU 的官方 `go-tuf/v2` registry client，绑定 full Git commit、canonical
-  Git tree digest、manifest 权限和 provenance assertion；CLI/Desktop 可发现并展示落盘证据；
-- 只读 `plugin registry audit` 从显式带外 root 重放连续 root 轮换，验证旧/新双阈值、角色
-  key 隔离、到期窗口和完整 metadata/index/attestation 字节；成功 JSON 保留 public key ID、
-  SHA-256 与 `externalRequired` 边界。
-- Reasonix MCP identity P0 已按 Reames 边界收口：宿主本地 receipt、identity/capability drift、
-  mutable launcher exact content lock、legacy seed 单次迁移、destructive fresh-human、Desktop
-  reverify 和共享 Host sibling registry 刷新，见
-`docs/audits/2026-07-17-m5-mcp-identity-trust.md`。
+| 项目 | reviewed SHA | 决策角色 |
+|---|---|---|
+| DeepSeek Reasonix | `40ef98de92a30a273ee582ec682ab338483109d2` | 唯一主源码上游 |
+| Hermes | `4c96172d9bee8542a356610802b9aabc1419f650` | Gateway/错误/运维参考 |
+| Codex | `56395bddaf26eb2829387ca6a417bf9128e5b239` | 协议/Hook/LSP/交互参考 |
+| MiMo Code | `72e9002e48a71b383b8851b23d65e30c692d68fb` | 设计/技能体验参考 |
+| Impeccable | `8967edc988ee146823bca3c51fcf51296e9dec18` | 品牌设计语言参考 |
+| Scream Code | `6474e33ad13ffcf11c8eb8a1691af943fe707b2d` | Goal/TUI/主题机制参考 |
+| AgentArk | `63985cf819d1760f50f2a5c0dc11d82815e74623` | 安全架构参考 |
+| Claude Code | `07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60` | 插件生态 UX 参考 |
+| Kimi Code | `3086e4703992fbbe7a41379405ee243713ad9ced` | Desktop Shell/权限文案参考 |
+| Grok Build | `98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce` | 安全/终端/ACP 机制参考 |
+| awesome-design-md | `664b3e78fd1a298ba11973822da988483256d4b4` | 设计资料参考 |
 
-## P1/P2/P3 当前边界
+Reasonix `3637d0f0..40ef98de` 共 5 个非 merge 提交、49 文件、`+1658/-410`；完整逐提交结论和机器账本：
 
-- P1 writer worktree isolation 已完成：writer-capable task/Skill/Subagent 使用独立
-  `reames/subagent-*` branch/worktree、workspace/ref 跨进程锁和父会话统一交付事务；ambiguous
-  post-apply crash 保持 `acceptance_interrupted`，不自动覆盖人工 drift。
-- P2 offline Guard/Safe Mode 已实现：三平台 Desktop 入口默认经过 Guard；五分钟三次失败账本、
-  30 秒健康观察期、配置快照、完整安装单元 pending transaction、Windows installer failure
-  marker 和 mixed-install fail-closed 共用 `internal/repair`。
-- Safe Mode 不读取用户/项目 TOML 或 dotenv，不恢复旧 tab/session；Desktop 只建立 recovery-only
-  shell，`boot.Build` 拒绝 Provider、Controller、工具和普通 Agent 装配，并禁用 MCP、plugin、Hook、
-  Bot、LSP、planner、Guardian、subagent、Memory Compiler、更新检查、Heartbeat 与本地 pending 诊断归档等运行面。
-- `control.Controller.RecoveryStatus()`、Serve `/api/recovery`、Desktop `GetRecoveryStatus()`、
-  Guard check 与 `gateway recovery-status` 共用同一报告；`gateway run` 在加载普通 runtime 前执行
-  credential-free preflight。
-- P3 Recovery Center 已实现：普通模式经 Controller、Safe Mode 直接经同一 `repair.ExecuteAction`，
-  支持配置修复/快照恢复/精确 undo/验证更新回滚/派生状态重建/插件禁用；stale transaction identity
-  会被拒绝，Go/Wails 边界统一脱敏，Frontend 请求序号保证最后操作优先，组件保持 lazy chunk。
-- 三平台 Desktop candidate 已接入安装后 recovery smoke；首轮 Linux/macOS 通过，Windows DTO 数组
-  回归已在本地修复并以真实 Wails interaction/recovery smoke 复验。修复后的远端 candidate 尚待本批
-  单次 push。签名/notarization、公开 release 升级失败和断电点回滚仍为 external-blocked。
-- Reasonix 增量 lock 已接受到当前 SHA，但这只代表该区间完成人工分类，不等于完成从早期基座到当前
-  官方代际的全量更新。官方普通/计划/目标协作轴与 economy/balanced/delivery 工作模式轴已确认存在，
-  下一 GOAL 改为 P4 全量三方源码/稳定 tag/活跃分支 parity 与核心模式闭环。`7f00d2c2` Theme Pack V2
-  后移到 P5 分层设计；`d3cfa5c2`
-  reasoning-only `finish_reason=stop` 已按 Provider capability 吸收；`3637d0f0` 的生产发布 workflow 不
-  继承，只转化为 Reames 全 workflow 发布写权限棘轮。Kimi 权限文案准确性已转化为三语合同；
-  Hermes/Codex/MiMo 最新机制均已分类，没有使用 `--accept-all` 或引入第二套 runtime。
+- `docs/audits/2026-07-18-reasonix-3637d0f-40ef98d.md`
+- `docs/upstreams/reviews/reasonix-generation-3637d0f-40ef98d.json`
+- `docs/upstreams/reviews/reasonix-current.json`
 
-权威设计、运维与证据见 `docs/RECOVERY.zh-CN.md` 和
-`docs/audits/2026-07-17-p2-offline-guard-safe-mode.md`。
+全参考冻结和 Grok intake：
 
-当前本地门禁已通过：Root build/vet/internal 全测；Desktop build/vet/full test；Frontend
-`test:all`/production build/bundle budget；恢复/Provider/Agent/Controller/插件/Gateway 与 Desktop 定向
-race；六目标 CLI + Guard `CGO_ENABLED=0`；133 项 Python 合同（2 项平台跳过）、Node、工具文档、
-docs/deploy/release/public、actionlint 与 shell syntax；最新本地 Windows recovery smoke。localized initial
-JS 为 999,829 / 1,000,000 bytes。`git clone --no-local` 已从提交对象重跑 Root、Desktop、空
-`node_modules` Frontend 与四类合同；新审计漏索引被 clean clone 文档合同发现并修复，最终 tracked
-工作树干净。上游截止点已更新到 lock：Reasonix `3637d0f0` 无新增，Hermes `11d36232`、Codex
-`b9680065` 等已分类；此后按分钟出现的新参考提交留给下一次 Upstream Watch，不反复打开已完成验证。
-当前只剩提交并单次 push Recovery DTO 数组修复，随后确认新的 CI/CodeQL/Desktop candidate 全绿。
+- `docs/audits/2026-07-18-upstream-reference-freeze.md`
+- `docs/audits/2026-07-18-grok-build-reference-intake.md`
 
-- `docs/audits/2026-07-14-m5-plugin-lifecycle-trust.md`
-- `docs/audits/2026-07-15-m5-plugin-process-isolation.md`
-- `docs/audits/2026-07-16-m5-tuf-plugin-registry.md`
-- `docs/audits/2026-07-16-m5-registry-operations-audit.md`
-- `docs/audits/2026-07-17-m5-mcp-identity-trust.md`
+## 5. 本批代码变化
 
-## 未关闭边界
+Reasonix `40ef98de` 的适用部分已按 Reames 状态机重构：
 
-- M5 的真实运营公开 registry 仍为 `external-blocked`：生产 HTTPS endpoint、不同人员见证的
-  离线 root/targets threshold ceremony、online role custody、HSM 或等价托管、freshness
-  monitor、实际密钥轮换/compromise drill，以及声明 builder identity/SLSA level 时的独立
-  DSSE/SLSA policy verifier，均不能由合成密钥或 localhost 冒充。
-- package process 当前允许网络，且没有跨三平台统一硬 CPU/RSS 配额；用户手工 Hook/MCP
-  与 LSP 仍是高权限进程。这是持续威胁模型限制，不把它误写成生产 registry 已完成或重新
-  打开已验收的 M5 仓库内合同。
-- M6 的 linger-enabled logout/reboot、干净云节点、真实飞书/QQ/微信回环和公开签名 release
-  仍为 `external-blocked`。
-- `bash`、MCP、外部 API 和后台 opaque side effect 不具备任意副作用 exactly-once。
+- TUI 捕获鼠标时，右键优先复制活动 transcript selection；无 selection 且 composer 可见时粘贴文本；
+- SSH 环境不读取远端主机剪贴板冒充用户本地终端剪贴板，并显示三语提示；
+- 右键文本重新进入统一 `tea.PasteMsg`，继续复用文件引用、长文本折叠、completion 和 repaint；
+- assistant 回答增加稳定的 `Reames` identity/two-cell gutter；live 与 resume 使用同一投影；
+- reasoning → answer、answer → usage receipt 增加语义间距，直接回答不增加首行空白。
 
-## 下一执行顺序
+Hermes 的 Windows BOM 信号已转成 Reames 修复：`internal/cron.Open` 接受 UTF-8 BOM，下一次成功保存
+自动写回无 BOM JSON。Hermes 最终 `4c96172d` 的 CDP 双栈/端口占用修复因 Reames 没有同构
+browser-connect runtime 而明确不适用。
 
-1. 当前 P3 DTO 修复已完成 Root/Desktop/Frontend 全量、合同、定向 race 和真实 Windows Wails
-   interaction/recovery smoke；形成一个提交并单次 push，随后等待普通 CI、CodeQL 和 Desktop
-   candidate，失败则继续在 P3 批次修复，不用碎片 push 消耗 CI。
-2. 远端全绿后打开 P4“Reasonix 代际差距与运行模式闭环”：定位早期基座，三方比较官方当前
-   `main-v2`/稳定 tag、Reames HEAD，清点活跃 feature/fix 分支，形成覆盖核心源码和全部 bug fixes 的
-   parity map；随后优先补齐普通/计划/目标与 economy/balanced/delivery 两个正交轴的真实缺口。
-3. P4 核心代际缺口闭环后再打开 P5“受控 Theme Pack”：先不可执行 manifest、semantic token
-   allowlist、ZIP/path/symlink/图片限制、内容寻址原子存储，再做 Gallery、可撤销预览和原创资产。
-4. 若生产 registry 的人员、密钥、域名和对象存储条件到位，按双语 runbook 执行真实仪式、
-   发布、轮换和 compromise drill，并独立归档证据；未到位时保持明确阻塞，不降低门槛。
-5. 取得干净云节点、真实 IM 应用或签名设施后，关闭 M6 的 logout/reboot、Gateway recovery
-   preflight 实启、真实渠道回环和发布证据。
+上游追踪方面，Reasonix、Hermes、Codex、MiMo、Scream Code、AgentArk、Kimi Code、Grok Build 已启用
+路径级 `diff=true`；以后只比较 lock → latest，仍然只自动发现/建单，不自动 merge/cherry-pick。
 
-长期 GOAL 只有在代码、测试、文档一致、`main` 与最新 CI/CodeQL 全绿，且最近里程碑的所有
-可执行事项关闭、剩余事项均准确标记为外部依赖时才能完成。
+## 6. 本批本地验证
+
+冻结提交形成前已通过：
+
+- Root：`go build ./...`、`go vet ./...`、`go test ./internal/... -count=1 -timeout 300s`；
+- Desktop：`go build ./...`、`go vet ./...`、`go test ./... -count=1 -timeout 300s`；
+- Frontend：`corepack pnpm test:all`、`corepack pnpm build`、bundle budget；
+- Race：`go test -race ./internal/cli ./internal/cron -count=1 -timeout 600s`；
+- Python：143 项脚本/合同测试通过，2 项平台条件跳过；
+- 上游：Reasonix generation、19 项 upstream、Node Issue reconciliation、显式逐项目接受；
+- 治理：tool 文档、docs/public/deploy/release 合同、actionlint v1.7.7、Git Bash shell syntax；
+- 运维：`verify-baseline.ps1` 与 credential-free Gateway smoke；
+- 发布形态：六目标 CLI + 六目标 Guard，共 12 个 `CGO_ENABLED=0` 构建。
+- clean clone：冻结提交对象通过 `git clone --no-local` 的 Root/Desktop 全量、空 `node_modules`
+  Frontend install/test/build/bundle budget，以及 Reasonix/upstream/docs/public 合同。
+
+远端完成声明必须使用最终 push 提交对应的 CI/CodeQL。为避免仅写回 run ID 又触发一次 CI，本文件不
+硬编码本批 run ID；新会话使用：
+
+```powershell
+gh run list --commit (git rev-parse HEAD) --limit 20
+```
+
+## 7. 外部依赖和未关闭边界
+
+以下不能用 mock、localhost 或测试密钥冒充完成：
+
+- 生产 registry HTTPS endpoint、不同人员见证的离线 root/targets threshold ceremony、HSM/等价托管、
+  freshness monitor、真实轮换与 compromise drill；
+- 声明 builder identity/SLSA level 时的独立 DSSE/SLSA policy verifier；
+- 干净 Linux 云节点上的 linger-enabled logout/reboot 与 Gateway recovery/system service 实启；
+- 真实 Provider 和飞书/QQ/微信的文本、审批、取消、恢复回环；
+- 公开签名 release、Windows/macOS signing/notarization 与真实升级失败/断电点演练；
+- NVDA/Narrator 实际听感和 Windows High Contrast 人工验收。
+
+这些是 `external-blocked`，不是仓库失败。没有真实 API key、IM 应用或云服务器时，继续完成仓库内
+合同、fixture、fail-closed 和 redaction，但不得把它们写成生产证据。
+
+## 8. 新会话启动顺序
+
+```powershell
+Set-Location F:\reames-agent
+git status --short --branch
+git branch --show-current
+git log -1 --oneline --decorate
+git fetch origin --prune
+git rev-list --left-right --count main...origin/main
+python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
+gh run list --commit (git rev-parse HEAD) --limit 20
+```
+
+判断规则：
+
+1. 工作树应干净，当前分支应为 `main`，`main...origin/main` 应为 `0 0`；否则先审查，不 reset/丢弃。
+2. Upstream Watch 若无新提交，不重开 P6；若有新提交，只审 lock → latest。
+3. 本批 CI/CodeQL 若失败，先在同一批修复，不用碎片 push 消耗 CI。
+4. 电脑清理后若 `F:\code-reference` 丢失，按 `docs/upstreams/upstreams.json` 重建；不要从旧聊天猜 SHA。
+5. 远端全绿且用户未提供外部环境时，项目保持暂时冻结；下一主线是 M6 外部证据，不降低门槛。
+
+## 9. Git 与清洁约束
+
+- `artifacts/`、`bin/` 构建产物、Desktop `dist` 生成内容不提交；只提交权威审计和机器账本。
+- 大批删除只用显式路径和预览；不执行宽泛 `git clean -fdX`。
+- 不使用 `git reset --hard`、`git checkout --` 丢弃未知改动。
+- 提交前运行 `git diff --check`、`git diff --cached --check`；push 后核对 CI/CodeQL。
+- 当前仓库只维护 `main`；不要为会话交接额外制造长期分支。

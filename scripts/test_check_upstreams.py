@@ -1,3 +1,4 @@
+import json
 import subprocess
 import tempfile
 import unittest
@@ -79,6 +80,23 @@ class ManifestValidationTests(unittest.TestCase):
                     ]
                 }
             )
+
+    def test_repository_manifest_tracks_official_grok_build(self):
+        manifest = json.loads(watch.DEFAULT_MANIFEST.read_text(encoding="utf-8-sig"))
+        grok = next(up for up in manifest["upstreams"] if up["id"] == "grok-build")
+
+        self.assertEqual("https://github.com/xai-org/grok-build.git", grok["repo"])
+        self.assertEqual("main", grok["branch"])
+        self.assertEqual("security-interaction-reference", grok["importance"])
+        self.assertEqual(r"F:\code-reference\Grok-Build", grok["local_reference"])
+        self.assertTrue(grok["diff"])
+
+    def test_code_mechanism_references_keep_path_level_diffs(self):
+        manifest = json.loads(watch.DEFAULT_MANIFEST.read_text(encoding="utf-8-sig"))
+        by_id = {up["id"]: up for up in manifest["upstreams"]}
+
+        for upstream_id in ("reasonix", "hermes", "codex", "mimo", "scream-code", "agentark", "kimi-code", "grok-build"):
+            self.assertTrue(by_id[upstream_id]["diff"], upstream_id)
 
 
 class AnalysisTests(unittest.TestCase):

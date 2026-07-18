@@ -2,21 +2,22 @@
   "version": 1,
   "upstream": "reasonix",
   "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-  "reviewed": "3637d0f028bb8223d50ba9490a0ab5140eada4f3",
-  "updated_at": "2026-07-18T03:30:00+08:00",
+  "reviewed": "40ef98de92a30a273ee582ec682ab338483109d2",
+  "updated_at": "2026-07-18T17:56:52+08:00",
   "areas": {
     "source-baseline": {
       "status": "complete",
       "evidence": [
         "ef3a132 records the Reames import from Reasonix main-v2 at 07c65c22226e4886004215168230e1e1edad734b",
-        "docs/audits/2026-07-18-reasonix-generation-parity.md fixes the three-way baseline and reviewed SHA"
+        "docs/audits/2026-07-18-reasonix-generation-parity.md fixes the three-way source baseline",
+        "docs/audits/2026-07-18-reasonix-3637d0f-40ef98d.md closes the latest incremental review"
       ]
     },
     "active-refs-tags": {
       "status": "complete",
       "evidence": [
-        "reasonix-generation-07c65c2-3637d0f.json records stable v1.17.14 tags and every unmerged origin ref",
-        "2026-07-18 parity audit classifies dependency, inline renderer, macOS migration, status bar, tab, missing-drive, reasoning-jank, and v1 refs"
+        "reasonix-generation-07c65c2-3637d0f.json records the full earlier generation and active refs",
+        "reasonix-generation-3637d0f-40ef98d.json records v1.17.15 tags, current unmerged refs, all five commits, paths and areas"
       ]
     },
     "agent-runtime": {
@@ -37,6 +38,7 @@
       "status": "complete",
       "evidence": [
         "provider/schema/retry/usage fixes from the generation range are classified in the inventory and prior 2026-07-17 sync audit",
+        "3637d0f0..40ef98de contains no provider runtime change; its cache-block motif is website-only and rejected",
         "internal/boot tests prove balanced and delivery share the same complete tool schema while each stable prefix remains deterministic"
       ]
     },
@@ -79,7 +81,8 @@
       "status": "complete",
       "evidence": [
         "interactive CLI, run, serve, and acp accept --profile economy|balanced|delivery; resumed CLI sessions inherit the saved profile",
-        "TUI /work-mode and ACP work_mode rebuild atomically, preserve state, and are covered by internal/cli and internal/acp tests"
+        "40ef98de right-click text paste, SSH clipboard boundary, assistant identity and semantic spacing are adapted with focused internal/cli tests",
+        "composer app-owned selection and Reasonix footer layout are explicitly deferred/not-applicable rather than silently marked adopted"
       ]
     },
     "serve-gateway": {
@@ -99,14 +102,16 @@
     "build-release": {
       "status": "complete",
       "evidence": [
-        "3637d0f0 release approval changes are classified not applicable while Reames production release remains disabled",
+        "3637d0f0 and e7a0f116 release authorization changes are classified not applicable while Reames production release remains disabled",
+        "8a36da8d, 315f6f30 and 840cb6ca website/release-note changes do not enter the Reames product tree",
         "CI, CodeQL, cross-build, candidate, public-readiness, and release workflow ratchets remain the accepted repository evidence"
       ]
     },
     "bug-fix-parity": {
       "status": "complete",
       "evidence": [
-        "reasonix-generation-07c65c2-3637d0f.json enumerates all 498 non-merge commits and all 314 exact fix/perf commits with paths and review areas",
+        "reasonix-generation-07c65c2-3637d0f.json enumerates the earlier 498 non-merge commits and 314 exact fix/perf commits",
+        "reasonix-generation-3637d0f-40ef98d.json adds all five latest non-merge commits and both exact fix commits with paths and review areas",
         "scripts/test_audit_reasonix_generation.py verifies deterministic enumeration, fix/perf selection, and area classification"
       ]
     }

@@ -195,6 +195,8 @@ var Chinese = Messages{
 	CompHintSlash:                "↑/↓ 移动 · Tab/Enter 选中 · Esc 关闭",
 	CompHintFile:                 "↑/↓ 移动 · Tab/Enter 进入文件夹或选中文件 · Esc 关闭",
 	MouseCopiedHint:              "已复制到剪贴板",
+	ClipboardTextPasteRemoteHint: "SSH 下右键粘贴无法读取本地剪贴板 — 请使用终端粘贴快捷键或 /mouse",
+	ClipboardTextPasteFailedFmt:  "粘贴文本失败：%v",
 	MouseCaptureOnHint:           "鼠标接管已开启 — 应用内拖拽选中/滚动条/滚轮生效",
 	MouseCaptureOffHint:          "鼠标接管已关闭 — 由终端原生处理选中和右键菜单",
 	MouseCaptureTag:              "终端原生鼠标",

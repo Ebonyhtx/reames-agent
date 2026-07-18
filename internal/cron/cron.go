@@ -4,6 +4,7 @@
 package cron
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,24 +27,24 @@ const (
 
 // Job is a persisted scheduled task.
 type Job struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	Prompt      string       `json:"prompt"`
-	Enabled     bool         `json:"enabled"`
-	Schedule    Schedule     `json:"schedule"`
-	LastRunAt   time.Time    `json:"last_run_at,omitempty"`
-	NextRunAt   time.Time    `json:"next_run_at,omitempty"`
-	LastStatus  string       `json:"last_status,omitempty"`
-	RunCount    int          `json:"run_count"`
-	CreatedAt   time.Time    `json:"created_at"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Prompt     string    `json:"prompt"`
+	Enabled    bool      `json:"enabled"`
+	Schedule   Schedule  `json:"schedule"`
+	LastRunAt  time.Time `json:"last_run_at,omitempty"`
+	NextRunAt  time.Time `json:"next_run_at,omitempty"`
+	LastStatus string    `json:"last_status,omitempty"`
+	RunCount   int       `json:"run_count"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // Schedule describes when a job runs.
 type Schedule struct {
-	Kind     ScheduleKind `json:"kind"`
-	Minutes  int          `json:"minutes,omitempty"`  // for interval
-	Expr     string       `json:"expr,omitempty"`     // for cron
-	RunAt    time.Time    `json:"run_at,omitempty"`   // for once
+	Kind    ScheduleKind `json:"kind"`
+	Minutes int          `json:"minutes,omitempty"` // for interval
+	Expr    string       `json:"expr,omitempty"`    // for cron
+	RunAt   time.Time    `json:"run_at,omitempty"`  // for once
 }
 
 // Store persists jobs to a JSON file.
@@ -70,6 +71,12 @@ func Open(dir string) (*Store, error) {
 	if len(data) == 0 {
 		return s, nil
 	}
+	// Windows Notepad and Windows PowerShell 5.1 may prefix hand-edited JSON
+	// with a UTF-8 BOM. encoding/json rejects that prefix even though the
+	// remaining bytes are valid UTF-8, which would otherwise disable cron CRUD
+	// and scheduling until the user repaired the file manually. Writes remain
+	// BOM-less, so the next successful mutation heals the store.
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 	if err := json.Unmarshal(data, &s.jobs); err != nil {
 		return nil, fmt.Errorf("cron: corrupt store: %w", err)
 	}

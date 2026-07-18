@@ -194,6 +194,8 @@ var English = Messages{
 	CompHintSlash:                "↑/↓ move · Tab/Enter select · Esc close",
 	CompHintFile:                 "↑/↓ move · Tab/Enter open folder or pick file · Esc close",
 	MouseCopiedHint:              "copied to clipboard",
+	ClipboardTextPasteRemoteHint: "right-click paste cannot read your local clipboard over SSH — use the terminal paste shortcut or /mouse",
+	ClipboardTextPasteFailedFmt:  "paste text failed: %v",
 	MouseCaptureOnHint:           "mouse capture on — in-app drag-select/scrollbar/wheel active",
 	MouseCaptureOffHint:          "mouse capture off — your terminal now handles selection and right-click",
 	MouseCaptureTag:              "native mouse",

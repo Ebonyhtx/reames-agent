@@ -816,13 +816,18 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseClickMsg:
-		// Right-click copies the active selection (Windows Terminal convention);
-		// left-press in the transcript region begins a text selection — unless
-		// the click lands on the scrollbar or a shell-output hint line.
+		// Match the terminal right-click convention while Reames owns the mouse:
+		// copy an active transcript selection, otherwise paste clipboard text into
+		// the visible composer. Left-press begins transcript selection unless it
+		// lands on the scrollbar or a shell-output hint line.
 		if msg.Button == tea.MouseRight && m.sel.active && !m.sel.empty() {
 			text := m.selectedText()
 			m.sel = selection{}
 			cmds = append(cmds, m.copySelectionWithNotice(text))
+			return m, finalize(m, cmds)
+		}
+		if msg.Button == tea.MouseRight && !m.hideComposer() {
+			cmds = append(cmds, pasteClipboardText())
 			return m, finalize(m, cmds)
 		}
 		if msg.Button == tea.MouseLeft && m.inScrollbar(msg.X, msg.Y) {
@@ -1490,6 +1495,19 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.growInputToFit()
 			m.updateCompletion()
 			return m, finalize(m, cmds)
+		}
+
+	case clipboardTextPasteMsg:
+		switch {
+		case msg.remote:
+			m.notice(i18n.M.ClipboardTextPasteRemoteHint)
+		case msg.err != nil:
+			m.notice(fmt.Sprintf(i18n.M.ClipboardTextPasteFailedFmt, msg.err))
+		case msg.text != "":
+			// Re-enter through the canonical paste path so file references,
+			// folded text, completion and textarea repainting stay identical to
+			// keyboard/bracketed paste.
+			return m.update(tea.PasteMsg{Content: msg.text})
 		}
 
 	case copyNoticeExpireMsg:
@@ -2220,6 +2238,17 @@ func (m *chatTUI) commitReasoning() {
 	m.reasoningTextIdx = -1
 }
 
+// commitReasoningBeforeAnswer closes a real reasoning block and leaves exactly
+// one blank transcript row before the assistant answer. Direct answers remain
+// compact and do not gain a leading spacer.
+func (m *chatTUI) commitReasoningBeforeAnswer() {
+	hadReasoning := m.reasoningNative || m.reasoningLineIdx >= 0
+	m.commitReasoning()
+	if hadReasoning {
+		m.commitSpacer()
+	}
+}
+
 // streamAnswer renders the answer streamed so far up to its last completed
 // paragraph (flushableMarkdownPrefix) and writes it as one transcript block,
 // rewritten in place as later paragraphs land — so a long reply appears chunk by
@@ -2234,7 +2263,7 @@ func (m *chatTUI) streamAnswer() {
 	if len(prefix) <= m.answerFlushed {
 		return
 	}
-	rendered := m.renderer.Render(prefix)
+	rendered := renderAssistantMarkdown(prefix, transcriptContentWidth(m.width, m.nativeScrollback))
 	if rendered == "" {
 		return
 	}
@@ -2260,7 +2289,7 @@ func (m *chatTUI) commitPending() {
 		return
 	}
 	raw := m.pending.String()
-	rendered := m.renderer.Render(raw)
+	rendered := renderAssistantMarkdown(raw, transcriptContentWidth(m.width, m.nativeScrollback))
 	if rendered == "" {
 		rendered = raw
 	}
@@ -3451,7 +3480,7 @@ func (m *chatTUI) ingestEvent(e event.Event) {
 		m.streamReasoning(e.Text)
 
 	case event.Text:
-		m.commitReasoning() // reasoning ends as the answer begins
+		m.commitReasoningBeforeAnswer()
 		m.pending.WriteString(e.Text)
 		m.streamAnswer()
 
@@ -3509,6 +3538,7 @@ func (m *chatTUI) ingestEvent(e event.Event) {
 		}
 		if line := termrender.FormatUsageLine(e.Usage, e.Pricing, e.CacheDiagnostics); line != "" {
 			m.finalizeStreamed()
+			m.commitSpacer()
 			m.commitLine(line)
 		}
 
@@ -4179,7 +4209,7 @@ func (m *chatTUI) runMCPPrompt(input string) tea.Cmd {
 // replaySectionsFor turns a loaded session into scrollback blocks: user bubbles
 // and assistant markdown. Tool messages are dropped — needed in session state
 // but noise in the visible transcript on resume.
-func replaySectionsFor(history []control.TranscriptMessage, width int, renderer *mdRenderer) []string {
+func replaySectionsFor(history []control.TranscriptMessage, width int, _ *mdRenderer) []string {
 	var out []string
 	for _, m := range history {
 		switch m.Role {
@@ -4199,11 +4229,7 @@ func replaySectionsFor(history []control.TranscriptMessage, width int, renderer 
 			if body == "" {
 				continue
 			}
-			rendered := renderer.Render(body)
-			if rendered == "" {
-				rendered = body
-			}
-			out = append(out, rendered+"\n")
+			out = append(out, renderAssistantMarkdown(body, width)+"\n\n")
 		}
 	}
 	return out
