@@ -276,6 +276,21 @@ curl -X POST http://127.0.0.1:37913/send \
   }'
 ```
 
+Gateway 会在 `<Reames Agent home>/bot/delivery-ledger.json` 保存权限为 0600 的
+原子投递账本。它不保存消息正文、附件、模型输出或工具数据，只保存远端消息
+身份、状态和适配器提供的 opaque 恢复游标。重复入站消息会跨重启抑制；只有
+最终回复实际发送成功后才提交游标。`/status`、control `/status` 和 `/metrics`
+只显示已交付、处理中、待重试和 checkpoint 数量，不返回远端 ID、游标或本地路径。
+
+当前内置飞书、QQ、微信适配器已使用持久 claim/去重和最终投递门禁，但尚未
+实现完全离线期间的历史消息分页补扫。因此“进程收到过事件后的重复投递恢复”
+可用，不代表“关机期间所有漏消息都能恢复”。后者必须由具体平台的历史/resume
+API 和真实应用凭据验证。部分分片已发送、后续分片失败时，系统选择不推进游标，
+重试可能重复前一个分片；这是明确的 at-least-once 边界。
+排队消息即使被 `collect` 合并、被 queue-cap 策略摘要/丢弃，或被 interrupt/reset
+显式覆盖，也会保留各自的 durable claim；Gateway 只在对应最终回复或取消确认
+实际送达后结算这些 claims。
+
 ## 使用流程
 
 ```mermaid

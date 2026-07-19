@@ -424,6 +424,7 @@ func runGatewayForeground(args []string, version, flagSetName, displayName strin
 			},
 		},
 		Debounce:       time.Duration(cfg.Bot.DebounceMs) * time.Millisecond,
+		RecoveryPath:   botruntime.RecoveryLedgerPath(),
 		OnInbound:      rememberInboundRemote,
 		OnSessionReady: botruntime.NewSessionRemembererWithWorkspace(logger, workspaceRoot),
 	}

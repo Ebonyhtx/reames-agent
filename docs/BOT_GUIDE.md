@@ -308,6 +308,26 @@ curl -X POST http://127.0.0.1:37913/send \
   }'
 ```
 
+The Gateway keeps a mode-0600 atomic delivery ledger at
+`<Reames Agent home>/bot/delivery-ledger.json`. It never stores message text,
+attachments, model output, or tool data—only remote message identity, state, and
+opaque adapter recovery cursors. Duplicate inbound events are suppressed across
+restarts, and a cursor is committed only after the final reply is actually sent.
+`/status`, control `/status`, and `/metrics` expose counts only, never remote IDs,
+cursor values, or the local path.
+
+The built-in Feishu, QQ, and Weixin adapters already use durable claim/dedupe and
+the final-delivery gate, but they do not yet page message history missed while the
+process was completely offline. That requires a platform-specific history/resume
+API and real application credentials. Delivery is explicitly at-least-once: if
+one reply chunk succeeds and a later chunk fails, the cursor stays behind and a
+retry may duplicate the earlier chunk.
+Queued messages keep their individual durable claims even when `collect`
+merges them, a queue-cap policy summarizes or drops an older entry, or an
+explicit interrupt/reset supersedes pending work. The Gateway settles those
+claims only with the corresponding delivered response or cancellation
+acknowledgement.
+
 ## Usage flow
 
 ```mermaid

@@ -383,9 +383,15 @@ notarization、公开主题 registry
 - Server/Web：作为可选远程控制面，提供鉴权、CSRF/Origin、租约、SSE/WS 重连、速率限制和审计。
 - 部署：Docker、systemd、反向代理和健康检查已有基线；敏感的 home/state `backup create/verify/restore`、仅新目标恢复、候选/安装后健康检查、保留 immediate predecessor 的 updater 与 `upgrade --rollback` 已有本地自动证据。内嵌 manifest 只证明自洽，多根恢复没有 durable crash journal，公开签名 release 和干净云节点实启仍需外部证据。
 - 反馈中心：已建立 `internal/feedback` schema、本地 JSONL 账本、`serve` 的 `POST /api/feedback`、`GET /api/feedback/summary` 与 `POST /api/feedback/draft`，以及 SSH 运维可用的 `reames-agent feedback submit|summary|draft --home PATH`，先完成脱敏、去重、本地聚合和维护草稿，再接人工确认后的 Issue 发布。
-- Gateway：统一消息 envelope；渠道 metadata 不进入 provider prompt。按 Hermes `862b1b37..7a43ab04`
-  的 Discord 断线恢复信号补 durable per-channel cursor、原消息身份、claim/去重账本、全局扫描上限和
-  “最终投递成功后才推进 cursor”合同；账本损坏或写失败必须 fail closed，不能把重新连上等同于消息已交付。
+- [x] Gateway core：统一消息 envelope；渠道 metadata 不进入 provider prompt。按 Hermes
+  `862b1b37..7a43ab04` 的 Discord 断线恢复信号实现 0600 原子 claim/去重账本、原消息身份、每远端频道
+  连续成功前缀 cursor、全局 200 条补扫上限、冷启动 interrupted reclaim 和“最终投递成功后才推进 cursor”
+  合同；collect/debounce、queue-cap summarize/drop、interrupt 与显式 reset/switch 均保留或结算全部
+  constituent claims。账本损坏、超限、身份不一致或写失败 fail closed。CLI/Desktop 共用 Reames home
+  账本，状态/指标只暴露计数；详见 `audits/2026-07-19-m6-durable-channel-recovery.md`。
+- [ ] 渠道断线实证：内置飞书/QQ/微信适配器尚未实现可选 `RecoveryAdapter` 的真实历史分页/resume；当前已
+  获得跨进程实时事件去重和最终投递门禁，但不能冒充完全离线期间的漏消息补扫。逐渠道实现后还须以真实
+  凭据执行掉线、重连、历史补偿、审批/取消与最终远端投递回环；该项保持 adapter/external-blocked。
 - 每个渠道先完成文本 + 审批 + 取消 + 断线补偿/恢复，再扩展媒体与富交互。
 - 阿里云等自有服务器形态按 [云端 Agent 计划](CLOUD_AGENT_PLAN.md) 推进，先完成 SSH/CLI 与独立 Gateway service，再按需开启 `serve`，最后承载后台研究任务。
 
@@ -434,6 +440,10 @@ notarization、公开主题 registry
   总计和单项均受 8192 估算 token 门槛约束，并只在 Frameless Bidi V3 启用。Reames 将其作为 P9
   Realtime/App-Server 会话播种合同，不回填到 P8 HTTP Responses；Hermes 的 `/model --once` 作为单轮
   root 模型覆盖候选，必须证明不污染持久默认模型、并发会话或后续 turn 后才可采用。
+- Codex `312caf17..0fb559f0` 将 inline-data audio 贯穿 dynamic tools、MCP、code-mode、App-Server 与历史，
+  并让 paginated thread 同时支持 metadata/summary/full legacy views、双向 cursor 和 live active-turn 合并。
+  Reames P9 必须按完整纵向能力实现 bounded inline audio、显式 modality、unsupported fallback 和安全历史投影，
+  以及不破坏 limit/cursor 的 paginated App-Server 兼容；当前 ACP `audio=false` 与 Desktop history page 不得冒充 parity。
 
 ## P10：第一方 Browser Control / CDP
 

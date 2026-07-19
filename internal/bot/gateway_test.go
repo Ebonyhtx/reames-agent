@@ -1489,6 +1489,7 @@ func TestGatewayControlServerStatusAndSend(t *testing.T) {
 	gw := NewGatewayWithAdapterBindings(GatewayConfig{
 		Enabled:        map[Platform]bool{PlatformFeishu: true},
 		Allowlist:      AllowlistConfig{AllowAll: true},
+		RecoveryPath:   filepath.Join(t.TempDir(), "delivery-ledger.json"),
 		ControlEnabled: true,
 		ControlAddr:    "127.0.0.1:0",
 		ControlToken:   "secret",
@@ -1525,7 +1526,7 @@ func TestGatewayControlServerStatusAndSend(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
-	if status.Status != "running" || len(status.Adapters) != 1 || status.Adapters[0].ID != "feishu-lark" {
+	if status.Status != "running" || len(status.Adapters) != 1 || status.Adapters[0].ID != "feishu-lark" || !status.DeliveryRecovery.Enabled {
 		t.Fatalf("status = %+v, want running feishu-lark", status)
 	}
 
@@ -1561,7 +1562,7 @@ func TestGatewayControlServerStatusAndSend(t *testing.T) {
 	}
 	metricsBody, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(metricsBody), "reamesAgent_bot_adapter_sends_total") {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(metricsBody), "reamesAgent_bot_adapter_sends_total") || !strings.Contains(string(metricsBody), "reamesAgent_bot_recovery_retry_pending") {
 		t.Fatalf("GET /metrics status=%d body=%q, want adapter metrics", resp.StatusCode, string(metricsBody))
 	}
 }

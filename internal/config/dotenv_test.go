@@ -1,10 +1,13 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	fileenc "reames-agent/internal/fileutil/encoding"
 )
 
 func TestLoadDotEnvDoesNotImportProjectOrHomeEnv(t *testing.T) {
@@ -248,6 +251,85 @@ func TestDotEnvFileFilteredPreservesProjectScopeRules(t *testing.T) {
 	}
 	if _, ok := got["HOME"]; ok {
 		t.Fatalf("HOME should be filtered: %+v", got)
+	}
+}
+
+func TestReadDotEnvFileDecodesUTF16WithoutMutatingSource(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		enc  fileenc.Kind
+	}{
+		{name: "little endian", enc: fileenc.UTF16LE},
+		{name: "big endian", enc: fileenc.UTF16BE},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), ".env")
+			before := fileenc.Encode("FIRST_KEY=one\nSECOND_KEY='two words'\n", tc.enc)
+			if err := os.WriteFile(path, before, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			file, ok := readDotEnvFile(path)
+			if !ok {
+				t.Fatal("readDotEnvFile rejected supported UTF-16")
+			}
+			if file.Values["FIRST_KEY"] != "one" || file.Values["SECOND_KEY"] != "two words" {
+				t.Fatalf("values = %#v", file.Values)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(after, before) {
+				t.Fatal("readDotEnvFile mutated the source file")
+			}
+		})
+	}
+}
+
+func TestStoreCredentialConvertsSupportedUTF16ToUTF8(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REAMES_AGENT_HOME", home)
+	path := UserCredentialsPath()
+	before := fileenc.Encode("EXISTING_KEY=kept\n", fileenc.UTF16LE)
+	if err := os.WriteFile(path, before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := SetCredential("NEW_KEY", "new value"); err != nil {
+		t.Fatalf("SetCredential: %v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.HasPrefix(after, []byte{0xFF, 0xFE}) || bytes.IndexByte(after, 0) >= 0 {
+		t.Fatalf("credentials were not normalized to UTF-8: %x", after)
+	}
+	file, ok := readDotEnvFile(path)
+	if !ok || file.Values["EXISTING_KEY"] != "kept" || file.Values["NEW_KEY"] != "new value" {
+		t.Fatalf("normalized values = %#v, ok=%v", file.Values, ok)
+	}
+}
+
+func TestStoreCredentialRefusesUTF32WithoutChangingBytes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REAMES_AGENT_HOME", home)
+	path := UserCredentialsPath()
+	before := []byte{0xFF, 0xFE, 0x00, 0x00, 'K', 0x00, 0x00, 0x00}
+	if err := os.WriteFile(path, before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := SetCredential("NEW_KEY", "new"); err == nil || !strings.Contains(err.Error(), "UTF-32") {
+		t.Fatalf("SetCredential error = %v, want UTF-32 rejection", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatalf("UTF-32 credentials changed: before=%x after=%x", before, after)
 	}
 }
 

@@ -614,12 +614,12 @@ func removeCredentialFromFile(path, key string) error {
 }
 
 func readCredentialFileLines(path string) ([]string, error) {
-	data, err := os.ReadFile(path)
+	data, err := readDotEnvText(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("read credentials file: %w", err)
 	}
 	text := strings.TrimRight(string(data), "\n")
 	if text == "" {

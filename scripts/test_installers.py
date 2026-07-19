@@ -82,6 +82,16 @@ def powershell_args(script: str, *args: str) -> list[str]:
 
 
 class InstallerDryRunTests(unittest.TestCase):
+    def test_powershell_installer_is_ascii_for_windows_powershell_51(self) -> None:
+        data = (ROOT / "scripts" / "install.ps1").read_bytes()
+        non_ascii = [(index, value) for index, value in enumerate(data) if value > 0x7F]
+        self.assertEqual(
+            non_ascii,
+            [],
+            "install.ps1 must stay pure ASCII: Windows PowerShell 5.1 can "
+            "misparse UTF-8-without-BOM punctuation before execution",
+        )
+
     def test_unix_gateway_dry_run_preserves_home_and_credential_boundary(self) -> None:
         bash = unix_bash()
         if not bash:

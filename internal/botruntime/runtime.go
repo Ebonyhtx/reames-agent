@@ -79,6 +79,16 @@ func HasEnabledPlatform(enabled map[bot.Platform]bool) bool {
 	return false
 }
 
+// RecoveryLedgerPath returns the process-home-scoped durable IM delivery
+// ledger shared by CLI and Desktop gateway hosts.
+func RecoveryLedgerPath() string {
+	home := strings.TrimSpace(config.ReamesAgentHomeDir())
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, "bot", "delivery-ledger.json")
+}
+
 func PlatformConfigured(cfg *config.Config, platform bot.Platform) bool {
 	if cfg == nil {
 		return false

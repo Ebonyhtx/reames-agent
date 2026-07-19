@@ -35,6 +35,10 @@ type QueueResult struct {
 	Dropped  bool
 	Pending  int
 	Mode     string
+	// Discarded contains queued messages explicitly superseded by interrupt
+	// mode. The gateway settles their durable claims only after the interrupt
+	// acknowledgement is delivered successfully.
+	Discarded []InboundMessage
 }
 
 type QueueSnapshot struct {
@@ -244,6 +248,9 @@ func (sm *SessionManager) TryAcquireWithQueue(key string, msg InboundMessage, op
 			case QueueDropOld, QueueDropSummarize:
 				removed := queue[0]
 				queue = queue[1:]
+				// The next successfully delivered turn represents this intentional
+				// queue-cap discard, even when its text is summarized or omitted.
+				mergeInboundDeliveryClaims(&msg, removed.msg)
 				if drop == QueueDropSummarize {
 					sm.dropped[key] = append(sm.dropped[key], queueSummary(removed.msg.Text))
 				}
@@ -257,6 +264,8 @@ func (sm *SessionManager) TryAcquireWithQueue(key string, msg InboundMessage, op
 				} else {
 					last.msg.Text = msg.Text
 				}
+				last.msg.MediaURLs = append(last.msg.MediaURLs, msg.MediaURLs...)
+				mergeInboundDeliveryClaims(&last.msg, msg)
 				last.timestamp = time.Now()
 				last.mode = mode
 				sm.pending[key] = queue
@@ -279,9 +288,13 @@ func (sm *SessionManager) ReplacePending(key string, msg InboundMessage) QueueRe
 		sm.active[key] = true
 		return QueueResult{Acquired: true, Mode: QueueModeInterrupt}
 	}
+	discarded := make([]InboundMessage, 0, len(sm.pending[key]))
+	for _, pending := range sm.pending[key] {
+		discarded = append(discarded, pending.msg)
+	}
 	sm.pending[key] = []pendingTurn{{msg: msg, timestamp: time.Now(), mode: QueueModeFollowup}}
 	delete(sm.dropped, key)
-	return QueueResult{Queued: true, Pending: 1, Mode: QueueModeInterrupt}
+	return QueueResult{Queued: true, Dropped: len(discarded) > 0, Pending: 1, Mode: QueueModeInterrupt, Discarded: discarded}
 }
 
 // Release 释放 session 锁，返回等待队列中的下一条消息（合并后）。
@@ -320,6 +333,8 @@ func (sm *SessionManager) Release(key string) *InboundMessage {
 			if queue[i].msg.Text != "" {
 				merged.Text = merged.Text + "\n" + queue[i].msg.Text
 			}
+			merged.MediaURLs = append(merged.MediaURLs, queue[i].msg.MediaURLs...)
+			mergeInboundDeliveryClaims(merged, queue[i].msg)
 		}
 	}
 	delete(sm.pending, key)

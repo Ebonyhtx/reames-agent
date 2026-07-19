@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -10,6 +11,28 @@ import (
 
 	"reames-agent/internal/event"
 )
+
+type failingRenderAdapter struct{ *fakeAdapter }
+
+func (a *failingRenderAdapter) Send(context.Context, OutboundMessage) (SendResult, error) {
+	return SendResult{}, errors.New("send unavailable")
+}
+
+func TestRenderSinkFinalDeliveryRequiresSuccessfulFinalMessage(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	missing := newRenderSink(context.Background(), newFakeAdapter(PlatformWeixin, "missing"), "conn", "weixin", "chat", ChatDM, "user", "message", logger, nil, nil)
+	missing.Emit(event.Event{Kind: event.TurnDone})
+	if err := missing.finalDeliveryError(); err == nil || !strings.Contains(err.Error(), "without a final response") {
+		t.Fatalf("missing final delivery error = %v", err)
+	}
+
+	failing := newRenderSink(context.Background(), &failingRenderAdapter{newFakeAdapter(PlatformWeixin, "failing")}, "conn", "weixin", "chat", ChatDM, "user", "message", logger, nil, nil)
+	failing.Emit(event.Event{Kind: event.Text, Text: "final answer"})
+	failing.Emit(event.Event{Kind: event.TurnDone})
+	if err := failing.finalDeliveryError(); err == nil || !strings.Contains(err.Error(), "send unavailable") {
+		t.Fatalf("failed final delivery error = %v", err)
+	}
+}
 
 func TestApprovalCardCarriesChatType(t *testing.T) {
 	card := approvalCard(event.Approval{ID: "approval-1"}, ChatDM, "allowed-user")

@@ -49,7 +49,13 @@ type GatewayConfig struct {
 	Allowlist          AllowlistConfig
 	Enabled            map[Platform]bool
 	Debounce           time.Duration
-	OnInbound          func(InboundMessage)
+	// RecoveryPath enables the durable inbound claim/dedupe ledger. Empty keeps
+	// the gateway stateless for embedding tests; production hosts set a path
+	// under Reames Agent home.
+	RecoveryPath        string
+	RecoveryRecordLimit int
+	RecoveryScanLimit   int
+	OnInbound           func(InboundMessage)
 	// OnSessionReady notifies the host after the bot has created or reused the
 	// controller for an inbound remote. Hosts may persist the concrete session ID
 	// or keep the remote as a read-only channel.
@@ -161,6 +167,7 @@ type BotGateway struct {
 	adapterHealth           map[string]*AdapterHealthSnapshot
 	controlServer           *controlHTTPServer
 	sessionOverrides        map[string]sessionRuntimeOverride
+	recovery                *deliveryLedger
 
 	logger *slog.Logger
 }
@@ -215,6 +222,7 @@ type sessionState struct {
 	pendingApprovals map[string]event.Approval
 	lastApprovalID   string
 	lastAskID        string
+	activeInbound    *InboundMessage
 	createdAt        time.Time
 	lastActive       time.Time
 }
@@ -239,6 +247,16 @@ type sessionEventSink struct {
 
 type pendingReactionAdapter interface {
 	AddPendingReaction(ctx context.Context, messageID string) (func(), error)
+}
+
+type trackedRenderAdapter struct {
+	Adapter
+	gw      *BotGateway
+	binding AdapterBinding
+}
+
+func (a trackedRenderAdapter) Send(ctx context.Context, msg OutboundMessage) (SendResult, error) {
+	return a.gw.sendViaAdapter(ctx, a.binding, msg)
 }
 
 const outboundEchoTTL = 10 * time.Minute
@@ -361,6 +379,11 @@ func (gw *BotGateway) buildSelfUserIDs() {
 
 // Start 启动所有已启用的平台适配器并开始处理消息。
 func (gw *BotGateway) Start(ctx context.Context) error {
+	recovery, err := openDeliveryLedger(gw.cfg.RecoveryPath, gw.cfg.RecoveryRecordLimit)
+	if err != nil {
+		return err
+	}
+	gw.recovery = recovery
 	started := make([]AdapterBinding, 0, len(gw.adapters))
 	var startErr []error
 	for _, binding := range gw.adapters {
@@ -389,6 +412,10 @@ func (gw *BotGateway) Start(ctx context.Context) error {
 	if len(started) == 0 && len(startErr) > 0 {
 		return errors.Join(startErr...)
 	}
+	startErr = append(startErr, gw.recoverMissed(ctx, started)...)
+	gw.mu.Lock()
+	gw.startErr = startErr
+	gw.mu.Unlock()
 	if err := gw.startControlServer(ctx); err != nil {
 		for _, binding := range started {
 			_ = binding.Adapter.Stop()
@@ -402,6 +429,47 @@ func (gw *BotGateway) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (gw *BotGateway) recoverMissed(ctx context.Context, bindings []AdapterBinding) []error {
+	if gw.recovery == nil {
+		return nil
+	}
+	limit := gw.cfg.RecoveryScanLimit
+	if limit <= 0 {
+		limit = defaultRecoveryScanLimit
+	}
+	remaining := limit
+	var recoveryErrs []error
+	for _, binding := range bindings {
+		adapter, ok := binding.Adapter.(RecoveryAdapter)
+		if !ok || remaining <= 0 {
+			continue
+		}
+		messages, err := adapter.RecoverMissed(ctx, gw.recovery.checkpoints(binding), remaining)
+		if err != nil {
+			recoveryErrs = append(recoveryErrs, fmt.Errorf("recover adapter %s: %w", binding.ID, err))
+			continue
+		}
+		if len(messages) > remaining {
+			recoveryErrs = append(recoveryErrs, fmt.Errorf("recover adapter %s returned %d messages; global remaining limit is %d", binding.ID, len(messages), remaining))
+			messages = messages[:remaining]
+		}
+		remaining -= len(messages)
+		for _, msg := range messages {
+			msg.Recovered = true
+			if strings.TrimSpace(msg.MessageID) == "" || strings.TrimSpace(msg.RecoveryCursor) == "" {
+				recoveryErrs = append(recoveryErrs, fmt.Errorf("recover adapter %s returned a message without message_id or recovery_cursor", binding.ID))
+				continue
+			}
+			gw.markAdapterMessage(binding)
+			gw.handleMessage(ctx, binding, msg)
+		}
+	}
+	if remaining == 0 {
+		gw.logger.Info("bot recovery scan reached global limit", "limit", limit)
+	}
+	return recoveryErrs
 }
 
 func (gw *BotGateway) AdapterCount() int {
@@ -427,6 +495,11 @@ func (gw *BotGateway) AdapterHealth() []AdapterHealthSnapshot {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+// DeliveryRecoveryHealth returns privacy-safe durable delivery ledger counts.
+func (gw *BotGateway) DeliveryRecoveryHealth() DeliveryRecoverySnapshot {
+	return gw.recovery.snapshot()
 }
 
 func (gw *BotGateway) setAdapterConfigured(binding AdapterBinding) {
@@ -573,14 +646,21 @@ func (gw *BotGateway) dispatchLoop(ctx context.Context, binding AdapterBinding) 
 
 func (gw *BotGateway) handleMessage(ctx context.Context, binding AdapterBinding, msg InboundMessage) {
 	msg.Platform = binding.Platform
-	if msg.ConnectionID == "" {
-		msg.ConnectionID = binding.ID
-	}
-	if msg.Domain == "" {
-		msg.Domain = binding.Domain
-	}
+	// The host binding is authoritative. Adapter payload metadata must not be
+	// able to select another connection's routes, access policy, or ledger.
+	msg.ConnectionID = binding.ID
+	msg.Domain = binding.Domain
 	if gw.isSelfMessage(msg) {
 		gw.logger.Debug("bot ignored self message", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "user", hashID(msg.UserID))
+		return
+	}
+	claimed, err := gw.recovery.claim(msg)
+	if err != nil {
+		gw.logger.Error("bot inbound durable claim failed", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
+		return
+	}
+	if !claimed {
+		gw.logger.Debug("bot ignored already claimed inbound message", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID))
 		return
 	}
 	src := msg.Session()
@@ -603,10 +683,11 @@ func (gw *BotGateway) handleMessage(ctx context.Context, binding AdapterBinding,
 	// allowlist 检查
 	if !gw.checkAllowlist(binding.Platform, msg) {
 		gw.logger.Info("user not in allowlist", "platform", binding.Platform, "connection", msg.ConnectionID, "user", hashID(msg.UserID))
-		if gw.offerPairing(ctx, binding.Adapter, msg) {
+		if offered, err := gw.offerPairing(ctx, binding.Adapter, msg); offered {
+			gw.settleInbound(msg, err)
 			return
 		}
-		_ = gw.sendText(ctx, binding.Adapter, msg, "抱歉，您没有使用此 bot 的权限。")
+		gw.settleInbound(msg, gw.sendText(ctx, binding.Adapter, msg, "抱歉，您没有使用此 bot 的权限。"))
 		return
 	}
 	if gw.cfg.OnInbound != nil {
@@ -618,14 +699,14 @@ func (gw *BotGateway) handleMessage(ctx context.Context, binding AdapterBinding,
 	} else if normalized, ok := gw.normalizeAskShortcut(key, msg.Text); ok {
 		msg.Text = normalized
 	} else if _, ok := decisionShortcutCommand(msg.Text); ok && gw.sessions.IsActive(key) {
-		_ = gw.sendText(ctx, binding.Adapter, msg, "没有找到可匹配的待处理操作。请重新触发一次操作后回复编号，或按消息中的 ID 使用 /approve、/deny 或 /answer。")
+		gw.settleInbound(msg, gw.sendText(ctx, binding.Adapter, msg, "没有找到可匹配的待处理操作。请重新触发一次操作后回复编号，或按消息中的 ID 使用 /approve、/deny 或 /answer。"))
 		return
 	}
 
 	// 斜杠命令处理
 	if IsSlashBypass(msg.Text) {
 		gw.logger.Info("bot slash command", logFields...)
-		gw.handleSlashCommand(ctx, binding.Adapter, key, msg)
+		gw.settleInbound(msg, gw.handleSlashCommand(ctx, binding.Adapter, key, msg))
 		return
 	}
 
@@ -640,16 +721,29 @@ func (gw *BotGateway) handleMessage(ctx context.Context, binding AdapterBinding,
 				if cleanup != nil {
 					cleanup()
 				}
-				_ = gw.sendText(ctx, binding.Adapter, msg, "已收到，会并入当前任务。")
+				gw.settleInbound(msg, gw.sendText(ctx, binding.Adapter, msg, "已收到，会并入当前任务。"))
 				return
 			}
 		case QueueModeInterrupt:
+			interrupted := gw.activeInboundForSession(key)
 			gw.cancelActiveSession(key)
 			runReactionCleanups(gw.takeReactionCleanups(key))
 			result := gw.sessions.ReplacePending(key, msg)
 			gw.storeReactionCleanup(key, cleanup)
 			gw.logger.Info("bot active turn interrupted; newest message queued", "session", key[:8], "pending", result.Pending)
-			_ = gw.sendText(ctx, binding.Adapter, msg, "已停止当前任务，稍后处理这条新消息。")
+			if err := gw.sendText(ctx, binding.Adapter, msg, "已停止当前任务，稍后处理这条新消息。"); err == nil {
+				gw.settleCanceledInbound(interrupted)
+				for i := range result.Discarded {
+					gw.settleCanceledInbound(&result.Discarded[i])
+				}
+			} else {
+				if interrupted != nil {
+					gw.failInbound(*interrupted, err)
+				}
+				for i := range result.Discarded {
+					gw.failInbound(result.Discarded[i], err)
+				}
+			}
 			return
 		}
 	}
@@ -665,7 +759,7 @@ func (gw *BotGateway) handleMessage(ctx context.Context, binding AdapterBinding,
 		if cleanup != nil {
 			cleanup()
 		}
-		_ = gw.sendText(ctx, binding.Adapter, msg, "当前会话排队已满，请稍后再发，或使用 /queue interrupt 中断当前任务。")
+		gw.settleInbound(msg, gw.sendText(ctx, binding.Adapter, msg, "当前会话排队已满，请稍后再发，或使用 /queue interrupt 中断当前任务。"))
 		return
 	}
 	if result.Queued {
@@ -733,6 +827,17 @@ func (gw *BotGateway) cancelActiveSession(key string) {
 	if state.ctrl != nil {
 		botCancel(state.ctrl)
 	}
+}
+
+func (gw *BotGateway) activeInboundForSession(key string) *InboundMessage {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	state := gw.controllers[key]
+	if state == nil || state.activeInbound == nil {
+		return nil
+	}
+	copy := *state.activeInbound
+	return &copy
 }
 
 func (gw *BotGateway) storeReactionCleanup(key string, cleanup func()) {
@@ -921,12 +1026,11 @@ func checkConnectionAllowlist(access AccessConfig, msg InboundMessage) bool {
 	return actorAllowed || groupAllowed
 }
 
-func (gw *BotGateway) requireCommandRole(ctx context.Context, adapter Adapter, msg InboundMessage, role string) bool {
+func (gw *BotGateway) requireCommandRole(ctx context.Context, adapter Adapter, msg InboundMessage, role string) (bool, error) {
 	if gw.checkCommandRole(msg.Platform, msg, role) {
-		return true
+		return true, nil
 	}
-	_ = gw.sendText(ctx, adapter, msg, "抱歉，你没有执行此 bot 命令的权限。")
-	return false
+	return false, gw.sendText(ctx, adapter, msg, "抱歉，你没有执行此 bot 命令的权限。")
 }
 
 func (gw *BotGateway) checkCommandRole(plat Platform, msg InboundMessage, role string) bool {
@@ -973,13 +1077,13 @@ func stringSet(values []string) map[string]bool {
 	return out
 }
 
-func (gw *BotGateway) offerPairing(ctx context.Context, adapter Adapter, msg InboundMessage) bool {
+func (gw *BotGateway) offerPairing(ctx context.Context, adapter Adapter, msg InboundMessage) (bool, error) {
 	if access, ok := gw.connectionAccess(msg); ok {
 		if !access.PairingEnabled {
-			return false
+			return false, nil
 		}
 	} else if !gw.cfg.PairingEnabled {
-		return false
+		return false, nil
 	}
 	req, created, err := CreateOrRefreshPairingRequest(msg, PairingConfig{
 		Enabled:               true,
@@ -988,7 +1092,7 @@ func (gw *BotGateway) offerPairing(ctx context.Context, adapter Adapter, msg Inb
 	})
 	if err != nil {
 		gw.logger.Warn("bot pairing request failed", "platform", msg.Platform, "chat_type", msg.ChatType, "err", err)
-		return false
+		return false, nil
 	}
 	prefix := "需要先完成配对。"
 	if !created {
@@ -996,8 +1100,7 @@ func (gw *BotGateway) offerPairing(ctx context.Context, adapter Adapter, msg Inb
 	}
 	text := fmt.Sprintf("%s\n配对码: %s\n请在本机运行: reames-agent bot pairing approve %s\n此码将在 %s 过期。",
 		prefix, req.Code, req.Code, req.ExpiresAt.Local().Format("2006-01-02 15:04"))
-	_ = gw.sendText(ctx, adapter, msg, text)
-	return true
+	return true, gw.sendText(ctx, adapter, msg, text)
 }
 
 func chatUsesGroupAllowlist(chatType ChatType) bool {
@@ -1124,10 +1227,10 @@ func (gw *BotGateway) currentPendingAskIDForReply(key string) string {
 	return ""
 }
 
-func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, key string, msg InboundMessage) {
+func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, key string, msg InboundMessage) error {
 	cmd, ok := ParseSlashCommand(msg.Text)
 	if !ok {
-		return
+		return errors.New("invalid slash command")
 	}
 	switch cmd.Verb {
 	case "/stop":
@@ -1141,7 +1244,13 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 			cancel()
 		}
 		gw.sessions.ForceRelease(key)
-		_ = gw.sendText(ctx, adapter, msg, "已停止当前任务。")
+		err := gw.sendText(ctx, adapter, msg, "已停止当前任务。")
+		if err == nil {
+			gw.settleCanceledSession(key)
+		} else {
+			gw.failCanceledSession(key)
+		}
+		return err
 
 	case "/new", "/reset":
 		var cancel context.CancelFunc
@@ -1165,22 +1274,32 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 			if err := state.ctrl.NewSession(); err != nil {
 				gw.logger.Warn("new session failed", "err", err)
 				gw.sessions.ForceRelease(key)
-				_ = gw.sendText(ctx, adapter, msg, "新会话创建失败，请稍后重试。")
-				return
+				sendErr := gw.sendText(ctx, adapter, msg, "新会话创建失败，请稍后重试。")
+				if sendErr == nil {
+					gw.settleCanceledSession(key)
+				} else {
+					gw.failCanceledSession(key)
+				}
+				return sendErr
 			}
 			gw.rememberSessionReady(msg, state.ctrl)
 		}
 		gw.sessions.ForceRelease(key)
-		_ = gw.sendText(ctx, adapter, msg, "已开始新会话。")
+		err := gw.sendText(ctx, adapter, msg, "已开始新会话。")
+		if err == nil {
+			gw.settleCanceledSession(key)
+		} else {
+			gw.failCanceledSession(key)
+		}
+		return err
 
 	case "/approve":
-		if !gw.requireCommandRole(ctx, adapter, msg, "approver") {
-			return
+		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "approver"); !allowed {
+			return err
 		}
 		// 从消息中解析 approval ID
 		if len(cmd.Args) < 1 {
-			_ = gw.sendText(ctx, adapter, msg, "用法: /approve <id>")
-			return
+			return gw.sendText(ctx, adapter, msg, "用法: /approve <id>")
 		}
 		gw.mu.Lock()
 		state, ok := gw.controllers[key]
@@ -1188,18 +1307,17 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		if ok && state.ctrl != nil {
 			botApprove(state.ctrl, cmd.Args[0], true)
 			gw.forgetPendingApproval(key, cmd.Args[0])
-			_ = gw.sendText(ctx, adapter, msg, "已批准。")
+			return gw.sendText(ctx, adapter, msg, "已批准。")
 		} else {
-			_ = gw.sendText(ctx, adapter, msg, "没有找到当前会话中的待审批操作，请重新触发一次操作。")
+			return gw.sendText(ctx, adapter, msg, "没有找到当前会话中的待审批操作，请重新触发一次操作。")
 		}
 
 	case "/deny":
-		if !gw.requireCommandRole(ctx, adapter, msg, "approver") {
-			return
+		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "approver"); !allowed {
+			return err
 		}
 		if len(cmd.Args) < 1 {
-			_ = gw.sendText(ctx, adapter, msg, "用法: /deny <id>")
-			return
+			return gw.sendText(ctx, adapter, msg, "用法: /deny <id>")
 		}
 		gw.mu.Lock()
 		state, ok := gw.controllers[key]
@@ -1207,15 +1325,14 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		if ok && state.ctrl != nil {
 			botApprove(state.ctrl, cmd.Args[0], false)
 			gw.forgetPendingApproval(key, cmd.Args[0])
-			_ = gw.sendText(ctx, adapter, msg, "已拒绝。")
+			return gw.sendText(ctx, adapter, msg, "已拒绝。")
 		} else {
-			_ = gw.sendText(ctx, adapter, msg, "没有找到当前会话中的待审批操作，请重新触发一次操作。")
+			return gw.sendText(ctx, adapter, msg, "没有找到当前会话中的待审批操作，请重新触发一次操作。")
 		}
 
 	case "/answer":
 		if len(cmd.Args) < 2 {
-			_ = gw.sendText(ctx, adapter, msg, "用法: /answer <id> <选项或 q1=选项;q2=选项>")
-			return
+			return gw.sendText(ctx, adapter, msg, "用法: /answer <id> <选项或 q1=选项;q2=选项>")
 		}
 		askID := cmd.Args[0]
 		rawAnswer := strings.TrimSpace(strings.Join(cmd.Args[1:], " "))
@@ -1235,81 +1352,89 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		}
 		gw.mu.Unlock()
 		if !ok || state.ctrl == nil {
-			_ = gw.sendText(ctx, adapter, msg, "没有找到当前会话。")
-			return
+			return gw.sendText(ctx, adapter, msg, "没有找到当前会话。")
 		}
 		answers := parseAskAnswers(questions, rawAnswer)
 		state.ctrl.AnswerQuestion(askID, answers)
-		_ = gw.sendText(ctx, adapter, msg, "已提交回答。")
+		return gw.sendText(ctx, adapter, msg, "已提交回答。")
 
 	case "/yolo", "/mode":
-		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
-			return
+		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "admin"); !allowed {
+			return err
 		}
 		mode, statusOnly, ok := parseToolApprovalModeCommand(msg.Text)
 		if !ok {
-			_ = gw.sendText(ctx, adapter, msg, "用法: /yolo on|off|auto|status，或 /mode yolo|ask|auto")
-			return
+			return gw.sendText(ctx, adapter, msg, "用法: /yolo on|off|auto|status，或 /mode yolo|ask|auto")
 		}
 		if statusOnly {
-			_ = gw.sendText(ctx, adapter, msg, gw.toolApprovalModeStatusText(key, msg))
-			return
+			return gw.sendText(ctx, adapter, msg, gw.toolApprovalModeStatusText(key, msg))
 		}
 		persistErr := gw.setToolApprovalModeForMessage(key, msg, mode)
 		text := toolApprovalModeChangedText(mode)
 		if persistErr != nil {
 			text += "\n当前会话已生效，但保存到设置失败：" + persistErr.Error()
 		}
-		_ = gw.sendText(ctx, adapter, msg, text)
+		return gw.sendText(ctx, adapter, msg, text)
 
 	case "/queue":
 		mode, clear, statusOnly, ok := parseQueueCommand(msg.Text)
 		if !ok {
-			_ = gw.sendText(ctx, adapter, msg, "用法: /queue steer|followup|collect|interrupt|status|default")
-			return
+			return gw.sendText(ctx, adapter, msg, "用法: /queue steer|followup|collect|interrupt|status|default")
 		}
 		if statusOnly {
-			_ = gw.sendText(ctx, adapter, msg, gw.queueStatusText(key, msg))
-			return
+			return gw.sendText(ctx, adapter, msg, gw.queueStatusText(key, msg))
 		}
 		if clear {
 			gw.sessions.ClearQueueMode(key)
-			_ = gw.sendText(ctx, adapter, msg, "已恢复默认队列模式："+queueModeLabel(gw.queueMode(key, msg))+"。")
-			return
+			return gw.sendText(ctx, adapter, msg, "已恢复默认队列模式："+queueModeLabel(gw.queueMode(key, msg))+"。")
 		}
 		gw.sessions.SetQueueMode(key, mode)
-		_ = gw.sendText(ctx, adapter, msg, "已切换队列模式："+queueModeLabel(mode)+"。")
+		return gw.sendText(ctx, adapter, msg, "已切换队列模式："+queueModeLabel(mode)+"。")
 
 	case "/projects":
-		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
-			return
+		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "admin"); !allowed {
+			return err
 		}
 		query := strings.TrimSpace(strings.TrimPrefix(msg.Text, "/projects"))
-		_ = gw.sendText(ctx, adapter, msg, formatBotProjects(gw.buildProjectIndex(), query, botProjectListLimit))
+		return gw.sendText(ctx, adapter, msg, formatBotProjects(gw.buildProjectIndex(), query, botProjectListLimit))
 
 	case "/use":
-		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
-			return
+		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "admin"); !allowed {
+			return err
 		}
-		_ = gw.sendText(ctx, adapter, msg, gw.handleUseProjectCommand(key, msg.Text))
+		text, changed := gw.handleUseProjectCommand(key, msg.Text)
+		err := gw.sendText(ctx, adapter, msg, text)
+		if err == nil && changed {
+			gw.settleCanceledSession(key)
+		} else if err != nil && changed {
+			gw.failCanceledSession(key)
+		}
+		return err
 
 	case "/sessions":
-		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
-			return
+		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "admin"); !allowed {
+			return err
 		}
-		_ = gw.sendText(ctx, adapter, msg, gw.handleSessionsCommand(msg.Text))
+		return gw.sendText(ctx, adapter, msg, gw.handleSessionsCommand(msg.Text))
 
 	case "/attach":
-		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
-			return
+		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "admin"); !allowed {
+			return err
 		}
-		_ = gw.sendText(ctx, adapter, msg, gw.handleAttachSessionCommand(key, msg.Text))
+		text, changed := gw.handleAttachSessionCommand(key, msg.Text)
+		err := gw.sendText(ctx, adapter, msg, text)
+		if err == nil && changed {
+			gw.settleCanceledSession(key)
+		} else if err != nil && changed {
+			gw.failCanceledSession(key)
+		}
+		return err
 
 	case "/search":
-		if !gw.requireCommandRole(ctx, adapter, msg, "admin") {
-			return
+		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "admin"); !allowed {
+			return err
 		}
-		_ = gw.sendText(ctx, adapter, msg, gw.handleProjectSearchCommand(ctx, msg.Text))
+		return gw.sendText(ctx, adapter, msg, gw.handleProjectSearchCommand(ctx, msg.Text))
 
 	case "/status", "/current":
 		active := gw.sessions.ActiveCount()
@@ -1318,7 +1443,7 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		sessions := len(gw.controllers)
 		gw.mu.Unlock()
 		mode := gw.currentToolApprovalMode(key, msg)
-		_ = gw.sendText(ctx, adapter, msg, fmt.Sprintf("活跃任务数: %d\n保留会话数: %d\n工具审批模式: %s\n队列模式: %s\n当前会话排队: %d\n连接健康: %s", active, sessions, toolApprovalModeLabel(mode), queueModeLabel(gw.queueMode(key, msg)), pending, gw.adapterHealthSummaryText()))
+		return gw.sendText(ctx, adapter, msg, fmt.Sprintf("活跃任务数: %d\n保留会话数: %d\n工具审批模式: %s\n队列模式: %s\n当前会话排队: %d\n连接健康: %s\n投递恢复: %s", active, sessions, toolApprovalModeLabel(mode), queueModeLabel(gw.queueMode(key, msg)), pending, gw.adapterHealthSummaryText(), gw.deliveryRecoverySummaryText()))
 
 	case "/help":
 		help := "可用命令:\n" +
@@ -1338,8 +1463,9 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 			"/search all <关键词> - 跨已索引项目检索文件内容\n" +
 			"/status 或 /current - 查看当前状态\n" +
 			"/help - 显示帮助"
-		_ = gw.sendText(ctx, adapter, msg, help)
+		return gw.sendText(ctx, adapter, msg, help)
 	}
+	return errors.New("unsupported slash command")
 }
 
 func slashCommandVerb(text string) string {
@@ -1350,28 +1476,28 @@ func slashCommandVerb(text string) string {
 	return cmd.Verb
 }
 
-func (gw *BotGateway) handleUseProjectCommand(key, text string) string {
+func (gw *BotGateway) handleUseProjectCommand(key, text string) (string, bool) {
 	selector := parseUseProjectSelector(text)
 	if selector == "" {
-		return "用法: /use project <项目 id|名称|路径>，或 /use project default 恢复默认路由。"
+		return "用法: /use project <项目 id|名称|路径>，或 /use project default 恢复默认路由。", false
 	}
 	if isDefaultBotSelector(selector) {
 		gw.setSessionRuntimeOverride(key, sessionRuntimeOverride{}, false)
-		return "已恢复当前远端会话的默认项目路由。下一条消息会按 bot 配置重新选择 workspace。"
+		return "已恢复当前远端会话的默认项目路由。下一条消息会按 bot 配置重新选择 workspace。", true
 	}
 	projects := gw.buildProjectIndex()
 	project, matches := resolveBotProject(projects, selector)
 	if project.Root == "" {
 		if len(matches) > 0 {
-			return "匹配到多个项目，请使用项目 id：\n" + formatBotProjects(matches, "", botProjectListLimit)
+			return "匹配到多个项目，请使用项目 id：\n" + formatBotProjects(matches, "", botProjectListLimit), false
 		}
-		return "没有匹配的项目。可先用 /projects 查看当前索引。"
+		return "没有匹配的项目。可先用 /projects 查看当前索引。", false
 	}
 	gw.setSessionRuntimeOverride(key, sessionRuntimeOverride{
 		channel: ChannelConfig{WorkspaceRoot: project.Root},
 		label:   "project:" + project.ID,
 	}, true)
-	return fmt.Sprintf("已将当前远端会话切到项目 %s %s。\n下一条消息将在 %s 中运行。", project.ID, project.Name, displayBotPath(project.Root))
+	return fmt.Sprintf("已将当前远端会话切到项目 %s %s。\n下一条消息将在 %s 中运行。", project.ID, project.Name, displayBotPath(project.Root)), true
 }
 
 func parseUseProjectSelector(text string) string {
@@ -1403,25 +1529,25 @@ func parseSessionsQuery(text string) string {
 	return strings.TrimSpace(strings.Join(parts[1:], " "))
 }
 
-func (gw *BotGateway) handleAttachSessionCommand(key, text string) string {
+func (gw *BotGateway) handleAttachSessionCommand(key, text string) (string, bool) {
 	selector := parseAttachSessionSelector(text)
 	if selector == "" {
-		return "用法: /attach session <会话 id|关键词|path:...>"
+		return "用法: /attach session <会话 id|关键词|path:...>", false
 	}
 	projects := gw.buildProjectIndex()
 	sessions := gw.buildSessionIndex(projects)
 	session, matches := resolveBotSession(sessions, selector)
 	if session.ID == "" {
 		if len(matches) > 0 {
-			return "匹配到多个会话，请使用会话 id：\n" + formatBotSessions(matches, "", botSessionListLimit)
+			return "匹配到多个会话，请使用会话 id：\n" + formatBotSessions(matches, "", botSessionListLimit), false
 		}
-		return "没有匹配的会话。可先用 /sessions search <关键词> 查看当前索引。"
+		return "没有匹配的会话。可先用 /sessions search <关键词> 查看当前索引。", false
 	}
 	if session.SessionPath == "" {
-		return "这个会话没有可恢复的 path: transcript，暂时不能 attach。"
+		return "这个会话没有可恢复的 path: transcript，暂时不能 attach。", false
 	}
 	if info, err := os.Stat(session.SessionPath); err != nil || info.IsDir() {
-		return "会话文件不可用或已被移动：" + displayBotPath(session.SessionPath)
+		return "会话文件不可用或已被移动：" + displayBotPath(session.SessionPath), false
 	}
 	workspaceRoot := session.WorkspaceRoot
 	if workspaceRoot == "" {
@@ -1434,7 +1560,7 @@ func (gw *BotGateway) handleAttachSessionCommand(key, text string) string {
 		label:       "session:" + session.ID,
 	}, true)
 	projectName := firstNonEmptyString(session.ProjectName, botProjectName(workspaceRoot), "global")
-	return fmt.Sprintf("已 attach 到会话 %s（%s）。\n下一条消息会从 %s 继续。", session.ID, projectName, displayBotPath(session.SessionPath))
+	return fmt.Sprintf("已 attach 到会话 %s（%s）。\n下一条消息会从 %s 继续。", session.ID, projectName, displayBotPath(session.SessionPath)), true
 }
 
 func parseAttachSessionSelector(text string) string {
@@ -1568,6 +1694,14 @@ func (gw *BotGateway) adapterHealthSummaryText() string {
 		parts = append(parts, fmt.Sprintf("%s=%s", label, status))
 	}
 	return strings.Join(parts, ", ")
+}
+
+func (gw *BotGateway) deliveryRecoverySummaryText() string {
+	snapshot := gw.DeliveryRecoveryHealth()
+	if !snapshot.Enabled {
+		return "未启用"
+	}
+	return fmt.Sprintf("已交付=%d, 处理中=%d, 待重试=%d, 游标=%d", snapshot.Delivered, snapshot.Processing, snapshot.Interrupted+snapshot.Failed, snapshot.Checkpoints)
 }
 
 func parseToolApprovalModeCommand(text string) (mode string, statusOnly bool, ok bool) {
@@ -1710,7 +1844,12 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 	// 获取或创建 Controller
 	state := gw.getOrCreateSession(ctx, key, msg)
 	if state == nil || state.ctrl == nil {
-		_ = gw.sendText(ctx, adapter, msg, "内部错误：无法创建会话。")
+		sendErr := gw.sendText(ctx, adapter, msg, "内部错误：无法创建会话。")
+		if sendErr != nil {
+			gw.failInbound(msg, sendErr)
+		} else {
+			gw.failInbound(msg, errors.New("controller unavailable"))
+		}
 		return
 	}
 	gw.rememberSessionReady(msg, state.ctrl)
@@ -1725,9 +1864,14 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 	_ = adapter.SendTyping(ctx, msg.ChatID)
 
 	// 创建事件渲染 sink
+	renderAdapter := trackedRenderAdapter{
+		Adapter: adapter,
+		gw:      gw,
+		binding: AdapterBinding{ID: msg.ConnectionID, Domain: msg.Domain, Platform: msg.Platform, Adapter: adapter},
+	}
 	sink := newRenderSink(
 		ctx,
-		adapter,
+		renderAdapter,
 		msg.ConnectionID,
 		msg.Domain,
 		msg.ChatID,
@@ -1766,17 +1910,73 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 
 	gw.mu.Lock()
 	state.cancel = cancel
+	active := msg
+	state.activeInbound = &active
 	state.lastActive = time.Now()
 	gw.mu.Unlock()
+	defer func() {
+		gw.mu.Lock()
+		if state.activeInbound != nil && state.activeInbound.MessageID == msg.MessageID {
+			state.activeInbound = nil
+		}
+		gw.mu.Unlock()
+	}()
 
 	// 运行一轮对话
 	err := state.ctrl.RunTurn(turnCtx, input)
 	sink.Emit(event.Event{Kind: event.TurnDone, Err: err})
 	if err != nil {
+		gw.failInbound(msg, err)
 		gw.logger.Warn("turn error", "session", key[:8], "err", err)
 		return
 	}
+	if err := sink.finalDeliveryError(); err != nil {
+		gw.failInbound(msg, err)
+		gw.logger.Warn("turn final delivery incomplete", "session", key[:8], "err", err)
+		return
+	}
+	if err := gw.recovery.delivered(msg); err != nil {
+		gw.logger.Error("turn delivered but durable cursor commit failed", "session", key[:8], "err", err)
+		return
+	}
 	gw.logger.Info("bot turn completed", "platform", msg.Platform, "chat_type", msg.ChatType, "chat", hashID(msg.ChatID), "session", key[:8])
+}
+
+func (gw *BotGateway) settleInbound(msg InboundMessage, deliveryErr error) {
+	if deliveryErr != nil {
+		gw.failInbound(msg, deliveryErr)
+		return
+	}
+	if err := gw.recovery.delivered(msg); err != nil {
+		gw.logger.Error("bot inbound delivered but durable cursor commit failed", "platform", msg.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
+	}
+}
+
+func (gw *BotGateway) settleCanceledInbound(msg *InboundMessage) {
+	if msg == nil {
+		return
+	}
+	if err := gw.recovery.delivered(*msg); err != nil {
+		gw.logger.Error("canceled bot turn could not commit durable delivery", "platform", msg.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
+	}
+}
+
+func (gw *BotGateway) settleCanceledSession(key string) {
+	if err := gw.recovery.deliveredSession(key); err != nil {
+		gw.logger.Error("canceled bot session could not commit durable delivery", "session", key, "err", err)
+	}
+}
+
+func (gw *BotGateway) failCanceledSession(key string) {
+	if err := gw.recovery.failSession(key); err != nil {
+		gw.logger.Error("canceled bot session failure could not be persisted", "session", key, "err", err)
+	}
+}
+
+func (gw *BotGateway) failInbound(msg InboundMessage, cause error) {
+	if err := gw.recovery.fail(msg, cause); err != nil {
+		gw.logger.Error("bot inbound failure state could not be persisted", "platform", msg.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
+	}
 }
 
 func (gw *BotGateway) inputTextWithMedia(ctx context.Context, adapter Adapter, msg InboundMessage, state *sessionState) string {

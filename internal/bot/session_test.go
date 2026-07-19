@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -192,6 +193,86 @@ func TestSessionManager_Debounce(t *testing.T) {
 	// "second" 和 "third" 合并在队列里（"first" 已作为 active 被处理）
 	if next.Text != "second\nthird" {
 		t.Errorf("merged = %q, want %q", next.Text, "second\nthird")
+	}
+}
+
+func TestSessionManagerCollectCarriesMergedDeliveryClaimsAndMedia(t *testing.T) {
+	sm := NewSessionManager(time.Second)
+	base := InboundMessage{Platform: PlatformWeixin, ConnectionID: "primary", Domain: "weixin", ChatType: ChatDM, ChatID: "chat", UserID: "user"}
+	active := base
+	active.MessageID = "active"
+	active.Text = "active"
+	key := BuildSessionKey(active.Session())
+	if result := sm.TryAcquireWithQueue(key, active, QueueOptions{Mode: QueueModeCollect}); !result.Acquired {
+		t.Fatalf("active result = %+v", result)
+	}
+	second := base
+	second.MessageID = "second"
+	second.Text = "second"
+	second.MediaURLs = []string{"https://example.test/second.png"}
+	third := base
+	third.MessageID = "third"
+	third.Text = "third"
+	third.MediaURLs = []string{"https://example.test/third.png"}
+	sm.TryAcquireWithQueue(key, second, QueueOptions{Mode: QueueModeCollect})
+	sm.TryAcquireWithQueue(key, third, QueueOptions{Mode: QueueModeCollect})
+
+	merged := sm.Release(key)
+	if merged == nil || merged.Text != "second\nthird" {
+		t.Fatalf("merged = %+v", merged)
+	}
+	claims := inboundDeliveryClaims(*merged)
+	if len(claims) != 2 || claims[0].MessageID != second.MessageID || claims[1].MessageID != third.MessageID {
+		t.Fatalf("merged claims = %+v", claims)
+	}
+	if len(merged.MediaURLs) != 2 || merged.MediaURLs[0] != second.MediaURLs[0] || merged.MediaURLs[1] != third.MediaURLs[0] {
+		t.Fatalf("merged media = %+v", merged.MediaURLs)
+	}
+}
+
+func TestSessionManagerQueueCapCarriesDroppedClaimIntoNextTurn(t *testing.T) {
+	sm := NewSessionManager(time.Second)
+	base := InboundMessage{Platform: PlatformWeixin, ConnectionID: "primary", ChatType: ChatDM, ChatID: "chat", UserID: "user"}
+	active := base
+	active.MessageID = "active"
+	key := BuildSessionKey(active.Session())
+	sm.TryAcquireWithQueue(key, active, QueueOptions{Mode: QueueModeFollowup, Cap: 1})
+	old := base
+	old.MessageID = "old"
+	old.Text = "old text"
+	sm.TryAcquireWithQueue(key, old, QueueOptions{Mode: QueueModeFollowup, Cap: 1, Drop: QueueDropSummarize})
+	newest := base
+	newest.MessageID = "newest"
+	newest.Text = "new text"
+	result := sm.TryAcquireWithQueue(key, newest, QueueOptions{Mode: QueueModeFollowup, Cap: 1, Drop: QueueDropSummarize})
+	if !result.Queued || !result.Dropped {
+		t.Fatalf("queue result = %+v", result)
+	}
+	merged := sm.Release(key)
+	if merged == nil || !strings.Contains(merged.Text, "old text") {
+		t.Fatalf("released message = %+v", merged)
+	}
+	claims := inboundDeliveryClaims(*merged)
+	if len(claims) != 2 || claims[0].MessageID != newest.MessageID || claims[1].MessageID != old.MessageID {
+		t.Fatalf("queue-cap claims = %+v", claims)
+	}
+}
+
+func TestSessionManagerInterruptReportsSupersededQueueClaims(t *testing.T) {
+	sm := NewSessionManager(time.Second)
+	base := InboundMessage{Platform: PlatformWeixin, ConnectionID: "primary", ChatType: ChatDM, ChatID: "chat", UserID: "user"}
+	active := base
+	active.MessageID = "active"
+	key := BuildSessionKey(active.Session())
+	sm.TryAcquireWithQueue(key, active, QueueOptions{Mode: QueueModeFollowup})
+	queued := base
+	queued.MessageID = "queued"
+	sm.TryAcquireWithQueue(key, queued, QueueOptions{Mode: QueueModeFollowup})
+	interrupt := base
+	interrupt.MessageID = "interrupt"
+	result := sm.ReplacePending(key, interrupt)
+	if len(result.Discarded) != 1 || result.Discarded[0].MessageID != queued.MessageID {
+		t.Fatalf("interrupt result = %+v", result)
 	}
 }
 

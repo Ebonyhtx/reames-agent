@@ -45,12 +45,21 @@ type InboundMessage struct {
 	UserID       string   `json:"user_id"`
 	UserName     string   `json:"user_name"`
 	// OperatorID, when set, is the authenticated actor gated by the allowlist; UserID stays routing-only.
-	OperatorID string   `json:"operator_id,omitempty"`
-	Text       string   `json:"text"`
-	MessageID  string   `json:"message_id"`
-	ThreadID   string   `json:"thread_id,omitempty"`
-	MediaURLs  []string `json:"media_urls,omitempty"`
-	Raw        any      `json:"-"`
+	OperatorID string `json:"operator_id,omitempty"`
+	Text       string `json:"text"`
+	MessageID  string `json:"message_id"`
+	// RecoveryCursor is an opaque adapter-owned position used only for missed
+	// message recovery. It is committed after final outbound delivery, never on
+	// receipt. Recovered identifies messages returned by RecoveryAdapter.
+	RecoveryCursor string   `json:"-"`
+	Recovered      bool     `json:"-"`
+	ThreadID       string   `json:"thread_id,omitempty"`
+	MediaURLs      []string `json:"media_urls,omitempty"`
+	Raw            any      `json:"-"`
+	// deliveryClaims carries already-claimed messages that the queue merged,
+	// summarized, or intentionally superseded into this message. It is runtime
+	// only and lets one final response settle every durable claim it represents.
+	deliveryClaims []deliveryClaim
 }
 
 // Session derives the SessionSource from this message.
@@ -158,7 +167,6 @@ type PlatformAdapter interface {
 	// Capabilities 返回平台支持的能力。
 	Capabilities() PlatformCapabilities
 }
-
 
 // PlatformCapabilities 描述平台支持的能力。
 type PlatformCapabilities struct {

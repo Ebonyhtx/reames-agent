@@ -10,6 +10,14 @@ import (
 	"reames-agent/internal/config"
 )
 
+func TestRecoveryLedgerPathUsesReamesAgentHome(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "isolated-home")
+	t.Setenv("REAMES_AGENT_HOME", home)
+	if got, want := RecoveryLedgerPath(), filepath.Join(home, "bot", "delivery-ledger.json"); filepath.Clean(got) != filepath.Clean(want) {
+		t.Fatalf("RecoveryLedgerPath() = %q, want %q", got, want)
+	}
+}
+
 func TestAllowlistUserCountIncludesRoles(t *testing.T) {
 	allowlist := config.BotAllowlist{
 		FeishuApprovers: []string{"ou-approver"},

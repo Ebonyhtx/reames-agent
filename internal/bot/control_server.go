@@ -20,12 +20,13 @@ type controlHTTPServer struct {
 }
 
 type controlStatusResponse struct {
-	Status           string                  `json:"status"`
-	ControlAddr      string                  `json:"control_addr,omitempty"`
-	ActiveSessions   int                     `json:"active_sessions"`
-	RetainedSessions int                     `json:"retained_sessions"`
-	StartErrors      []string                `json:"start_errors,omitempty"`
-	Adapters         []AdapterHealthSnapshot `json:"adapters"`
+	Status           string                   `json:"status"`
+	ControlAddr      string                   `json:"control_addr,omitempty"`
+	ActiveSessions   int                      `json:"active_sessions"`
+	RetainedSessions int                      `json:"retained_sessions"`
+	StartErrors      []string                 `json:"start_errors,omitempty"`
+	Adapters         []AdapterHealthSnapshot  `json:"adapters"`
+	DeliveryRecovery DeliveryRecoverySnapshot `json:"delivery_recovery"`
 }
 
 type controlSendRequest struct {
@@ -160,6 +161,10 @@ func (gw *BotGateway) handleControlStatus(w http.ResponseWriter, r *http.Request
 			status = "degraded"
 		}
 	}
+	recovery := gw.DeliveryRecoveryHealth()
+	if recovery.Interrupted > 0 || recovery.Failed > 0 {
+		status = "degraded"
+	}
 	writeControlJSON(w, controlStatusResponse{
 		Status:           status,
 		ControlAddr:      gw.ControlAddr(),
@@ -167,6 +172,7 @@ func (gw *BotGateway) handleControlStatus(w http.ResponseWriter, r *http.Request
 		RetainedSessions: retained,
 		StartErrors:      errTexts,
 		Adapters:         gw.AdapterHealth(),
+		DeliveryRecovery: recovery,
 	})
 }
 
@@ -211,6 +217,10 @@ func (gw *BotGateway) handleControlMetrics(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	fmt.Fprintf(w, "# TYPE reamesAgent_bot_active_sessions gauge\nreamesAgent_bot_active_sessions %d\n", gw.sessions.ActiveCount())
 	fmt.Fprintf(w, "# TYPE reamesAgent_bot_retained_sessions gauge\nreamesAgent_bot_retained_sessions %d\n", retained)
+	recovery := gw.DeliveryRecoveryHealth()
+	fmt.Fprintf(w, "# TYPE reamesAgent_bot_recovery_processing gauge\nreamesAgent_bot_recovery_processing %d\n", recovery.Processing)
+	fmt.Fprintf(w, "# TYPE reamesAgent_bot_recovery_retry_pending gauge\nreamesAgent_bot_recovery_retry_pending %d\n", recovery.Interrupted+recovery.Failed)
+	fmt.Fprintf(w, "# TYPE reamesAgent_bot_recovery_checkpoints gauge\nreamesAgent_bot_recovery_checkpoints %d\n", recovery.Checkpoints)
 	fmt.Fprintln(w, "# TYPE reamesAgent_bot_adapter_messages_total counter")
 	for _, health := range gw.AdapterHealth() {
 		labels := adapterMetricLabels(health)

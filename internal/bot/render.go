@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -35,6 +36,8 @@ type renderSink struct {
 	lastFlush     time.Time
 	lastProgress  time.Time
 	progressCount int
+	finalSends    int
+	finalErr      error
 }
 
 const (
@@ -72,6 +75,8 @@ func (s *renderSink) Emit(e event.Event) {
 		s.toolNames = make(map[string]string)
 		s.progressCount = 0
 		s.lastProgress = time.Time{}
+		s.finalSends = 0
+		s.finalErr = nil
 
 	case event.Reasoning:
 		if !s.inThinking {
@@ -215,7 +220,7 @@ func (s *renderSink) flushPrefix(idx int) {
 		s.lastFlush = time.Now()
 		return
 	}
-	_ = s.send(OutboundMessage{
+	err := s.send(OutboundMessage{
 		ConnectionID: s.connID,
 		Domain:       s.domain,
 		ChatID:       s.chatID,
@@ -223,6 +228,10 @@ func (s *renderSink) flushPrefix(idx int) {
 		Text:         text,
 		ReplyToMsgID: s.replyTo,
 	})
+	s.finalSends++
+	if err != nil && s.finalErr == nil {
+		s.finalErr = err
+	}
 	remaining := raw[idx:]
 	s.buf.Reset()
 	s.buf.WriteString(remaining)
@@ -350,6 +359,16 @@ func byteIndexForRuneLimit(text string, maxRunes int) int {
 func (s *renderSink) send(msg OutboundMessage) error {
 	_, err := s.adapter.Send(s.ctx, msg)
 	return err
+}
+
+func (s *renderSink) finalDeliveryError() error {
+	if s.finalErr != nil {
+		return fmt.Errorf("final response send: %w", s.finalErr)
+	}
+	if s.finalSends == 0 {
+		return errors.New("turn completed without a final response delivery")
+	}
+	return nil
 }
 
 func approvalKeyboard(id string) *InlineKeyboard {
