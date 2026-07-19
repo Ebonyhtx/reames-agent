@@ -99,8 +99,9 @@ ok(
 );
 ok(
   packageSource.includes('"pretest": "tsx src/__tests__/theme-pack.test.ts && tsx src/__tests__/appearance-panel.test.tsx"') &&
-    packageSource.includes('"pretest:all": "tsx src/__tests__/theme-pack.test.ts && tsx src/__tests__/appearance-panel.test.tsx"'),
-  "controlled-theme DOM and Gallery interaction contracts run in ordinary and full frontend test lifecycles",
+    packageSource.includes('"pretest:all": "tsx src/__tests__/theme-pack.test.ts && tsx src/__tests__/appearance-panel.test.tsx && tsx src/__tests__/session-export.test.ts"') &&
+    packageSource.includes('"prebuild": "tsx src/__tests__/session-export.test.ts"'),
+  "controlled theme and export contracts run in their required frontend lifecycles",
 );
 ok(
   distPlaceholder.byteLength === 0 &&

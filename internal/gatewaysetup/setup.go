@@ -225,8 +225,10 @@ func resolveChannel(channel string) (channelTarget, error) {
 		return channelTarget{Channel: "qq", Provider: "qq", Domain: "qq", Label: "QQ", DefaultID: "qq-qq", DefaultAppSecretEnv: "QQ_BOT_APP_SECRET"}, nil
 	case "weixin", "wechat":
 		return channelTarget{Channel: "weixin", Provider: "weixin", Domain: "weixin", Label: "微信", DefaultID: "weixin-weixin", DefaultTokenEnv: "WEIXIN_BOT_TOKEN"}, nil
+	case "telegram":
+		return channelTarget{Channel: "telegram", Provider: "telegram", Domain: "telegram", Label: "Telegram", DefaultID: "telegram-telegram", DefaultTokenEnv: "TELEGRAM_BOT_TOKEN"}, nil
 	default:
-		return channelTarget{}, fmt.Errorf("invalid gateway channel %q: use feishu, lark, qq, or weixin", channel)
+		return channelTarget{}, fmt.Errorf("invalid gateway channel %q: use feishu, lark, qq, weixin, or telegram", channel)
 	}
 }
 
@@ -316,6 +318,10 @@ func validateConnection(conn config.BotConnectionConfig, target channelTarget) e
 		if !envNamePattern.MatchString(strings.TrimSpace(conn.Credential.TokenEnv)) {
 			return errors.New("weixin setup requires a valid --token-env name")
 		}
+	case "telegram":
+		if !envNamePattern.MatchString(strings.TrimSpace(conn.Credential.TokenEnv)) {
+			return errors.New("telegram setup requires a valid --token-env name")
+		}
 	}
 	return nil
 }
@@ -338,6 +344,9 @@ func applyLegacyBotConfig(cfg *config.Config, conn config.BotConnectionConfig, t
 		cfg.Bot.Weixin.Enabled = true
 		cfg.Bot.Weixin.AccountID = conn.Credential.AccountID
 		cfg.Bot.Weixin.TokenEnv = conn.Credential.TokenEnv
+	case "telegram":
+		cfg.Bot.Telegram.Enabled = true
+		cfg.Bot.Telegram.TokenEnv = conn.Credential.TokenEnv
 	}
 }
 

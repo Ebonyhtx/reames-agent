@@ -5,7 +5,7 @@ import { useDeferredClose } from "../lib/useMountTransition";
 import { isTopModalDialog, useDialogFocus } from "../lib/useDialogFocus";
 import { app } from "../lib/bridge";
 import { normalizeLangPref, useI18n, useT, type DictKey, type LangPref } from "../lib/i18n";
-import { apiKeyEnvFromProviderName, inferredVisionModels, mergedFetchedProviderModels, providerApiKeyEnvForSave, providerDefaultModel, providerIsConfigured, providerModelCandidates, providerRequiresKey } from "../lib/providerModels";
+import { apiKeyEnvFromProviderName, inferredVisionModels, mergedFetchedProviderModels, mergeProviderModelContextWindows, providerApiKeyEnvForSave, providerDefaultModel, providerIsConfigured, providerModelCandidates, providerModelContextWindowDrafts, providerModelContextWindowIsSmall, providerRequiresKey } from "../lib/providerModels";
 import { useUpdater } from "../lib/useUpdater";
 import {
   applyTheme,
@@ -993,6 +993,7 @@ function defaultBotSettings(): BotSettingsView {
       qq: [],
       feishu: [],
       weixin: [],
+      telegram: [],
     },
     control: {
       enabled: false,
@@ -1011,15 +1012,19 @@ function defaultBotSettings(): BotSettingsView {
       qqUsers: [],
       feishuUsers: [],
       weixinUsers: [],
+      telegramUsers: [],
       qqApprovers: [],
       feishuApprovers: [],
       weixinApprovers: [],
+      telegramApprovers: [],
       qqAdmins: [],
       feishuAdmins: [],
       weixinAdmins: [],
+      telegramAdmins: [],
       qqGroups: [],
       feishuGroups: [],
       weixinGroups: [],
+      telegramGroups: [],
     },
     qq: { enabled: false, appId: "", appSecretEnv: "QQ_BOT_APP_SECRET", secretSet: false, sandbox: false, model: "", toolApprovalMode: "ask", workspaceRoot: "", access: defaultBotAccess() },
     feishu: {
@@ -1039,6 +1044,12 @@ function defaultBotSettings(): BotSettingsView {
       tokenEnv: "WEIXIN_BOT_TOKEN",
       tokenSet: false,
       apiBase: "https://ilinkai.weixin.qq.com",
+    },
+    telegram: {
+      enabled: false,
+      tokenEnv: "TELEGRAM_BOT_TOKEN",
+      tokenSet: false,
+      apiBase: "https://api.telegram.org",
     },
     connections: [],
   };
@@ -1090,6 +1101,7 @@ function normalizeBotSettings(bot: BotSettingsView | null | undefined): BotSetti
       qq: asArray(selfUserIds.qq),
       feishu: asArray(selfUserIds.feishu),
       weixin: asArray(selfUserIds.weixin),
+      telegram: asArray(selfUserIds.telegram),
     },
     control: {
       enabled: Boolean(control.enabled),
@@ -1108,15 +1120,19 @@ function normalizeBotSettings(bot: BotSettingsView | null | undefined): BotSetti
       qqUsers: asArray(allowlist.qqUsers),
       feishuUsers: asArray(allowlist.feishuUsers),
       weixinUsers: asArray(allowlist.weixinUsers),
+      telegramUsers: asArray(allowlist.telegramUsers),
       qqApprovers: asArray(allowlist.qqApprovers),
       feishuApprovers: asArray(allowlist.feishuApprovers),
       weixinApprovers: asArray(allowlist.weixinApprovers),
+      telegramApprovers: asArray(allowlist.telegramApprovers),
       qqAdmins: asArray(allowlist.qqAdmins),
       feishuAdmins: asArray(allowlist.feishuAdmins),
       weixinAdmins: asArray(allowlist.weixinAdmins),
+      telegramAdmins: asArray(allowlist.telegramAdmins),
       qqGroups: asArray(allowlist.qqGroups),
       feishuGroups: asArray(allowlist.feishuGroups),
       weixinGroups: asArray(allowlist.weixinGroups),
+      telegramGroups: asArray(allowlist.telegramGroups),
     },
     qq: {
       ...fallback.qq,
@@ -1128,6 +1144,7 @@ function normalizeBotSettings(bot: BotSettingsView | null | undefined): BotSetti
     },
     feishu: { ...fallback.feishu, ...bot?.feishu, domain: bot?.feishu?.domain === "lark" ? "lark" : "feishu", mode },
     weixin: { ...fallback.weixin, ...bot?.weixin },
+    telegram: { ...fallback.telegram, ...bot?.telegram },
     connections: asArray(bot?.connections).map(normalizeBotConnection),
   };
 }
@@ -2188,15 +2205,19 @@ const BOT_ALLOWLIST_TEXT_KEYS = [
   "qqUsers",
   "feishuUsers",
   "weixinUsers",
+  "telegramUsers",
   "qqApprovers",
   "feishuApprovers",
   "weixinApprovers",
+  "telegramApprovers",
   "qqAdmins",
   "feishuAdmins",
   "weixinAdmins",
+  "telegramAdmins",
   "qqGroups",
   "feishuGroups",
   "weixinGroups",
+  "telegramGroups",
 ] as const;
 type BotAllowlistTextKey = typeof BOT_ALLOWLIST_TEXT_KEYS[number];
 type BotSelfUserTextKey = keyof BotSettingsView["selfUserIds"];
@@ -2212,7 +2233,7 @@ const BOT_INSTALL_DEFAULT_TIMEOUT_SECONDS = 300;
 const BOT_INSTALL_MIN_POLL_SECONDS = 3;
 const DEFAULT_QQ_SECRET_ENV = "QQ_BOT_APP_SECRET";
 const QQ_CONNECTION_ID = "__qq_bot__";
-const BOT_PLATFORM_KEYS = ["qq", "feishu", "weixin"] as const;
+const BOT_PLATFORM_KEYS = ["qq", "feishu", "weixin", "telegram"] as const;
 type BotPlatformKey = typeof BOT_PLATFORM_KEYS[number];
 const BOT_ALLOWLIST_ROLES = ["Users", "Groups", "Approvers", "Admins"] as const;
 type BotAllowlistRole = typeof BOT_ALLOWLIST_ROLES[number];
@@ -2224,6 +2245,7 @@ function botAllowlistKey(platform: BotPlatformKey, role: BotAllowlistRole): BotA
 
 function botConnectionPlatform(connection: BotConnectionView): BotPlatformKey {
   if (connection.provider === "weixin") return "weixin";
+  if (connection.provider === "telegram") return "telegram";
   if (connection.provider === "qq") return "qq";
   return "feishu";
 }
@@ -2231,6 +2253,7 @@ function botConnectionPlatform(connection: BotConnectionView): BotPlatformKey {
 function botPlatformLabel(platform: BotPlatformKey, t: ReturnType<typeof useT>): string {
   if (platform === "qq") return "QQ";
   if (platform === "weixin") return t("settings.botWeixin");
+  if (platform === "telegram") return "Telegram";
   return t("settings.botPlatformFeishuLark");
 }
 
@@ -2988,7 +3011,7 @@ function BotsSection({ s, busy, apply, initialFocus }: BotsSectionProps) {
           <button type="button" className="btn btn--small" disabled={busy} onClick={() => void diagnoseConnection(selectedConnection.id)}>
             {t("settings.botDiagnose")}
           </button>
-          {(selectedConnection.provider === "feishu" || selectedConnection.provider === "weixin") ? (
+          {(selectedConnection.provider === "feishu" || selectedConnection.provider === "weixin" || selectedConnection.provider === "telegram") ? (
             <button type="button" className="btn btn--small" disabled={busy || !selectedConnectionRemote} onClick={() => void testConnection(selectedConnection)}>
               {t("settings.botTest")}
             </button>
@@ -3569,6 +3592,14 @@ function BotsSection({ s, busy, apply, initialFocus }: BotsSectionProps) {
                     onChange={(value) => updateSelfUserText("weixin", value)}
                     onBlur={(value) => persistSelfUserText("weixin", value)}
                   />
+                  <BotListInput
+                    label={t("settings.botTelegramUsers")}
+                    value={selfUserText.telegram}
+                    disabled={busy}
+                    placeholder={t("settings.botListPlaceholder")}
+                    onChange={(value) => updateSelfUserText("telegram", value)}
+                    onBlur={(value) => persistSelfUserText("telegram", value)}
+                  />
                 </div>
               </SettingsField>
               <SettingsField label={t("settings.botPairing")} hint={t("settings.botPairingDetailHint")}>
@@ -3656,6 +3687,7 @@ function BotsSection({ s, busy, apply, initialFocus }: BotsSectionProps) {
                             <option value="qq">QQ</option>
                             <option value="feishu">{t("settings.botFeishu")}</option>
                             <option value="weixin">{t("settings.botWeixin")}</option>
+                            <option value="telegram">Telegram</option>
                           </select>
                         </label>
                         <label>
@@ -3842,6 +3874,7 @@ function botConnectionLabel(connection: BotConnectionView, t: ReturnType<typeof 
   if (connection.domain === "lark") return "Lark";
   if (connection.provider === "weixin") return t("settings.botWeixin");
   if (connection.provider === "qq") return "QQ";
+  if (connection.provider === "telegram") return "Telegram";
   return t("settings.botFeishu");
 }
 
@@ -3854,11 +3887,11 @@ function botConnectionScopeLabel(connection: BotConnectionView, t: ReturnType<ty
 }
 
 function botConnectionSecretEnv(connection: BotConnectionView): string {
-  return connection.provider === "weixin" ? connection.credential.tokenEnv : connection.credential.appSecretEnv;
+  return connection.provider === "weixin" || connection.provider === "telegram" ? connection.credential.tokenEnv : connection.credential.appSecretEnv;
 }
 
 function botConnectionSecretPatch(connection: BotConnectionView, value: string): Partial<BotConnectionView["credential"]> {
-  return connection.provider === "weixin" ? { tokenEnv: value } : { appSecretEnv: value };
+  return connection.provider === "weixin" || connection.provider === "telegram" ? { tokenEnv: value } : { appSecretEnv: value };
 }
 
 function botConnectionCredentialSummary(connection: BotConnectionView, t: ReturnType<typeof useT>): string {
@@ -3866,6 +3899,11 @@ function botConnectionCredentialSummary(connection: BotConnectionView, t: Return
     return connection.credential.accountId
       ? t("settings.botCredentialAccount", { value: connection.credential.accountId })
       : t("settings.botCredentialLocalWeixin");
+  }
+  if (connection.provider === "telegram") {
+    return connection.credential.tokenEnv
+      ? t("settings.botCredentialEnv", { value: connection.credential.tokenEnv })
+      : t("settings.botCredentialConfigured");
   }
   if (connection.credential.appId) {
     return t("settings.botCredentialApp", { value: connection.credential.appId });
@@ -3955,6 +3993,7 @@ function sanitizeBotDraft(draft: BotSettingsView): BotSettingsView {
       qq: uniqueStrings(bot.selfUserIds.qq.map((v) => v.trim())),
       feishu: uniqueStrings(bot.selfUserIds.feishu.map((v) => v.trim())),
       weixin: uniqueStrings(bot.selfUserIds.weixin.map((v) => v.trim())),
+      telegram: uniqueStrings(bot.selfUserIds.telegram.map((v) => v.trim())),
     },
     control: {
       enabled: bot.control.enabled,
@@ -3972,15 +4011,19 @@ function sanitizeBotDraft(draft: BotSettingsView): BotSettingsView {
       qqUsers: uniqueStrings(bot.allowlist.qqUsers.map((v) => v.trim())),
       feishuUsers: uniqueStrings(bot.allowlist.feishuUsers.map((v) => v.trim())),
       weixinUsers: uniqueStrings(bot.allowlist.weixinUsers.map((v) => v.trim())),
+      telegramUsers: uniqueStrings(bot.allowlist.telegramUsers.map((v) => v.trim())),
       qqApprovers: uniqueStrings(bot.allowlist.qqApprovers.map((v) => v.trim())),
       feishuApprovers: uniqueStrings(bot.allowlist.feishuApprovers.map((v) => v.trim())),
       weixinApprovers: uniqueStrings(bot.allowlist.weixinApprovers.map((v) => v.trim())),
+      telegramApprovers: uniqueStrings(bot.allowlist.telegramApprovers.map((v) => v.trim())),
       qqAdmins: uniqueStrings(bot.allowlist.qqAdmins.map((v) => v.trim())),
       feishuAdmins: uniqueStrings(bot.allowlist.feishuAdmins.map((v) => v.trim())),
       weixinAdmins: uniqueStrings(bot.allowlist.weixinAdmins.map((v) => v.trim())),
+      telegramAdmins: uniqueStrings(bot.allowlist.telegramAdmins.map((v) => v.trim())),
       qqGroups: uniqueStrings(bot.allowlist.qqGroups.map((v) => v.trim())),
       feishuGroups: uniqueStrings(bot.allowlist.feishuGroups.map((v) => v.trim())),
       weixinGroups: uniqueStrings(bot.allowlist.weixinGroups.map((v) => v.trim())),
+      telegramGroups: uniqueStrings(bot.allowlist.telegramGroups.map((v) => v.trim())),
     },
     qq: {
       ...bot.qq,
@@ -4005,6 +4048,11 @@ function sanitizeBotDraft(draft: BotSettingsView): BotSettingsView {
       accountId: bot.weixin.accountId.trim(),
       tokenEnv: bot.weixin.tokenEnv.trim(),
       apiBase: bot.weixin.apiBase.trim().replace(/\/+$/, ""),
+    },
+    telegram: {
+      ...bot.telegram,
+      tokenEnv: bot.telegram.tokenEnv.trim(),
+      apiBase: bot.telegram.apiBase.trim().replace(/\/+$/, ""),
     },
     connections: bot.connections.map((conn) => ({ ...normalizeBotConnection(conn), access: sanitizeBotAccess(conn.access) })).filter((conn) => conn.id && conn.provider),
   };
@@ -5502,15 +5550,19 @@ function botAllowlistTextValues(allowlist: BotAllowlistView): Record<BotAllowlis
     qqUsers: allowlist.qqUsers.join("\n"),
     feishuUsers: allowlist.feishuUsers.join("\n"),
     weixinUsers: allowlist.weixinUsers.join("\n"),
+    telegramUsers: allowlist.telegramUsers.join("\n"),
     qqApprovers: allowlist.qqApprovers.join("\n"),
     feishuApprovers: allowlist.feishuApprovers.join("\n"),
     weixinApprovers: allowlist.weixinApprovers.join("\n"),
+    telegramApprovers: allowlist.telegramApprovers.join("\n"),
     qqAdmins: allowlist.qqAdmins.join("\n"),
     feishuAdmins: allowlist.feishuAdmins.join("\n"),
     weixinAdmins: allowlist.weixinAdmins.join("\n"),
+    telegramAdmins: allowlist.telegramAdmins.join("\n"),
     qqGroups: allowlist.qqGroups.join("\n"),
     feishuGroups: allowlist.feishuGroups.join("\n"),
     weixinGroups: allowlist.weixinGroups.join("\n"),
+    telegramGroups: allowlist.telegramGroups.join("\n"),
   };
 }
 
@@ -5519,6 +5571,7 @@ function botSelfUserTextValues(selfUserIds: BotSettingsView["selfUserIds"]): Rec
     qq: selfUserIds.qq.join("\n"),
     feishu: selfUserIds.feishu.join("\n"),
     weixin: selfUserIds.weixin.join("\n"),
+    telegram: selfUserIds.telegram.join("\n"),
   };
 }
 
@@ -5533,18 +5586,22 @@ const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker({
   candidates,
   selectedModels,
   visionModels,
+  contextWindows,
   disabled,
   onToggleModel,
   onToggleVision,
+  onContextWindowChange,
   onSelectAll,
   onClear,
 }: {
   candidates: string[];
   selectedModels: string[];
   visionModels: string[];
+  contextWindows: Record<string, string>;
   disabled: boolean;
   onToggleModel: (model: string) => void;
   onToggleVision: (model: string) => void;
+  onContextWindowChange: (model: string, value: string) => void;
   onSelectAll: () => void;
   onClear: () => void;
 }) {
@@ -5578,6 +5635,7 @@ const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker({
           </button>
         </div>
       </div>
+      <div className="settings-field__hint">{t("settings.modelContextWindowGuide")}</div>
       {candidates.length > 8 && (
         <input
           className="mem-input provider-model-draft__search"
@@ -5610,6 +5668,26 @@ const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker({
                 />
                 <span>{t("settings.visionModel")}</span>
               </label>
+              <label className="provider-model-draft__vision">
+                <span>{t("settings.modelContextWindow")}</span>
+                <input
+                  className="mem-input"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  disabled={disabled || !enabled}
+                  placeholder={t("settings.modelContextWindowPlaceholder")}
+                  title={t("settings.modelContextWindowHint")}
+                  aria-label={t("settings.modelContextWindowAria", { model })}
+                  value={contextWindows[model] ?? ""}
+                  onChange={(event) => onContextWindowChange(model, event.target.value)}
+                />
+              </label>
+              {enabled && providerModelContextWindowIsSmall(contextWindows[model]) && (
+                <div className="provider-fetch-status provider-fetch-status--warn" role="status">
+                  {t("settings.modelContextWindowSmallWarning")}
+                </div>
+              )}
             </div>
           );
         }) : (
@@ -5660,6 +5738,9 @@ function ProviderEditor({
   // Empty when unset so the placeholder (and its "0 = default" hint) reads instead
   // of a bare "0"; saved back as 0.
   const [ctx, setCtx] = useState(initial?.contextWindow ? String(initial.contextWindow) : "");
+  const [modelContextWindows, setModelContextWindows] = useState<Record<string, string>>(
+    () => providerModelContextWindowDrafts(initial?.modelOverrides),
+  );
   const [reasoningProtocol, setReasoningProtocol] = useState(normalizeReasoningProtocol(initial?.reasoningProtocol));
   const [thinking, setThinking] = useState(normalizeThinkingMode(initial?.thinking));
   const [supportedEfforts] = useState<string[]>(initial?.supportedEfforts ?? []);
@@ -5738,7 +5819,7 @@ function ProviderEditor({
         thinking,
         supportedEfforts: cleanedSupportedEfforts,
         defaultEffort: cleanDefaultEffort,
-        modelOverrides: initial?.modelOverrides ?? [],
+        modelOverrides: mergeProviderModelContextWindows(initial?.modelOverrides, parseProviderListInput(models), modelContextWindows),
       });
       if (fetched.length === 0) {
         setFetchFallback(t("settings.fetchModelsManualFallbackEmpty"));
@@ -5793,7 +5874,7 @@ function ProviderEditor({
       // Clear the stored default if no levels are selected; the backend's
       // NormalizeEffort would otherwise silently ignore an unsupported value.
       defaultEffort: cleanedSupportedEfforts.length > 0 ? cleanDefaultEffort : "",
-      modelOverrides: initial?.modelOverrides ?? [],
+      modelOverrides: mergeProviderModelContextWindows(initial?.modelOverrides, ms, modelContextWindows),
     };
     try {
       await onSave(provider, keyDraft.trim() || undefined);
@@ -5881,6 +5962,10 @@ function ProviderEditor({
     else vision.add(model);
     setVisionModels(modelCandidateNames.filter((candidate) => vision.has(candidate)).join(", "));
     setVisionModelsConfigured(true);
+  };
+
+  const updateEditorModelContextWindow = (model: string, value: string) => {
+    setModelContextWindows((current) => ({ ...current, [model]: value }));
   };
 
   const selectAllEditorModels = () => {
@@ -6115,9 +6200,11 @@ function ProviderEditor({
         candidates={modelCandidateNames}
         selectedModels={modelNames}
         visionModels={visionModelNames}
+        contextWindows={modelContextWindows}
         disabled={busy || fetchingModels}
         onToggleModel={toggleEditorModel}
         onToggleVision={toggleEditorVisionModel}
+        onContextWindowChange={updateEditorModelContextWindow}
         onSelectAll={selectAllEditorModels}
         onClear={clearEditorModels}
       />

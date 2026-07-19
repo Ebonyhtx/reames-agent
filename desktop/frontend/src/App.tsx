@@ -204,25 +204,48 @@ type HistoryScopeFilter = { scope: "global" | "project"; workspaceRoot: string }
 type WorkspaceInsertTarget = "composer" | "planRevision";
 type DesktopPlatform = "darwin" | "windows" | "linux";
 
-function WindowsWindowControls() {
+function useWindowsMaximised(enabled: boolean): readonly [boolean, () => void] {
   const [maximised, setMaximised] = useState(false);
+  const syncGenerationRef = useRef(0);
 
   const syncMaximised = useCallback(() => {
+    if (!enabled) return;
+    const generation = ++syncGenerationRef.current;
     void app.IsMainWindowMaximised()
-      .then(setMaximised)
-      .catch(() => setMaximised(false));
-  }, []);
+      .then((value) => {
+        if (generation === syncGenerationRef.current) setMaximised(value);
+      })
+      .catch(() => {
+        if (generation === syncGenerationRef.current) setMaximised(false);
+      });
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      syncGenerationRef.current += 1;
+      setMaximised(false);
+      return;
+    }
     syncMaximised();
     window.addEventListener("resize", syncMaximised);
     window.addEventListener("focus", syncMaximised);
     return () => {
+      syncGenerationRef.current += 1;
       window.removeEventListener("resize", syncMaximised);
       window.removeEventListener("focus", syncMaximised);
     };
-  }, [syncMaximised]);
+  }, [enabled, syncMaximised]);
 
+  return [maximised, syncMaximised] as const;
+}
+
+function WindowsWindowControls({
+  maximised,
+  syncMaximised,
+}: {
+  maximised: boolean;
+  syncMaximised: () => void;
+}) {
   const toggleMaximise = useCallback(() => {
     void app.ToggleMaximiseMainWindow()
       .then(() => window.setTimeout(syncMaximised, 80))
@@ -1100,7 +1123,9 @@ export default function App() {
   const transientOverlayDismissSignal = useOverlayStore((s) => s.transientOverlayDismissSignal);
   const setTransientOverlayDismissSignal = useOverlayStore((s) => s.setTransientOverlayDismissSignal);
   const [desktopPlatform, setDesktopPlatform] = useState<DesktopPlatform>(detectBrowserPlatform);
-  useWailsResizeFix(desktopPlatform === "windows");
+  const windowsFramelessChrome = desktopPlatform === "windows";
+  const [mainWindowMaximised, syncMainWindowMaximised] = useWindowsMaximised(windowsFramelessChrome);
+  useWailsResizeFix(windowsFramelessChrome, mainWindowMaximised);
   const [statusBarStyle, setStatusBarStyle] = useState<"icon" | "text">("text");
   const [statusBarItems, setStatusBarItems] = useState<StatusBarItemId[]>(() => [...DEFAULT_STATUS_BAR_ITEMS]);
   const [renamingTopicId, setRenamingTopicId] = useState<string | null>(null);
@@ -1654,28 +1679,46 @@ export default function App() {
       try {
         if (format === "json") {
           const path = await app.PickExportFile(`${base}.json`, "application/json");
-          if (path) await app.SaveExportFile(path, getSessionJson(), false);
+          if (path) {
+            await app.SaveExportFile(path, getSessionJson(), false);
+            showToast(t("topicBar.exportSuccess", { count: 1 }), "info");
+          }
         } else if (format === "pdf") {
           const path = await app.PickExportFile(`${base}.pdf`, "application/pdf");
           if (!path) return;
           const { blobToBase64, renderSessionPdfBlob } = await import("./lib/sessionExport");
           const blob = await renderSessionPdfBlob(getSessionMarkdown(), sessionTitle);
           await app.SaveExportFile(path, await blobToBase64(blob), true);
+          showToast(t("topicBar.exportSuccess", { count: 1 }), "info");
         } else if (format === "image") {
           const path = await app.PickExportFile(`${base}.png`, "image/png");
           if (!path) return;
-          const { blobToBase64, renderSessionImageBlob } = await import("./lib/sessionExport");
-          const blob = await renderSessionImageBlob(getSessionMarkdown());
-          await app.SaveExportFile(path, await blobToBase64(blob), true);
+          const { renderSessionImageBase64Payloads } = await import("./lib/sessionExport");
+          const payloads = await renderSessionImageBase64Payloads(getSessionMarkdown());
+          await app.SaveExportImageFiles(path, payloads);
+          showToast(
+            payloads.length > 1
+              ? t("topicBar.exportImageParts", { count: payloads.length })
+              : t("topicBar.exportSuccess", { count: 1 }),
+            "info",
+          );
         } else {
           const path = await app.PickExportFile(`${base}.md`, "text/markdown");
-          if (path) await app.SaveExportFile(path, getSessionMarkdown(), false);
+          if (path) {
+            await app.SaveExportFile(path, getSessionMarkdown(), false);
+            showToast(t("topicBar.exportSuccess", { count: 1 }), "info");
+          }
         }
       } catch (err) {
         console.error("Failed to export session", err);
+        showToast(
+          t("topicBar.exportFailed", { error: err instanceof Error ? err.message : String(err) }),
+          "error",
+          { durationMs: 8000 },
+        );
       }
     },
-    [getSessionJson, getSessionMarkdown, sessionTitle],
+    [getSessionJson, getSessionMarkdown, sessionTitle, showToast, t],
   );
 
   useEffect(() => {
@@ -2940,15 +2983,16 @@ export default function App() {
   const topicbarCanRename = !recoveryForced && !sidebarImDetailConnection && Boolean(activeTab?.topicId);
   const topicbarTitleEditSize = Math.min(56, Math.max(4, topicTitleDraft.length || topicbarTitle.length || 1));
   const sidebarWorkbench = desktopLayoutStyle === "workbench";
-  const windowsFramelessChrome = desktopPlatform === "windows";
   const handleWindowsTitlebarDoubleClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     if (!windowsFramelessChrome) return;
     const target = event.target as HTMLElement | null;
     if (!target?.closest(".app-chrome, .topicbar, .workbench-dock__tools")) return;
     if (target.closest("button, input, textarea, select, a, [role='button'], [role='tab'], .windows-window-controls")) return;
     event.preventDefault();
-    void app.ToggleMaximiseMainWindow();
-  }, [windowsFramelessChrome]);
+    void app.ToggleMaximiseMainWindow()
+      .then(() => window.setTimeout(syncMainWindowMaximised, 80))
+      .catch(() => undefined);
+  }, [syncMainWindowMaximised, windowsFramelessChrome]);
   // Creation keeps the classic sidebar/chat structure while gating chrome tweaks
   // behind its own style flag so classic/workbench remain unchanged.
   const appChromeHidden = recoveryForced || sidebarWorkbench || sidebarCreation;
@@ -3924,7 +3968,12 @@ export default function App() {
           }} />
         </Suspense>
       )}
-      {windowsFramelessChrome && <WindowsWindowControls />}
+      {windowsFramelessChrome && (
+        <WindowsWindowControls
+          maximised={mainWindowMaximised}
+          syncMaximised={syncMainWindowMaximised}
+        />
+      )}
     </div>
     </ShellExpandProvider>
   );

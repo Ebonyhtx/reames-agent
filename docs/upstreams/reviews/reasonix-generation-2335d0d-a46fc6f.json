@@ -1,0 +1,578 @@
+{
+  "version": 1,
+  "upstream": "reasonix",
+  "baseline": "2335d0df9ea4029108ed965f76c2efff30fe6cf4",
+  "reviewed": "a46fc6f47a00ffffeaee6184c4748cac6cc4ae7d",
+  "reviewed_at": "2026-07-19T20:03:43+08:00",
+  "counts": {
+    "all_commits": 21,
+    "non_merge_commits": 16,
+    "fix_perf_commits": 3,
+    "diff_shortstat": "106 files changed, 4526 insertions(+), 396 deletions(-)"
+  },
+  "area_counts": {
+    "agent-runtime": 7,
+    "build-release": 1,
+    "cli-acp": 3,
+    "controller-transports": 4,
+    "desktop-ui-accessibility": 6,
+    "permissions-sandbox": 1,
+    "provider-cache": 2,
+    "recovery-update": 2,
+    "serve-gateway": 1,
+    "session-memory-compaction": 4,
+    "tools-mcp-plugins": 3
+  },
+  "fix_perf_area_counts": {
+    "desktop-ui-accessibility": 1,
+    "tools-mcp-plugins": 2
+  },
+  "unmerged_remote_refs": [
+    {
+      "ref": "origin/dependabot/github_actions/actions-4c2bda7e8b",
+      "sha": "ec082e6a986b9075b5625eded46271ebc386fa90",
+      "ahead": 1,
+      "subject": "chore(deps): bump the actions group with 2 updates"
+    },
+    {
+      "ref": "origin/dependabot/go_modules/desktop/go-9b87d4a103",
+      "sha": "276a8674e5873d933d3fe45d447af831dc4a82fb",
+      "ahead": 1,
+      "subject": "chore(deps): bump the go group across 1 directory with 5 updates"
+    },
+    {
+      "ref": "origin/dependabot/go_modules/go-40ad0753b6",
+      "sha": "460d589b83fd5d0d3c62c3f2003a0ab1deb18048",
+      "ahead": 1,
+      "subject": "chore(deps): bump the go group across 1 directory with 13 updates"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/desktop/frontend/npm-aab5777841",
+      "sha": "09486076b17ba5a5b1ef5a0973495370ea70df44",
+      "ahead": 1,
+      "subject": "chore(deps): bump the npm group across 1 directory with 8 updates"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/site/astro-7.1.1",
+      "sha": "342891bd1fc5441a9db185c3c441cc391011d778",
+      "ahead": 1,
+      "subject": "chore(deps): bump astro from 6.4.8 to 7.1.1 in /site"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/site/npm-d40bf93b92",
+      "sha": "cf83b75ec7bc23009850d39f21b00afe0f065640",
+      "ahead": 1,
+      "subject": "chore(deps): bump the npm group in /site with 2 updates"
+    },
+    {
+      "ref": "origin/feature/inline-renderer",
+      "sha": "217fb750362693f5a0c2cb240351131241275c87",
+      "ahead": 4,
+      "subject": "feat(cli)!: default the transcript renderer to inline"
+    },
+    {
+      "ref": "origin/feature/macos-home-migration-pr",
+      "sha": "410d2e12fb2c2883f52ec73baaa89c3df38d050a",
+      "ahead": 1,
+      "subject": "feat(config): add macOS home migration command"
+    },
+    {
+      "ref": "origin/feature/status-bar-display-options",
+      "sha": "e30bac56ec4faf3edd7431bd6401f0f71c00e8f5",
+      "ahead": 1,
+      "subject": "feat(desktop): customize status bar items"
+    },
+    {
+      "ref": "origin/fix/chrome-tab-strip-max-width",
+      "sha": "4a381fc84c301efcc1e0a2d76539397601ef228d",
+      "ahead": 3,
+      "subject": "fix(desktop): pin mac chrome new tab button"
+    },
+    {
+      "ref": "origin/fix/chrome-tabs-reserve-right-dock",
+      "sha": "dde01b723d1d6a8d82e4e5ef6ff534528a2bd1f6",
+      "ahead": 2,
+      "subject": "fix(desktop): bound chrome tab strip overflow"
+    },
+    {
+      "ref": "origin/fix/desktop-open-tab-crash-missing-drive",
+      "sha": "92c2df5efd2e082a5a1e5893ead351758ccb1fda",
+      "ahead": 1,
+      "subject": "fix(desktop): toast instead of crash when a tab opens on an unreachable path"
+    },
+    {
+      "ref": "origin/fix/desktop-streaming-reasoning-jank",
+      "sha": "0e3eb72d0bcb545e391253cf54dc72b8e13bc471",
+      "ahead": 2,
+      "subject": "Handle display mode changes during reasoning streams"
+    },
+    {
+      "ref": "origin/v1",
+      "sha": "50b1bf4a5061ad22abb97774a424b5962abab79f",
+      "ahead": 1561,
+      "subject": "fix(cli): don't crash session hydration on a tool_call missing its function"
+    }
+  ],
+  "recent_merged_tags": [
+    {
+      "name": "desktop-v1.17.15",
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a"
+    },
+    {
+      "name": "npm-v1.17.15",
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a"
+    },
+    {
+      "name": "v1.17.15",
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a"
+    },
+    {
+      "name": "desktop-v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "npm-v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "desktop-v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "npm-v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "desktop-v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "npm-v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "desktop-v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "npm-v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "desktop-v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "npm-v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "desktop-v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "npm-v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "desktop-v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "npm-v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "desktop-v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "npm-v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "desktop-v1.17.6",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "npm-v1.17.6",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "npm-v1.17.6-rc.1",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    }
+  ],
+  "commits": [
+    {
+      "sha": "bb9c4aa547b5571a6d1a2c63d11635a74df5c55e",
+      "authored_at": "2026-07-18T16:12:20+08:00",
+      "subject": "test(config): isolate config writes from user home",
+      "fix_perf": false,
+      "files": [
+        "internal/cli/chat_tui_test.go",
+        "internal/cli/cli_test.go",
+        "internal/config/edit_test.go"
+      ],
+      "areas": [
+        "cli-acp"
+      ]
+    },
+    {
+      "sha": "8395ab934bb6e48f6a3de0008f9bf7e258bdb813",
+      "authored_at": "2026-07-19T11:40:51+08:00",
+      "subject": "docs: credit CLI clipboard co-contributor",
+      "fix_perf": false,
+      "files": [
+        "CHANGELOG.md",
+        "README.md",
+        "README.zh-CN.md"
+      ],
+      "areas": [
+        "agent-runtime"
+      ]
+    },
+    {
+      "sha": "b98903560fdce1e9cde33d28f0a39ed6cdac591f",
+      "authored_at": "2026-07-19T11:45:10+08:00",
+      "subject": "fix(hooks): run quoted Windows batch plugin commands",
+      "fix_perf": true,
+      "files": [
+        "internal/hook/batch_command_other.go",
+        "internal/hook/batch_command_windows.go",
+        "internal/hook/hook.go",
+        "internal/hook/hook_test.go",
+        "internal/hook/windows_batch_test.go",
+        "internal/hook/windows_compat.go"
+      ],
+      "areas": [
+        "tools-mcp-plugins"
+      ]
+    },
+    {
+      "sha": "df1578bc1ce0e6bcfea7d7b00d2d13a243b0c651",
+      "authored_at": "2026-07-19T11:53:28+08:00",
+      "subject": "test(config): isolate all user state writes",
+      "fix_perf": false,
+      "files": [
+        "internal/boot/main_test.go",
+        "internal/bot/main_test.go",
+        "internal/botruntime/main_test.go",
+        "internal/cli/chat_tui_test.go",
+        "internal/config/dotenv_test.go",
+        "internal/config/edit_test.go",
+        "internal/config/main_test.go",
+        "internal/config/path_isolation_test.go",
+        "internal/config/render_test.go",
+        "internal/control/main_test.go",
+        "internal/doctor/main_test.go",
+        "internal/installsource/install_source_test.go",
+        "internal/plugin/main_test.go",
+        "internal/repair/main_test.go",
+        "internal/serve/main_test.go",
+        "internal/skill/main_test.go",
+        "internal/testenv/home.go",
+        "internal/testenv/home_test.go",
+        "internal/tool/builtin/confine_test.go"
+      ],
+      "areas": [
+        "recovery-update",
+        "tools-mcp-plugins",
+        "cli-acp",
+        "serve-gateway",
+        "controller-transports",
+        "agent-runtime"
+      ]
+    },
+    {
+      "sha": "ec3691d01d4cefed15888cf6417c5af3322d3b01",
+      "authored_at": "2026-07-19T12:03:51+08:00",
+      "subject": "docs: remove clipboard attribution copy",
+      "fix_perf": false,
+      "files": [
+        "CHANGELOG.md",
+        "README.md",
+        "README.zh-CN.md"
+      ],
+      "areas": [
+        "agent-runtime"
+      ]
+    },
+    {
+      "sha": "bf612ec7eed6d8697c990bfa90f39679177efcb6",
+      "authored_at": "2026-07-19T12:05:26+08:00",
+      "subject": "test(control): snapshot session during steer polling",
+      "fix_perf": false,
+      "files": [
+        "internal/control/steer_fallback_test.go"
+      ],
+      "areas": [
+        "session-memory-compaction",
+        "controller-transports"
+      ]
+    },
+    {
+      "sha": "1a8b6f827d46b2dc6d7625305755efb01e8ae775",
+      "authored_at": "2026-07-19T12:08:45+08:00",
+      "subject": "fix(hooks): preserve Windows batch argument semantics",
+      "fix_perf": true,
+      "files": [
+        "internal/hook/hook_test.go",
+        "internal/hook/windows_batch_test.go",
+        "internal/hook/windows_compat.go"
+      ],
+      "areas": [
+        "tools-mcp-plugins"
+      ]
+    },
+    {
+      "sha": "9c96fd7a51294a1b72df8f17ea656c02310bbbae",
+      "authored_at": "2026-07-19T12:45:43+08:00",
+      "subject": "test(config): isolate platform cache roots",
+      "fix_perf": false,
+      "files": [
+        "internal/config/path_isolation_test.go",
+        "internal/testenv/home.go",
+        "internal/testenv/home_test.go"
+      ],
+      "areas": [
+        "provider-cache"
+      ]
+    },
+    {
+      "sha": "2b43e0f8c6856a3422c94b222a2e19fa83331162",
+      "authored_at": "2026-07-19T14:40:56+08:00",
+      "subject": "Preserve cancelled turn display history / 保留中断轮次的可见历史 (#6666)",
+      "fix_perf": false,
+      "files": [
+        "desktop/app.go",
+        "desktop/frontend/src/__tests__/use-controller-meta.test.ts",
+        "desktop/frontend/src/lib/useController.ts",
+        "desktop/frontend/src/locales/en.ts",
+        "desktop/frontend/src/locales/zh-TW.ts",
+        "desktop/frontend/src/locales/zh.ts",
+        "desktop/history_test.go",
+        "desktop/sessions.go",
+        "desktop/sessions_test.go",
+        "desktop/tabs.go",
+        "desktop/tabs_display_buffer_test.go",
+        "desktop/tabs_planner_notice_test.go",
+        "internal/control/controller.go",
+        "internal/control/runtime_status_test.go",
+        "internal/control/turn_orchestrator.go",
+        "internal/control/turn_orchestrator_test.go",
+        "internal/event/event.go",
+        "internal/filelock/filelock.go",
+        "internal/filelock/filelock_test.go",
+        "internal/filelock/lock_unix.go",
+        "internal/filelock/lock_windows.go"
+      ],
+      "areas": [
+        "session-memory-compaction",
+        "desktop-ui-accessibility",
+        "controller-transports",
+        "agent-runtime"
+      ]
+    },
+    {
+      "sha": "dd929bf2df6e3a5e0156115250be2882531c7c94",
+      "authored_at": "2026-07-19T14:45:12+08:00",
+      "subject": "Bound session save lock waits / 限制会话保存锁等待时间 (#6667)",
+      "fix_perf": false,
+      "files": [
+        "desktop/app.go",
+        "desktop/app_autosave_test.go",
+        "desktop/app_test.go",
+        "desktop/startup_health_test.go",
+        "desktop/tabs.go",
+        "internal/agent/recovery_gc_test.go",
+        "internal/agent/save.go",
+        "internal/agent/save_test.go",
+        "internal/agent/session_lock_unix.go",
+        "internal/agent/session_lock_windows.go",
+        "internal/agent/session_lock_windows_test.go",
+        "internal/agent/session_removal.go",
+        "internal/control/controller.go",
+        "internal/control/controller_test.go",
+        "internal/control/port.go"
+      ],
+      "areas": [
+        "recovery-update",
+        "session-memory-compaction",
+        "desktop-ui-accessibility",
+        "controller-transports",
+        "agent-runtime"
+      ]
+    },
+    {
+      "sha": "c77af74c9646f4b7fc84630f04988589c3d40962",
+      "authored_at": "2026-07-19T16:15:15+08:00",
+      "subject": "feat(config): support per-model context windows (#6677)",
+      "fix_perf": false,
+      "files": [
+        "desktop/frontend/src/__tests__/provider-model-refresh.test.ts",
+        "desktop/frontend/src/components/SettingsPanel.tsx",
+        "desktop/frontend/src/lib/providerModels.ts",
+        "desktop/frontend/src/lib/types.ts",
+        "desktop/frontend/src/locales/en.ts",
+        "desktop/frontend/src/locales/zh-TW.ts",
+        "desktop/frontend/src/locales/zh.ts",
+        "desktop/frontend/src/styles.css",
+        "desktop/settings_app.go",
+        "desktop/settings_app_test.go",
+        "docs/GUIDE.md",
+        "docs/GUIDE.zh-CN.md",
+        "docs/SPEC.md",
+        "internal/config/config.go",
+        "internal/config/edit_test.go",
+        "internal/config/effort.go",
+        "internal/config/render.go",
+        "internal/config/render_test.go",
+        "reasonix.example.toml"
+      ],
+      "areas": [
+        "provider-cache",
+        "desktop-ui-accessibility"
+      ]
+    },
+    {
+      "sha": "26aa92cb2d857ab3b669914a4b3112e92c0efdf9",
+      "authored_at": "2026-07-19T17:06:46+08:00",
+      "subject": "Harden crash diagnostics and recurring runtime failures / 强化崩溃诊断并修复高频运行时故障 (#6678)",
+      "fix_perf": false,
+      "files": [
+        "desktop/crash_app.go",
+        "desktop/crash_app_test.go",
+        "desktop/frontend/src/__tests__/crash-reporting.test.ts",
+        "desktop/frontend/src/__tests__/mermaid-rendering.test.tsx",
+        "desktop/frontend/src/components/MermaidDiagram.tsx",
+        "desktop/frontend/src/components/VirtualMenu.tsx",
+        "desktop/frontend/src/components/WorkspacePanel.tsx",
+        "desktop/frontend/src/components/editors/HljsDiff.tsx",
+        "desktop/frontend/src/lib/compat.ts",
+        "desktop/frontend/src/lib/crash.ts",
+        "desktop/frontend/src/main.tsx",
+        "internal/secrets/redact.go",
+        "internal/secrets/redact_test.go",
+        "workers/crash-report/src/index.test.ts",
+        "workers/crash-report/src/index.ts",
+        "workers/crash-report/src/stats.ts"
+      ],
+      "areas": [
+        "permissions-sandbox",
+        "desktop-ui-accessibility",
+        "agent-runtime"
+      ]
+    },
+    {
+      "sha": "1e1ba41d40503540e8dc9f7dc07f68ebf76b771f",
+      "authored_at": "2026-07-19T19:31:25+08:00",
+      "subject": "agent/save: make session filenames Windows-safe / 修复 Windows 会话文件名兼容性 (#6684)",
+      "fix_perf": false,
+      "files": [
+        "internal/agent/save.go",
+        "internal/agent/session_test.go"
+      ],
+      "areas": [
+        "session-memory-compaction",
+        "agent-runtime"
+      ]
+    },
+    {
+      "sha": "4411560530d007ecde6d9971477bbc432c3ba01a",
+      "authored_at": "2026-07-19T19:41:00+08:00",
+      "subject": "feat(cli): support middle-click paste / 支持 CLI 中键粘贴 (#6589)",
+      "fix_perf": false,
+      "files": [
+        "internal/cli/chat_tui.go",
+        "internal/cli/chat_tui_paste.go",
+        "internal/cli/chat_tui_test.go",
+        "internal/i18n/i18n.go",
+        "internal/i18n/messages_en.go",
+        "internal/i18n/messages_zh.go",
+        "internal/i18n/messages_zh_tw.go"
+      ],
+      "areas": [
+        "cli-acp"
+      ]
+    },
+    {
+      "sha": "4c1702ca46c9102b1e47971e18cb614a7914215e",
+      "authored_at": "2026-07-19T19:44:30+08:00",
+      "subject": "feat(desktop): 聊天区域的宽度修改add configurable conversation width (standard 960px / full 90%) (#6590)",
+      "fix_perf": false,
+      "files": [
+        "desktop/frontend/package.json",
+        "desktop/frontend/src/App.tsx",
+        "desktop/frontend/src/__tests__/conversation-width.test.ts",
+        "desktop/frontend/src/components/AppearanceOverview.tsx",
+        "desktop/frontend/src/components/SettingsPanel.tsx",
+        "desktop/frontend/src/lib/bridge.ts",
+        "desktop/frontend/src/lib/conversationWidth.ts",
+        "desktop/frontend/src/lib/types.ts",
+        "desktop/frontend/src/locales/en.ts",
+        "desktop/frontend/src/locales/zh-TW.ts",
+        "desktop/frontend/src/locales/zh.ts",
+        "desktop/frontend/src/main.tsx",
+        "desktop/frontend/src/styles.css",
+        "desktop/settings_app.go",
+        "desktop/settings_app_test.go",
+        "internal/config/config.go",
+        "internal/config/edit.go",
+        "internal/config/edit_test.go",
+        "internal/config/render.go",
+        "internal/config/render_test.go"
+      ],
+      "areas": [
+        "build-release",
+        "desktop-ui-accessibility"
+      ]
+    },
+    {
+      "sha": "a46fc6f47a00ffffeaee6184c4748cac6cc4ae7d",
+      "authored_at": "2026-07-19T20:03:43+08:00",
+      "subject": "fix(desktop): 桌面客户端最大化窗口时光标卡死在 resize 形状prevent cursor stuck at resize shape when window is max… (#6610)",
+      "fix_perf": true,
+      "files": [
+        "desktop/frontend/src/App.tsx",
+        "desktop/frontend/src/__tests__/wails-resize-fix.test.tsx",
+        "desktop/frontend/src/lib/useWailsResizeFix.ts"
+      ],
+      "areas": [
+        "desktop-ui-accessibility"
+      ]
+    }
+  ]
+}

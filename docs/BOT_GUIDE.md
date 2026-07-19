@@ -7,14 +7,14 @@
 <a href="./GUIDE.md">General guide</a>
 
 > For desktop and CLI users. This guide explains how to connect Feishu, Lark,
-> WeChat, and QQ bots, how to use Reames Agent from IM, and how approvals, Ask
+> WeChat, QQ, and Telegram bots, how to use Reames Agent from IM, and how approvals, Ask
 > questions, YOLO, and bot commands work.
 
 ## Contents
 
 - [What the bot does](#what-the-bot-does)
 - [Where it runs](#where-it-runs)
-- [Connect the four channels](#connect-the-four-channels)
+- [Connect the five channels](#connect-the-five-channels)
 - [Run the bot headlessly](#run-the-bot-headlessly)
 - [Usage flow](#usage-flow)
 - [Channel interaction differences](#channel-interaction-differences)
@@ -26,7 +26,7 @@
 ## What the bot does
 
 After a bot is connected, you can send Reames Agent messages from Feishu, Lark,
-WeChat, or QQ. The desktop app or `reames-agent gateway run` process handles the
+WeChat, QQ, or Telegram. The desktop app or `reames-agent gateway run` process handles the
 model, tools, permissions, sandboxing, and local context, then sends progress
 and results back to the IM channel.
 
@@ -60,7 +60,7 @@ The normal `reames-agent run` command does not automatically start the IM gatewa
 Remote bot behavior is active only while the desktop bot runtime is running or
 while a `reames-agent gateway run` process is alive.
 
-## Connect the four channels
+## Connect the five channels
 
 Open the Reames Agent desktop app and go to **Settings -> Bots**. In **Add IM Bot**,
 choose a channel and scan the QR code.
@@ -74,10 +74,12 @@ flowchart LR
   D --> F["Scan with Lark to create a PersonalAgent"]
   D --> G["Scan with WeChat to sign in Bot Assistant"]
   D --> H["Manual setup for QQ Bot"]
+  D --> T["Configure Telegram bot token env"]
   E --> I["Connection is saved locally"]
   F --> I
   G --> I
   H --> I
+  T --> I
   I --> J["Send the first IM message"]
   J --> K["Desktop creates the matching session"]
 ```
@@ -141,6 +143,29 @@ the App ID and App Secret manually. The adapter reads only the configured
 environment variable. QQ and WeChat HTTP calls use bounded clients so a stalled
 provider request cannot block the gateway indefinitely.
 
+### Telegram
+
+Telegram uses the official Bot API with long polling. Create a bot with
+BotFather, place the token in an environment variable such as
+`TELEGRAM_BOT_TOKEN`, then create the connection with the CLI configuration
+flow. The desktop app can inspect or edit the token environment-variable name,
+run diagnostics, and send a real test message, but it does not claim a
+one-click Telegram installation flow.
+
+```sh
+export TELEGRAM_BOT_TOKEN="<bot token>"
+reames-agent gateway setup --home ~/.reames-agent --channel telegram \
+  --token-env TELEGRAM_BOT_TOKEN --workspace /path/to/project --pairing
+reames-agent gateway doctor --deep --home ~/.reames-agent
+reames-agent gateway run --channels telegram --dir /path/to/project
+```
+
+The token value is never written to TOML or the delivery ledger. Remote Bot API
+URLs must use HTTPS; plain HTTP is accepted only for localhost test fixtures.
+Startup validates the token with `getMe`. The polling loop has a request
+deadline, bounded exponential backoff, cancellable stop, and can restart after
+stop without allowing concurrent duplicate starts.
+
 ## Run the bot headlessly
 
 The desktop app is the easiest way to create and test bot connections, but the
@@ -156,15 +181,16 @@ reames-agent gateway setup --home ~/.reames-agent --channel feishu \
 reames-agent bot doctor
 reames-agent bot doctor --deep
 reames-agent gateway doctor --deep --home ~/.reames-agent
-reames-agent gateway run --channels qq,feishu,lark,weixin --dir /path/to/project
+reames-agent gateway run --channels qq,feishu,lark,weixin,telegram --dir /path/to/project
 reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project
 reames-agent gateway install --start-now --home ~/.reames-agent --channels feishu --dir /path/to/project
 reames-agent gateway install --start-now --watchdog-sec 60s --home ~/.reames-agent --channels feishu --dir /path/to/project
 ```
 
 `gateway setup` is the headless configuration entrypoint for `feishu`, `lark`,
-`qq`, and `weixin`. Feishu/Lark/QQ use `--app-id` and `--app-secret-env`;
-WeChat uses `--account-id` and `--token-env`. Secret options accept only
+`qq`, `weixin`, and `telegram`. Feishu/Lark/QQ use `--app-id` and
+`--app-secret-env`; WeChat uses `--account-id` and `--token-env`; Telegram uses
+`--token-env`. Secret options accept only
 conventional uppercase environment-variable names. Secret values are never
 accepted on the command line or written to the config. Use `--connection-id`
 for a stable multi-instance ID and `--workspace`, `--model`, and
@@ -186,7 +212,8 @@ being replaced by defaults.
 
 Use `--channels` to choose which configured IM inputs to accept. `feishu` and
 `lark` select the matching Feishu-family connection; `weixin` selects the saved
-WeChat iLink account; `qq` selects the configured QQ bot. Use `--dir` to attach
+WeChat iLink account; `qq` selects the configured QQ bot; `telegram` selects the
+configured Telegram bot. Use `--dir` to attach
 incoming messages to a project workspace and `--model` to override the default
 model for this process.
 
@@ -208,7 +235,7 @@ reachable; production deployments still need a real channel round trip.
 The headless gateway uses the same config records as the desktop app:
 
 - `[[bot.connections]]` identifies each IM input. `provider` is the adapter
-  family (`feishu`, `weixin`, or `qq`), while `domain` distinguishes variants
+  family (`feishu`, `weixin`, `qq`, or `telegram`), while `domain` distinguishes variants
   such as Feishu vs Lark.
 - `credential.app_id`, `credential.app_secret_env`, `credential.account_id`,
   and `credential.token_env` point to app IDs, app secrets, saved accounts, and
@@ -256,7 +283,7 @@ reames-agent bot pairing approve CODE
 reames-agent bot pairing reject CODE
 ```
 
-If `qq_admins`, `feishu_admins`, `weixin_admins`, or the matching
+If `qq_admins`, `feishu_admins`, `weixin_admins`, `telegram_admins`, or the matching
 `*_approvers` lists are configured, `/yolo` and `/mode` are admin-only while
 `/projects`, `/use project`, `/sessions`, `/attach session`, and `/search all`
 are also admin-only. `/approve` and `/deny` require an approver or admin. When
@@ -316,9 +343,14 @@ restarts, and a cursor is committed only after the final reply is actually sent.
 `/status`, control `/status`, and `/metrics` expose counts only, never remote IDs,
 cursor values, or the local path.
 
-The built-in Feishu, QQ, and Weixin adapters already use durable claim/dedupe and
-the final-delivery gate, but they do not yet page message history missed while the
-process was completely offline. That requires a platform-specific history/resume
+The built-in Feishu, QQ, Weixin, and Telegram adapters already use durable
+claim/dedupe and the final-delivery gate. Telegram additionally maps
+`update_id` to the durable delivery identity and only advances the remote
+polling offset after the final reply was sent and the delivery ledger commit
+succeeded. A failed send keeps the same update unacknowledged for retry; a
+delivered duplicate after restart is not run through the Agent again but is
+acknowledged remotely. Feishu, QQ, and Weixin do not yet page message history
+missed while the process was completely offline. That requires a platform-specific history/resume
 API and real application credentials. Delivery is explicitly at-least-once: if
 one reply chunk succeeds and a later chunk fails, the cursor stays behind and a
 retry may duplicate the earlier chunk.
@@ -333,7 +365,7 @@ acknowledgement.
 ```mermaid
 sequenceDiagram
   participant U as "User"
-  participant IM as "Feishu / Lark / WeChat / QQ"
+  participant IM as "Feishu / Lark / WeChat / QQ / Telegram"
   participant R as "Reames Agent desktop or gateway"
   participant T as "Local tools and model"
 
@@ -378,6 +410,7 @@ without exposing real account IDs, local paths, or private chat content.
 | Lark | Scan to create a PersonalAgent | Interactive card buttons, or commands | Interactive card buttons, or commands | International Lark workspaces |
 | WeChat | Scan with WeChat | Reply `1` / `2`, or commands | Reply with normal text, option numbers, or commands | Lightweight personal/mobile testing |
 | QQ | Manual setup (App ID + App Secret) | Inline keyboard buttons, numeric replies, or commands | Reply with normal text, option numbers, or commands | QQ groups, DMs, and official QQ Bot platform |
+| Telegram | BotFather token via environment variable | Text commands and numeric replies | Reply with normal text, option numbers, or commands | Telegram DMs/groups and durable long-polling deployments |
 
 Feishu and Lark card buttons are converted into commands such as
 `/approve <id>`, `/deny <id>`, or `/answer <id> <option>`. QQ approval buttons
@@ -386,7 +419,7 @@ failure, copy the ID shown in the card and send the equivalent text command.
 
 ## Command quick reference
 
-These commands work in Feishu, Lark, WeChat, and QQ.
+These commands work in Feishu, Lark, WeChat, QQ, and Telegram.
 
 | Command | Purpose | Example |
 | --- | --- | --- |
@@ -461,7 +494,7 @@ When an adapter supplies media URLs, the gateway downloads those files into the
 current workspace's `.reames-agent/attachments` directory and passes them to
 Reames Agent as `@.reames-agent/attachments/...` references. If an attachment cannot be
 saved, the bot sends a short warning and continues with the available text. The
-built-in Feishu, Weixin, and QQ adapters currently focus on text events; ordinary
+built-in Feishu, Weixin, QQ, and Telegram adapters currently focus on text events; ordinary
 IM attachment extraction can be added at the adapter layer.
 
 ## Approvals and YOLO

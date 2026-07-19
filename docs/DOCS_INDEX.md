@@ -136,8 +136,13 @@
 | [P7 上游增量与 Gateway systemd watchdog 审计](audits/2026-07-19-p7-upstream-gateway-watchdog.md) | Reasonix Fleet/字体、Hermes 生命周期采用、其他参考增量分类、systemd 通知与 P8/P9/P10 方向 |
 | [P8 原生 GPT / Claude Provider parity 审计](audits/2026-07-19-p8-native-gpt-claude-provider-parity.md) | OpenAI Responses encrypted reasoning replay、Anthropic Messages ordered redacted thinking、原生预设、fixture 证据与真实 API external-blocked 边界 |
 | [M6 持久渠道恢复审计](audits/2026-07-19-m6-durable-channel-recovery.md) | 跨重启入站 claim/dedupe、连续游标、最终发送门禁、受限补扫适配器、隐私状态投影与真实 IM external-blocked 边界 |
+| [M6 Telegram 持久长轮询审计](audits/2026-07-19-m6-telegram-durable-polling.md) | 正式 Telegram Adapter、env-only token、long-poll deadline/retry、最终投递后 offset 门禁与 localhost 故障注入 |
 | [Hermes / Impeccable 最新增量审计](audits/2026-07-19-upstream-hermes-impeccable-delta.md) | Hermes installer、dotenv、MCP/Markdown 代码级分类与 Impeccable 设计/治理信号 |
 | [Codex / Hermes / Scream 提交前增量审计](audits/2026-07-19-codex-hermes-scream-precommit-delta.md) | Codex audio/code-mode 与 paginated App-Server 线程语义、Hermes Desktop 订阅粒度及 Scream TUI 性能信号 |
+| [Reasonix 2335d0df..a46fc6f 增量审计](audits/2026-07-19-reasonix-2335d0d-a46fc6f.md) | 测试隔离、Windows batch/save/session/resize、context window、本地可靠性采用及明确延后/拒绝 |
+| [Reasonix 与全参考最新再冻结审计](audits/2026-07-19-upstream-a46fc6f-reference-delta.md) | Reasonix/Codex/Claude 三层治理、Hermes delivery/watchdog、MiMo Skill、Scream bug audit 与 Kimi headless/file 机制分类 |
+| [Reasonix a46fc6f..65fcd465 增量审计](audits/2026-07-19-reasonix-a46fc6f-65fcd46.md) | LongCat context、Linux WebKit、可靠会话导出采用，Theme schema 延后与 Remote SSH P11 分类 |
+| [Reasonix 65fcd465..8bb0e549 增量审计](audits/2026-07-19-reasonix-65fcd46-8bb0e54.md) | 设置刷新保留活动 Theme Pack、最新配置基底恢复与 Reames 统一 theme runtime 等价证据 |
 | [M5 MCP 身份绑定信任审计](audits/2026-07-17-m5-mcp-identity-trust.md) | Reasonix MCP identity receipt、capability drift、launcher exact lock、Desktop reverify 与 destructive fresh-human 闭环 |
 | [P2 Offline Guard / Safe Mode 审计](audits/2026-07-17-p2-offline-guard-safe-mode.md) | Guard 启动账本、安装单元回滚、Safe Mode、统一恢复投影及 Reasonix 最新可靠性吸收证据 |
 | [P3 Recovery Center 与 Reasonix 方向审计](audits/2026-07-17-p3-recovery-reasonix-direction.md) | Desktop Recovery Center、三平台安装态 smoke、DeepSeek reasoning-only stop、发布棘轮与 P4 代际差距/P5 Theme Pack 方向 |

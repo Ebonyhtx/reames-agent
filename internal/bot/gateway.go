@@ -347,7 +347,7 @@ func normalizeAdapterBindings(adapters []AdapterBinding) []AdapterBinding {
 }
 
 func (gw *BotGateway) buildAllowlist() {
-	for _, plat := range []Platform{PlatformQQ, PlatformFeishu, PlatformWeixin} {
+	for _, plat := range []Platform{PlatformQQ, PlatformFeishu, PlatformWeixin, PlatformTelegram} {
 		gw.allowlist[plat] = make(map[string]bool)
 		if !gw.cfg.Allowlist.Enabled {
 			continue
@@ -372,7 +372,7 @@ func addAllowlistUsers(dst map[string]bool, users []string) {
 }
 
 func (gw *BotGateway) buildSelfUserIDs() {
-	for _, plat := range []Platform{PlatformQQ, PlatformFeishu, PlatformWeixin} {
+	for _, plat := range []Platform{PlatformQQ, PlatformFeishu, PlatformWeixin, PlatformTelegram} {
 		gw.selfUserIDs[plat] = stringSet(gw.cfg.SelfUserIDs[plat])
 	}
 }
@@ -650,17 +650,22 @@ func (gw *BotGateway) handleMessage(ctx context.Context, binding AdapterBinding,
 	// able to select another connection's routes, access policy, or ledger.
 	msg.ConnectionID = binding.ID
 	msg.Domain = binding.Domain
-	if gw.isSelfMessage(msg) {
-		gw.logger.Debug("bot ignored self message", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "user", hashID(msg.UserID))
-		return
-	}
 	claimed, err := gw.recovery.claim(msg)
 	if err != nil {
+		gw.notifyInboundSettlements(inboundDeliveryClaims(msg), false)
 		gw.logger.Error("bot inbound durable claim failed", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
 		return
 	}
 	if !claimed {
+		if gw.recovery.wasDelivered(msg) {
+			gw.notifyInboundSettlements(inboundDeliveryClaims(msg), true)
+		}
 		gw.logger.Debug("bot ignored already claimed inbound message", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID))
+		return
+	}
+	if gw.isSelfMessage(msg) {
+		gw.logger.Debug("bot ignored self message", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "user", hashID(msg.UserID))
+		gw.settleInbound(msg, nil)
 		return
 	}
 	src := msg.Session()
@@ -1877,7 +1882,7 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 		msg.ChatID,
 		msg.ChatType,
 		msg.UserID,
-		msg.MessageID,
+		inboundReplyMessageID(msg),
 		gw.logger,
 		func(approval event.Approval) {
 			gw.mu.Lock()
@@ -1939,6 +1944,7 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 		gw.logger.Error("turn delivered but durable cursor commit failed", "session", key[:8], "err", err)
 		return
 	}
+	gw.notifyInboundSettlements(inboundDeliveryClaims(msg), true)
 	gw.logger.Info("bot turn completed", "platform", msg.Platform, "chat_type", msg.ChatType, "chat", hashID(msg.ChatID), "session", key[:8])
 }
 
@@ -1949,7 +1955,9 @@ func (gw *BotGateway) settleInbound(msg InboundMessage, deliveryErr error) {
 	}
 	if err := gw.recovery.delivered(msg); err != nil {
 		gw.logger.Error("bot inbound delivered but durable cursor commit failed", "platform", msg.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
+		return
 	}
+	gw.notifyInboundSettlements(inboundDeliveryClaims(msg), true)
 }
 
 func (gw *BotGateway) settleCanceledInbound(msg *InboundMessage) {
@@ -1958,24 +1966,55 @@ func (gw *BotGateway) settleCanceledInbound(msg *InboundMessage) {
 	}
 	if err := gw.recovery.delivered(*msg); err != nil {
 		gw.logger.Error("canceled bot turn could not commit durable delivery", "platform", msg.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
+		return
 	}
+	gw.notifyInboundSettlements(inboundDeliveryClaims(*msg), true)
 }
 
 func (gw *BotGateway) settleCanceledSession(key string) {
-	if err := gw.recovery.deliveredSession(key); err != nil {
+	claims, err := gw.recovery.deliveredSession(key)
+	if err != nil {
 		gw.logger.Error("canceled bot session could not commit durable delivery", "session", key, "err", err)
+		return
 	}
+	gw.notifyInboundSettlements(claims, true)
 }
 
 func (gw *BotGateway) failCanceledSession(key string) {
-	if err := gw.recovery.failSession(key); err != nil {
+	claims, err := gw.recovery.failSession(key)
+	if err != nil {
 		gw.logger.Error("canceled bot session failure could not be persisted", "session", key, "err", err)
+		return
 	}
+	gw.notifyInboundSettlements(claims, false)
 }
 
 func (gw *BotGateway) failInbound(msg InboundMessage, cause error) {
 	if err := gw.recovery.fail(msg, cause); err != nil {
 		gw.logger.Error("bot inbound failure state could not be persisted", "platform", msg.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
+		return
+	}
+	gw.notifyInboundSettlements(inboundDeliveryClaims(msg), false)
+}
+
+func (gw *BotGateway) notifyInboundSettlements(claims []deliveryClaim, delivered bool) {
+	if len(claims) == 0 {
+		return
+	}
+	gw.mu.Lock()
+	bindings := append([]AdapterBinding(nil), gw.adapters...)
+	gw.mu.Unlock()
+	for _, claim := range claims {
+		for _, binding := range bindings {
+			if binding.Platform != claim.Source.Platform || binding.ID != claim.Source.ConnectionID || binding.Domain != claim.Source.Domain {
+				continue
+			}
+			settler, ok := binding.Adapter.(DeliverySettlementAdapter)
+			if ok {
+				settler.SettleInbound(claim.MessageID, delivered)
+			}
+			break
+		}
 	}
 }
 
@@ -2407,7 +2446,7 @@ func (gw *BotGateway) sendText(ctx context.Context, adapter Adapter, msg Inbound
 		ChatID:       msg.ChatID,
 		ChatType:     msg.ChatType,
 		Text:         text,
-		ReplyToMsgID: msg.MessageID,
+		ReplyToMsgID: inboundReplyMessageID(msg),
 	}
 	binding := AdapterBinding{
 		ID:       strings.TrimSpace(msg.ConnectionID),
@@ -2428,6 +2467,13 @@ func (gw *BotGateway) sendText(ctx context.Context, adapter Adapter, msg Inbound
 	}
 	gw.logger.Info("bot send completed", "platform", msg.Platform, "chat_type", msg.ChatType, "chat", hashID(msg.ChatID), "reply_to", hashID(msg.MessageID), "message", hashID(result.MessageID))
 	return err
+}
+
+func inboundReplyMessageID(msg InboundMessage) string {
+	if reply := strings.TrimSpace(msg.ReplyToMessageID); reply != "" {
+		return reply
+	}
+	return strings.TrimSpace(msg.MessageID)
 }
 
 func (gw *BotGateway) sendViaAdapter(ctx context.Context, binding AdapterBinding, msg OutboundMessage) (SendResult, error) {

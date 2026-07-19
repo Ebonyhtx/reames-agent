@@ -1,5 +1,16 @@
 import { useEffect } from "react";
 
+const RESIZE_CURSORS = new Set([
+  "e-resize",
+  "n-resize",
+  "ne-resize",
+  "nw-resize",
+  "s-resize",
+  "se-resize",
+  "sw-resize",
+  "w-resize",
+]);
+
 /**
  * WailsWailsFlags mirrors the `window.wails.flags` object injected by the
  * Wails v2 runtime (see internal/frontend/runtime/desktop/main.js).
@@ -50,6 +61,13 @@ declare global {
  * The Wails mousedown handler still works because it only reads
  * `window.wails.flags.resizeEdge`, which we continue to set here.
  *
+ * Maximised state cannot be inferred safely from viewport dimensions: a
+ * manually sized or FancyZones-managed window can also fill the work area.
+ * Instead, this hook consumes the native maximise state shared with the
+ * Windows titlebar controls. Mousemove stays synchronous and never performs
+ * IPC. When maximised, stale resize state is cleared and edge detection is
+ * skipped until the native state reports a restore.
+ *
  * Upstream fix: https://github.com/wailsapp/wails/issues/4590 (Wails v3
  * sidestepped by clamping zoom ≥ 1.0).  Once Wails v2 ships a proper fix
  * this hook can be deleted.
@@ -58,7 +76,7 @@ declare global {
  *   // In App.tsx or any component mounted for the app's lifetime:
  *   useWailsResizeFix(desktopPlatform === "windows");
  */
-export function useWailsResizeFix(enabled: boolean): void {
+export function useWailsResizeFix(enabled: boolean, maximised = false): void {
   useEffect(() => {
     if (!enabled) return;
     const wails = window.wails;
@@ -70,10 +88,31 @@ export function useWailsResizeFix(enabled: boolean): void {
     const previousResizeEdge = flags.resizeEdge;
     const previousCursor = document.documentElement.style.cursor;
 
-    // Restore the default cursor when we're done — memoize the initial value.
-    const defaultCursor = previousCursor;
+    // Prefer Wails' remembered cursor. A resize-shaped inline cursor at mount
+    // is stale state, not the application's default.
+    const rememberedCursor = flags.defaultCursor ?? previousCursor;
+    const defaultCursor = RESIZE_CURSORS.has(rememberedCursor) ? "" : rememberedCursor;
+    const restoredCursor = defaultCursor || "default";
+
+    const clearResizeState = () => {
+      flags.resizeEdge = undefined;
+      if (document.documentElement.style.cursor !== restoredCursor) {
+        document.documentElement.style.cursor = restoredCursor;
+      }
+    };
+
+    // Normalise stale startup state immediately. A normal window will restore
+    // its edge on the next mousemove; a maximised window keeps the default.
+    if (maximised || previousResizeEdge !== undefined || RESIZE_CURSORS.has(previousCursor)) {
+      clearResizeState();
+    }
 
     const onMouseMove = (e: MouseEvent) => {
+      if (maximised) {
+        clearResizeState();
+        return;
+      }
+
       // Both operands in CSS pixels — the bug fix.
       const iw = window.innerWidth;
       const ih = window.innerHeight;
@@ -97,7 +136,7 @@ export function useWailsResizeFix(enabled: boolean): void {
 
       if (edge !== flags.resizeEdge) {
         flags.resizeEdge = edge;
-        document.documentElement.style.cursor = edge ?? (defaultCursor || "");
+        document.documentElement.style.cursor = edge ?? restoredCursor;
       }
     };
 
@@ -111,5 +150,5 @@ export function useWailsResizeFix(enabled: boolean): void {
       flags.resizeEdge = previousResizeEdge;
       document.documentElement.style.cursor = previousCursor;
     };
-  }, [enabled]);
+  }, [enabled, maximised]);
 }

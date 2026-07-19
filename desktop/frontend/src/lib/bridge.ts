@@ -253,6 +253,7 @@ export interface AppBindings {
   SavePastedFile(name: string, dataUrl: string): Promise<string>;
   PickExportFile(defaultFilename: string, mimeType: string): Promise<string>;
   SaveExportFile(path: string, payload: string, base64Encoded: boolean): Promise<void>;
+  SaveExportImageFiles(path: string, payloads: string[]): Promise<void>;
   AttachDropped(path: string): Promise<DroppedItem>;
   AttachmentDataURL(path: string): Promise<string>;
   Models(): Promise<ModelInfo[]>;

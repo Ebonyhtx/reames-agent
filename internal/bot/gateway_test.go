@@ -80,11 +80,215 @@ func (f *fakeAdapter) sentMessages() []OutboundMessage {
 	return out
 }
 
+func TestGatewayNotifiesSettlementAdapterAfterDurableCommitAndDuplicate(t *testing.T) {
+	adapter := newSettlementFakeAdapter()
+	gw := NewGatewayWithAdapterBindings(GatewayConfig{
+		Enabled:      map[Platform]bool{PlatformTelegram: true},
+		Allowlist:    AllowlistConfig{AllowAll: true},
+		RecoveryPath: filepath.Join(t.TempDir(), "delivery-ledger.json"),
+	}, []AdapterBinding{{ID: "telegram-main", Domain: "telegram", Platform: PlatformTelegram, Adapter: adapter}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := gw.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer gw.Stop()
+
+	msg := InboundMessage{
+		Platform:         PlatformTelegram,
+		ChatType:         ChatDM,
+		ChatID:           "1001",
+		UserID:           "2002",
+		Text:             "/help",
+		MessageID:        "42",
+		ReplyToMessageID: "7",
+		RecoveryCursor:   "42",
+	}
+	adapter.msgCh <- msg
+	first := awaitSettlement(t, adapter.settlements)
+	if first.messageID != "42" || !first.delivered {
+		t.Fatalf("first settlement = %+v", first)
+	}
+	deadline := time.Now().Add(time.Second)
+	for len(adapter.sentMessages()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	sent := adapter.sentMessages()
+	if len(sent) != 1 || sent[0].ReplyToMsgID != "7" {
+		t.Fatalf("sent = %+v, want platform-native reply id", sent)
+	}
+
+	adapter.msgCh <- msg
+	duplicate := awaitSettlement(t, adapter.settlements)
+	if duplicate.messageID != "42" || !duplicate.delivered {
+		t.Fatalf("duplicate settlement = %+v", duplicate)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if got := len(adapter.sentMessages()); got != 1 {
+		t.Fatalf("delivered duplicate ran again: sends=%d", got)
+	}
+}
+
+func TestGatewayRestartAcknowledgesDurablyDeliveredTelegramDuplicate(t *testing.T) {
+	ledgerPath := filepath.Join(t.TempDir(), "delivery-ledger.json")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	msg := InboundMessage{Platform: PlatformTelegram, ChatType: ChatDM, ChatID: "1001", UserID: "2002", Text: "/help", MessageID: "46", ReplyToMessageID: "8", RecoveryCursor: "46"}
+
+	firstAdapter := newSettlementFakeAdapter()
+	first := NewGatewayWithAdapterBindings(GatewayConfig{
+		Enabled: map[Platform]bool{PlatformTelegram: true}, Allowlist: AllowlistConfig{AllowAll: true}, RecoveryPath: ledgerPath,
+	}, []AdapterBinding{{ID: "telegram-main", Domain: "telegram", Platform: PlatformTelegram, Adapter: firstAdapter}}, logger)
+	if err := first.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	firstAdapter.msgCh <- msg
+	if outcome := awaitSettlement(t, firstAdapter.settlements); outcome.messageID != "46" || !outcome.delivered {
+		t.Fatalf("first settlement = %+v", outcome)
+	}
+	first.Stop()
+
+	secondAdapter := newSettlementFakeAdapter()
+	second := NewGatewayWithAdapterBindings(GatewayConfig{
+		Enabled: map[Platform]bool{PlatformTelegram: true}, Allowlist: AllowlistConfig{AllowAll: true}, RecoveryPath: ledgerPath,
+	}, []AdapterBinding{{ID: "telegram-main", Domain: "telegram", Platform: PlatformTelegram, Adapter: secondAdapter}}, logger)
+	if err := second.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer second.Stop()
+	secondAdapter.msgCh <- msg
+	if outcome := awaitSettlement(t, secondAdapter.settlements); outcome.messageID != "46" || !outcome.delivered {
+		t.Fatalf("restart duplicate settlement = %+v", outcome)
+	}
+	if got := len(secondAdapter.sentMessages()); got != 0 {
+		t.Fatalf("restart duplicate ran another turn: sends=%d", got)
+	}
+}
+
+func TestGatewayNotifiesFailedSettlementOnlyAfterLedgerWrite(t *testing.T) {
+	adapter := newSettlementFakeAdapter()
+	gw := NewGatewayWithAdapterBindings(GatewayConfig{
+		Enabled:      map[Platform]bool{PlatformTelegram: true},
+		Allowlist:    AllowlistConfig{AllowAll: true},
+		RecoveryPath: filepath.Join(t.TempDir(), "delivery-ledger.json"),
+	}, []AdapterBinding{{ID: "telegram-main", Domain: "telegram", Platform: PlatformTelegram, Adapter: adapter}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := gw.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer gw.Stop()
+	msg := InboundMessage{Platform: PlatformTelegram, ConnectionID: "telegram-main", Domain: "telegram", ChatType: ChatDM, ChatID: "1001", UserID: "2002", MessageID: "43", RecoveryCursor: "43"}
+	claimed, err := gw.recovery.claim(msg)
+	if err != nil || !claimed {
+		t.Fatalf("claim = %v, %v", claimed, err)
+	}
+	gw.failInbound(msg, errors.New("fixture failure"))
+	outcome := awaitSettlement(t, adapter.settlements)
+	if outcome.messageID != "43" || outcome.delivered {
+		t.Fatalf("failure settlement = %+v", outcome)
+	}
+}
+
+func TestGatewayDurablyAcknowledgesIgnoredTelegramSelfMessage(t *testing.T) {
+	adapter := newSettlementFakeAdapter()
+	gw := NewGatewayWithAdapterBindings(GatewayConfig{
+		Enabled:            map[Platform]bool{PlatformTelegram: true},
+		IgnoreSelfMessages: true,
+		SelfUserIDs:        map[Platform][]string{PlatformTelegram: {"99"}},
+		RecoveryPath:       filepath.Join(t.TempDir(), "delivery-ledger.json"),
+	}, []AdapterBinding{{ID: "telegram-main", Domain: "telegram", Platform: PlatformTelegram, Adapter: adapter}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := gw.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer gw.Stop()
+
+	adapter.msgCh <- InboundMessage{Platform: PlatformTelegram, ChatType: ChatDM, ChatID: "1001", UserID: "99", MessageID: "44", RecoveryCursor: "44"}
+	outcome := awaitSettlement(t, adapter.settlements)
+	if outcome.messageID != "44" || !outcome.delivered {
+		t.Fatalf("self-message settlement = %+v", outcome)
+	}
+	if got := len(adapter.sentMessages()); got != 0 {
+		t.Fatalf("ignored self message produced %d outbound sends", got)
+	}
+}
+
+func TestGatewayReleasesTelegramBatchWhenDurableClaimFails(t *testing.T) {
+	adapter := newSettlementFakeAdapter()
+	ledgerPath := filepath.Join(t.TempDir(), "delivery-ledger.json")
+	gw := NewGatewayWithAdapterBindings(GatewayConfig{
+		Enabled:      map[Platform]bool{PlatformTelegram: true},
+		Allowlist:    AllowlistConfig{AllowAll: true},
+		RecoveryPath: ledgerPath,
+	}, []AdapterBinding{{ID: "telegram-main", Domain: "telegram", Platform: PlatformTelegram, Adapter: adapter}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := gw.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer gw.Stop()
+	if err := os.Mkdir(ledgerPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter.msgCh <- InboundMessage{Platform: PlatformTelegram, ChatType: ChatDM, ChatID: "1001", UserID: "2002", MessageID: "45", RecoveryCursor: "45"}
+	outcome := awaitSettlement(t, adapter.settlements)
+	if outcome.messageID != "45" || outcome.delivered {
+		t.Fatalf("claim-failure settlement = %+v, want retry signal", outcome)
+	}
+}
+
+func awaitSettlement(t *testing.T, ch <-chan struct {
+	messageID string
+	delivered bool
+}) struct {
+	messageID string
+	delivered bool
+} {
+	t.Helper()
+	select {
+	case outcome := <-ch:
+		return outcome
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for delivery settlement")
+		return struct {
+			messageID string
+			delivered bool
+		}{}
+	}
+}
+
 type blockingSendAdapter struct {
 	*fakeAdapter
 	entered chan struct{}
 	release chan struct{}
 	once    sync.Once
+}
+
+type settlementFakeAdapter struct {
+	*fakeAdapter
+	settlements chan struct {
+		messageID string
+		delivered bool
+	}
+}
+
+func newSettlementFakeAdapter() *settlementFakeAdapter {
+	return &settlementFakeAdapter{
+		fakeAdapter: newFakeAdapter(PlatformTelegram, "telegram"),
+		settlements: make(chan struct {
+			messageID string
+			delivered bool
+		}, 16),
+	}
+}
+
+func (a *settlementFakeAdapter) SettleInbound(messageID string, delivered bool) {
+	a.settlements <- struct {
+		messageID string
+		delivered bool
+	}{messageID: messageID, delivered: delivered}
 }
 
 func newBlockingSendAdapter(platform Platform, name string) *blockingSendAdapter {

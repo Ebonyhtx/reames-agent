@@ -209,6 +209,9 @@ func main() {
 	if launch.SafeMode {
 		_ = os.Setenv("REAMES_AGENT_SAFE_MODE", "1")
 	}
+	// Keep accelerated WebKit rendering during normal Linux launches. Safe Mode
+	// broadens recovery on NVIDIA before Wails creates the WebKit process.
+	configureWebKitRendererRecovery(launch.SafeMode)
 	startupState, trackerErr := tracker.Begin(version, launch.SafeMode)
 	trackerOwned := trackerErr == nil && startupState.PID == os.Getpid()
 
@@ -233,6 +236,10 @@ func main() {
 	if zf, ok := loadZoomFactor(); ok && zf > 0 {
 		zoomFactor = zf
 	}
+
+	// On Linux, cover JavaScriptCore's lazy signal-handler installation window.
+	// Other platforms provide no-op implementations.
+	scheduleWebKitSignalHandlerRepair()
 
 	err := wails.Run(&options.App{
 		Title:     "Reames Agent",

@@ -22,8 +22,14 @@ func TestLoadPendingSnapshots_Empty(t *testing.T) {
 }
 
 func TestLoadPendingSnapshots_Corrupt(t *testing.T) {
-	os.WriteFile(pendingSnapshotPath(), []byte("not json"), 0600)
-	defer os.Remove(pendingSnapshotPath())
+	path := pendingSnapshotPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir pending snapshot dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("not json"), 0o600); err != nil {
+		t.Fatalf("write corrupt pending snapshot: %v", err)
+	}
+	defer os.Remove(path)
 	_, err := LoadPendingSnapshots()
 	if err == nil {
 		t.Fatal("expected error for corrupt file")

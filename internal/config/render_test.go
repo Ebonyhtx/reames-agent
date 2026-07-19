@@ -202,6 +202,13 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	orig.Skills.MaxDepth = 2
 	orig.Bot.ToolApprovalMode = "auto"
 	orig.Bot.Control = BotControlConfig{Enabled: true, Addr: "127.0.0.1:39001", TokenEnv: "BOT_CONTROL_TOKEN"}
+	orig.Bot.SelfUserIDs.Telegram = []string{"9001"}
+	orig.Bot.Allowlist.Enabled = true
+	orig.Bot.Allowlist.TelegramUsers = []string{"1001"}
+	orig.Bot.Allowlist.TelegramApprovers = []string{"1002"}
+	orig.Bot.Allowlist.TelegramAdmins = []string{"1003"}
+	orig.Bot.Allowlist.TelegramGroups = []string{"-1002001"}
+	orig.Bot.Telegram = TelegramBotConfig{Enabled: true, TokenEnv: "CUSTOM_TELEGRAM_TOKEN", APIBase: "https://telegram-proxy.example.com"}
 	orig.Bot.Routes = []BotRouteConfig{{
 		ConnectionID:     "feishu-lark",
 		ChatType:         "group",
@@ -334,6 +341,16 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	}
 	if !got.Bot.Control.Enabled || got.Bot.Control.Addr != "127.0.0.1:39001" || got.Bot.Control.TokenEnv != "BOT_CONTROL_TOKEN" {
 		t.Errorf("bot control not preserved: %+v", got.Bot.Control)
+	}
+	if !reflect.DeepEqual(got.Bot.SelfUserIDs.Telegram, []string{"9001"}) ||
+		!reflect.DeepEqual(got.Bot.Allowlist.TelegramUsers, []string{"1001"}) ||
+		!reflect.DeepEqual(got.Bot.Allowlist.TelegramApprovers, []string{"1002"}) ||
+		!reflect.DeepEqual(got.Bot.Allowlist.TelegramAdmins, []string{"1003"}) ||
+		!reflect.DeepEqual(got.Bot.Allowlist.TelegramGroups, []string{"-1002001"}) {
+		t.Errorf("telegram access fields not preserved: self=%v allowlist=%+v", got.Bot.SelfUserIDs.Telegram, got.Bot.Allowlist)
+	}
+	if !got.Bot.Telegram.Enabled || got.Bot.Telegram.TokenEnv != "CUSTOM_TELEGRAM_TOKEN" || got.Bot.Telegram.APIBase != "https://telegram-proxy.example.com" {
+		t.Errorf("telegram config not preserved: %+v", got.Bot.Telegram)
 	}
 	if len(got.Bot.Routes) != 1 || got.Bot.Routes[0].WorkspaceRoot != "/tmp/reamesAgent-route" || got.Bot.Routes[0].ChatID != "oc_group" {
 		t.Errorf("bot routes not preserved: %+v", got.Bot.Routes)
@@ -912,6 +929,7 @@ func TestRenderTOMLRoundTripsProviderHeadersAndModelOverrides(t *testing.T) {
 				DefaultEffort:     "high",
 				Thinking:          &thinkingOff,
 				Vision:            boolPtr(false),
+				ContextWindow:     262_144,
 			},
 		},
 	}}
@@ -926,7 +944,7 @@ func TestRenderTOMLRoundTripsProviderHeadersAndModelOverrides(t *testing.T) {
 	if !strings.Contains(rendered, `auth_header = true`) {
 		t.Fatalf("rendered TOML missing auth_header:\n%s", rendered)
 	}
-	if !strings.Contains(rendered, `model_overrides`) || !strings.Contains(rendered, `reasoning_protocol = "deepseek"`) {
+	if !strings.Contains(rendered, `model_overrides`) || !strings.Contains(rendered, `reasoning_protocol = "deepseek"`) || !strings.Contains(rendered, `context_window = 262144`) {
 		t.Fatalf("rendered TOML missing model overrides:\n%s", rendered)
 	}
 
@@ -952,7 +970,7 @@ func TestRenderTOMLRoundTripsProviderHeadersAndModelOverrides(t *testing.T) {
 		t.Fatalf("extra_body metadata after round trip = %+v", p.ExtraBody["metadata"])
 	}
 	ov := p.ModelOverrides["deepseek-v4-flash"]
-	if ov.ReasoningProtocol != ReasoningProtocolDeepSeek || ov.Thinking == nil || *ov.Thinking != "" || !reflect.DeepEqual(ov.SupportedEfforts, []string{"high", "max"}) || ov.DefaultEffort != "high" || ov.Vision == nil || *ov.Vision {
+	if ov.ReasoningProtocol != ReasoningProtocolDeepSeek || ov.Thinking == nil || *ov.Thinking != "" || !reflect.DeepEqual(ov.SupportedEfforts, []string{"high", "max"}) || ov.DefaultEffort != "high" || ov.Vision == nil || *ov.Vision || ov.ContextWindow != 262_144 {
 		t.Fatalf("model override after round trip = %+v", ov)
 	}
 }

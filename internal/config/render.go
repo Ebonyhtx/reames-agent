@@ -426,7 +426,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 				fmt.Fprintf(&b, "default_effort    = %q   # used when /effort is auto or unset; must be one of supported_efforts\n", p.DefaultEffort)
 			}
 			if len(p.ModelOverrides) > 0 {
-				fmt.Fprintf(&b, "model_overrides   = %s   # per-model reasoning/vision overrides for mixed gateways\n", renderModelOverrides(p.ModelOverrides))
+				fmt.Fprintf(&b, "model_overrides   = %s   # per-model context/reasoning/vision overrides for mixed gateways\n", renderModelOverrides(p.ModelOverrides))
 			}
 			if p.NoProxy {
 				b.WriteString("no_proxy    = true   # reach this base_url directly, never via the proxy\n")
@@ -576,6 +576,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		fmt.Fprintf(&b, "qq = %s\n", renderStringArray(c.Bot.SelfUserIDs.QQ))
 		fmt.Fprintf(&b, "feishu = %s\n", renderStringArray(c.Bot.SelfUserIDs.Feishu))
 		fmt.Fprintf(&b, "weixin = %s\n", renderStringArray(c.Bot.SelfUserIDs.Weixin))
+		fmt.Fprintf(&b, "telegram = %s\n", renderStringArray(c.Bot.SelfUserIDs.Telegram))
 		b.WriteString("\n[bot.control]\n")
 		fmt.Fprintf(&b, "enabled = %v   # local loopback HTTP API for status/send; requires Bearer token\n", c.Bot.Control.Enabled)
 		if strings.TrimSpace(c.Bot.Control.Addr) != "" {
@@ -612,15 +613,19 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		fmt.Fprintf(&b, "qq_users = %s\n", renderStringArray(c.Bot.Allowlist.QQUsers))
 		fmt.Fprintf(&b, "feishu_users = %s\n", renderStringArray(c.Bot.Allowlist.FeishuUsers))
 		fmt.Fprintf(&b, "weixin_users = %s\n", renderStringArray(c.Bot.Allowlist.WeixinUsers))
+		fmt.Fprintf(&b, "telegram_users = %s\n", renderStringArray(c.Bot.Allowlist.TelegramUsers))
 		fmt.Fprintf(&b, "qq_approvers = %s\n", renderStringArray(c.Bot.Allowlist.QQApprovers))
 		fmt.Fprintf(&b, "feishu_approvers = %s\n", renderStringArray(c.Bot.Allowlist.FeishuApprovers))
 		fmt.Fprintf(&b, "weixin_approvers = %s\n", renderStringArray(c.Bot.Allowlist.WeixinApprovers))
+		fmt.Fprintf(&b, "telegram_approvers = %s\n", renderStringArray(c.Bot.Allowlist.TelegramApprovers))
 		fmt.Fprintf(&b, "qq_admins = %s\n", renderStringArray(c.Bot.Allowlist.QQAdmins))
 		fmt.Fprintf(&b, "feishu_admins = %s\n", renderStringArray(c.Bot.Allowlist.FeishuAdmins))
 		fmt.Fprintf(&b, "weixin_admins = %s\n", renderStringArray(c.Bot.Allowlist.WeixinAdmins))
+		fmt.Fprintf(&b, "telegram_admins = %s\n", renderStringArray(c.Bot.Allowlist.TelegramAdmins))
 		fmt.Fprintf(&b, "qq_groups = %s\n", renderStringArray(c.Bot.Allowlist.QQGroups))
 		fmt.Fprintf(&b, "feishu_groups = %s\n", renderStringArray(c.Bot.Allowlist.FeishuGroups))
 		fmt.Fprintf(&b, "weixin_groups = %s\n", renderStringArray(c.Bot.Allowlist.WeixinGroups))
+		fmt.Fprintf(&b, "telegram_groups = %s\n", renderStringArray(c.Bot.Allowlist.TelegramGroups))
 		b.WriteString("\n[bot.qq]\n")
 		fmt.Fprintf(&b, "enabled = %v\n", c.Bot.QQ.Enabled)
 		fmt.Fprintf(&b, "app_id = %q\n", c.Bot.QQ.AppID)
@@ -652,6 +657,10 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		fmt.Fprintf(&b, "account_id = %q\n", c.Bot.Weixin.AccountID)
 		fmt.Fprintf(&b, "token_env = %q\n", c.Bot.Weixin.TokenEnv)
 		fmt.Fprintf(&b, "api_base = %q\n", c.Bot.Weixin.APIBase)
+		b.WriteString("\n[bot.telegram]\n")
+		fmt.Fprintf(&b, "enabled = %v\n", c.Bot.Telegram.Enabled)
+		fmt.Fprintf(&b, "token_env = %q\n", c.Bot.Telegram.TokenEnv)
+		fmt.Fprintf(&b, "api_base = %q\n", c.Bot.Telegram.APIBase)
 		for _, conn := range c.Bot.Connections {
 			b.WriteString("\n[[bot.connections]]\n")
 			fmt.Fprintf(&b, "id = %q\n", conn.ID)
@@ -1514,11 +1523,14 @@ func renderModelOverride(ov ProviderModelOverride) string {
 	if ov.Vision != nil {
 		parts = append(parts, fmt.Sprintf("vision = %t", *ov.Vision))
 	}
+	if ov.ContextWindow > 0 {
+		parts = append(parts, fmt.Sprintf("context_window = %d", ov.ContextWindow))
+	}
 	return "{ " + strings.Join(parts, ", ") + " }"
 }
 
 func modelOverrideEmpty(ov ProviderModelOverride) bool {
-	return ov.ReasoningProtocol == "" && ov.Thinking == nil && len(ov.SupportedEfforts) == 0 && ov.DefaultEffort == "" && ov.Vision == nil
+	return ov.ReasoningProtocol == "" && ov.Thinking == nil && len(ov.SupportedEfforts) == 0 && ov.DefaultEffort == "" && ov.Vision == nil && ov.ContextWindow <= 0
 }
 
 func hasPositiveIntMap(m map[string]int) bool {

@@ -1,7 +1,9 @@
 package trust
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -49,6 +51,77 @@ func TestRedactSecrets(t *testing.T) {
 		} else if !strings.Contains(got, tt.contains) {
 			t.Errorf("expected %q in %q", tt.contains, got)
 		}
+	}
+}
+
+func TestRedactSecretsMasksCredentialKeyValues(t *testing.T) {
+	secret := "real-secret-value-1234567890"
+	in := `DEEPSEEK_API_KEY=` + secret + ` Authorization: Bearer ` + secret + ` {"access_token":"` + secret + `"} PWD=/home/user`
+	got := RedactSecrets(in)
+	if strings.Contains(got, secret) {
+		t.Fatalf("credential value leaked: %q", got)
+	}
+	if !strings.Contains(got, "Authorization: Bearer [REDACTED]") {
+		t.Fatalf("authorization scheme was not preserved: %q", got)
+	}
+	if !strings.Contains(got, "PWD=/home/user") {
+		t.Fatalf("working-directory PWD was falsely redacted: %q", got)
+	}
+	if again := RedactSecrets(got); again != got {
+		t.Fatalf("redaction is not idempotent:\nfirst:  %q\nsecond: %q", got, again)
+	}
+}
+
+func TestRedactSecretsPreservesSafeURLFieldsAndSpecificLabels(t *testing.T) {
+	secret := "sk-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
+	in := "https://example.com/plugin.zip?token=" + secret + "&version=2#install"
+	got := RedactSecrets(in)
+	if strings.Contains(got, secret) {
+		t.Fatalf("URL credential leaked: %q", got)
+	}
+	for _, want := range []string{"token=[REDACTED:OpenAI]", "&version=2", "#install"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("redacted URL missing %q: %q", want, got)
+		}
+	}
+	if again := RedactSecrets(got); again != got {
+		t.Fatalf("URL redaction is not idempotent:\nfirst:  %q\nsecond: %q", got, again)
+	}
+}
+
+func TestRedactSecretsLongConcurrentTranscript(t *testing.T) {
+	const secret = "real-secret-value-1234567890"
+	var transcript strings.Builder
+	for i := 0; i < 2_000; i++ {
+		fmt.Fprintf(&transcript, "message %d payload=%s DEEPSEEK_API_KEY=%s Authorization: Bearer %s\n", i, strings.Repeat("x", i%31), secret, secret)
+	}
+	input := transcript.String()
+
+	const workers = 12
+	const iterations = 10
+	var wg sync.WaitGroup
+	errs := make(chan string, workers)
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				got := RedactSecrets(input)
+				if strings.Contains(got, secret) {
+					errs <- "long concurrent redaction leaked the test secret"
+					return
+				}
+				if again := RedactSecrets(got); again != got {
+					errs <- "long concurrent redaction was not idempotent"
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
 	}
 }
 

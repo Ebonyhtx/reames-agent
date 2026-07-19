@@ -1,0 +1,242 @@
+{
+  "version": 1,
+  "upstream": "reasonix",
+  "baseline": "65fcd46525bb407a34a2286aa48b4540bf934cd4",
+  "reviewed": "8bb0e5493a7d4774277666326c05b96791485aa2",
+  "reviewed_at": "2026-07-19T23:01:24+08:00",
+  "counts": {
+    "all_commits": 1,
+    "non_merge_commits": 1,
+    "fix_perf_commits": 0,
+    "diff_shortstat": "4 files changed, 33 insertions(+), 10 deletions(-)"
+  },
+  "area_counts": {
+    "desktop-ui-accessibility": 1
+  },
+  "fix_perf_area_counts": {},
+  "unmerged_remote_refs": [
+    {
+      "ref": "origin/dependabot/github_actions/actions-4c2bda7e8b",
+      "sha": "ec082e6a986b9075b5625eded46271ebc386fa90",
+      "ahead": 1,
+      "subject": "chore(deps): bump the actions group with 2 updates"
+    },
+    {
+      "ref": "origin/dependabot/go_modules/desktop/go-9b87d4a103",
+      "sha": "276a8674e5873d933d3fe45d447af831dc4a82fb",
+      "ahead": 1,
+      "subject": "chore(deps): bump the go group across 1 directory with 5 updates"
+    },
+    {
+      "ref": "origin/dependabot/go_modules/go-40ad0753b6",
+      "sha": "460d589b83fd5d0d3c62c3f2003a0ab1deb18048",
+      "ahead": 1,
+      "subject": "chore(deps): bump the go group across 1 directory with 13 updates"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/desktop/frontend/npm-aab5777841",
+      "sha": "09486076b17ba5a5b1ef5a0973495370ea70df44",
+      "ahead": 1,
+      "subject": "chore(deps): bump the npm group across 1 directory with 8 updates"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/site/astro-7.1.1",
+      "sha": "342891bd1fc5441a9db185c3c441cc391011d778",
+      "ahead": 1,
+      "subject": "chore(deps): bump astro from 6.4.8 to 7.1.1 in /site"
+    },
+    {
+      "ref": "origin/dependabot/npm_and_yarn/site/npm-d40bf93b92",
+      "sha": "cf83b75ec7bc23009850d39f21b00afe0f065640",
+      "ahead": 1,
+      "subject": "chore(deps): bump the npm group in /site with 2 updates"
+    },
+    {
+      "ref": "origin/feature/inline-renderer",
+      "sha": "217fb750362693f5a0c2cb240351131241275c87",
+      "ahead": 4,
+      "subject": "feat(cli)!: default the transcript renderer to inline"
+    },
+    {
+      "ref": "origin/feature/macos-home-migration-pr",
+      "sha": "410d2e12fb2c2883f52ec73baaa89c3df38d050a",
+      "ahead": 1,
+      "subject": "feat(config): add macOS home migration command"
+    },
+    {
+      "ref": "origin/feature/status-bar-display-options",
+      "sha": "e30bac56ec4faf3edd7431bd6401f0f71c00e8f5",
+      "ahead": 1,
+      "subject": "feat(desktop): customize status bar items"
+    },
+    {
+      "ref": "origin/fix/chrome-tab-strip-max-width",
+      "sha": "4a381fc84c301efcc1e0a2d76539397601ef228d",
+      "ahead": 3,
+      "subject": "fix(desktop): pin mac chrome new tab button"
+    },
+    {
+      "ref": "origin/fix/chrome-tabs-reserve-right-dock",
+      "sha": "dde01b723d1d6a8d82e4e5ef6ff534528a2bd1f6",
+      "ahead": 2,
+      "subject": "fix(desktop): bound chrome tab strip overflow"
+    },
+    {
+      "ref": "origin/fix/desktop-open-tab-crash-missing-drive",
+      "sha": "92c2df5efd2e082a5a1e5893ead351758ccb1fda",
+      "ahead": 1,
+      "subject": "fix(desktop): toast instead of crash when a tab opens on an unreachable path"
+    },
+    {
+      "ref": "origin/fix/desktop-streaming-reasoning-jank",
+      "sha": "0e3eb72d0bcb545e391253cf54dc72b8e13bc471",
+      "ahead": 2,
+      "subject": "Handle display mode changes during reasoning streams"
+    },
+    {
+      "ref": "origin/v1",
+      "sha": "50b1bf4a5061ad22abb97774a424b5962abab79f",
+      "ahead": 1561,
+      "subject": "fix(cli): don't crash session hydration on a tool_call missing its function"
+    }
+  ],
+  "recent_merged_tags": [
+    {
+      "name": "desktop-v1.17.15",
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a"
+    },
+    {
+      "name": "npm-v1.17.15",
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a"
+    },
+    {
+      "name": "v1.17.15",
+      "sha": "315f6f30532f43fa95d0958b2fff2b353442fa9a"
+    },
+    {
+      "name": "desktop-v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "npm-v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "v1.17.14",
+      "sha": "db4be5e6ba262594a0907fb57884d23ae9b90812"
+    },
+    {
+      "name": "desktop-v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "npm-v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "v1.17.13",
+      "sha": "5342a8aedc9161c5ff2c6cfce04e300b7a2e8136"
+    },
+    {
+      "name": "desktop-v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "npm-v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "v1.17.12",
+      "sha": "afdcd161fe8ece8adc250bd4bf2448c1983efb9d"
+    },
+    {
+      "name": "desktop-v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "npm-v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "v1.17.11",
+      "sha": "20a64b4d15687fbddb7ccc658daf909f71d01427"
+    },
+    {
+      "name": "desktop-v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "npm-v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "v1.17.10",
+      "sha": "698e39a9d8598e50b85e4ad9c47e6496f4fb4218"
+    },
+    {
+      "name": "desktop-v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "npm-v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "v1.17.9",
+      "sha": "7cbc435d92b75979f6207c40f83933740eb32def"
+    },
+    {
+      "name": "desktop-v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "npm-v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "v1.17.8",
+      "sha": "7d68fb1a93dc6edfddee65926a8b28a3a0169d57"
+    },
+    {
+      "name": "desktop-v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "npm-v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "v1.17.7",
+      "sha": "5992b2ef2507430ea44523e6398d74b80c85359e"
+    },
+    {
+      "name": "desktop-v1.17.6",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "npm-v1.17.6",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    },
+    {
+      "name": "npm-v1.17.6-rc.1",
+      "sha": "3b677cf3832cd50782f66f144a029108c3c94c1b"
+    }
+  ],
+  "commits": [
+    {
+      "sha": "8bb0e5493a7d4774277666326c05b96791485aa2",
+      "authored_at": "2026-07-19T23:01:24+08:00",
+      "subject": "Fix theme pack state after settings refresh (#6694)",
+      "fix_perf": false,
+      "files": [
+        "desktop/frontend/src/App.tsx",
+        "desktop/frontend/src/__tests__/theme-pack.test.ts",
+        "desktop/frontend/src/components/SettingsPanel.tsx",
+        "desktop/frontend/src/lib/themePack.ts"
+      ],
+      "areas": [
+        "desktop-ui-accessibility"
+      ]
+    }
+  ]
+}

@@ -16,6 +16,10 @@ import {
   topFrameFromStack,
   type PerformanceSnapshot,
 } from "../lib/crash";
+import { installObjectHasOwnPolyfill } from "../lib/compat";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 let passed = 0;
 let failed = 0;
@@ -31,6 +35,22 @@ function eq(a: unknown, b: unknown, label: string) {
 }
 
 console.log("\ncrash reporting");
+
+const testDir = dirname(fileURLToPath(import.meta.url));
+const markdownRendererSource = readFileSync(resolve(testDir, "../components/MarkdownRenderer.tsx"), "utf8");
+const sessionExportSource = readFileSync(resolve(testDir, "../lib/sessionExport.tsx"), "utf8");
+eq(markdownRendererSource.startsWith('import "../lib/compat";'), true, "installs WebKit compatibility before interactive markdown imports");
+eq(sessionExportSource.startsWith('import "./compat";'), true, "installs WebKit compatibility before export markdown imports");
+const legacyObject = function LegacyObject() {} as unknown as ObjectConstructor & {
+  hasOwn?: (value: object, property: PropertyKey) => boolean;
+};
+installObjectHasOwnPolyfill(legacyObject);
+eq(legacyObject.hasOwn?.({ own: true }, "own"), true, "Object.hasOwn polyfill accepts own properties");
+eq(
+  legacyObject.hasOwn?.(Object.create({ inherited: true }), "inherited"),
+  false,
+  "Object.hasOwn polyfill rejects inherited properties",
+);
 
 const err = new TypeError("invalid argument");
 err.stack = "TypeError: invalid argument\n    at submit (src/App.tsx:12:3)";

@@ -26,6 +26,50 @@ func (r *captureTurnRunner) Run(_ context.Context, input string) error {
 	return nil
 }
 
+func TestTelegramBotSettingsRoundTrip(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	t.Setenv("DESKTOP_TELEGRAM_TOKEN", "123456:desktop_test_secret")
+	app := NewApp()
+	view := botSettingsView(config.Default().Bot)
+	view.Enabled = true
+	view.SelfUserIDs.Telegram = []string{" 99 "}
+	view.Allowlist.Enabled = true
+	view.Allowlist.TelegramUsers = []string{" 1001 "}
+	view.Allowlist.TelegramApprovers = []string{"1002"}
+	view.Allowlist.TelegramAdmins = []string{"1003"}
+	view.Allowlist.TelegramGroups = []string{" -1002001 "}
+	view.Telegram = TelegramBotView{Enabled: true, TokenEnv: " DESKTOP_TELEGRAM_TOKEN ", APIBase: "https://telegram-proxy.example.com/"}
+	view.Connections = []BotConnectionView{{
+		ID: " telegram-primary ", Provider: "telegram", Domain: "telegram", Enabled: true,
+		Credential: BotConnectionCredentialView{TokenEnv: " DESKTOP_TELEGRAM_TOKEN "},
+	}}
+	if err := app.SetBotSettings(view); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadForEditStrict(config.UserConfigPath(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Bot.Telegram.Enabled || cfg.Bot.Telegram.TokenEnv != "DESKTOP_TELEGRAM_TOKEN" || cfg.Bot.Telegram.APIBase != "https://telegram-proxy.example.com" {
+		t.Fatalf("telegram config = %+v", cfg.Bot.Telegram)
+	}
+	if !reflect.DeepEqual(cfg.Bot.SelfUserIDs.Telegram, []string{"99"}) ||
+		!reflect.DeepEqual(cfg.Bot.Allowlist.TelegramUsers, []string{"1001"}) ||
+		!reflect.DeepEqual(cfg.Bot.Allowlist.TelegramApprovers, []string{"1002"}) ||
+		!reflect.DeepEqual(cfg.Bot.Allowlist.TelegramAdmins, []string{"1003"}) ||
+		!reflect.DeepEqual(cfg.Bot.Allowlist.TelegramGroups, []string{"-1002001"}) {
+		t.Fatalf("telegram access config = self:%v allowlist:%+v", cfg.Bot.SelfUserIDs.Telegram, cfg.Bot.Allowlist)
+	}
+	if len(cfg.Bot.Connections) != 1 || cfg.Bot.Connections[0].ID != "telegram-primary" || cfg.Bot.Connections[0].Credential.TokenEnv != "DESKTOP_TELEGRAM_TOKEN" {
+		t.Fatalf("telegram connections = %+v", cfg.Bot.Connections)
+	}
+	got := botSettingsView(cfg.Bot)
+	if !got.Telegram.TokenSet || got.Telegram.APIBase != "https://telegram-proxy.example.com" || !reflect.DeepEqual(got.Allowlist.TelegramUsers, []string{"1001"}) {
+		t.Fatalf("telegram settings view = %+v", got)
+	}
+}
+
 func TestProviderViewFromEntry_FiltersNonChatModels(t *testing.T) {
 	p := config.ProviderEntry{
 		Name: "mimo-api",
@@ -46,6 +90,30 @@ func TestProviderViewFromEntry_FiltersNonChatModels(t *testing.T) {
 	}
 	if !view.VisionModelsSet {
 		t.Fatal("ProviderView.VisionModelsSet = false, want true for configured vision_models")
+	}
+}
+
+func TestProviderModelOverridesPreservePerModelContextWindow(t *testing.T) {
+	thinkingOff := ""
+	overrides := map[string]config.ProviderModelOverride{
+		"short-model": {ContextWindow: 32_768, Thinking: &thinkingOff},
+		"long-model":  {ContextWindow: 1_000_000},
+		"removed":     {ContextWindow: 8_192},
+	}
+	models := []string{"short-model", "long-model"}
+
+	view := providerModelOverridesForView(overrides, models)
+	if len(view) != 2 || view[0].Model != "long-model" || view[0].ContextWindow != 1_000_000 || view[1].Model != "short-model" || view[1].ContextWindow != 32_768 || view[1].Thinking == nil {
+		t.Fatalf("provider model override view = %+v", view)
+	}
+
+	view[0].ContextWindow = -1
+	saved := providerModelOverridesForSave(view, models)
+	if _, ok := saved["long-model"]; ok {
+		t.Fatalf("non-positive context-only override should be removed: %+v", saved)
+	}
+	if got := saved["short-model"].ContextWindow; got != 32_768 {
+		t.Fatalf("saved short-model context window = %d, want 32768", got)
 	}
 }
 

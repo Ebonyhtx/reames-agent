@@ -496,6 +496,7 @@ export function makeMockApp(): AppBindings {
         qq: [],
         feishu: [],
         weixin: [],
+        telegram: [],
       },
       control: {
         enabled: false,
@@ -514,15 +515,19 @@ export function makeMockApp(): AppBindings {
         qqUsers: [],
         feishuUsers: freshMock ? [] : ["ou_mock_user_001"],
         weixinUsers: freshMock ? [] : ["wxid_mock_user_001"],
+        telegramUsers: [],
         qqApprovers: [],
         feishuApprovers: [],
         weixinApprovers: [],
+        telegramApprovers: [],
         qqAdmins: [],
         feishuAdmins: [],
         weixinAdmins: [],
+        telegramAdmins: [],
         qqGroups: [],
         feishuGroups: [],
         weixinGroups: [],
+        telegramGroups: [],
       },
       qq: { enabled: false, appId: "", appSecretEnv: "QQ_BOT_APP_SECRET", secretSet: false, sandbox: false, model: "", toolApprovalMode: "ask", workspaceRoot: "", access: { enabled: true, allowAll: false, pairingEnabled: true, users: [], groups: [], approvers: [], admins: [] } },
       feishu: {
@@ -542,6 +547,12 @@ export function makeMockApp(): AppBindings {
         tokenEnv: "WEIXIN_BOT_TOKEN",
         tokenSet: false,
         apiBase: "https://ilinkai.weixin.qq.com",
+      },
+      telegram: {
+        enabled: false,
+        tokenEnv: "TELEGRAM_BOT_TOKEN",
+        tokenSet: false,
+        apiBase: "https://api.telegram.org",
       },
       connections: freshMock ? [] : [
         {
@@ -2358,6 +2369,20 @@ export function makeMockApp(): AppBindings {
       a.click();
       a.remove();
       if (!base64Encoded) URL.revokeObjectURL(url);
+    },
+    async SaveExportImageFiles(path: string, payloads: string[]) {
+      if (payloads.length === 0) throw new Error("No image payloads to export");
+      const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+      const dot = path.lastIndexOf(".");
+      const extensionStart = dot > slash ? dot : path.length;
+      const stem = path.slice(0, extensionStart);
+      const extension = path.slice(extensionStart);
+      for (let index = 0; index < payloads.length; index++) {
+        const partPath = payloads.length > 1
+          ? `${stem}-${index + 1}-of-${payloads.length}${extension}`
+          : path;
+        await this.SaveExportFile(partPath, payloads[index], true);
+      }
     },
     async AttachDropped(path: string) {
       const name = path.split(/[/\\]/).filter(Boolean).pop() ?? path;

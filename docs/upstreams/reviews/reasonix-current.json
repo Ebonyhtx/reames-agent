@@ -2,8 +2,8 @@
   "version": 1,
   "upstream": "reasonix",
   "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-  "reviewed": "2335d0df9ea4029108ed965f76c2efff30fe6cf4",
-  "updated_at": "2026-07-19T00:35:35+08:00",
+  "reviewed": "8bb0e5493a7d4774277666326c05b96791485aa2",
+  "updated_at": "2026-07-19T23:25:00+08:00",
   "areas": {
     "source-baseline": {
       "status": "complete",
@@ -11,7 +11,10 @@
         "ef3a132 records the Reames import from Reasonix main-v2 at 07c65c22226e4886004215168230e1e1edad734b",
         "docs/audits/2026-07-18-reasonix-generation-parity.md fixes the three-way source baseline",
         "docs/audits/2026-07-18-reasonix-3637d0f-40ef98d.md closes the prior incremental review",
-        "docs/audits/2026-07-19-p7-upstream-gateway-watchdog.md closes 40ef98de..2335d0df at the code and product-boundary level"
+        "docs/audits/2026-07-19-p7-upstream-gateway-watchdog.md closes 40ef98de..2335d0df at the code and product-boundary level",
+        "docs/audits/2026-07-19-reasonix-2335d0d-a46fc6f.md closes 2335d0df..a46fc6f commit-by-commit and records adopted, equivalent, deferred, and rejected behavior",
+        "docs/audits/2026-07-19-reasonix-a46fc6f-65fcd46.md closes the five reliability/Remote SSH commits and separates direct adoption from Theme schema and roadmap work",
+        "docs/audits/2026-07-19-reasonix-65fcd46-8bb0e54.md proves the latest Theme Pack refresh fix is already enforced by the Reames theme runtime"
       ]
     },
     "active-refs-tags": {
@@ -19,7 +22,10 @@
       "evidence": [
         "reasonix-generation-07c65c2-3637d0f.json records the full earlier generation and active refs",
         "reasonix-generation-3637d0f-40ef98d.json records v1.17.15 tags, prior unmerged refs, all five commits, paths and areas",
-        "reasonix-generation-40ef98d-2335d0d.json records the two P7 commits, 56 files, active refs and current merged tags"
+        "reasonix-generation-40ef98d-2335d0d.json records the two P7 commits, 56 files, active refs and merged tags",
+        "reasonix-generation-2335d0d-a46fc6f.json records 21 commits, 16 non-merge commits, 106 files, active refs and the three exact fix/perf commits",
+        "reasonix-generation-a46fc6f-65fcd46.json records all five non-merge commits, 141 files, current tags and the exact fix/perf selection",
+        "reasonix-generation-65fcd46-8bb0e54.json records the single four-file Theme Pack refresh commit"
       ]
     },
     "agent-runtime": {
@@ -27,14 +33,16 @@
       "evidence": [
         "internal/agent/agent.go and empty_final_test.go absorb d3cfa5c2 behind explicit DeepSeek reasoning capability",
         "M4 audits cover Goal/Todo/evidence, durable child effects, writer worktrees, and crash recovery",
-        "2335d0df Fleet scheduler/write claims were reviewed and not substituted for Reames worktree delivery, rooted effects, and tree-wide budgets"
+        "2335d0df Fleet scheduler/write claims were reviewed and not substituted for Reames worktree delivery, rooted effects, and tree-wide budgets",
+        "dd929bf2 bounded save waits and shutdown recovery are adopted; 2b43e0f8 cancelled-turn display history remains explicitly deferred without weakening canonical transcript cleanup"
       ]
     },
     "controller-transports": {
       "status": "complete",
       "evidence": [
         "docs/ARCHITECTURE.md records the empty transport runtime import allowlist and shared SessionAPI/command/event boundary",
-        "work profiles are assembled in internal/boot and reused by Desktop, CLI, Serve, Bot, and ACP"
+        "work profiles are assembled in internal/boot and reused by Desktop, CLI, Serve, Bot, and ACP",
+        "2335d0df..a46fc6f test-state isolation and shutdown recovery preserve the shared Controller boundary rather than adding a Desktop-only Agent runtime"
       ]
     },
     "provider-cache": {
@@ -42,7 +50,9 @@
       "evidence": [
         "provider/schema/retry/usage fixes from the generation range are classified in the inventory and prior 2026-07-17 sync audit",
         "3637d0f0..40ef98de contains no provider runtime change; its cache-block motif is website-only and rejected",
-        "internal/boot tests prove balanced and delivery share the same complete tool schema while each stable prefix remains deterministic"
+        "internal/boot tests prove balanced and delivery share the same complete tool schema while each stable prefix remains deterministic",
+        "c77af74c per-model context_window is adopted through provider overrides, TOML, Desktop DTOs, discovery merge, and frontend validation",
+        "00af3a03 corrects LongCat-2.0 to 1,048,576 tokens and is adopted with a narrow untouched-official-preset migration"
       ]
     },
     "tools-mcp-plugins": {
@@ -50,21 +60,25 @@
       "evidence": [
         "docs/audits/2026-07-17-m5-mcp-identity-trust.md closes identity receipts, launcher pins, drift revocation, and fresh-human trust",
         "2026-07-18 parity audit adopts persistent-session fixes but explicitly rejects upstream trust simplification",
-        "2335d0df named profile discovery remains a future UX candidate and cannot create a second plugin/tool or scheduler runtime"
+        "2335d0df named profile discovery remains a future UX candidate and cannot create a second plugin/tool or scheduler runtime",
+        "b9890356 and 1a8b6f82 Windows batch Hook semantics are adopted without bypassing package-owned OS sandboxing"
       ]
     },
     "permissions-sandbox": {
       "status": "complete",
       "evidence": [
         "M4/M5 audits cover per-write approval, os.Root writers, credential isolation, worktree leases, and package process sandboxing",
-        "P2 Guard/Safe Mode audit proves fail-closed recovery-only assembly without Provider or extension runtime"
+        "P2 Guard/Safe Mode audit proves fail-closed recovery-only assembly without Provider or extension runtime",
+        "26aa92cb linear secret redaction and local reliability fixes are adopted while its remote crash upload worker and telemetry are rejected"
       ]
     },
     "session-memory-compaction": {
       "status": "complete",
       "evidence": [
         "dae65e25 save/event-log/navigation mechanisms are absorbed with Reames persistence fencing and tests",
-        "c966d027 Memory v5 removal is explicitly classified as a product divergence with observe default and bounded opt-in compact injection"
+        "c966d027 Memory v5 removal is explicitly classified as a product divergence with observe default and bounded opt-in compact injection",
+        "dd929bf2 bounded cross-process save lock and process-specific shutdown recovery plus 1e1ba41d Windows-safe session filenames are adopted",
+        "2b43e0f8 cancelled-turn display buffer is deferred because canonical model history is already safe but read-only partial display persistence needs its own durable sidecar contract"
       ]
     },
     "goal-plan-work-modes": {
@@ -80,7 +94,10 @@
       "evidence": [
         "Desktop implements three-state work mode UI and session persistence with frontend and Go tests",
         "navigation failure toast, streaming reasoning jank, history timestamps, Windows openers, status item customization, and P5 Theme Pack decision are classified",
-        "5eac2d79 regional typography is deferred until an independent cross-platform font fallback, CJK overflow, accessibility, and Safe Mode contract exists"
+        "5eac2d79 regional typography is deferred until an independent cross-platform font fallback, CJK overflow, accessibility, and Safe Mode contract exists",
+        "26aa92cb Mermaid/compat reliability and a46fc6f native-maximized resize cursor recovery are adopted with focused frontend tests; 4c1702ca conversation width remains a responsive/accessibility candidate",
+        "0a54d504 reliable session image/PDF export is adopted with safe inline-resource filtering, raster pagination, atomic multipart persistence and visible feedback; a144e55e paneOpacity remains a Theme Pack v2 candidate",
+        "8bb0e549 settings-refresh preservation is existing-equivalent through themePackRuntime.effectiveStyle/apply; the focused frontend regression proves active pack continuity and latest-base restoration"
       ]
     },
     "cli-acp": {
@@ -89,21 +106,27 @@
         "interactive CLI, run, serve, and acp accept --profile economy|balanced|delivery; resumed CLI sessions inherit the saved profile",
         "40ef98de right-click text paste, SSH clipboard boundary, assistant identity and semantic spacing are adapted with focused internal/cli tests",
         "composer app-owned selection and Reasonix footer layout are explicitly deferred/not-applicable rather than silently marked adopted",
-        "40ef98de..2335d0df contains no new CLI runtime requirement beyond the separately classified Fleet profile UX"
+        "40ef98de..2335d0df contains no new CLI runtime requirement beyond the separately classified Fleet profile UX",
+        "44115605 PRIMARY/tmux middle-click paste remains deferred; existing right-click/SSH/paste contracts stay authoritative",
+        "65fcd465 Remote SSH CLI is classified into P11 and cannot bypass the existing Controller, permission, sandbox, credential and evidence boundaries"
       ]
     },
     "serve-gateway": {
       "status": "complete",
       "evidence": [
         "serve --profile preserves the profile across model/effort controller rebuilds",
-        "Bot/Gateway explicitly defaults balanced until a stable per-connection profile contract exists"
+        "Bot/Gateway explicitly defaults balanced until a stable per-connection profile contract exists",
+        "bb9c4aa5/df1578bc/9c96fd7a test isolation now protects serve, bot and gateway tests from real user home/cache/temp writes",
+        "65fcd465 remote serve/tunnel is reviewed as a future transport adapter, not permission to add a second remote Agent runtime"
       ]
     },
     "recovery-update": {
       "status": "complete",
       "evidence": [
         "docs/audits/2026-07-17-p2-offline-guard-safe-mode.md and P3 Recovery Center evidence cover Guard, repair transaction, and updater rollback",
-        "production signing/notarization remains external-blocked rather than being inferred from candidate tests"
+        "production signing/notarization remains external-blocked rather than being inferred from candidate tests",
+        "dd929bf2 shutdown recovery persists the in-memory transcript before Desktop Controller close and lease release",
+        "d50a9888 Linux WebKit SA_ONSTACK startup repair is adopted while the broad NVIDIA DMA-BUF fallback remains Safe-Mode-only and user-overridable"
       ]
     },
     "build-release": {
@@ -111,8 +134,9 @@
       "evidence": [
         "3637d0f0 and e7a0f116 release authorization changes are classified not applicable while Reames production release remains disabled",
         "8a36da8d, 315f6f30 and 840cb6ca website/release-note changes do not enter the Reames product tree",
-        "40ef98de..2335d0df contains no production release or publication mechanism to adopt",
-        "CI, CodeQL, cross-build, candidate, public-readiness, and release workflow ratchets remain the accepted repository evidence"
+        "40ef98de..a46fc6f contains no production release or publication mechanism to adopt; upstream crash-report worker and upload path are explicitly excluded",
+        "CI, CodeQL, cross-build, candidate, public-readiness, and release workflow ratchets remain the accepted repository evidence",
+        "65fcd465 installer additions for Remote SSH are not adopted before the P11 threat model and lifecycle contract"
       ]
     },
     "bug-fix-parity": {
@@ -121,7 +145,10 @@
         "reasonix-generation-07c65c2-3637d0f.json enumerates the earlier 498 non-merge commits and 314 exact fix/perf commits",
         "reasonix-generation-3637d0f-40ef98d.json adds all five latest non-merge commits and both exact fix commits with paths and review areas",
         "scripts/test_audit_reasonix_generation.py verifies deterministic enumeration, fix/perf selection, and area classification",
-        "reasonix-generation-40ef98d-2335d0d.json enumerates both latest non-merge commits and proves the interval contains zero conventional fix/perf commits"
+        "reasonix-generation-40ef98d-2335d0d.json enumerates both prior non-merge commits and proves that interval contains zero conventional fix/perf commits",
+        "reasonix-generation-2335d0d-a46fc6f.json enumerates all 21 commits, 16 non-merge commits, 106 changed files and three exact fix/perf commits; all three are adopted at the relevant Reames boundary",
+        "reasonix-generation-a46fc6f-65fcd46.json enumerates five commits and 141 files; LongCat, Linux WebKit and export reliability are adopted, while Theme schema and Remote SSH are explicitly deferred",
+        "reasonix-generation-65fcd46-8bb0e54.json enumerates one non-merge commit and four files; its Theme Pack refresh invariant is existing-equivalent and now has an explicit Reames regression"
       ]
     }
   }

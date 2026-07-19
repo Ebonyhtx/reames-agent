@@ -174,6 +174,8 @@ func ApprovePairingCode(code string) (PairingRequest, error) {
 		cfg.Bot.Allowlist.FeishuUsers, _ = appendUnique(cfg.Bot.Allowlist.FeishuUsers, req.UserID)
 	case PlatformWeixin:
 		cfg.Bot.Allowlist.WeixinUsers, _ = appendUnique(cfg.Bot.Allowlist.WeixinUsers, req.UserID)
+	case PlatformTelegram:
+		cfg.Bot.Allowlist.TelegramUsers, _ = appendUnique(cfg.Bot.Allowlist.TelegramUsers, req.UserID)
 	}
 	if allowlistAdminCount(cfg.Bot.Allowlist) == 0 {
 		switch req.Platform {
@@ -186,6 +188,9 @@ func ApprovePairingCode(code string) (PairingRequest, error) {
 		case PlatformWeixin:
 			cfg.Bot.Allowlist.WeixinAdmins, _ = appendUnique(cfg.Bot.Allowlist.WeixinAdmins, req.UserID)
 			cfg.Bot.Allowlist.WeixinApprovers, _ = appendUnique(cfg.Bot.Allowlist.WeixinApprovers, req.UserID)
+		case PlatformTelegram:
+			cfg.Bot.Allowlist.TelegramAdmins, _ = appendUnique(cfg.Bot.Allowlist.TelegramAdmins, req.UserID)
+			cfg.Bot.Allowlist.TelegramApprovers, _ = appendUnique(cfg.Bot.Allowlist.TelegramApprovers, req.UserID)
 		}
 	}
 	if err := cfg.SaveTo(userPath); err != nil {
@@ -353,7 +358,7 @@ func newPairingCode() (string, error) {
 }
 
 func allowlistAdminCount(a config.BotAllowlist) int {
-	return len(a.QQAdmins) + len(a.FeishuAdmins) + len(a.WeixinAdmins)
+	return len(a.QQAdmins) + len(a.FeishuAdmins) + len(a.WeixinAdmins) + len(a.TelegramAdmins)
 }
 
 func appendUnique(values []string, next string) ([]string, bool) {

@@ -14,6 +14,7 @@ import (
 
 	"reames-agent/internal/bot"
 	"reames-agent/internal/bot/feishu"
+	"reames-agent/internal/bot/telegram"
 	"reames-agent/internal/bot/weixin"
 	"reames-agent/internal/botruntime"
 	"reames-agent/internal/config"
@@ -257,7 +258,7 @@ func (a *App) TestBotConnection(id, target string) (BotConnectionDiagnostic, err
 		return botConnectionDiagnostic(nil, id, "missing", "config", "connection_missing", "未找到连接。", true), nil
 	}
 	target = firstNonEmptyBot(strings.TrimSpace(target), firstSessionRemoteID(conn.SessionMappings))
-	if conn.Provider != "feishu" && conn.Provider != "weixin" {
+	if conn.Provider != "feishu" && conn.Provider != "weixin" && conn.Provider != "telegram" {
 		return botConnectionDiagnostic(conn, conn.ID, "warning", "send", "test_send_unsupported", "当前渠道暂不支持桌面端主动发送测试消息，可使用诊断检查基础配置。", false), nil
 	}
 	if target == "" {
@@ -280,6 +281,11 @@ func (a *App) TestBotConnection(id, target string) (BotConnectionDiagnostic, err
 		weixinCfg.AccountID = firstNonEmptyBot(conn.Credential.AccountID, weixinCfg.AccountID)
 		weixinCfg.TokenEnv = firstNonEmptyBot(conn.Credential.TokenEnv, weixinCfg.TokenEnv)
 		result, err = weixin.SendText(ctx, weixinCfg, target, "Reames Agent bot 测试消息：连接和发送链路可用。")
+	case "telegram":
+		telegramCfg := cfg.Bot.Telegram
+		telegramCfg.Enabled = true
+		telegramCfg.TokenEnv = firstNonEmptyBot(conn.Credential.TokenEnv, telegramCfg.TokenEnv)
+		result, err = telegram.SendText(ctx, telegramCfg, target, "Reames Agent bot 测试消息：连接和发送链路可用。")
 	}
 	if err != nil {
 		return botConnectionDiagnostic(conn, conn.ID, "error", "send", "test_send_failed", err.Error(), true), nil
@@ -648,6 +654,9 @@ func normalizeBotInstallTarget(provider, domain string) (string, string) {
 	}
 	if provider == "weixin" || provider == "wechat" {
 		return "weixin", "weixin"
+	}
+	if provider == "telegram" {
+		return "telegram", "telegram"
 	}
 	if domain != "lark" {
 		domain = "feishu"

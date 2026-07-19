@@ -1,4 +1,4 @@
-// Package bot 实现 Reames Agent 多渠道 IM bot 消息网关，支持 QQ、飞书、微信。
+// Package bot 实现 Reames Agent 多渠道 IM bot 消息网关，支持 QQ、飞书、微信和 Telegram。
 // 架构参考 Hermes 项目的 gateway/adapter/session 模式。
 package bot
 
@@ -8,9 +8,10 @@ import "context"
 type Platform string
 
 const (
-	PlatformQQ     Platform = "qq"
-	PlatformFeishu Platform = "feishu"
-	PlatformWeixin Platform = "weixin"
+	PlatformQQ       Platform = "qq"
+	PlatformFeishu   Platform = "feishu"
+	PlatformWeixin   Platform = "weixin"
+	PlatformTelegram Platform = "telegram"
 )
 
 // ChatType 标识会话类型。
@@ -48,6 +49,11 @@ type InboundMessage struct {
 	OperatorID string `json:"operator_id,omitempty"`
 	Text       string `json:"text"`
 	MessageID  string `json:"message_id"`
+	// ReplyToMessageID is the platform-native message identifier used for
+	// threaded replies when the durable delivery identity differs. Telegram,
+	// for example, uses the global update_id for recovery and message_id for
+	// reply_to_message_id. It is runtime-only and never enters provider prompts.
+	ReplyToMessageID string `json:"-"`
 	// RecoveryCursor is an opaque adapter-owned position used only for missed
 	// message recovery. It is committed after final outbound delivery, never on
 	// receipt. Recovered identifies messages returned by RecoveryAdapter.
@@ -147,6 +153,15 @@ type Adapter interface {
 
 	// Name 返回适配器实例名（用于日志）。
 	Name() string
+}
+
+// DeliverySettlementAdapter is an optional adapter contract for transports
+// whose inbound acknowledgement must wait until Reames has durably recorded
+// the final delivery outcome. SettleInbound must be non-blocking and safe for
+// concurrent calls. A delivered=false outcome keeps the remote message
+// eligible for retry; delivered=true may advance the transport acknowledgement.
+type DeliverySettlementAdapter interface {
+	SettleInbound(messageID string, delivered bool)
 }
 
 // MessageHandler 是 BotGateway 处理入站消息的回调。

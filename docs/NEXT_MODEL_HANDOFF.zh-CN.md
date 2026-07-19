@@ -24,8 +24,9 @@
 
 ## 2. 用户目标和工作节奏
 
-持续把 Reames Agent 推进到高可信可交付状态；Reasonix 是一级主源码上游，Codex/Claude Code 是二级
-战略代码上游，其他项目只吸收适用机制。
+持续把 Reames Agent 推进到高可信可交付状态；Reasonix 是唯一一级主源码上游，持续跟进 DeepSeek
+原生协议、Agent/runtime、Desktop/CLI 和可靠性修复；Codex/Claude Code 是二级战略代码上游，分别
+跟进 GPT/OpenAI 与 Claude/Anthropic 的原生协议和代码级 Agent 能力；其他项目只吸收适用机制。
 每个大批同步实现、测试、文档和证据；充分本地验证后集中 commit/push，避免碎片 push 浪费 CI。
 
 永久边界：
@@ -54,11 +55,15 @@
 - P8 已由 `a58f7691` 集中交付，CI `29663429224` 8/8、CodeQL `29663429258` 3/3 全绿；官方
   OpenAI Responses/GPT 与 Anthropic Messages/Claude 的仓库内原生协议门槛已关闭，真实公网 API 回环
   仍是 `external-blocked`。
-- M6 当前批正在关闭 durable channel recovery core：持久 claim/去重、原消息身份、每频道连续前缀 cursor、
-  最终发送门禁、全局补扫上限和隐私安全状态投影已实现并通过定向/race；内置渠道的真实历史分页和真实 IM
-  掉线回环仍未完成，不能从核心合同外推。
-- 后续方向已由用户明确：P8 官方 OpenAI Responses/GPT 与 Claude parity；P9 Codex-class
-  Plugin/Skill/Hook/MCP/headless；P10 第一方 CDP Browser Control。现有兼容端点、插件基础或
+- M6 durable channel recovery core 已实现持久 claim/去重、原消息身份、每频道连续前缀 cursor、最终发送
+  门禁、全局补扫上限和隐私安全状态投影。Telegram 已升级为正式 long-poll Adapter，贯通 config、CLI、
+  Gateway、Desktop、pairing/access、doctor/test-send，并以 localhost 故障注入证明 send 失败不推进 offset、
+  成功 durable commit 后推进。真实渠道历史分页/掉线回环仍未完成；outbound final-response obligation
+  也尚未实现，平台 ACK 前崩溃后可能重跑 Agent，不能从 inbound ledger 外推完全答复恢复。
+- 本批新增 `internal/testenv`，隔离 HOME/USERPROFILE、XDG、AppData、TEMP/TMP 和 Reames home/state/cache，
+  会写状态的 Go/Desktop 测试不再默认污染真实用户目录或 C 盘通用 Temp。
+- 后续方向已由用户明确：P8 官方 OpenAI Responses/GPT 与 Claude parity 已关闭；P9 Codex-class
+  Plugin/Skill/Hook/MCP/headless；P10 第一方 CDP Browser Control；P11 受治理 Remote SSH。现有兼容端点、插件基础或
   `web_search`/`web_fetch`/Playwright MCP 不能冒充这些阶段完成。
 - 当前树只保留 Go/Wails 产品；旧 Hermes/Python/Electron/TUI/plugin/test/package、`site/`、`workers/`
   已删除，public-readiness 会阻止其回归。
@@ -71,15 +76,15 @@
 
 | 项目 | reviewed SHA | 决策角色 |
 |---|---|---|
-| DeepSeek Reasonix | `2335d0df9ea4029108ed965f76c2efff30fe6cf4` | 唯一主源码上游 |
-| Hermes | `614dc194ea7d853d39f9e84582ec62156f41a475` | Gateway/错误/运维参考 |
+| DeepSeek Reasonix | `8bb0e5493a7d4774277666326c05b96791485aa2` | 唯一一级主源码上游；DeepSeek 原生与主 runtime |
+| Hermes | `36f2a966c7f9f69987494b867c3dcf96b69a5766` | 三级 Gateway/错误/运维机制参考 |
 | Codex | `0fb559f0f6e231a88ac02ea002d3ecd248e2b515` | 二级战略；GPT/Responses、协议、插件、Hook/LSP/CDP |
-| MiMo Code | `d48888f7b1d22e830ee5c10faf2b9e455f3cd881` | 设计/技能体验参考 |
+| MiMo Code | `f24ce4eb7341bfba6bb608436c1d27a843508adf` | 三级设计/Skill 体验参考 |
 | Impeccable | `e4ab5e24bdf5321b72163d2fbcbe6fa985c848ba` | 品牌设计语言参考 |
-| Scream Code | `4938d5175349768774876efdc0beab8a149ced25` | Goal/TUI/主题机制参考 |
+| Scream Code | `22a2adaf8a459ab6bcfda028cc74b4c9b7e5f11f` | 三级 Goal/TUI/可靠性机制参考 |
 | AgentArk | `63985cf819d1760f50f2a5c0dc11d82815e74623` | 安全架构参考 |
-| Claude Code | `07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60` | 二级战略；Claude/Messages、Thinking、工具/视觉/缓存、插件 |
-| Kimi Code | `4f3c7240c4adc7c748e536bf578e468c1b5bcd7b` | Desktop Shell/权限文案参考 |
+| Claude Code | `015170d3fd84fb57ef4685a64b673fadd0690dc1` | 二级战略；Claude/Messages、Thinking、工具/视觉/缓存、插件 |
+| Kimi Code | `df6899553962d1764c9f4c3bec1b63c811cb425e` | 三级 Desktop Shell/headless/文件语义参考 |
 | Grok Build | `7cfcb20d2b50b0d18801a6c0af2e401c0e060894` | 安全/终端/ACP 机制参考；本批采用无歧义 MCP 名称合同 |
 | awesome-design-md | `664b3e78fd1a298ba11973822da988483256d4b4` | 设计资料参考 |
 
@@ -113,6 +118,16 @@ P7 新增区间和机器账本：
 - `docs/audits/2026-07-19-p7-upstream-gateway-watchdog.md`
 - `docs/upstreams/reviews/reasonix-generation-40ef98d-2335d0d.json`
 - `docs/upstreams/reviews/reasonix-current.json`
+
+本批最新 Reasonix 与全参考再冻结：
+
+- `docs/audits/2026-07-19-reasonix-2335d0d-a46fc6f.md`
+- `docs/upstreams/reviews/reasonix-generation-2335d0d-a46fc6f.json`
+- `docs/audits/2026-07-19-upstream-a46fc6f-reference-delta.md`
+- `docs/audits/2026-07-19-reasonix-a46fc6f-65fcd46.md`
+- `docs/upstreams/reviews/reasonix-generation-a46fc6f-65fcd46.json`
+- `docs/audits/2026-07-19-reasonix-65fcd46-8bb0e54.md`
+- `docs/upstreams/reviews/reasonix-generation-65fcd46-8bb0e54.json`
 
 ## 5. P7 本批代码变化
 
@@ -200,6 +215,32 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
 - control `/status`、IM `/status` 与 metrics 只返回统计计数。权威审计：
   `audits/2026-07-19-m6-durable-channel-recovery.md`。
 
+## 5.3 Reasonix 最新可靠性与 Telegram 扩展
+
+- Reasonix `2335d0df..a46fc6f` 的 21 个提交/16 个非 merge/106 个文件已代码级审查；采用
+  test-state isolation、Windows batch Hook、有界 session save lock/shutdown recovery、每模型
+  context window、Mermaid/旧 WebKit/线性脱敏、Windows-safe session filename 和最大化 resize cursor；
+- 取消轮次 partial display、PRIMARY/tmux 中键粘贴和 conversation width 有明确延后；远程 crash
+  upload/遥测与当前 TanStack 版本不存在的私有 API 明确不采用；
+- Telegram 使用 `update_id` 作为 durable identity、`message_id` 作为 reply，`getMe` 后启动 long poll，
+  每次请求有 deadline、指数退避和可取消 Stop；localhost E2E 已证明首次 send 502 时 offset 保持 0，
+  第二次成功并 durable commit 后推进到 43，token 不进入 ledger；
+- Hermes 最新 outbound delivery obligation 证明 Reames 仍有一项明确缺口：当前发送失败会保留 inbound
+  retry，但没有在平台 ACK 前持久化最终答复，重启后可能重跑模型。下一 M6 仓库任务是有界、0600、
+  身份绑定且对 mid-send 歧义可见标记的 obligation 恢复；
+- Codex 本轮无新增；Claude 只有 changelog/feed，未从说明推断协议变化。MiMo BM25 Skill search、Scream
+  25 项 bug audit、Kimi 多实例 Web/分片 read model/stat-lstat 仅作为 P9/P10 或可靠性候选。
+- 最终补扫又发现 Reasonix `a46fc6f..65fcd465` 5 个提交/141 文件：本批采用 LongCat-2.0 1,048,576
+  context window 与窄迁移、Linux WebKit/JavaScriptCore `SA_ONSTACK` 启动修复、会话图片/PDF 分页和后端
+  原子多文件导出；pane opacity 因 Theme Pack v1 schema 已关闭而延后，Remote SSH 进入 P11，不整套复制。
+- Hermes `3a6e40b2..36f2a966` 只登记 search/extract 能力分离和设置 deep-link 机制；Kimi
+  `a3e773f9..df689955` 仅新增远端 thinking-effort telemetry，Reames 不建设自有遥测服务，因此不采用。
+- Scream `c6b24f60..22a2adaf` 的 component-scoped animation/footer render 只作为 TUI 性能机制信号；
+  Reames React/Wails 没有同构的全屏 `requestRender` 热路径。
+- Reasonix 最终 `65fcd465..8bb0e549` 修复设置刷新覆盖活动 Theme Pack。Reames 已由统一
+  `themePackRuntime.effectiveStyle/apply` 等价覆盖，本批新增显式回归，证明刷新配置不替换活动包，清包后恢复
+  最新配置基底；生产代码无需复制 helper。
+
 ## 6. 本批本地验证
 
 P8 冻结提交形成前已通过：
@@ -217,18 +258,24 @@ P8 冻结提交形成前已通过：
 
 M6 当前批已通过：
 
-- Root `go build ./...`、`go vet ./...`、`go test ./internal/... -count=1 -timeout 300s`；
-- Desktop `go build ./...`、`go vet ./...`、`go test ./... -count=1 -timeout 300s`；
-- Frontend `corepack pnpm test:all`、production build/bundle budget 与真实 Chrome plugin lifecycle smoke，
-  无 console/page error；
-- Race：`internal/bot`、`botruntime`、`control`、`plugin`、`config`；
-- 六目标 CLI + 六目标 Guard 共 12 个 `CGO_ENABLED=0` 构建；
+- Root 当前工作树与独立 clone 均通过 `go build ./...`、`go vet ./...`、
+  `go test -p=1 ./internal/... -count=1 -timeout 300s`；
+- Desktop 当前工作树与独立 clone 均通过 `go build ./...`、`go vet ./...`、
+  `go test -p=1 ./... -count=1 -timeout 600s`；
+- Frontend 当前工作树与最终 clone snapshot 均从锁文件通过 `corepack pnpm test:all`、production build 和 bundle
+  budget；Reasonix `8bb0e549` 回归 4 项全部通过，最终 entry JS 641,587 B、localized initial 1,003,986 B、
+  browser mock 983,221 B；本批此前真实 Chrome plugin lifecycle smoke 也无 console/page error；
+- 最新 race：`internal/config`，以及 Desktop `Export|ConfigureWebKit`；本批此前的 bot/botruntime/control/plugin/
+  provider/agent 等高风险 race 组同样通过；
+- 当前工作树和 clean clone 均完成六目标 CLI + 六目标 Guard，共 12 个 `CGO_ENABLED=0` 构建；
 - durable claim/cold restart/corruption/redaction、跨用户顺序门禁、collect/queue-cap/interrupt 全 claim 结算、
   取消 ack 失败重试、真实 runTurn 最终发送成功/失败、补扫上限、checkpoint handoff 与 adapter scan failure；
-- docs/public/deploy/release/installer/upstream 治理合同；`2026-07-19T00:56:24Z` 最终上游检查 11/11 无变化。
-- 独立 `--no-hardlinks` clean clone 已从空 `node_modules` 和隔离在 F 盘的 Go/pnpm 缓存完成 Root、Desktop、
-  Frontend、真实 Chrome plugin lifecycle、六目标 CLI/Guard、Gateway clean-node smoke，以及 docs/public/
-  deploy/release/installer/upstream 全部合同；上游复查仍为 `changed_count=0`。
+- docs/public/deploy/release/installer/Desktop artifact/Reasonix generation/upstream 全部治理合同；最终深扫
+  `2026-07-19T15:36:34Z` 为 11/11 `changed_count=0`；
+- 独立 `--no-hardlinks` clean clone 验证 snapshot `670f284529738efb69c4c59a1b52cd64e5aaa9be`，使用空
+  `node_modules` 和隔离在 F 盘的 Go/pnpm 缓存完成 Root、Desktop、Frontend、12 目标构建、Gateway clean-node
+  smoke 及全部治理合同。最后一次 snapshot 只追加 Reasonix frontend 回归和文档/锁文件，并再次通过 Frontend
+  与治理/Upstream Watch；snapshot 后只回填本段本地证据，不改实现、测试或上游锁。
 
 本批仓库内与 clean-clone 门槛已关闭；尚未完成的是最终 push 提交对应的远端 CI/CodeQL。在远端证据
 全绿前不得关闭本批最后公开交付门槛。
@@ -248,7 +295,7 @@ gh run list --commit (git rev-parse HEAD) --limit 20
   freshness monitor、真实轮换与 compromise drill；
 - 声明 builder identity/SLSA level 时的独立 DSSE/SLSA policy verifier；
 - 干净 Linux 云节点上的 linger-enabled logout/reboot 与 Gateway recovery/system service 实启；
-- 真实 OpenAI/Anthropic Provider 和飞书/QQ/微信的文本、审批、取消、恢复回环；
+- 真实 OpenAI/Anthropic/DeepSeek Provider 和飞书/QQ/微信/Telegram 的文本、审批、取消、恢复回环；
 - 真实 systemd watchdog kill/restart、IM 远端掉线/重连和第一方 CDP 对真实登录态浏览器的控制；
 - 公开签名 release、Windows/macOS signing/notarization 与真实升级失败/断电点演练；
 - NVDA/Narrator 实际听感和 Windows High Contrast 人工验收。

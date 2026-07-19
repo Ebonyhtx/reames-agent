@@ -112,7 +112,7 @@ func (f *gatewayStringListFlag) Set(value string) error {
 func gatewaySetup(args []string) int {
 	fs := flag.NewFlagSet("gateway setup", flag.ContinueOnError)
 	home := fs.String("home", "", "REAMES_AGENT_HOME to configure")
-	channel := fs.String("channel", "", "channel: feishu, lark, qq, or weixin")
+	channel := fs.String("channel", "", "channel: feishu, lark, qq, weixin, or telegram")
 	connectionID := fs.String("connection-id", "", "stable connection ID (default derived from channel)")
 	label := fs.String("label", "", "connection label")
 	workspace := fs.String("workspace", "", "default workspace for this connection")
@@ -251,7 +251,7 @@ func gatewayService(action string, args []string) int {
 	name := fs.String("name", "reames-agent-gateway", "OS service name")
 	exe := fs.String("exe", "", "reames-agent executable path (default: current executable)")
 	home := fs.String("home", strings.TrimSpace(os.Getenv("REAMES_AGENT_HOME")), "REAMES_AGENT_HOME for the installed gateway service")
-	channels := fs.String("channels", "", "gateway channels for install: qq,feishu,lark,weixin")
+	channels := fs.String("channels", "", "gateway channels for install: qq,feishu,lark,weixin,telegram")
 	dir := fs.String("dir", "", "gateway working directory for install")
 	model := fs.String("model", "", "gateway model override for install")
 	watchdogSec := fs.Duration("watchdog-sec", 0, "Linux systemd watchdog timeout for install (0 disables; minimum 2s)")
@@ -302,7 +302,7 @@ func gatewayService(action string, args []string) int {
 
 func runGatewayForeground(args []string, version, flagSetName, displayName string) int {
 	fs := flag.NewFlagSet(flagSetName, flag.ContinueOnError)
-	channels := fs.String("channels", "", "启用的平台，逗号分隔：qq,feishu,lark,weixin")
+	channels := fs.String("channels", "", "启用的平台，逗号分隔：qq,feishu,lark,weixin,telegram")
 	dir := fs.String("dir", "", "工作目录")
 	model := fs.String("model", "", "模型名（空则用 default_model）")
 	home := fs.String("home", "", "REAMES_AGENT_HOME for this foreground gateway process")
@@ -386,9 +386,10 @@ func runGatewayForeground(args []string, version, flagSetName, displayName strin
 		PairingMaxPending:  cfg.Bot.Pairing.MaxPendingPerPlatform,
 		IgnoreSelfMessages: cfg.Bot.IgnoreSelfMessages,
 		SelfUserIDs: map[bot.Platform][]string{
-			bot.PlatformQQ:     cfg.Bot.SelfUserIDs.QQ,
-			bot.PlatformFeishu: cfg.Bot.SelfUserIDs.Feishu,
-			bot.PlatformWeixin: cfg.Bot.SelfUserIDs.Weixin,
+			bot.PlatformQQ:       cfg.Bot.SelfUserIDs.QQ,
+			bot.PlatformFeishu:   cfg.Bot.SelfUserIDs.Feishu,
+			bot.PlatformWeixin:   cfg.Bot.SelfUserIDs.Weixin,
+			bot.PlatformTelegram: cfg.Bot.SelfUserIDs.Telegram,
 		},
 		ControlEnabled:     cfg.Bot.Control.Enabled,
 		ControlAddr:        cfg.Bot.Control.Addr,
@@ -403,24 +404,28 @@ func runGatewayForeground(args []string, version, flagSetName, displayName strin
 			Enabled:  cfg.Bot.Allowlist.Enabled,
 			AllowAll: cfg.Bot.Allowlist.AllowAll,
 			Users: map[bot.Platform][]string{
-				bot.PlatformQQ:     cfg.Bot.Allowlist.QQUsers,
-				bot.PlatformFeishu: cfg.Bot.Allowlist.FeishuUsers,
-				bot.PlatformWeixin: cfg.Bot.Allowlist.WeixinUsers,
+				bot.PlatformQQ:       cfg.Bot.Allowlist.QQUsers,
+				bot.PlatformFeishu:   cfg.Bot.Allowlist.FeishuUsers,
+				bot.PlatformWeixin:   cfg.Bot.Allowlist.WeixinUsers,
+				bot.PlatformTelegram: cfg.Bot.Allowlist.TelegramUsers,
 			},
 			Approvers: map[bot.Platform][]string{
-				bot.PlatformQQ:     cfg.Bot.Allowlist.QQApprovers,
-				bot.PlatformFeishu: cfg.Bot.Allowlist.FeishuApprovers,
-				bot.PlatformWeixin: cfg.Bot.Allowlist.WeixinApprovers,
+				bot.PlatformQQ:       cfg.Bot.Allowlist.QQApprovers,
+				bot.PlatformFeishu:   cfg.Bot.Allowlist.FeishuApprovers,
+				bot.PlatformWeixin:   cfg.Bot.Allowlist.WeixinApprovers,
+				bot.PlatformTelegram: cfg.Bot.Allowlist.TelegramApprovers,
 			},
 			Admins: map[bot.Platform][]string{
-				bot.PlatformQQ:     cfg.Bot.Allowlist.QQAdmins,
-				bot.PlatformFeishu: cfg.Bot.Allowlist.FeishuAdmins,
-				bot.PlatformWeixin: cfg.Bot.Allowlist.WeixinAdmins,
+				bot.PlatformQQ:       cfg.Bot.Allowlist.QQAdmins,
+				bot.PlatformFeishu:   cfg.Bot.Allowlist.FeishuAdmins,
+				bot.PlatformWeixin:   cfg.Bot.Allowlist.WeixinAdmins,
+				bot.PlatformTelegram: cfg.Bot.Allowlist.TelegramAdmins,
 			},
 			Groups: map[bot.Platform][]string{
-				bot.PlatformQQ:     cfg.Bot.Allowlist.QQGroups,
-				bot.PlatformFeishu: cfg.Bot.Allowlist.FeishuGroups,
-				bot.PlatformWeixin: cfg.Bot.Allowlist.WeixinGroups,
+				bot.PlatformQQ:       cfg.Bot.Allowlist.QQGroups,
+				bot.PlatformFeishu:   cfg.Bot.Allowlist.FeishuGroups,
+				bot.PlatformWeixin:   cfg.Bot.Allowlist.WeixinGroups,
+				bot.PlatformTelegram: cfg.Bot.Allowlist.TelegramGroups,
 			},
 		},
 		Debounce:       time.Duration(cfg.Bot.DebounceMs) * time.Millisecond,
@@ -640,7 +645,7 @@ func botDoctor(args []string) int {
 			selfStatus = "enabled"
 		}
 		addCheck("bot.self_protection", selfStatus,
-			fmt.Sprintf("self_ids=%d", len(bc.SelfUserIDs.QQ)+len(bc.SelfUserIDs.Feishu)+len(bc.SelfUserIDs.Weixin)))
+			fmt.Sprintf("self_ids=%d", len(bc.SelfUserIDs.QQ)+len(bc.SelfUserIDs.Feishu)+len(bc.SelfUserIDs.Weixin)+len(bc.SelfUserIDs.Telegram)))
 		controlStatus := "disabled"
 		controlDetail := ""
 		if bc.Control.Enabled {
@@ -715,6 +720,21 @@ func botDoctor(args []string) int {
 		addCheck("bot.weixin", "disabled", "")
 	}
 
+	// Telegram 检查
+	if bc.Telegram.Enabled {
+		addCheck("bot.telegram.enabled", "ok", "")
+		if strings.TrimSpace(bc.Telegram.TokenEnv) == "" {
+			addCheck("bot.telegram.token", "missing", "token_env is empty")
+		} else if os.Getenv(strings.TrimSpace(bc.Telegram.TokenEnv)) == "" {
+			addCheck("bot.telegram.token", "missing", bc.Telegram.TokenEnv+" is not set")
+		} else {
+			addCheck("bot.telegram.token", "ok", bc.Telegram.TokenEnv+" is set")
+		}
+		addCheck("bot.telegram.api_base", "ok", firstNonEmpty(strings.TrimSpace(bc.Telegram.APIBase), "https://api.telegram.org"))
+	} else {
+		addCheck("bot.telegram", "disabled", "")
+	}
+
 	enabledConnections := 0
 	for _, conn := range bc.Connections {
 		if conn.Enabled {
@@ -742,20 +762,21 @@ func botDoctor(args []string) int {
 		addCheck("bot.allowlist", "open", "allow_all=true — every reachable user can trigger local tools")
 	} else if bc.Allowlist.Enabled {
 		addCheck("bot.allowlist", "enabled",
-			fmt.Sprintf("qq=%d feishu=%d weixin=%d users approvers=%d admins=%d",
+			fmt.Sprintf("qq=%d feishu=%d weixin=%d telegram=%d users approvers=%d admins=%d",
 				len(bc.Allowlist.QQUsers),
 				len(bc.Allowlist.FeishuUsers),
 				len(bc.Allowlist.WeixinUsers),
-				len(bc.Allowlist.QQApprovers)+len(bc.Allowlist.FeishuApprovers)+len(bc.Allowlist.WeixinApprovers),
-				len(bc.Allowlist.QQAdmins)+len(bc.Allowlist.FeishuAdmins)+len(bc.Allowlist.WeixinAdmins)))
+				len(bc.Allowlist.TelegramUsers),
+				len(bc.Allowlist.QQApprovers)+len(bc.Allowlist.FeishuApprovers)+len(bc.Allowlist.WeixinApprovers)+len(bc.Allowlist.TelegramApprovers),
+				len(bc.Allowlist.QQAdmins)+len(bc.Allowlist.FeishuAdmins)+len(bc.Allowlist.WeixinAdmins)+len(bc.Allowlist.TelegramAdmins)))
 	} else {
 		addCheck("bot.allowlist", "missing", "bot start will refuse without allowlist or allow_all=true")
 	}
 	if *deep {
 		addCheck("bot.roles", "ok",
 			fmt.Sprintf("approvers=%d admins=%d",
-				len(bc.Allowlist.QQApprovers)+len(bc.Allowlist.FeishuApprovers)+len(bc.Allowlist.WeixinApprovers),
-				len(bc.Allowlist.QQAdmins)+len(bc.Allowlist.FeishuAdmins)+len(bc.Allowlist.WeixinAdmins)))
+				len(bc.Allowlist.QQApprovers)+len(bc.Allowlist.FeishuApprovers)+len(bc.Allowlist.WeixinApprovers)+len(bc.Allowlist.TelegramApprovers),
+				len(bc.Allowlist.QQAdmins)+len(bc.Allowlist.FeishuAdmins)+len(bc.Allowlist.WeixinAdmins)+len(bc.Allowlist.TelegramAdmins)))
 	}
 
 	if *jsonOut {
@@ -922,7 +943,7 @@ func loadBotCommandConfig() (*config.Config, error) {
 }
 
 func botConfigIsUserOwned(bc config.BotConfig) bool {
-	if bc.Enabled || len(bc.Connections) > 0 || bc.QQ.Enabled || bc.Feishu.Enabled || bc.Weixin.Enabled {
+	if bc.Enabled || len(bc.Connections) > 0 || bc.QQ.Enabled || bc.Feishu.Enabled || bc.Weixin.Enabled || bc.Telegram.Enabled {
 		return true
 	}
 	if bc.Allowlist.AllowAll || botruntime.AllowlistUserCount(bc.Allowlist) > 0 {
@@ -936,16 +957,16 @@ func botConfigIsUserOwned(bc config.BotConfig) bool {
 			return true
 		}
 	}
-	return len(bc.Allowlist.QQGroups)+len(bc.Allowlist.FeishuGroups)+len(bc.Allowlist.WeixinGroups)+
-		len(bc.Allowlist.QQApprovers)+len(bc.Allowlist.FeishuApprovers)+len(bc.Allowlist.WeixinApprovers)+
-		len(bc.Allowlist.QQAdmins)+len(bc.Allowlist.FeishuAdmins)+len(bc.Allowlist.WeixinAdmins) > 0
+	return len(bc.Allowlist.QQGroups)+len(bc.Allowlist.FeishuGroups)+len(bc.Allowlist.WeixinGroups)+len(bc.Allowlist.TelegramGroups)+
+		len(bc.Allowlist.QQApprovers)+len(bc.Allowlist.FeishuApprovers)+len(bc.Allowlist.WeixinApprovers)+len(bc.Allowlist.TelegramApprovers)+
+		len(bc.Allowlist.QQAdmins)+len(bc.Allowlist.FeishuAdmins)+len(bc.Allowlist.WeixinAdmins)+len(bc.Allowlist.TelegramAdmins) > 0
 }
 
 func botUsage() {
-	fmt.Print(`reames-agent bot — multi-channel IM bot gateway (QQ / Feishu / WeChat)
+	fmt.Print(`reames-agent bot — multi-channel IM bot gateway (QQ / Feishu / WeChat / Telegram)
 
 Usage:
-  reames-agent bot start   [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME] [--home PATH]
+  reames-agent bot start   [--channels qq,feishu,lark,weixin,telegram] [--dir PATH] [--model NAME] [--home PATH]
   reames-agent bot doctor  [--json] [--deep] [--home PATH]
   reames-agent bot pairing list|approve|reject
   reames-agent bot weixin-login [--timeout SECONDS]
@@ -980,7 +1001,7 @@ func gatewayUsage() {
 
 Usage:
   reames-agent gateway setup --channel CHANNEL [connection and access options] [--home PATH] [--dry-run]
-  reames-agent gateway run [--channels qq,feishu,lark,weixin] [--dir PATH] [--model NAME] [--home PATH]
+  reames-agent gateway run [--channels qq,feishu,lark,weixin,telegram] [--dir PATH] [--model NAME] [--home PATH]
   reames-agent gateway doctor [--json] [--deep] [--home PATH]
   reames-agent gateway recovery-status [--json] [--home PATH] [--root PATH]
   reames-agent gateway install [--dry-run] [--start-now] [--scope user|system] [--home PATH] [--channels LIST] [--dir PATH] [--model NAME] [--watchdog-sec DURATION]
@@ -1001,6 +1022,7 @@ Subcommands:
 Examples:
   reames-agent gateway setup --channel feishu --app-id APP_ID --app-secret-env FEISHU_BOT_APP_SECRET --workspace /path/to/project --pairing
   reames-agent gateway setup --channel qq --app-id APP_ID --users USER_ID --admins ADMIN_ID --dry-run
+  reames-agent gateway setup --channel telegram --token-env TELEGRAM_BOT_TOKEN --pairing --dry-run
   reames-agent gateway run --home ~/.reames-agent --channels feishu
   reames-agent gateway recovery-status --json --home ~/.reames-agent
   reames-agent gateway install --dry-run --home ~/.reames-agent --channels feishu --dir /path/to/project

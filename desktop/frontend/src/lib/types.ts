@@ -1281,6 +1281,7 @@ export interface ProviderModelOverrideView {
   supportedEfforts: string[];
   defaultEffort: string;
   vision?: boolean | null;
+  contextWindow?: number;
 }
 
 // BalanceInfo is the wallet-balance readout (desktop/app.go Balance). available
@@ -1349,15 +1350,19 @@ export interface BotAllowlistView {
   qqUsers: string[];
   feishuUsers: string[];
   weixinUsers: string[];
+  telegramUsers: string[];
   qqApprovers: string[];
   feishuApprovers: string[];
   weixinApprovers: string[];
+  telegramApprovers: string[];
   qqAdmins: string[];
   feishuAdmins: string[];
   weixinAdmins: string[];
+  telegramAdmins: string[];
   qqGroups: string[];
   feishuGroups: string[];
   weixinGroups: string[];
+  telegramGroups: string[];
 }
 
 export interface BotAccessView {
@@ -1374,6 +1379,7 @@ export interface BotSelfUserIDsView {
   qq: string[];
   feishu: string[];
   weixin: string[];
+  telegram: string[];
 }
 
 export interface BotPairingView {
@@ -1432,6 +1438,13 @@ export interface WeixinBotView {
   apiBase: string;
 }
 
+export interface TelegramBotView {
+  enabled: boolean;
+  tokenEnv: string;
+  tokenSet: boolean;
+  apiBase: string;
+}
+
 export interface BotConnectionCredentialView {
   appId: string;
   appSecretEnv: string;
@@ -1454,8 +1467,8 @@ export interface BotConnectionSessionMappingView {
 
 export interface BotConnectionView {
   id: string;
-  provider: "qq" | "feishu" | "weixin" | string;
-  domain: "qq" | "feishu" | "lark" | "weixin" | string;
+  provider: "qq" | "feishu" | "weixin" | "telegram" | string;
+  domain: "qq" | "feishu" | "lark" | "weixin" | "telegram" | string;
   label: string;
   enabled: boolean;
   status: "disconnected" | "pending" | "connected" | "error" | string;
@@ -1488,6 +1501,7 @@ export interface BotSettingsView {
   qq: QQBotView;
   feishu: FeishuBotView;
   weixin: WeixinBotView;
+  telegram: TelegramBotView;
   connections: BotConnectionView[];
 }
 

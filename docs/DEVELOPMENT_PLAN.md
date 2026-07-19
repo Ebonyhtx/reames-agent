@@ -353,6 +353,9 @@ notarization、公开主题 registry
   Hermes 最终 `4c96172d` 的 CDP 双栈/端口占用修复因 Reames 无 browser-connect runtime 而明确不适用。
 - [x] Reasonix、Hermes、Codex、MiMo、Scream Code、AgentArk、Kimi Code、Grok Build 开启路径级
   `diff=true`，以后只审新 lock → latest，不重复打开本冻结点以前的提交。
+- [x] 最终冻结继续推进到 Reasonix `8bb0e549`：LongCat/WebKit/export 可靠性已采用，Remote SSH 进入 P11，
+  最新 Theme Pack settings-refresh 修复由 Reames `themePackRuntime` 既有统一边界等价覆盖并补显式回归；
+  Scream `22a2adaf` 的 component-scoped TUI render 只登记为性能机制信号。
 
 ## P7：Reasonix Fleet 增量与 Gateway watchdog 收口
 
@@ -389,9 +392,19 @@ notarization、公开主题 registry
   合同；collect/debounce、queue-cap summarize/drop、interrupt 与显式 reset/switch 均保留或结算全部
   constituent claims。账本损坏、超限、身份不一致或写失败 fail closed。CLI/Desktop 共用 Reames home
   账本，状态/指标只暴露计数；详见 `audits/2026-07-19-m6-durable-channel-recovery.md`。
-- [ ] 渠道断线实证：内置飞书/QQ/微信适配器尚未实现可选 `RecoveryAdapter` 的真实历史分页/resume；当前已
-  获得跨进程实时事件去重和最终投递门禁，但不能冒充完全离线期间的漏消息补扫。逐渠道实现后还须以真实
-  凭据执行掉线、重连、历史补偿、审批/取消与最终远端投递回环；该项保持 adapter/external-blocked。
+- [x] Telegram durable long polling：正式 Adapter 已贯通 config、CLI/Gateway、Desktop、pairing/access、
+  doctor/test-send；token 只引用 env，非 localhost HTTP fail closed。`getMe` 启动验证、请求 deadline、指数
+  退避、可取消 Stop、重复 Start 拒绝、Stop 后重启、`update_id` durable identity、原生 `message_id` reply，
+  以及最终发送成功并 durable commit 后 offset 才推进均有 localhost 故障注入。真实 BotFather/token、群聊、
+  审批/取消、掉线和节点重启仍为 `external-blocked`；见 `audits/2026-07-19-m6-telegram-durable-polling.md`。
+- [ ] Outbound final-response obligation：当前 inbound ledger 能保证失败不推进 cursor/Telegram offset，但平台
+  ACK 前崩溃后仍可能重跑 Agent 才重建答案。增加 0600、有界、身份绑定的最终答复 obligation，发送前持久化，
+  对 mid-send 歧义使用可见“可能重复”标记，成功后原子清除；恢复发送不得重跑模型，也不得把正文写入日志、
+  metrics 或 provider prompt。该项可由 localhost、进程中断和故障注入证明，不依赖真实 IM。
+- [ ] 渠道断线实证：内置飞书/QQ/微信适配器尚未实现可选 `RecoveryAdapter` 的真实历史分页/resume；Telegram
+  long poll 依赖远端保留 update，也尚无独立历史补扫 API。当前已获得跨进程实时事件去重和最终投递门禁，
+  但不能冒充完全离线期间的漏消息补扫。逐渠道实现后还须以真实凭据执行掉线、重连、历史补偿、审批/取消与
+  最终远端投递回环；该项保持 adapter/external-blocked。
 - 每个渠道先完成文本 + 审批 + 取消 + 断线补偿/恢复，再扩展媒体与富交互。
 - 阿里云等自有服务器形态按 [云端 Agent 计划](CLOUD_AGENT_PLAN.md) 推进，先完成 SSH/CLI 与独立 Gateway service，再按需开启 `serve`，最后承载后台研究任务。
 
@@ -457,6 +470,17 @@ notarization、公开主题 registry
 - 浏览器网络、cookie/登录态、下载和页面文本全部接入 permission、sandbox、credential isolation、
   prompt-injection 标注、evidence 与 redaction。`web_search`、`web_fetch` 或可选 Playwright MCP 不算 P10 完成。
 
+## P11：受治理 Remote SSH 工作区
+
+- 以 Reasonix `65fcd465` 为一级上游代码输入，先完成威胁模型与能力矩阵，再建立最小纵向闭环：显式 host 配置、
+  host-key 首次确认/变更拒绝、可取消连接、受控 remote `serve`、单一 tunnel 和断线恢复。
+- Remote 会话必须继续由 `control.Controller` 驱动；SSH/SFTP/forward/bootstrap 只能作为 transport 与 workspace
+  adapter，不能建立第二套 Agent loop、审批、插件、记忆、证据或更新 runtime。
+- 私钥、agent socket、known_hosts、jump host、remote command、端口转发和自动安装分别进入 credential、permission、
+  sandbox、redaction 与 evidence。host-key 变化、bootstrap checksum、远端可执行文件版本和清理失败均 fail closed。
+- 首批不承诺任意 SFTP 写、无限端口转发或无人值守 bootstrap；先用 localhost SSH fixture 和故障注入证明身份、
+  取消、重连、并发 session 隔离与无半安装，再补真实 Linux/macOS/Windows SSH 主机证据。
+
 ## M7：通用工作能力
 
 在编程闭环稳定后，按共同基础设施复用程度扩展：
@@ -500,15 +524,19 @@ notarization、公开主题 registry
 
 ```text
 P1/P2/P3/P4/P5 已关闭；P5 的 CI、CodeQL 与三平台 Desktop candidate 全绿
-→ P6 已关闭；P7 已审查 Reasonix `40ef98de..2335d0df`、Codex 战略增量与 4 个机制参考增量，并收口 Gateway systemd
-  READY/WATCHDOG/STOPPING、adapter-health gate 和 bounded shutdown；权威 reviewed SHA 以 lock 为准
+→ P6/P7 已关闭；P8 官方 OpenAI Responses/GPT 与 Anthropic Messages/Claude 的仓库内原生协议门槛已关闭，
+  真实公网 API 回环仍为 external-blocked
+→ Reasonix 一级上游最新审至 `8bb0e549`：LongCat context、Linux WebKit 启动修复与可靠会话导出已采用，
+  Theme Pack settings-refresh 为已有等价并补回归；pane opacity 延后，Remote SSH 进入 P11。Codex `0fb559f0`、Claude `015170d3` 无新增；Hermes/Kimi
+  最新机制增量已逐项分类；权威 SHA 只看 lock
 → Grok Build `98c3b24` 已纳入机制参考；后续增量重点比较 shell/permission/sandbox、
 durable session/subagent、TUI queue/interject、ACP/headless。不得照搬其 Plan Mode 的 shell/subagent 写入缺口，
 也不接入 xAI auth、telemetry、online memory、managed policy、marketplace 或 Rust 第二 runtime
-→ 当前 M6 继续等待/准备干净 Linux linger-enabled logout/reboot、真实 watchdog kill/restart、Gateway
-  recovery-status/system service 实启，以及真实 Provider 与飞书/微信/QQ 文本、审批、取消、恢复回环
-→ 无需外部凭据的下一仓库主线按 P8 → P9 → P10：官方 GPT/Claude Provider parity、Codex-class
-  插件/headless 能力矩阵、第一方 CDP Browser Control；每条先完成 fixture/权限/沙箱/evidence 再补真实回环
+→ 当前 M6 已交付 Telegram durable long polling；下一无需凭据的可靠性缺口是 outbound final-response
+  obligation，随后继续逐渠道 RecoveryAdapter fixture。并行等待干净 Linux linger-enabled logout/reboot、
+  真实 watchdog kill/restart、Gateway recovery-status/system service 实启，以及真实 Provider/IM 回环
+→ 仓库战略主线继续 P9 → P10 → P11：Codex-class 插件/headless、第一方 CDP Browser Control、受治理 Remote SSH；
+  分别跟进 Codex/Claude 的代码级 Agent 能力，每条先完成 fixture/权限/沙箱/evidence 再补真实回环
 → 体验候选：历史消息时间、Windows 外部打开器、Subagent profile、workspace 面板偏好按真实用户缺口进入
 → external-blocked：真实运营 registry 的生产 endpoint、人员/HSM 密钥仪式、online custody、
 实际轮换/compromise drill，以及声明 provenance 时的独立 DSSE/SLSA policy verifier

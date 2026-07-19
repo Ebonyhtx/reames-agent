@@ -1,18 +1,18 @@
 {
   "version": 2,
-  "updated_at": "2026-07-19T00:56:11Z",
+  "updated_at": "2026-07-19T15:28:22Z",
   "upstreams": {
     "reasonix": {
       "branch": "main-v2",
       "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-      "reviewed": "2335d0df9ea4029108ed965f76c2efff30fe6cf4",
-      "latest_seen": "2335d0df9ea4029108ed965f76c2efff30fe6cf4"
+      "reviewed": "8bb0e5493a7d4774277666326c05b96791485aa2",
+      "latest_seen": "8bb0e5493a7d4774277666326c05b96791485aa2"
     },
     "hermes": {
       "branch": "main",
       "baseline": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
-      "reviewed": "614dc194ea7d853d39f9e84582ec62156f41a475",
-      "latest_seen": "614dc194ea7d853d39f9e84582ec62156f41a475"
+      "reviewed": "36f2a966c7f9f69987494b867c3dcf96b69a5766",
+      "latest_seen": "36f2a966c7f9f69987494b867c3dcf96b69a5766"
     },
     "codex": {
       "branch": "main",
@@ -23,8 +23,8 @@
     "mimo": {
       "branch": "main",
       "baseline": "ba87f5d48d7d3e77145fce6797faebf016fd23c6",
-      "reviewed": "d48888f7b1d22e830ee5c10faf2b9e455f3cd881",
-      "latest_seen": "d48888f7b1d22e830ee5c10faf2b9e455f3cd881"
+      "reviewed": "f24ce4eb7341bfba6bb608436c1d27a843508adf",
+      "latest_seen": "f24ce4eb7341bfba6bb608436c1d27a843508adf"
     },
     "impeccable": {
       "branch": "main",
@@ -35,8 +35,8 @@
     "scream-code": {
       "branch": "main",
       "baseline": "946eda69896ac161223bdb830acc62e4b6c8228e",
-      "reviewed": "4938d5175349768774876efdc0beab8a149ced25",
-      "latest_seen": "4938d5175349768774876efdc0beab8a149ced25"
+      "reviewed": "22a2adaf8a459ab6bcfda028cc74b4c9b7e5f11f",
+      "latest_seen": "22a2adaf8a459ab6bcfda028cc74b4c9b7e5f11f"
     },
     "agentark": {
       "branch": "main",
@@ -47,14 +47,14 @@
     "claude-code": {
       "branch": "main",
       "baseline": "7930e1c82d997b013af28673501f3b95569a71cb",
-      "reviewed": "07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60",
-      "latest_seen": "07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60"
+      "reviewed": "015170d3fd84fb57ef4685a64b673fadd0690dc1",
+      "latest_seen": "015170d3fd84fb57ef4685a64b673fadd0690dc1"
     },
     "kimi-code": {
       "branch": "main",
       "baseline": "f30781bb273321f3e3bbb548a9d0724ab6299fc6",
-      "reviewed": "4f3c7240c4adc7c748e536bf578e468c1b5bcd7b",
-      "latest_seen": "4f3c7240c4adc7c748e536bf578e468c1b5bcd7b"
+      "reviewed": "df6899553962d1764c9f4c3bec1b63c811cb425e",
+      "latest_seen": "df6899553962d1764c9f4c3bec1b63c811cb425e"
     },
     "awesome-design-md": {
       "branch": "main",

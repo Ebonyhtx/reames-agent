@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"reames-agent/internal/testenv"
+
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 )
 
@@ -13,17 +15,14 @@ import (
 // this, tests that persist desktop state, sessions, cache, or CLI-style config
 // can leak into the developer's real Reames Agent directories.
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "reamesAgent-desktop-test")
+	cleanupUserState, err := testenv.IsolateUserState()
 	if err != nil {
 		os.Exit(1)
 	}
-	os.Setenv("HOME", dir)
+	dir := os.Getenv("HOME")
 	os.Setenv("REAMES_AGENT_CREDENTIALS_STORE", "file")
-	os.Setenv("USERPROFILE", dir)
-	os.Setenv("XDG_CONFIG_HOME", dir+"/config")
 	os.Setenv("REAMES_AGENT_STATE_HOME", dir+"/state")
 	os.Setenv("REAMES_AGENT_CACHE_HOME", dir+"/cache")
-	os.Setenv("AppData", dir)
 	// Neutralize the Wails runtime-event bridge for the whole test binary:
 	// outside a running Wails app, runtime.EventsEmit log.Fatals on the plain
 	// contexts tests use, killing the process from any emitting code path.
@@ -31,7 +30,7 @@ func TestMain(m *testing.M) {
 	// the per-instance runtimeEvents.emit hook, which takes precedence.
 	runtimeEventsEmitFallback = func(context.Context, string, ...interface{}) {}
 	code := m.Run()
-	os.RemoveAll(dir)
+	cleanupUserState()
 	os.Exit(code)
 }
 

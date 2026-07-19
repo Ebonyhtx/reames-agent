@@ -57,6 +57,6 @@ Thumbs.db
 
 benchmarks/context-maintenance-e2e/run/
 
-# Generated advisory reports
-/artifacts/upstream-watch*/
-/artifacts/desktop-*-smoke*.json
+# Generated advisory reports, build caches, cross-builds, and local verification scratch.
+# Authoritative audits and machine ledgers live under docs/, never under artifacts/.
+/artifacts/

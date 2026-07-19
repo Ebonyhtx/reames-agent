@@ -269,10 +269,10 @@ P8 继续按代码路径和真实 wire 审查，而不是按 README 或模型名
 
 | 项目 | reviewed SHA | 本批结论 |
 |---|---|---|
-| DeepSeek Reasonix | `2335d0df9ea4029108ed965f76c2efff30fe6cf4` | 一级主源码上游，无新增未审提交 |
-| OpenAI Codex | `312caf176a8fd3a5897a3d1fd3ed0a283bd1b5ac` | Responses wire/reasoning/tool、TUI 与 Realtime V3 初始历史项已逐文件审查 |
-| Claude Code | `07dcb0e13580b21174ff1bf6a7e1d5ead3b61d60` | 可公开 plugin/schema/example 与产品信号已分层审查 |
-| Hermes | `7a43ab042f65182bb8cb00cebbd1320867d751db` | 空响应修复已采用；新增断线补偿、单轮模型和 computer-use 信号进入后续阶段 |
+| DeepSeek Reasonix | `a46fc6f47a00ffffeaee6184c4748cac6cc4ae7d` | 一级主源码上游；最新可靠性批已代码级审查并采用适用修复 |
+| OpenAI Codex | `0fb559f0f6e231a88ac02ea002d3ecd248e2b515` | Responses、Realtime、code-mode/App-Server 与 Browser/CDP 战略矩阵已推进；本轮无新增 |
+| Claude Code | `015170d3fd84fb57ef4685a64b673fadd0690dc1` | 最新只有 changelog/feed；不从发布说明反推 Messages/runtime parity |
+| Hermes | `3a6e40b297d505cf42b6c35b94e6b0efd967527e` | durable delivery、Telegram watchdog、turn lease、配置与插件信号完成机制级分类 |
 | Grok Build | `7cfcb20d2b50b0d18801a6c0af2e401c0e060894` | 采用无歧义 MCP 名称合同，其余保持机制参考 |
 
 Hermes `bf391030..862b1b37` 的 advisory 会同时出现 “empty response” 和 `max_tokens`。Reames 的共享
@@ -289,3 +289,69 @@ Desktop gateway reconnect 在其双 runtime/REST+RPC 投影中保留 pending tur
 双权威补丁。其 Discord durable cursor/final-delivery gate 是 M6 明确缺口；`/model --once` 是 P9 候选；
 computer-use 的 verify→foreground escalation、按 session+delivery-mode 审批和 dead-driver reconnect 是
 P10 验收输入。以上均按机制边界登记，不复制 Python/Electron runtime。
+
+## 12. 2026-07-19 Reasonix `a46fc6f` 与全参考再冻结
+
+本轮再次把全部本地镜像安全快进并运行深度 Upstream Watch。接受过程逐项执行
+`--accept reasonix`、`--accept hermes`、`--accept mimo`、`--accept scream-code`、
+`--accept claude-code`、`--accept kimi-code`，没有使用 `--accept-all`。最终权威 SHA
+始终以 `docs/upstreams/upstreams.lock.json` 为准。
+
+Reasonix `2335d0df..a46fc6f` 共 21 个提交、16 个非 merge 提交和 106 个变化文件。
+Reames 采用测试 home/cache/temp 隔离、Windows batch Hook、有界 session save lock 与
+shutdown recovery、每模型 context window、本地 Mermaid/兼容/线性脱敏可靠性、
+Windows-safe session filename 和 native maximized resize cursor 修复。取消轮次只读
+partial display、PRIMARY/tmux 中键粘贴和 conversation width 明确延后；远程 crash
+upload、遥测与当前依赖不存在的 TanStack 私有 API 明确拒绝。完整代码审计与机器账本：
+
+- `audits/2026-07-19-reasonix-2335d0d-a46fc6f.md`
+- `upstreams/reviews/reasonix-generation-2335d0d-a46fc6f.json`
+- `upstreams/reviews/reasonix-current.json`
+
+Codex 本轮无新增。Claude Code 的唯一变化是 2.1.215 changelog/feed，表示 `/verify` 与
+`/code-review` 改为显式调用；没有可公开的 Messages、thinking、cache、tool/vision 或
+插件 runtime 代码变化，因此只登记产品信号。Hermes 的 outbound final-response
+obligation 暴露了 Reames 下一项 M6 durability 缺口：当前 inbound ledger 能阻止 cursor
+在发送失败时推进，但进程在平台 ACK 前崩溃后仍可能重跑 Agent；后续应持久化有界答复
+obligation，并对 mid-send 歧义显示“可能重复”标记。MiMo Skill BM25、Scream 全项目 bug
+audit、Kimi 多实例 Web/分片 read model/stat-lstat 只作为 P9/P10 或可靠性回归输入。
+
+完整跨参考结论见
+[`audits/2026-07-19-upstream-a46fc6f-reference-delta.md`](audits/2026-07-19-upstream-a46fc6f-reference-delta.md)。
+
+## 13. 2026-07-19 Reasonix `65fcd465` 增量冻结
+
+Reasonix `a46fc6f..65fcd465` 共 5 个非 merge 提交、141 个变化文件。代码级结论如下：
+
+- 采用 `00af3a03`：LongCat-2.0 context window 改为 1,048,576，并只迁移未修改的官方预设；
+- 采用 `d50a9888`：保持 Wails v2.12，回移 Linux WebKit/JavaScriptCore `SA_ONSTACK` 启动修复；
+  NVIDIA DMA-BUF 广义降级只在 Safe Mode 启用且尊重用户环境；
+- 采用 `0a54d504`：会话图片/PDF 分页导出、外部资源隔离、独占多文件 staging、碰撞拒绝、失败回滚与可见反馈；
+- `a144e55e` 的 pane opacity 会扩大已关闭的 Theme Pack v1 schema，延后；其编辑器保存/激活竞态在 Reames
+  当前受控主题流程中不具同构路径；
+- `65fcd465` Remote SSH 是 109 文件的新安全面，进入 P11；不整套复制，不新增第二套 Controller/Agent/runtime。
+
+同期 Hermes `3a6e40b2..36f2a966` 只作为 Capabilities 搜索/提取分离和设置 deep-link 机制参考；voice provider
+不适用。Kimi `a3e773f9..df689955` 只增加远端 thinking-effort telemetry，因 Reames 不建设自有遥测服务而不采用；
+未来只可进入本地诊断/evidence。Codex `0fb559f0` 与 Claude Code `015170d3` 无新增。
+
+完整证据见：
+
+- `audits/2026-07-19-reasonix-a46fc6f-65fcd46.md`
+- `upstreams/reviews/reasonix-generation-a46fc6f-65fcd46.json`
+- `upstreams/reviews/reasonix-current.json`
+
+## 14. 2026-07-19 Reasonix `8bb0e549` 最终增量
+
+Reasonix `65fcd465..8bb0e549` 只有 1 个非 merge 提交和 4 个 Desktop frontend 文件，修复设置刷新覆盖活动
+Theme Pack 的状态。Reames 的 `themePackRuntime.effectiveStyle/apply` 已让所有 `applyTheme` 调用同时更新配置基底、
+保留活动包的 effective style 并重投影受控 tokens；`applyThemePack(null)` 会恢复最新配置基底。因此该提交为
+`existing-equivalent`，生产代码不复制，只增加“活动包期间刷新基础 theme/style，清包后恢复最新基底”的显式回归。
+
+同期 Scream Code `c6b24f60..22a2adaf` 将动画与 footer timer 改为 component-scoped render；Reames Desktop 使用
+React state 与局部组件更新，没有同构的全屏 TUI `requestRender` 热路径，只登记为渲染性能机制信号。Reasonix、
+Scream 均逐项 `--accept`，未使用 `--accept-all`。完整证据见：
+
+- `audits/2026-07-19-reasonix-65fcd46-8bb0e54.md`
+- `upstreams/reviews/reasonix-generation-65fcd46-8bb0e54.json`
+- `upstreams/reviews/reasonix-current.json`

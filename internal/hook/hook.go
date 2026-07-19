@@ -646,6 +646,9 @@ func DefaultSpawner(ctx context.Context, in SpawnInput) SpawnResult {
 // verbatim — normalizeStaticNodeEval's rendering escapes $ and backticks, so
 // even repaired commands re-entering here behave identically under sh -c.
 func spawnCommand(ctx context.Context, command string) *exec.Cmd {
+	if cmd, matched := windowsBatchCommand(ctx, command); matched {
+		return cmd
+	}
 	args := spawnCommandArgs(command)
 	return exec.CommandContext(ctx, args[0], args[1:]...)
 }
@@ -666,6 +669,9 @@ func spawnCommandArgs(command string) []string {
 func packageSpawnCommandArgs(in SpawnInput) []string {
 	if runtime.GOOS != "windows" || !in.PackagePolicy.Enabled() || !filepath.IsAbs(in.Command) {
 		return spawnCommandArgs(in.Command)
+	}
+	if args, ok := windowsBatchPackageArgs(in.Command); ok {
+		return args
 	}
 	info, err := os.Stat(in.Command)
 	if err != nil || info.IsDir() {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -631,6 +632,61 @@ func TestPackageSpawnCommandArgsUsesBashForWindowsShebang(t *testing.T) {
 	unowned := packageSpawnCommandArgs(SpawnInput{Command: script})
 	if len(unowned) < 2 || strings.EqualFold(unowned[0], sh.Path) {
 		t.Fatalf("user/global hook unexpectedly used package-only shebang path: %v", unowned)
+	}
+}
+
+func TestWindowsBatchCommandLinePreservesQuotedPluginPath(t *testing.T) {
+	command := `"C:\Users\Test User\AppData\Roaming\reames-agent\plugins\superpowers\hooks\run-hook.cmd" session-start`
+	got, ok := windowsBatchCommandLine(command)
+	if !ok {
+		t.Fatal("quoted plugin batch command was not recognized")
+	}
+	want := `cmd.exe /d /s /c ""C:\Users\Test User\AppData\Roaming\reames-agent\plugins\superpowers\hooks\run-hook.cmd" session-start"`
+	if got != want {
+		t.Fatalf("batch command line = %q, want %q", got, want)
+	}
+}
+
+func TestWindowsBatchCommandLinePreservesArgumentText(t *testing.T) {
+	command := `"C:\plugins\hook.cmd" plain "argument with spaces" caret^ escaped`
+	got, ok := windowsBatchCommandLine(command)
+	if !ok {
+		t.Fatal("quoted batch command was not recognized")
+	}
+	want := `cmd.exe /d /s /c ""C:\plugins\hook.cmd" plain "argument with spaces" caret^ escaped"`
+	if got != want {
+		t.Fatalf("batch argument text changed: got %q, want %q", got, want)
+	}
+}
+
+func TestWindowsBatchCommandLineLeavesOtherShellContractsAlone(t *testing.T) {
+	commands := []string{
+		`"C:\plugins\hook.cmd" session-start && echo chained`,
+		`C:\plugins\hook.cmd session-start`,
+		`powershell -File "C:\plugins\hook.ps1"`,
+		`node "C:\plugins\hook.js"`,
+		`echo hook.cmd`,
+	}
+	for _, command := range commands {
+		if got, ok := windowsBatchCommandLine(command); ok {
+			t.Errorf("windowsBatchCommandLine(%q) unexpectedly matched as %q", command, got)
+		}
+	}
+}
+
+func TestWindowsBatchPackageArgsKeepSandboxBoundary(t *testing.T) {
+	got, ok := windowsBatchPackageArgs(`C:/Program Files/Reames Agent/plugins/example/hooks/run-hook.cmd`)
+	if !ok {
+		t.Fatal("package batch command was not recognized")
+	}
+	want := []string{"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodePowerShellCommand(`& 'C:\Program Files\Reames Agent\plugins\example\hooks\run-hook.cmd'`)}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("package batch argv = %#v, want %#v", got, want)
+	}
+	for _, command := range []string{`C:\plugins\%NAME%\hook.cmd`, `C:\plugins\!NAME!\hook.cmd`, `C:\plugins\hook.exe`} {
+		if args, matched := windowsBatchPackageArgs(command); matched {
+			t.Errorf("unsafe package batch command %q unexpectedly matched as %#v", command, args)
+		}
 	}
 }
 

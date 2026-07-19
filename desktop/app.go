@@ -817,19 +817,22 @@ func (a *App) shutdown(context.Context) {
 	a.mu.RLock()
 	tabs := a.runtimeTabsLocked()
 	type shutdownItem struct {
-		tab  *WorkspaceTab
-		ctrl control.SessionAPI
+		tab      *WorkspaceTab
+		ctrl     control.SessionAPI
+		readOnly bool
 	}
 	items := make([]shutdownItem, 0, len(tabs))
 	for _, t := range tabs {
 		if t.Ctrl != nil {
-			items = append(items, shutdownItem{tab: t, ctrl: t.Ctrl})
+			items = append(items, shutdownItem{tab: t, ctrl: t.Ctrl, readOnly: t.ReadOnly})
 		}
 	}
 	a.mu.RUnlock()
 	for _, it := range items {
-		if err := a.snapshotTab(it.tab); err != nil {
-			slog.Warn("desktop: shutdown snapshot failed", "tab", it.tab.ID, "err", err)
+		if !it.readOnly {
+			if err := it.ctrl.SnapshotForShutdown(); err != nil {
+				slog.Warn("desktop: shutdown snapshot failed", "tab", it.tab.ID, "err", err)
+			}
 		}
 		it.ctrl.Close()
 		it.tab.releaseSessionLease()
@@ -848,6 +851,10 @@ func (a *App) shutdown(context.Context) {
 // position and size, then calls WindowShow so the user never sees the default
 // size/position flash.
 func (a *App) domReady(_ context.Context) {
+	// JavaScriptCore has installed its lazy signal handlers by this point. Restore
+	// the SA_ONSTACK flags required by Go; this is a no-op outside Linux.
+	repairWebKitSignalHandlers()
+
 	state, ok := loadWindowState()
 	if ok {
 		// Validate saved position against current screens. Wails v2 doesn't
@@ -2561,6 +2568,8 @@ func channelDisplayName(provider, domain string) string {
 		return "WeChat"
 	case "qq":
 		return "QQ"
+	case "telegram":
+		return "Telegram"
 	default:
 		return provider
 	}
@@ -8519,9 +8528,220 @@ func (a *App) SaveExportFile(path, payload string, base64Encoded bool) error {
 		data = []byte(payload)
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return err
+		return exportOperationError("save export file", path, err)
 	}
 	return nil
+}
+
+// SaveExportImageFiles writes one or more base64-encoded image parts. A single
+// image keeps the native save dialog's overwrite semantics. Multi-part exports
+// use numbered siblings, stage every payload before publication, never replace
+// an existing sibling, and roll back only files created by this call.
+func (a *App) SaveExportImageFiles(path string, payloads []string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	if len(payloads) == 0 {
+		return errors.New("no image payloads to export")
+	}
+	if len(payloads) == 1 {
+		return a.SaveExportFile(path, payloads[0], true)
+	}
+
+	targets := make([]string, len(payloads))
+	for i := range payloads {
+		targets[i] = numberedExportPath(path, i, len(payloads))
+	}
+	return saveExclusiveExportPayloads(targets, len(payloads), func(index int) ([]byte, error) {
+		decoded, err := base64.StdEncoding.DecodeString(payloads[index])
+		if err != nil {
+			return nil, fmt.Errorf("decode export image part %d: %w", index+1, err)
+		}
+		return decoded, nil
+	})
+}
+
+type stagedExportFile struct {
+	targetPath string
+	tempPath   string
+}
+
+type committedExportFile struct {
+	path string
+	info os.FileInfo
+}
+
+const exportTempCreateAttempts = 100
+
+func numberedExportPath(path string, partIndex, partCount int) string {
+	if partCount <= 1 {
+		return path
+	}
+	ext := filepath.Ext(path)
+	stem := strings.TrimSuffix(path, ext)
+	return fmt.Sprintf("%s-%d-of-%d%s", stem, partIndex+1, partCount, ext)
+}
+
+func saveExclusiveExportFiles(targets []string, payloads [][]byte) error {
+	return saveExclusiveExportPayloads(targets, len(payloads), func(index int) ([]byte, error) {
+		return payloads[index], nil
+	})
+}
+
+func saveExclusiveExportPayloads(targets []string, payloadCount int, payloadAt func(int) ([]byte, error)) error {
+	if len(targets) == 0 || len(targets) != payloadCount || payloadAt == nil {
+		return errors.New("invalid export image batch")
+	}
+	for _, target := range targets {
+		if _, err := os.Lstat(target); err == nil {
+			return fmt.Errorf("export file already exists: %s", filepath.Base(target))
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return exportOperationError("inspect export target", target, err)
+		}
+	}
+
+	staged := make([]stagedExportFile, 0, len(targets))
+	defer func() {
+		for _, file := range staged {
+			_ = os.Remove(file.tempPath)
+		}
+	}()
+	for i, target := range targets {
+		payload, err := payloadAt(i)
+		if err != nil {
+			return err
+		}
+		file, finalMode, err := createExportTempFile(filepath.Dir(target))
+		if err != nil {
+			return exportOperationError("stage export file", target, err)
+		}
+		tempPath := file.Name()
+		staged = append(staged, stagedExportFile{targetPath: target, tempPath: tempPath})
+		if _, err = file.Write(payload); err == nil {
+			err = file.Sync()
+		}
+		if err == nil {
+			err = file.Chmod(finalMode)
+		}
+		if err == nil {
+			err = file.Sync()
+		}
+		if closeErr := file.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			return exportOperationError("stage export file", target, err)
+		}
+	}
+
+	committed := make([]committedExportFile, 0, len(staged))
+	for _, file := range staged {
+		info, err := commitStagedExportFile(file.tempPath, file.targetPath)
+		if err != nil {
+			rollbackCommittedExportFiles(committed)
+			return exportOperationError("save export file", file.targetPath, err)
+		}
+		committed = append(committed, committedExportFile{path: file.targetPath, info: info})
+	}
+	return nil
+}
+
+func createExportTempFile(dir string) (*os.File, os.FileMode, error) {
+	for attempt := 0; attempt < exportTempCreateAttempts; attempt++ {
+		var suffix [12]byte
+		if _, err := rand.Read(suffix[:]); err != nil {
+			return nil, 0, fmt.Errorf("generate export temp name: %w", err)
+		}
+		path := filepath.Join(dir, ".reames-agent-export-"+hex.EncodeToString(suffix[:]))
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return nil, 0, err
+		}
+		info, err := file.Stat()
+		if err == nil {
+			err = file.Chmod(0o600)
+		}
+		if err != nil {
+			_ = file.Close()
+			_ = os.Remove(path)
+			return nil, 0, err
+		}
+		return file, info.Mode().Perm(), nil
+	}
+	return nil, 0, errors.New("could not reserve a unique export temp file")
+}
+
+func commitStagedExportFile(tempPath, targetPath string) (os.FileInfo, error) {
+	stagedInfo, err := os.Lstat(tempPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Link(tempPath, targetPath); err == nil {
+		current, statErr := os.Lstat(targetPath)
+		if statErr != nil {
+			removeExportFileIfSame(targetPath, stagedInfo)
+			return nil, statErr
+		}
+		if !os.SameFile(current, stagedInfo) {
+			return nil, errors.New("export target changed while it was being saved")
+		}
+		return stagedInfo, nil
+	}
+
+	source, err := os.Open(tempPath)
+	if err != nil {
+		return nil, err
+	}
+	defer source.Close()
+	target, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	info, statErr := target.Stat()
+	if statErr == nil {
+		_, err = io.Copy(target, source)
+	}
+	if err == nil && statErr == nil {
+		err = target.Sync()
+	}
+	if closeErr := target.Close(); err == nil && statErr == nil {
+		err = closeErr
+	}
+	if statErr != nil {
+		err = statErr
+	}
+	if err != nil {
+		removeExportFileIfSame(targetPath, info)
+		return nil, err
+	}
+	return info, nil
+}
+
+func rollbackCommittedExportFiles(files []committedExportFile) {
+	for _, file := range files {
+		removeExportFileIfSame(file.path, file.info)
+	}
+}
+
+func removeExportFileIfSame(path string, created os.FileInfo) {
+	if created == nil {
+		return
+	}
+	current, err := os.Lstat(path)
+	if err == nil && os.SameFile(current, created) {
+		_ = os.Remove(path)
+	}
+}
+
+func exportOperationError(operation, path string, err error) error {
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		return fmt.Errorf("%s %s: %v", operation, filepath.Base(path), pathErr.Err)
+	}
+	return fmt.Errorf("%s %s: %w", operation, filepath.Base(path), err)
 }
 
 func safeExportFilename(name string) string {

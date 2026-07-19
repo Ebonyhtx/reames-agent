@@ -172,6 +172,22 @@ reames-agent gateway run --home "$REAMES_AGENT_HOME" --channels feishu
 reames-agent bot start --home "$REAMES_AGENT_HOME" --channels feishu
 ```
 
+Telegram 使用官方 Bot API 长轮询，建议先以 secret-env-only 方式写入连接，再安装
+服务；token 值不会写入 TOML、service unit 或投递账本：
+
+```bash
+export TELEGRAM_BOT_TOKEN="<bot token>"
+reames-agent gateway setup --home "$REAMES_AGENT_HOME" --channel telegram \
+  --token-env TELEGRAM_BOT_TOKEN --workspace /srv/project --pairing
+reames-agent gateway doctor --deep --home "$REAMES_AGENT_HOME"
+reames-agent gateway install --dry-run --home "$REAMES_AGENT_HOME" \
+  --channels telegram --dir /srv/project
+```
+
+Telegram 远端 API 必须使用 HTTPS；HTTP 仅允许 localhost fixture。启动会执行
+`getMe`，轮询请求有 deadline、指数退避和可取消停止。offset 只有在最终回复
+发送成功且本地 delivery ledger 提交成功后推进，发送失败会重投同一 update。
+
 它适合调试、tmux 或临时运行；`bot start` 是兼容入口，长期推荐使用 `gateway run`。后台服务管理面当前已提供用户级 systemd / launchd / Windows Scheduled Task 命令；生产部署前建议先用 `--dry-run` 审阅计划：
 
 ```bash
@@ -188,7 +204,7 @@ journalctl --user -u reames-agent-gateway.service -f  # Linux 实时日志
 ```
 
 `gateway install --dry-run` 会在计划里显示绑定的 `REAMES_AGENT_HOME` 和
-`<Reames Agent home>/.env` 凭据来源。真实 API key、飞书/QQ/微信 secret 等
+`<Reames Agent home>/.env` 凭据来源。真实 API key、飞书/QQ/微信/Telegram secret 等
 仍保存在这个 `.env` 文件里；systemd unit、launchd plist 和 Windows
 Scheduled Task 不会嵌入 secret 值。
 

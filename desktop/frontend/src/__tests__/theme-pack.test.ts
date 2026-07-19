@@ -71,6 +71,17 @@ ok(root.dataset.themeCorners === "round" && root.dataset.themeDensity === "compa
 ok(root.style.getPropertyValue("--theme-home-background").includes(`/__reames_agent_theme_asset/${"a".repeat(64)}`), "scene uses a digest-addressed local URL");
 ok(root.style.getPropertyValue("--theme-home-position") === "25% 75%", "scene focus coordinates are projected");
 
+// Reasonix 8bb0e549 regression: a generic settings refresh must update the
+// configured base appearance without replacing the active pack in the live DOM.
+applyTheme("light", "amber", { persist: false });
+ok(getThemePack()?.id === pack.id, "settings refresh preserves the active pack identity");
+ok(root.dataset.themeStyle === "slate", "settings refresh preserves the pack effective style");
+ok(root.style.getPropertyValue("--accent") === "#315f8c", "settings refresh reapplies pack tokens for the resolved scheme");
+applyThemePack(null);
+ok(root.dataset.themeStyle === "amber", "clearing after settings refresh restores the latest configured base style");
+applyThemePack(pack);
+applyTheme("auto", "graphite", { persist: false });
+
 const official = structuredClone(pack) as ThemePackView;
 official.id = "reames-official-test";
 official.kind = "official";

@@ -1,3 +1,4 @@
+import "../lib/compat";
 import { lazy, memo, Suspense, useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";

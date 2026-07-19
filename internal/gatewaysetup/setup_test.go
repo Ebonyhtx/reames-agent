@@ -36,6 +36,10 @@ func TestApplyCreatesSupportedChannelConnections(t *testing.T) {
 			name: "weixin", options: Options{Channel: "weixin", AccountID: "wx-account", Admins: []string{"wx-owner"}},
 			wantID: "weixin-weixin", provider: "weixin", domain: "weixin", tokenEnv: "WEIXIN_BOT_TOKEN",
 		},
+		{
+			name: "telegram", options: Options{Channel: "telegram", Pairing: true},
+			wantID: "telegram-telegram", provider: "telegram", domain: "telegram", tokenEnv: "TELEGRAM_BOT_TOKEN",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -79,6 +83,10 @@ func TestApplyCreatesSupportedChannelConnections(t *testing.T) {
 			case "weixin":
 				if !cfg.Bot.Weixin.Enabled || cfg.Bot.Weixin.AccountID != "wx-account" {
 					t.Fatalf("legacy Weixin config = %+v", cfg.Bot.Weixin)
+				}
+			case "telegram":
+				if !cfg.Bot.Telegram.Enabled || cfg.Bot.Telegram.TokenEnv != "TELEGRAM_BOT_TOKEN" {
+					t.Fatalf("legacy Telegram config = %+v", cfg.Bot.Telegram)
 				}
 			}
 		})
@@ -206,7 +214,7 @@ func TestApplyRejectsUnsafeInputsWithoutTouchingConfig(t *testing.T) {
 		{name: "missing access", opts: Options{Channel: "feishu", AppID: "app"}, want: "choose --pairing"},
 		{name: "secret instead of env", opts: Options{Channel: "qq", AppID: "app", AppSecretEnv: "sk_live_actualsecret", Pairing: true}, want: "environment variable name"},
 		{name: "missing weixin account", opts: Options{Channel: "weixin", Pairing: true}, want: "--account-id"},
-		{name: "invalid channel", opts: Options{Channel: "telegram", Pairing: true}, want: "invalid gateway channel"},
+		{name: "invalid channel", opts: Options{Channel: "discord", Pairing: true}, want: "invalid gateway channel"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

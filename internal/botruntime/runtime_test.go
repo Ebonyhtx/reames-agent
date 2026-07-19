@@ -20,12 +20,55 @@ func TestRecoveryLedgerPathUsesReamesAgentHome(t *testing.T) {
 
 func TestAllowlistUserCountIncludesRoles(t *testing.T) {
 	allowlist := config.BotAllowlist{
-		FeishuApprovers: []string{"ou-approver"},
-		FeishuAdmins:    []string{"ou-admin"},
+		FeishuApprovers:   []string{"ou-approver"},
+		FeishuAdmins:      []string{"ou-admin"},
+		TelegramUsers:     []string{"1001"},
+		TelegramApprovers: []string{"1002"},
 	}
 
-	if got := AllowlistUserCount(allowlist); got != 2 {
+	if got := AllowlistUserCount(allowlist); got != 4 {
 		t.Fatalf("AllowlistUserCount() = %d, want role users included", got)
+	}
+}
+
+func TestTelegramRuntimeProjectionUsesSavedConnection(t *testing.T) {
+	cfg := config.Default()
+	cfg.Bot.Telegram.Enabled = true
+	cfg.Bot.Telegram.TokenEnv = "LEGACY_TELEGRAM_TOKEN"
+	cfg.Bot.Connections = []config.BotConnectionConfig{{
+		ID:         "telegram-primary",
+		Provider:   "telegram",
+		Domain:     "telegram",
+		Enabled:    true,
+		Model:      "deepseek-pro",
+		Credential: config.BotConnectionCredential{TokenEnv: "TELEGRAM_PRIMARY_TOKEN"},
+	}}
+
+	enabled, warnings := EnabledPlatforms(cfg, []string{"telegram"})
+	if len(warnings) != 0 || !enabled[bot.PlatformTelegram] {
+		t.Fatalf("EnabledPlatforms() = %+v warnings=%v", enabled, warnings)
+	}
+	channels := ChannelConfigs(cfg.Bot.Connections, true, true)
+	if len(channels) != 1 || channels[bot.PlatformTelegram].Model != "deepseek-pro" {
+		t.Fatalf("ChannelConfigs() = %+v", channels)
+	}
+	connectionChannels := ConnectionChannelConfigs(cfg.Bot.Connections, true, true)
+	if len(connectionChannels) != 1 || connectionChannels["telegram-primary"].Model != "deepseek-pro" {
+		t.Fatalf("ConnectionChannelConfigs() = %+v", connectionChannels)
+	}
+	bindings := AdapterBindings(cfg, enabled, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if len(bindings) != 1 || bindings[0].ID != "telegram-primary" || bindings[0].Domain != "telegram" || bindings[0].Platform != bot.PlatformTelegram || bindings[0].Adapter.Name() != "telegram" {
+		t.Fatalf("AdapterBindings() = %+v", bindings)
+	}
+}
+
+func TestRememberAllowlistSupportsTelegramUsersAndGroups(t *testing.T) {
+	var allowlist config.BotAllowlist
+	if !rememberAllowlist(&allowlist, bot.PlatformTelegram, "1001", "-1002001", bot.ChatGroup) {
+		t.Fatal("rememberAllowlist reported no Telegram change")
+	}
+	if len(allowlist.TelegramUsers) != 1 || allowlist.TelegramUsers[0] != "1001" || len(allowlist.TelegramGroups) != 1 || allowlist.TelegramGroups[0] != "-1002001" {
+		t.Fatalf("telegram allowlist = %+v", allowlist)
 	}
 }
 

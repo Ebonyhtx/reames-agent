@@ -18,7 +18,7 @@ internal/
   provider/       # LLM Provider 接口 + OpenAI/Anthropic 实现
   tool/           # 工具抽象 + Registry + 内置工具
   serve/          # HTTP/SSE 服务（Web/Cloud 前端）
-  bot/            # IM Bot（飞书/QQ/微信）
+  bot/            # IM Bot（飞书/QQ/微信/Telegram）
   cli/            # Bubble Tea TUI 实现
   config/         # TOML 配置加载
   plugin/         # MCP 插件宿主（stdio + HTTP）
@@ -176,3 +176,16 @@ Desktop 只建立 recovery-only shell，`boot.Build` 直接拒绝 Provider、Con
 普通 Agent 装配；Skill、Hook、plugin host、Bot、LSP、planner/Guardian/subagent/Memory Compiler、
 heartbeat、更新/遥测/metrics 等也在各自边界关闭。该设计保持“正常 runtime 只有一套 Controller”，
 而不是在 Guard 中复制第二套 Agent。
+
+## 七、Desktop 平台兼容与会话导出
+
+Linux Wails/WebKit2GTK 启动在普通 Controller 图之前应用窄平台兼容层：GTK main loop 开始后，
+`webkit_compat_linux.go` 有界重置 JavaScriptCore 信号处理器的 `SA_ONSTACK`，DOM ready 后再执行一次；
+其他平台为 no-op。NVIDIA 的广义 `WEBKIT_DISABLE_DMABUF_RENDERER` 降级只允许 Safe Mode 设置，并尊重
+用户显式环境；现有 Wayland explicit-sync 修复保持独立。该层不读取 Provider、插件或会话状态。
+
+会话 Markdown/JSON 仍经单文件保存；图片/PDF 在按需加载的 frontend export runtime 中渲染。导出只允许
+严格 raster base64 inline image，外部 media/CSS URL 被中和；长内容按自然边界切为受限 raster 页面。
+多段 PNG 不由浏览器逐文件写入，而通过 Wails 调用 `SaveExportImageFiles`，由 Go 后端完成 sibling temp
+staging、sync/chmod、独占发布和 inode-aware rollback。该事务只保证本次本地导出批次不会覆盖未确认 sibling
+或留下半批文件，不外推为任意文件系统/远端导出的通用事务。

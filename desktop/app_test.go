@@ -3385,11 +3385,11 @@ func TestSetModelForTabReattachesDetachedRuntime(t *testing.T) {
 		Ctrl:           oldCtrl,
 		Ready:          true,
 		model:          "old/old-model",
-		sessionLease:   lease,
 		disabledMCP:    map[string]ServerView{},
 		SharedHostKey:  "detached-host",
 		ActivityStatus: "",
 	}
+	detached.adoptSessionLease(lease)
 	tab := &WorkspaceTab{
 		ID:          "tab_a",
 		Scope:       "global",
@@ -8864,6 +8864,11 @@ func TestScanPromptHistoryCacheIsScopedBySessionDir(t *testing.T) {
 	}
 
 	app.setTestCtrl(ctrlB, "")
+	// A real controller rebind updates the tab's persisted session anchor and
+	// the live controller together. Keep the test fixture faithful to that
+	// contract; otherwise the pinned path from the first scan intentionally
+	// remains authoritative over the newly injected (stale) controller.
+	app.tabs["test"].SessionPath = pathB
 	second, err := app.ScanPromptHistory(first.Nonce)
 	if err != nil {
 		t.Fatal(err)

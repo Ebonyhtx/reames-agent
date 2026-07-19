@@ -165,6 +165,58 @@ func TestBotDoctorReportsSessionMappingCounts(t *testing.T) {
 	}
 }
 
+func TestBotDoctorReportsTelegramCredentialAndAccessCounts(t *testing.T) {
+	isolateBotUserConfig(t)
+	t.Setenv("TELEGRAM_DOCTOR_TOKEN", "123456:doctor_test_secret")
+	cfg := config.Default()
+	cfg.Bot.Enabled = true
+	cfg.Bot.Telegram.Enabled = true
+	cfg.Bot.Telegram.TokenEnv = "TELEGRAM_DOCTOR_TOKEN"
+	cfg.Bot.SelfUserIDs.Telegram = []string{"99"}
+	cfg.Bot.Allowlist.Enabled = true
+	cfg.Bot.Allowlist.TelegramUsers = []string{"1001"}
+	cfg.Bot.Allowlist.TelegramApprovers = []string{"1002"}
+	cfg.Bot.Allowlist.TelegramAdmins = []string{"1003"}
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, func() {
+		if rc := botDoctor([]string{"--json", "--deep"}); rc != 0 {
+			t.Fatalf("botDoctor rc = %d, want 0", rc)
+		}
+	})
+	for _, want := range []string{
+		`"name":"bot.telegram.enabled","status":"ok"`,
+		`"name":"bot.telegram.token","status":"ok","detail":"TELEGRAM_DOCTOR_TOKEN is set"`,
+		`"name":"bot.self_protection","status":"enabled","detail":"self_ids=1"`,
+		`"name":"bot.allowlist","status":"enabled","detail":"qq=0 feishu=0 weixin=0 telegram=1 users approvers=1 admins=1"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("bot doctor output missing %s:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "doctor_test_secret") {
+		t.Fatalf("bot doctor leaked Telegram token:\n%s", out)
+	}
+}
+
+func TestBotConfigIsUserOwnedRecognizesTelegramOnlySettings(t *testing.T) {
+	cfg := config.Default()
+	if botConfigIsUserOwned(cfg.Bot) {
+		t.Fatal("built-in bot defaults must not claim user ownership")
+	}
+	cfg.Bot.Telegram.Enabled = true
+	if !botConfigIsUserOwned(cfg.Bot) {
+		t.Fatal("enabled Telegram config was not recognized as user-owned")
+	}
+	cfg.Bot.Telegram.Enabled = false
+	cfg.Bot.Allowlist.TelegramGroups = []string{"-1002001"}
+	if !botConfigIsUserOwned(cfg.Bot) {
+		t.Fatal("Telegram group allowlist was not recognized as user-owned")
+	}
+}
+
 func TestBotDoctorDeepReportsPairingAndRoles(t *testing.T) {
 	isolateBotUserConfig(t)
 	cfg := config.Default()
@@ -232,6 +284,38 @@ func TestBotPairingApproveAddsAllowlistAndFirstAdmin(t *testing.T) {
 	}
 	if approvers := got.Bot.Allowlist.WeixinApprovers; len(approvers) != 1 || approvers[0] != "wx-user" {
 		t.Fatalf("weixin approvers = %+v, want first paired approver", approvers)
+	}
+}
+
+func TestBotPairingApproveAddsTelegramAllowlistAndFirstAdmin(t *testing.T) {
+	isolateBotUserConfig(t)
+	cfg := config.Default()
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+	req, _, err := bot.CreateOrRefreshPairingRequest(bot.InboundMessage{
+		Platform:     bot.PlatformTelegram,
+		ConnectionID: "telegram-main",
+		Domain:       "telegram",
+		ChatType:     bot.ChatDM,
+		ChatID:       "1001",
+		UserID:       "2002",
+	}, bot.PairingConfig{Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rc := botPairing([]string{"approve", req.Code}); rc != 0 {
+		t.Fatalf("botPairing approve rc = %d", rc)
+	}
+	got := config.LoadForEdit(config.UserConfigPath())
+	if users := got.Bot.Allowlist.TelegramUsers; len(users) != 1 || users[0] != "2002" {
+		t.Fatalf("telegram users = %+v", users)
+	}
+	if admins := got.Bot.Allowlist.TelegramAdmins; len(admins) != 1 || admins[0] != "2002" {
+		t.Fatalf("telegram admins = %+v", admins)
+	}
+	if approvers := got.Bot.Allowlist.TelegramApprovers; len(approvers) != 1 || approvers[0] != "2002" {
+		t.Fatalf("telegram approvers = %+v", approvers)
 	}
 }
 

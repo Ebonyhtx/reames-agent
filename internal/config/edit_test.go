@@ -704,6 +704,7 @@ func TestResolveModelAppliesModelOverrides(t *testing.T) {
 		BaseURL:           "https://proxy.example.com/v1",
 		Models:            []string{"deepseek-v4-flash", "plain-chat"},
 		Default:           "plain-chat",
+		ContextWindow:     131_072,
 		ReasoningProtocol: ReasoningProtocolOpenAI,
 		Thinking:          "adaptive",
 		SupportedEfforts:  []string{"low", "medium", "high"},
@@ -714,6 +715,7 @@ func TestResolveModelAppliesModelOverrides(t *testing.T) {
 				DefaultEffort:     "max",
 				Vision:            &visionOff,
 				Thinking:          &thinkingOff,
+				ContextWindow:     1_000_000,
 			},
 		},
 	}}}
@@ -735,6 +737,9 @@ func TestResolveModelAppliesModelOverrides(t *testing.T) {
 	if deepseek.Thinking != "" {
 		t.Fatalf("thinking override = %q, want explicit off", deepseek.Thinking)
 	}
+	if deepseek.ContextWindow != 1_000_000 {
+		t.Fatalf("deepseek context window = %d, want per-model override", deepseek.ContextWindow)
+	}
 
 	plain, ok := c.ResolveModel("gateway/plain-chat")
 	if !ok {
@@ -745,6 +750,9 @@ func TestResolveModelAppliesModelOverrides(t *testing.T) {
 	}
 	if plain.Thinking != "adaptive" {
 		t.Fatalf("plain thinking = %q, want inherited adaptive", plain.Thinking)
+	}
+	if plain.ContextWindow != 131_072 {
+		t.Fatalf("plain context window = %d, want inherited provider value", plain.ContextWindow)
 	}
 }
 

@@ -18,21 +18,12 @@ import (
 	"reames-agent/internal/config"
 	"reames-agent/internal/pluginpkg"
 	"reames-agent/internal/skill"
+	"reames-agent/internal/testenv"
 	"reames-agent/internal/tool"
 )
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "reamesAgent-installsource-test-*")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	_ = os.Setenv("HOME", dir)
-	_ = os.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, ".config"))
-	_ = os.Setenv("AppData", filepath.Join(dir, "AppData"))
-	code := m.Run()
-	_ = os.RemoveAll(dir)
-	os.Exit(code)
+	testenv.RunWithIsolatedUserState(m)
 }
 
 // --- shared helpers ---------------------------------------------------------

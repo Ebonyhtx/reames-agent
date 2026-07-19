@@ -329,6 +329,16 @@ func (l *deliveryLedger) claim(msg InboundMessage) (bool, error) {
 	return true, nil
 }
 
+func (l *deliveryLedger) wasDelivered(msg InboundMessage) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	record, ok := l.state.Records[deliveryRecordKey(msg.Session(), strings.TrimSpace(msg.MessageID))]
+	return ok && record.Status == deliveryStatusDelivered
+}
+
 func (l *deliveryLedger) fail(msg InboundMessage, cause error) error {
 	if l == nil {
 		return nil
@@ -401,9 +411,9 @@ func (l *deliveryLedger) delivered(msg InboundMessage) error {
 	return nil
 }
 
-func (l *deliveryLedger) deliveredSession(sessionKey string) error {
+func (l *deliveryLedger) deliveredSession(sessionKey string) ([]deliveryClaim, error) {
 	if l == nil || strings.TrimSpace(sessionKey) == "" {
-		return nil
+		return nil, nil
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -411,6 +421,7 @@ func (l *deliveryLedger) deliveredSession(sessionKey string) error {
 	now := time.Now().UTC()
 	channels := make(map[string]bool)
 	changed := false
+	var claims []deliveryClaim
 	for key, record := range candidate.Records {
 		if BuildSessionKey(record.Source) != sessionKey || record.Status == deliveryStatusDelivered {
 			continue
@@ -419,33 +430,35 @@ func (l *deliveryLedger) deliveredSession(sessionKey string) error {
 		record.UpdatedAt = now
 		record.LastError = ""
 		candidate.Records[key] = record
+		claims = append(claims, deliveryClaim{Source: record.Source, MessageID: record.MessageID})
 		if record.Cursor != "" {
 			channels[recoveryChannelKey(record.Source)] = true
 		}
 		changed = true
 	}
 	if !changed {
-		return nil
+		return nil, nil
 	}
 	for channelKey := range channels {
 		advanceRecoveryCheckpoint(&candidate, channelKey, now)
 	}
 	if err := l.persistLocked(candidate); err != nil {
-		return fmt.Errorf("bot recovery canceled session persist: %w", err)
+		return nil, fmt.Errorf("bot recovery canceled session persist: %w", err)
 	}
 	l.state = candidate
-	return nil
+	return claims, nil
 }
 
-func (l *deliveryLedger) failSession(sessionKey string) error {
+func (l *deliveryLedger) failSession(sessionKey string) ([]deliveryClaim, error) {
 	if l == nil || strings.TrimSpace(sessionKey) == "" {
-		return nil
+		return nil, nil
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	candidate := cloneDeliveryLedgerState(l.state)
 	now := time.Now().UTC()
 	changed := false
+	var claims []deliveryClaim
 	for key, record := range candidate.Records {
 		if BuildSessionKey(record.Source) != sessionKey || record.Status == deliveryStatusDelivered {
 			continue
@@ -454,16 +467,17 @@ func (l *deliveryLedger) failSession(sessionKey string) error {
 		record.UpdatedAt = now
 		record.LastError = "delivery failed; inspect local gateway logs"
 		candidate.Records[key] = record
+		claims = append(claims, deliveryClaim{Source: record.Source, MessageID: record.MessageID})
 		changed = true
 	}
 	if !changed {
-		return nil
+		return nil, nil
 	}
 	if err := l.persistLocked(candidate); err != nil {
-		return fmt.Errorf("bot recovery canceled session failure persist: %w", err)
+		return nil, fmt.Errorf("bot recovery canceled session failure persist: %w", err)
 	}
 	l.state = candidate
-	return nil
+	return claims, nil
 }
 
 func (l *deliveryLedger) checkpoints(binding AdapterBinding) []RecoveryCheckpoint {
