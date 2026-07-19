@@ -1,24 +1,24 @@
 {
   "version": 2,
-  "updated_at": "2026-07-19T15:28:22Z",
+  "updated_at": "2026-07-19T20:50:10Z",
   "upstreams": {
     "reasonix": {
       "branch": "main-v2",
       "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-      "reviewed": "8bb0e5493a7d4774277666326c05b96791485aa2",
-      "latest_seen": "8bb0e5493a7d4774277666326c05b96791485aa2"
+      "reviewed": "2301e24827bf62c7584f34c4f541c432dd4f6e0b",
+      "latest_seen": "2301e24827bf62c7584f34c4f541c432dd4f6e0b"
     },
     "hermes": {
       "branch": "main",
       "baseline": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
-      "reviewed": "36f2a966c7f9f69987494b867c3dcf96b69a5766",
-      "latest_seen": "36f2a966c7f9f69987494b867c3dcf96b69a5766"
+      "reviewed": "1b17015f7a8d0c0d68b1f08aa389538e7fd172e3",
+      "latest_seen": "1b17015f7a8d0c0d68b1f08aa389538e7fd172e3"
     },
     "codex": {
       "branch": "main",
       "baseline": "f6e251c3ac6573a4d6eccddea6ad12587868485f",
-      "reviewed": "0fb559f0f6e231a88ac02ea002d3ecd248e2b515",
-      "latest_seen": "0fb559f0f6e231a88ac02ea002d3ecd248e2b515"
+      "reviewed": "7844386e3de08febd13075eaaaf0e6f9dbe52c58",
+      "latest_seen": "7844386e3de08febd13075eaaaf0e6f9dbe52c58"
     },
     "mimo": {
       "branch": "main",
@@ -65,8 +65,8 @@
     "grok-build": {
       "branch": "main",
       "baseline": "98c3b2438aa922fbbe6178a5c0a4c48f85edc8ce",
-      "reviewed": "7cfcb20d2b50b0d18801a6c0af2e401c0e060894",
-      "latest_seen": "7cfcb20d2b50b0d18801a6c0af2e401c0e060894"
+      "reviewed": "ba76b0a683fa52e4e60685017b85905451be17bc",
+      "latest_seen": "ba76b0a683fa52e4e60685017b85905451be17bc"
     }
   }
 }

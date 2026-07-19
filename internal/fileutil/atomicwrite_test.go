@@ -26,9 +26,9 @@ func TestReplaceFileNoRetryWhenTmpMissing(t *testing.T) {
 	}
 }
 
-func TestReplaceFileRetriesThenReturnsError(t *testing.T) {
+func TestReplaceFileDirectoryFailsFast(t *testing.T) {
 	oldBase, oldMax := replaceRetryBase, maxReplaceRetries
-	replaceRetryBase, maxReplaceRetries = 0, 3
+	replaceRetryBase, maxReplaceRetries = 10*time.Second, 12
 	t.Cleanup(func() { replaceRetryBase, maxReplaceRetries = oldBase, oldMax })
 
 	dir := t.TempDir()
@@ -40,8 +40,12 @@ func TestReplaceFileRetriesThenReturnsError(t *testing.T) {
 	if err := os.Mkdir(dest, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	start := time.Now()
 	if err := ReplaceFile(tmp, dest); err == nil {
 		t.Fatal("want error when dest can never be replaced")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("directory destination should fail without transient retries, took %v", elapsed)
 	}
 	if !fileExists(tmp) {
 		t.Error("tmp should survive a failed replace so the next launch can retry")

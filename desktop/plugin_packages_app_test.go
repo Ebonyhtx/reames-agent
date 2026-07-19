@@ -306,6 +306,41 @@ func TestSupersedePluginStartupBuildsCancelsOldGenerationBuilds(t *testing.T) {
 	}
 }
 
+func TestApplyPluginOperationSupersedesStartupBuildBeforeMutation(t *testing.T) {
+	app := NewApp()
+	activeCtrl := control.New(control.Options{})
+	defer activeCtrl.Close()
+	var canceled atomic.Bool
+	active := &WorkspaceTab{ID: "active", Ctrl: activeCtrl, Ready: true}
+	building := &WorkspaceTab{
+		ID:              "building",
+		buildGeneration: 4,
+		buildCancel:     func() { canceled.Store(true) },
+	}
+	app.mu.Lock()
+	app.tabs[active.ID] = active
+	app.tabs[building.ID] = building
+	app.activeTabID = active.ID
+	app.mu.Unlock()
+
+	_, err := app.applyPluginOperation(func() (PluginOperationView, error) {
+		if !canceled.Load() {
+			return PluginOperationView{}, fmt.Errorf("old startup build was still admitted when plugin mutation began")
+		}
+		app.mu.Lock()
+		building.removed = true // prevent the post-mutation restart from doing real boot work
+		generation := building.buildGeneration
+		app.mu.Unlock()
+		if generation != 5 {
+			return PluginOperationView{}, fmt.Errorf("build generation = %d, want 5", generation)
+		}
+		return PluginOperationView{}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDecodePluginOperationClassifiesStatuses(t *testing.T) {
 	tests := []struct {
 		status  string

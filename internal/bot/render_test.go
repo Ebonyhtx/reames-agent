@@ -34,6 +34,37 @@ func TestRenderSinkFinalDeliveryRequiresSuccessfulFinalMessage(t *testing.T) {
 	}
 }
 
+func TestRenderSinkDefersOnlySuccessfulFinalTextAndIgnoresDuplicateTurnDone(t *testing.T) {
+	adapter := newFakeAdapter(PlatformWeixin, "deferred")
+	sink := newRenderSink(context.Background(), adapter, "conn", "weixin", "chat", ChatDM, "user", "message", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
+	sink.deferFinal = true
+	sink.Emit(event.Event{Kind: event.TurnStarted})
+	sink.Emit(event.Event{Kind: event.Text, Text: "durable final answer"})
+	sink.Emit(event.Event{Kind: event.TurnDone})
+	sink.Emit(event.Event{Kind: event.TurnDone})
+	if got := len(adapter.sentMessages()); got != 0 {
+		t.Fatalf("deferred final sent before obligation persistence: %d", got)
+	}
+	messages, err := sink.drainFinalMessages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 || messages[0].Text != "durable final answer" {
+		t.Fatalf("deferred messages = %+v", messages)
+	}
+	if _, err := sink.drainFinalMessages(); err == nil {
+		t.Fatal("second drain unexpectedly returned a final response")
+	}
+
+	failing := newRenderSink(context.Background(), adapter, "conn", "weixin", "chat", ChatDM, "user", "message", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
+	failing.deferFinal = true
+	failing.Emit(event.Event{Kind: event.Text, Text: "partial answer"})
+	failing.Emit(event.Event{Kind: event.TurnDone, Err: errors.New("turn failed")})
+	if got := adapter.sentMessages(); len(got) != 2 || got[0].Text != "partial answer" || !strings.Contains(got[1].Text, "turn failed") {
+		t.Fatalf("failed turn messages = %+v", got)
+	}
+}
+
 func TestApprovalCardCarriesChatType(t *testing.T) {
 	card := approvalCard(event.Approval{ID: "approval-1"}, ChatDM, "allowed-user")
 	if len(card.Elements) < 2 {
@@ -214,7 +245,7 @@ func TestRenderSinkConsumesEmptyWhitespacePrefix(t *testing.T) {
 	sink := newRenderSink(context.Background(), adapter, "weixin-weixin", "weixin", "chat-1", ChatDM, "user-1", "msg-1", slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
 	sink.buf.WriteString("\n工具状态")
 
-	sink.flushPrefix(1)
+	sink.flushPrefix(1, false)
 
 	if got := sink.buf.String(); got != "工具状态" {
 		t.Fatalf("buffer = %q, want leading newline consumed", got)

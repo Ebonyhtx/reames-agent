@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"reames-agent/internal/agent"
 	"reames-agent/internal/diff"
@@ -125,6 +126,48 @@ func TestInterruptedWriterTransactionRollsBackWorkspaceTranscriptAndRuntime(t *t
 	}
 }
 
+func TestGracefulInterruptedTurnKeepsCompletePairsAndLocalizesUnsafeTail(t *testing.T) {
+	sess := agent.NewSession("system")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "previous"})
+	start := sess.Len()
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "update config", CreatedAt: time.Now().UnixMilli()})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{
+		ID: "write-1", Name: "write_file", Arguments: `{"path":"config.json","content":"{}"}`, Added: 1,
+	}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "write-1", Name: "write_file", Content: "wrote config.json"})
+	sess.Add(provider.Message{
+		Role: provider.RoleAssistant, Content: "unsafe partial answer", ReasoningContent: "unsafe partial reasoning",
+		ReasoningSignature: "must-not-replay", ReasoningBlocks: []provider.ReasoningBlock{{Type: "redacted_thinking", Data: "opaque"}},
+		ToolCalls: []provider.ToolCall{{ID: "partial-1", Name: "bash", Arguments: `{"command":"danger"}`}},
+	})
+	exec := agent.New(nil, nil, sess, agent.Options{}, event.Discard)
+	c := New(Options{Executor: exec})
+	if err := c.preserveInterruptedVisibleTurnMessagesAfter(start, provider.Message{}); err != nil {
+		t.Fatalf("preserve interrupted turn: %v", err)
+	}
+
+	msgs := sess.Snapshot()
+	if len(msgs) != start+4 || msgs[start+1].Role != provider.RoleAssistant || msgs[start+2].Role != provider.RoleTool {
+		t.Fatalf("complete canonical tool pair was not retained: %+v", msgs)
+	}
+	local := msgs[len(msgs)-1]
+	if !local.LocalOnly || local.InterruptedTurn == nil || !local.InterruptedTurn.Pending || local.ReasoningSignature != "" || len(local.ReasoningBlocks) != 0 {
+		t.Fatalf("unsafe tail was not converted to a safe local recovery record: %+v", local)
+	}
+	if len(local.ToolCalls) != 1 || local.ToolCalls[0].Name != "bash" || local.ToolCalls[0].Arguments != "" {
+		t.Fatalf("partial tool arguments leaked into local display contract: %+v", local.ToolCalls)
+	}
+	recovery := local.InterruptedTurn
+	if len(recovery.CompletedTools) != 1 || recovery.CompletedTools[0].Name != "write_file" || len(recovery.CompletedTools[0].Files) != 1 || recovery.CompletedTools[0].Files[0] != "config.json" || len(recovery.InterruptedTools) != 1 || recovery.InterruptedTools[0] != "bash" {
+		t.Fatalf("recovery facts = %+v", recovery)
+	}
+	for _, m := range provider.MessagesForRequest(msgs) {
+		if strings.Contains(m.Content, "unsafe partial") || strings.Contains(m.ReasoningContent, "unsafe partial") {
+			t.Fatalf("unsafe local output leaked to provider messages: %+v", provider.MessagesForRequest(msgs))
+		}
+	}
+}
+
 func TestCommittedWriterTransactionSurvivesCrashBeforeMarkerClear(t *testing.T) {
 	f := newRecoveryTransactionFixture(t)
 	f.session.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "write-1", Name: "write_file", Content: "wrote state.txt"})
@@ -182,8 +225,14 @@ func TestStreamInterruptedTurnCommitsPartialTranscriptAndRuntime(t *testing.T) {
 		t.Fatal(loadErr)
 	}
 	msgs := loaded.Messages
-	if len(msgs) != startMessages+2 || msgs[len(msgs)-1].Role != provider.RoleAssistant || msgs[len(msgs)-1].Content != "durable partial response" {
-		t.Fatalf("persisted interrupted transcript = %+v, want partial assistant tail", msgs)
+	if len(msgs) != startMessages+2 || !msgs[len(msgs)-1].LocalOnly || msgs[len(msgs)-1].Content != "durable partial response" || msgs[len(msgs)-1].InterruptedTurn == nil || !msgs[len(msgs)-1].InterruptedTurn.Pending {
+		t.Fatalf("persisted interrupted transcript = %+v, want provider-excluded partial display tail", msgs)
+	}
+	wire := provider.MessagesForRequest(msgs)
+	for _, message := range wire {
+		if strings.Contains(message.Content, "durable partial response") {
+			t.Fatalf("partial interrupted output leaked into provider history: %+v", wire)
+		}
 	}
 	state, ok := c.goals.readSessionState(path)
 	if !ok {
@@ -220,7 +269,7 @@ func TestStreamInterruptedTurnCommitFailureRollsBackPartialTranscript(t *testing
 	}
 
 	err := c.runTurnWithRaw(context.Background(), "continue", "continue")
-	if !provider.IsStreamInterrupted(err) || !strings.Contains(err.Error(), "commit interrupted stream turn") {
+	if !provider.IsStreamInterrupted(err) || !strings.Contains(err.Error(), "commit interrupted turn") {
 		t.Fatalf("turn error = %v, want interrupted stream commit failure", err)
 	}
 	loaded, loadErr := agent.LoadSession(path)

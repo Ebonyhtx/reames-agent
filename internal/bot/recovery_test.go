@@ -1,10 +1,13 @@
 package bot
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,12 +31,19 @@ func recoveryTestMessage(id, cursor string) InboundMessage {
 	}
 }
 
-func TestDeliveryLedgerCommitsCursorOnlyAfterDelivery(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "bot", "delivery-ledger.json")
-	ledger, err := openDeliveryLedger(path, 16)
+func openTestDeliveryLedger(t *testing.T, path string, limit int) *deliveryLedger {
+	t.Helper()
+	ledger, err := openDeliveryLedger(path, limit)
 	if err != nil {
 		t.Fatalf("openDeliveryLedger: %v", err)
 	}
+	t.Cleanup(ledger.close)
+	return ledger
+}
+
+func TestDeliveryLedgerCommitsCursorOnlyAfterDelivery(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bot", "delivery-ledger.json")
+	ledger := openTestDeliveryLedger(t, path, 16)
 	msg := recoveryTestMessage("message-1", "cursor-1")
 	claimed, err := ledger.claim(msg)
 	if err != nil || !claimed {
@@ -66,10 +76,7 @@ func TestDeliveryLedgerCommitsCursorOnlyAfterDelivery(t *testing.T) {
 }
 
 func TestDeliveryLedgerAdvancesOnlyContiguousChannelPrefix(t *testing.T) {
-	ledger, err := openDeliveryLedger(filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
 	first := recoveryTestMessage("group-message-1", "group-cursor-1")
 	first.ChatType = ChatGroup
 	first.UserID = "group-user-1"
@@ -98,10 +105,7 @@ func TestDeliveryLedgerAdvancesOnlyContiguousChannelPrefix(t *testing.T) {
 }
 
 func TestDeliveryLedgerMergedQueueTurnSettlesEveryClaim(t *testing.T) {
-	ledger, err := openDeliveryLedger(filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
 	second := recoveryTestMessage("queued-message-2", "queued-cursor-2")
 	third := recoveryTestMessage("queued-message-3", "queued-cursor-3")
 	for _, msg := range []InboundMessage{second, third} {
@@ -126,18 +130,13 @@ func TestDeliveryLedgerMergedQueueTurnSettlesEveryClaim(t *testing.T) {
 func TestDeliveryLedgerColdStartRetriesInterruptedClaim(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "delivery-ledger.json")
 	msg := recoveryTestMessage("message-interrupted", "cursor-interrupted")
-	first, err := openDeliveryLedger(path, 16)
-	if err != nil {
-		t.Fatalf("open first ledger: %v", err)
-	}
+	first := openTestDeliveryLedger(t, path, 16)
 	if claimed, err := first.claim(msg); err != nil || !claimed {
 		t.Fatalf("first claim = %v, %v", claimed, err)
 	}
 
-	restarted, err := openDeliveryLedger(path, 16)
-	if err != nil {
-		t.Fatalf("reopen ledger: %v", err)
-	}
+	first.close()
+	restarted := openTestDeliveryLedger(t, path, 16)
 	if claimed, err := restarted.claim(msg); err != nil || !claimed {
 		t.Fatalf("claim after cold-start recovery = %v, %v; want retry", claimed, err)
 	}
@@ -148,10 +147,7 @@ func TestDeliveryLedgerColdStartRetriesInterruptedClaim(t *testing.T) {
 }
 
 func TestDeliveryLedgerRetryPreservesCursorAndRejectsIdentityConflict(t *testing.T) {
-	ledger, err := openDeliveryLedger(filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
 	msg := recoveryTestMessage("message-retry", "cursor-original")
 	if claimed, err := ledger.claim(msg); err != nil || !claimed {
 		t.Fatalf("first claim = %v, %v", claimed, err)
@@ -181,10 +177,7 @@ func TestDeliveryLedgerRetryPreservesCursorAndRejectsIdentityConflict(t *testing
 func TestDeliveryLedgerFailureDoesNotAdvanceCursorAndRedactsSecret(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "delivery-ledger.json")
 	msg := recoveryTestMessage("message-failed", "cursor-failed")
-	ledger, err := openDeliveryLedger(path, 16)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ledger := openTestDeliveryLedger(t, path, 16)
 	if claimed, err := ledger.claim(msg); err != nil || !claimed {
 		t.Fatalf("claim = %v, %v", claimed, err)
 	}
@@ -213,6 +206,362 @@ func TestDeliveryLedgerCorruptionFailsClosed(t *testing.T) {
 	}
 	if _, err := openDeliveryLedger(path, 16); err == nil {
 		t.Fatal("openDeliveryLedger accepted corrupt identity")
+	}
+}
+
+func TestDeliveryLedgerMigratesVersionOneAndReleasesExclusiveLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "delivery-ledger.json")
+	legacy := deliveryLedgerState{
+		Version:     legacyDeliveryLedgerVersion,
+		Records:     map[string]deliveryRecord{},
+		Checkpoints: map[string]RecoveryCheckpoint{},
+		Sequences:   map[string]int64{},
+	}
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first := openTestDeliveryLedger(t, path, 16)
+	if first.state.Version != deliveryLedgerVersion || first.state.Obligations == nil {
+		t.Fatalf("migrated state = %+v", first.state)
+	}
+	if _, err := openDeliveryLedger(path, 16); err == nil || !strings.Contains(err.Error(), "already in use") {
+		t.Fatalf("second writer error = %v, want exclusive-lock failure", err)
+	}
+	first.close()
+	reopened := openTestDeliveryLedger(t, path, 16)
+	if reopened.state.Version != deliveryLedgerVersion {
+		t.Fatalf("reopened version = %d", reopened.state.Version)
+	}
+}
+
+type obligationTestAdapter struct {
+	*fakeAdapter
+	beforeSend func(OutboundMessage)
+	sendErr    error
+}
+
+func (a *obligationTestAdapter) Send(ctx context.Context, msg OutboundMessage) (SendResult, error) {
+	if a.beforeSend != nil {
+		a.beforeSend(msg)
+	}
+	result, _ := a.fakeAdapter.Send(ctx, msg)
+	if a.sendErr != nil {
+		return SendResult{}, a.sendErr
+	}
+	return result, nil
+}
+
+func obligationMessages(msg InboundMessage, texts ...string) []OutboundMessage {
+	messages := make([]OutboundMessage, 0, len(texts))
+	for _, text := range texts {
+		messages = append(messages, OutboundMessage{
+			ConnectionID: msg.ConnectionID,
+			Domain:       msg.Domain,
+			ChatID:       msg.ChatID,
+			ChatType:     msg.ChatType,
+			Text:         text,
+			ReplyToMsgID: inboundReplyMessageID(msg),
+		})
+	}
+	return messages
+}
+
+func obligationGateway(ledger *deliveryLedger, msg InboundMessage, adapter Adapter, logger *slog.Logger) *BotGateway {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	gw := NewGateway(GatewayConfig{}, nil, logger)
+	gw.recovery = ledger
+	gw.adapters = []AdapterBinding{{ID: msg.ConnectionID, Domain: msg.Domain, Platform: msg.Platform, Adapter: adapter}}
+	return gw
+}
+
+func TestOutboundObligationPersistsAttemptBeforePlatformSendAndCommitsAtomically(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "delivery-ledger.json")
+	ledger := openTestDeliveryLedger(t, path, 16)
+	first := recoveryTestMessage("message-obligation-1", "cursor-obligation-1")
+	second := recoveryTestMessage("message-obligation-2", "cursor-obligation-2")
+	for _, msg := range []InboundMessage{first, second} {
+		if claimed, err := ledger.claim(msg); err != nil || !claimed {
+			t.Fatalf("claim %s = %v, %v", msg.MessageID, claimed, err)
+		}
+	}
+	merged := first
+	mergeInboundDeliveryClaims(&merged, second)
+	obligation, err := ledger.prepareOutboundObligation(merged, obligationMessages(merged, "durable final answer"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := deliveryRecordKey(obligation.Source, obligation.MessageID)
+	adapter := &obligationTestAdapter{fakeAdapter: newFakeAdapter(merged.Platform, merged.ConnectionID)}
+	adapter.beforeSend = func(OutboundMessage) {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Errorf("read ledger during send: %v", readErr)
+			return
+		}
+		var state deliveryLedgerState
+		if err := json.Unmarshal(data, &state); err != nil {
+			t.Errorf("decode ledger during send: %v", err)
+			return
+		}
+		persisted := state.Obligations[key]
+		if persisted.Status != obligationStatusAttempting || persisted.Attempts != 1 {
+			t.Errorf("persisted obligation during send = %+v", persisted)
+		}
+	}
+	gw := obligationGateway(ledger, merged, adapter, nil)
+	if delivered, err := gw.sendOutboundObligation(context.Background(), key); err != nil || !delivered {
+		t.Fatalf("sendOutboundObligation = %v, %v", delivered, err)
+	}
+	snapshot := ledger.snapshot()
+	if snapshot.Obligations != 0 || snapshot.Delivered != 2 || snapshot.Checkpoints != 1 {
+		t.Fatalf("atomic completion snapshot = %+v", snapshot)
+	}
+	checkpoints := ledger.checkpoints(AdapterBinding{ID: merged.ConnectionID, Domain: merged.Domain, Platform: merged.Platform})
+	if len(checkpoints) != 1 || checkpoints[0].Cursor != second.RecoveryCursor || checkpoints[0].Sequence != 2 {
+		t.Fatalf("atomic completion checkpoint = %+v", checkpoints)
+	}
+}
+
+func TestOutboundObligationRecoveryWarningMatchesSendAmbiguity(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		makeState  func(*testing.T, *deliveryLedger, string)
+		wantMarker bool
+	}{
+		{name: "pending", makeState: func(*testing.T, *deliveryLedger, string) {}, wantMarker: false},
+		{name: "attempting", makeState: func(t *testing.T, ledger *deliveryLedger, key string) {
+			if _, err := ledger.beginOutboundAttempt(key); err != nil {
+				t.Fatal(err)
+			}
+		}, wantMarker: true},
+		{name: "failed", makeState: func(t *testing.T, ledger *deliveryLedger, key string) {
+			if _, err := ledger.beginOutboundAttempt(key); err != nil {
+				t.Fatal(err)
+			}
+			if err := ledger.failOutboundAttempt(key); err != nil {
+				t.Fatal(err)
+			}
+		}, wantMarker: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "delivery-ledger.json")
+			first := openTestDeliveryLedger(t, path, 16)
+			msg := recoveryTestMessage("message-"+tc.name, "cursor-"+tc.name)
+			if claimed, err := first.claim(msg); err != nil || !claimed {
+				t.Fatalf("claim = %v, %v", claimed, err)
+			}
+			obligation, err := first.prepareOutboundObligation(msg, obligationMessages(msg, "original final answer"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			key := deliveryRecordKey(obligation.Source, obligation.MessageID)
+			tc.makeState(t, first, key)
+			first.close()
+
+			restarted := openTestDeliveryLedger(t, path, 16)
+			adapter := &obligationTestAdapter{fakeAdapter: newFakeAdapter(msg.Platform, msg.ConnectionID)}
+			gw := obligationGateway(restarted, msg, adapter, nil)
+			if delivered, err := gw.sendOutboundObligation(context.Background(), key); err != nil || !delivered {
+				t.Fatalf("recover obligation = %v, %v", delivered, err)
+			}
+			sent := adapter.sentMessages()
+			if len(sent) != 1 {
+				t.Fatalf("sent = %+v", sent)
+			}
+			hasMarker := strings.HasPrefix(sent[0].Text, recoveredReplyMarker)
+			if hasMarker != tc.wantMarker || !strings.HasSuffix(sent[0].Text, "original final answer") {
+				t.Fatalf("recovered text = %q, want marker=%v", sent[0].Text, tc.wantMarker)
+			}
+		})
+	}
+}
+
+func TestOutboundObligationResumesAtNextUnconfirmedChunk(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "delivery-ledger.json")
+	first := openTestDeliveryLedger(t, path, 16)
+	msg := recoveryTestMessage("message-multichunk", "cursor-multichunk")
+	if claimed, err := first.claim(msg); err != nil || !claimed {
+		t.Fatalf("claim = %v, %v", claimed, err)
+	}
+	obligation, err := first.prepareOutboundObligation(msg, obligationMessages(msg, "chunk-one", "chunk-two", "chunk-three"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := deliveryRecordKey(obligation.Source, obligation.MessageID)
+	if _, err := first.beginOutboundAttempt(key); err != nil {
+		t.Fatal(err)
+	}
+	if _, complete, _, err := first.acknowledgeOutboundChunk(key); err != nil || complete {
+		t.Fatalf("ack first chunk = complete %v, err %v", complete, err)
+	}
+	if _, err := first.beginOutboundAttempt(key); err != nil {
+		t.Fatal(err)
+	}
+	first.close()
+
+	restarted := openTestDeliveryLedger(t, path, 16)
+	adapter := &obligationTestAdapter{fakeAdapter: newFakeAdapter(msg.Platform, msg.ConnectionID)}
+	gw := obligationGateway(restarted, msg, adapter, nil)
+	if delivered, err := gw.sendOutboundObligation(context.Background(), key); err != nil || !delivered {
+		t.Fatalf("resume obligation = %v, %v", delivered, err)
+	}
+	sent := adapter.sentMessages()
+	if len(sent) != 2 || sent[0].Text != recoveredReplyMarker+"chunk-two" || sent[1].Text != "chunk-three" {
+		t.Fatalf("resumed chunks = %+v", sent)
+	}
+}
+
+func TestOutboundObligationSendAndCommitFailuresRemainRetryable(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		commitFail bool
+	}{
+		{name: "platform send", commitFail: false},
+		{name: "local commit", commitFail: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
+			msg := recoveryTestMessage("message-failure-"+tc.name, "cursor-failure-"+tc.name)
+			if claimed, err := ledger.claim(msg); err != nil || !claimed {
+				t.Fatalf("claim = %v, %v", claimed, err)
+			}
+			obligation, err := ledger.prepareOutboundObligation(msg, obligationMessages(msg, "failure-sensitive-answer"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			key := deliveryRecordKey(obligation.Source, obligation.MessageID)
+			adapter := &obligationTestAdapter{fakeAdapter: newFakeAdapter(msg.Platform, msg.ConnectionID)}
+			if tc.commitFail {
+				originalWrite := ledger.writeFile
+				writes := 0
+				ledger.writeFile = func(path string, data []byte, mode os.FileMode) error {
+					writes++
+					if writes == 2 {
+						return errors.New("injected acknowledgement commit failure")
+					}
+					return originalWrite(path, data, mode)
+				}
+			} else {
+				adapter.sendErr = errors.New("injected platform send failure")
+			}
+			gw := obligationGateway(ledger, msg, adapter, nil)
+			if delivered, err := gw.sendOutboundObligation(context.Background(), key); err == nil || !delivered {
+				t.Fatalf("send failure = delivered %v, err %v", delivered, err)
+			}
+			snapshot := ledger.snapshot()
+			if snapshot.Obligations != 1 || snapshot.Checkpoints != 0 || snapshot.Delivered != 0 {
+				t.Fatalf("retryable failure snapshot = %+v", snapshot)
+			}
+			if tc.commitFail && snapshot.ObligationAmbiguous != 1 {
+				t.Fatalf("commit ambiguity snapshot = %+v", snapshot)
+			}
+			if !tc.commitFail && snapshot.Failed != 1 {
+				t.Fatalf("send failure snapshot = %+v", snapshot)
+			}
+		})
+	}
+}
+
+func TestOutboundObligationBoundsAndContentIdentityFailClosed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "delivery-ledger.json")
+	ledger := openTestDeliveryLedger(t, path, 1024)
+	msg := recoveryTestMessage("message-bounds", "cursor-bounds")
+	if claimed, err := ledger.claim(msg); err != nil || !claimed {
+		t.Fatalf("claim = %v, %v", claimed, err)
+	}
+	tooMany := make([]string, maxOutboundObligationChunks+1)
+	for i := range tooMany {
+		tooMany[i] = "x"
+	}
+	if _, err := ledger.prepareOutboundObligation(msg, obligationMessages(msg, tooMany...)); err == nil {
+		t.Fatal("accepted too many outbound chunks")
+	}
+	if _, err := ledger.prepareOutboundObligation(msg, obligationMessages(msg, strings.Repeat("x", maxOutboundObligationBytes+1))); err == nil {
+		t.Fatal("accepted oversized outbound obligation")
+	}
+	obligation, err := ledger.prepareOutboundObligation(msg, obligationMessages(msg, "identity-bound-answer"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := deliveryRecordKey(obligation.Source, obligation.MessageID)
+	ledger.close()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state deliveryLedgerState
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	corrupt := state.Obligations[key]
+	corrupt.Chunks[0] = "tampered-answer"
+	state.Obligations[key] = corrupt
+	data, err = json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openDeliveryLedger(path, 1024); err == nil || !strings.Contains(err.Error(), "content identity mismatch") {
+		t.Fatalf("corrupt obligation error = %v", err)
+	}
+}
+
+func TestDuplicateInboundResumesObligationWithoutCreatingController(t *testing.T) {
+	ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
+	msg := recoveryTestMessage("message-duplicate-obligation", "cursor-duplicate-obligation")
+	if claimed, err := ledger.claim(msg); err != nil || !claimed {
+		t.Fatalf("claim = %v, %v", claimed, err)
+	}
+	if _, err := ledger.prepareOutboundObligation(msg, obligationMessages(msg, "resume-without-model")); err != nil {
+		t.Fatal(err)
+	}
+	adapter := &obligationTestAdapter{fakeAdapter: newFakeAdapter(msg.Platform, msg.ConnectionID)}
+	gw := obligationGateway(ledger, msg, adapter, nil)
+	gw.handleMessage(context.Background(), gw.adapters[0], msg)
+	if len(gw.controllers) != 0 {
+		t.Fatalf("duplicate obligation created controllers: %d", len(gw.controllers))
+	}
+	if sent := adapter.sentMessages(); len(sent) != 1 || sent[0].Text != "resume-without-model" {
+		t.Fatalf("duplicate recovery sends = %+v", sent)
+	}
+}
+
+func TestOutboundObligationBodyStaysOutOfLogsStatusAndMetrics(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
+	msg := recoveryTestMessage("message-private-obligation", "cursor-private-obligation")
+	if claimed, err := ledger.claim(msg); err != nil || !claimed {
+		t.Fatalf("claim = %v, %v", claimed, err)
+	}
+	const secretBody = "UNIQUE_FINAL_BODY_MUST_NOT_LEAK_74291"
+	obligation, err := ledger.prepareOutboundObligation(msg, obligationMessages(msg, secretBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := &obligationTestAdapter{fakeAdapter: newFakeAdapter(msg.Platform, msg.ConnectionID), sendErr: errors.New("platform unavailable")}
+	gw := obligationGateway(ledger, msg, adapter, logger)
+	key := deliveryRecordKey(obligation.Source, obligation.MessageID)
+	_, _ = gw.sendOutboundObligation(context.Background(), key)
+
+	status := httptest.NewRecorder()
+	gw.handleControlStatus(status, httptest.NewRequest("GET", "/status", nil))
+	metrics := httptest.NewRecorder()
+	gw.handleControlMetrics(metrics, httptest.NewRequest("GET", "/metrics", nil))
+	combined := logs.String() + status.Body.String() + metrics.Body.String()
+	if strings.Contains(combined, secretBody) {
+		t.Fatalf("outbound body leaked through diagnostics: %s", combined)
+	}
+	if !strings.Contains(status.Body.String(), `"obligations":1`) || !strings.Contains(metrics.Body.String(), "reamesAgent_bot_outbound_obligations 1") {
+		t.Fatalf("privacy-safe obligation counts missing: status=%s metrics=%s", status.Body.String(), metrics.Body.String())
 	}
 }
 
@@ -248,14 +597,12 @@ func TestGatewayRunTurnCommitsOnlySuccessfulFinalSend(t *testing.T) {
 		{name: "send failed", adapter: &failedRecoverySendAdapter{newFakeAdapter(PlatformWeixin, "failed")}, wantFailed: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ledger, err := openDeliveryLedger(filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
-			if err != nil {
-				t.Fatal(err)
-			}
+			ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
 			gw := NewGateway(GatewayConfig{}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 			gw.recovery = ledger
 			msg := recoveryTestMessage("turn-message", "turn-cursor")
 			msg.Text = "run a turn"
+			gw.adapters = []AdapterBinding{{ID: msg.ConnectionID, Domain: msg.Domain, Platform: msg.Platform, Adapter: tc.adapter}}
 			if claimed, err := ledger.claim(msg); err != nil || !claimed {
 				t.Fatalf("claim = %v, %v", claimed, err)
 			}
@@ -282,10 +629,7 @@ func TestGatewayRunTurnCommitsOnlySuccessfulFinalSend(t *testing.T) {
 }
 
 func TestGatewayStopCommitsCanceledInboundBeforeCommandCursor(t *testing.T) {
-	ledger, err := openDeliveryLedger(filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
 	gw := NewGateway(GatewayConfig{}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	gw.recovery = ledger
 	original := recoveryTestMessage("message-running", "cursor-running")
@@ -320,10 +664,7 @@ func TestGatewayStopCommitsCanceledInboundBeforeCommandCursor(t *testing.T) {
 }
 
 func TestGatewayStopAcknowledgementFailureLeavesCanceledClaimsRetryable(t *testing.T) {
-	ledger, err := openDeliveryLedger(filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
 	gw := NewGateway(GatewayConfig{}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	gw.recovery = ledger
 	original := recoveryTestMessage("message-running-failed-ack", "cursor-running-failed-ack")
@@ -355,12 +696,14 @@ type fakeRecoveryAdapter struct {
 	recovered   []InboundMessage
 	checkpoints []RecoveryCheckpoint
 	limit       int
+	calls       int
 	err         error
 }
 
 func (f *fakeRecoveryAdapter) RecoverMissed(_ context.Context, checkpoints []RecoveryCheckpoint, limit int) ([]InboundMessage, error) {
 	f.muRecovery.Lock()
 	defer f.muRecovery.Unlock()
+	f.calls++
 	f.checkpoints = append([]RecoveryCheckpoint(nil), checkpoints...)
 	f.limit = limit
 	return append([]InboundMessage(nil), f.recovered...), f.err
@@ -370,6 +713,12 @@ func (f *fakeRecoveryAdapter) recoveryCall() ([]RecoveryCheckpoint, int) {
 	f.muRecovery.Lock()
 	defer f.muRecovery.Unlock()
 	return append([]RecoveryCheckpoint(nil), f.checkpoints...), f.limit
+}
+
+func (f *fakeRecoveryAdapter) recoveryCalls() int {
+	f.muRecovery.Lock()
+	defer f.muRecovery.Unlock()
+	return f.calls
 }
 
 func TestGatewayRecoveryScansThenDeduplicatesAcrossRestart(t *testing.T) {
@@ -463,5 +812,73 @@ func TestRecoveryAdapterErrorDegradesWithoutBlockingLiveGateway(t *testing.T) {
 	defer gw.Stop()
 	if errs := gw.StartErrors(); len(errs) != 1 || !strings.Contains(errs[0].Error(), "history unavailable") {
 		t.Fatalf("StartErrors = %v", errs)
+	}
+}
+
+func TestStartupObligationsAndHistoryShareOneRecoveryScanBudget(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "delivery-ledger.json")
+	msg := recoveryTestMessage("message-startup-obligation", "cursor-startup-obligation")
+	ledger := openTestDeliveryLedger(t, path, 16)
+	if claimed, err := ledger.claim(msg); err != nil || !claimed {
+		t.Fatalf("claim = %v, %v", claimed, err)
+	}
+	if _, err := ledger.prepareOutboundObligation(msg, obligationMessages(msg, "startup obligation")); err != nil {
+		t.Fatal(err)
+	}
+	ledger.close()
+
+	adapter := &fakeRecoveryAdapter{
+		fakeAdapter: newFakeAdapter(msg.Platform, msg.ConnectionID),
+		recovered:   []InboundMessage{recoveryTestMessage("history-must-wait", "history-cursor")},
+	}
+	gw := NewGatewayWithAdapterBindings(GatewayConfig{
+		Enabled:           map[Platform]bool{msg.Platform: true},
+		Allowlist:         AllowlistConfig{AllowAll: true},
+		RecoveryPath:      path,
+		RecoveryScanLimit: 1,
+	}, []AdapterBinding{{ID: msg.ConnectionID, Domain: msg.Domain, Platform: msg.Platform, Adapter: adapter}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := gw.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer gw.Stop()
+	if got := adapter.recoveryCalls(); got != 0 {
+		t.Fatalf("history recovery calls = %d, want zero after obligation consumes cap", got)
+	}
+	if sent := adapter.sentMessages(); len(sent) != 1 || sent[0].Text != "startup obligation" {
+		t.Fatalf("startup obligation sends = %+v", sent)
+	}
+}
+
+func TestExplicitSettlementRemovesObligationButFailedAcknowledgementPreservesIt(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		settle          func(*deliveryLedger, InboundMessage) error
+		wantObligations int
+	}{
+		{name: "acknowledged cancellation", settle: func(ledger *deliveryLedger, msg InboundMessage) error {
+			return ledger.delivered(msg)
+		}, wantObligations: 0},
+		{name: "failed cancellation acknowledgement", settle: func(ledger *deliveryLedger, msg InboundMessage) error {
+			return ledger.fail(msg, errors.New("cancellation acknowledgement failed"))
+		}, wantObligations: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ledger := openTestDeliveryLedger(t, filepath.Join(t.TempDir(), "delivery-ledger.json"), 16)
+			msg := recoveryTestMessage("message-cancel-"+tc.name, "cursor-cancel-"+tc.name)
+			if claimed, err := ledger.claim(msg); err != nil || !claimed {
+				t.Fatalf("claim = %v, %v", claimed, err)
+			}
+			if _, err := ledger.prepareOutboundObligation(msg, obligationMessages(msg, "answer pending cancellation")); err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.settle(ledger, msg); err != nil {
+				t.Fatal(err)
+			}
+			if got := ledger.snapshot().Obligations; got != tc.wantObligations {
+				t.Fatalf("obligations after settlement = %d, want %d", got, tc.wantObligations)
+			}
+		})
 	}
 }

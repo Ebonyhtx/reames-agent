@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"reames-agent/internal/agent"
 	"reames-agent/internal/autoresearch"
@@ -128,18 +129,21 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 			}
 			return
 		}
-		// A StreamInterruptedError is returned only after the provider emitted
-		// output and the agent exhausted its bounded tail-recovery attempts. Any
-		// tool calls preceding that cut have already completed synchronously, and
-		// the partial assistant messages are intentionally useful context for the
-		// user's Continue action. Commit that coherent boundary instead of making
-		// the durable transcript contradict the "partial response was kept" UI.
-		// Process crashes and every other runtime error remain fail-closed below.
-		if provider.IsStreamInterrupted(runErr) {
-			if err := c.commitInFlightTurn(startMessages); err == nil {
+		visibleTurn := !turn.synthetic && !IsSyntheticUserMessage(turn.raw)
+		fallback := provider.Message{
+			Role: provider.RoleUser, Content: input,
+			Images: append([]string(nil), c.inputImages(turn.input)...), CreatedAt: time.Now().UnixMilli(),
+		}
+		// Graceful stops and provider failures with durable partial display keep
+		// complete tool pairs and convert unsafe fragments to LocalOnly records.
+		// Startup/crash recovery still follows the stricter checkpoint rollback
+		// below because the process cannot prove opaque side effects completed.
+		if visibleTurn && ((errors.Is(runErr, context.Canceled) && c.CancelRequested()) ||
+			provider.IsStreamInterrupted(runErr) || c.hasInterruptedDisplayAfter(startMessages, fallback)) {
+			if err := c.preserveAndCommitInterruptedTurn(startMessages, fallback); err == nil {
 				return
 			} else {
-				runErr = errors.Join(runErr, fmt.Errorf("commit interrupted stream turn: %w", err))
+				runErr = errors.Join(runErr, err)
 			}
 		}
 		if err := c.recoverInterruptedTurnState(c.SessionPath()); err != nil {

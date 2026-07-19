@@ -298,19 +298,25 @@ curl -X POST http://127.0.0.1:37913/send \
 ```
 
 Gateway 会在 `<Reames Agent home>/bot/delivery-ledger.json` 保存权限为 0600 的
-原子投递账本。它不保存消息正文、附件、模型输出或工具数据，只保存远端消息
-身份、状态和适配器提供的 opaque 恢复游标。重复入站消息会跨重启抑制；只有
-最终回复实际发送成功后才提交游标。`/status`、control `/status` 和 `/metrics`
-只显示已交付、处理中、待重试和 checkpoint 数量，不返回远端 ID、游标或本地路径。
+schema-v2 原子投递账本。它保存远端入站身份、状态、opaque 恢复游标，以及 Agent
+成功完成一轮后用于“不重跑模型直接恢复回复”的最终文本分片；不保存入站消息正文、
+附件、工具数据、审批/Ask 卡片、进度消息或原始错误。每个 outbound obligation
+最多 1 MiB/512 个纯文本分片，整个账本仍限 4 MiB。同路径长生命周期 OS 文件锁
+会让第二个 CLI Gateway 或 Desktop bot writer fail closed。`/status`、control
+`/status` 和 `/metrics` 只显示统计数量，不返回远端 ID、游标、本地路径或最终答复正文。
 
 当前内置飞书、QQ、微信和 Telegram 适配器已使用持久 claim/去重和最终投递门禁。
 Telegram 还会把 `update_id` 作为持久投递身份，并且只有最终回复发送成功且投递
-账本提交成功后才推进远端 polling offset。发送失败会保留同一 update 等待重试；
-重启后遇到已 delivered 的重复 update 不会再次运行 Agent，但会确认远端 update。
+账本提交成功后才推进远端 polling offset。每个最终文本分片发送前，Gateway 会先
+持久化 `attempting`；平台 ACK 后才推进 `next_chunk`，最后一个 ACK 会在一次原子写中
+删除 obligation、结算所有被合并的 inbound claims，并推进连续 cursor/Telegram offset。
+重复入站若命中已有 obligation，会直接恢复原答复，不创建 Controller，也不再次运行模型。
 飞书、QQ 和微信尚未实现完全离线期间的历史消息分页补扫。因此“进程收到过事件后的重复投递恢复”
 可用，不代表“关机期间所有漏消息都能恢复”。后者必须由具体平台的历史/resume
-API 和真实应用凭据验证。部分分片已发送、后续分片失败时，系统选择不推进游标，
-重试可能重复前一个分片；这是明确的 at-least-once 边界。
+API 和真实应用凭据验证。投递保持明确的 at-least-once 边界：如果平台已经接收某个
+分片，但进程在本地提交 ACK 前崩溃，系统无法证明远端结果，会保守重发这个未确认分片，
+并添加“可能重复”的可见提示；已经持久 ACK 的前置分片不会重发。纯 `pending` obligation
+表示从未尝试发送，恢复时不会显示重复警告。
 排队消息即使被 `collect` 合并、被 queue-cap 策略摘要/丢弃，或被 interrupt/reset
 显式覆盖，也会保留各自的 durable claim；Gateway 只在对应最终回复或取消确认
 实际送达后结算这些 claims。

@@ -583,7 +583,7 @@ function botSettingsMeta(bot: BotSettingsView, t: ReturnType<typeof useT>): stri
   return t("settings.botConnectionCount", { n: connections });
 }
 
-function ShortcutsSection() {
+export function ShortcutsSection() {
   const t = useT();
   const [platform] = useState(() => detectShortcutPlatform());
   const [revision, setRevision] = useState(0);
@@ -594,6 +594,22 @@ function ShortcutsSection() {
 
   const definitions = shortcutDefinitions();
   const commitShortcut = (action: ShortcutAction, event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setConflict(null);
+      setRecording(null);
+      return;
+    }
+    if (event.key === "Tab") {
+      const recorder = event.currentTarget;
+      queueMicrotask(() => {
+        // Native Tab normally moves focus first. If this WebView does not,
+        // release focus so the recorder cannot become a keyboard trap.
+        if (document.activeElement === recorder) recorder.blur();
+      });
+      return;
+    }
     const combo = comboFromKeyboardEvent(event.nativeEvent);
     if (!combo) return;
     event.preventDefault();
@@ -655,12 +671,21 @@ function ShortcutsSection() {
                 <button
                   className={`shortcuts-settings__key${isRecording ? " shortcuts-settings__key--recording" : ""}${definition.configurable === false ? " shortcuts-settings__key--locked" : ""}`}
                   type="button"
+                  data-shortcut-action={definition.action}
                   disabled={definition.configurable === false}
                   aria-label={isRecording ? t("settings.shortcutsRecording") : display}
                   aria-pressed={isRecording}
-                  onClick={() => {
+                  onClick={(event) => {
                     setRecording(definition.action);
                     setConflict(null);
+                    // WebKit does not focus buttons on click. The recorder owns
+                    // the key listener, so focus it explicitly in the Wails view.
+                    event.currentTarget.focus();
+                  }}
+                  onBlur={() => {
+                    if (!isRecording) return;
+                    setConflict(null);
+                    setRecording(null);
                   }}
                   onKeyDown={(event) => isRecording && commitShortcut(definition.action, event)}
                 >

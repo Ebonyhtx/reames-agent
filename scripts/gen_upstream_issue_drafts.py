@@ -125,7 +125,7 @@ def generate_issue_draft(upstream: dict) -> str:
         "- [ ] Check for security implications",
         "- [ ] Determine adoption strategy (adopt / defer / ignore)",
         "- [ ] Estimate adaptation effort",
-        "- [ ] Update `docs/upstreams/upstreams.lock.json` via `--accept`",
+        "- [ ] Update `docs/upstreams/upstreams.lock.json` via `--accept-revision <id>=<full-sha>`",
         "",
         "---",
         f"_Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} by scripts/gen_upstream_issue_drafts.py_",

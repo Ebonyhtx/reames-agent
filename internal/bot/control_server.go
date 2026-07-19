@@ -162,7 +162,7 @@ func (gw *BotGateway) handleControlStatus(w http.ResponseWriter, r *http.Request
 		}
 	}
 	recovery := gw.DeliveryRecoveryHealth()
-	if recovery.Interrupted > 0 || recovery.Failed > 0 {
+	if recovery.Interrupted > 0 || recovery.Failed > 0 || recovery.Obligations > 0 {
 		status = "degraded"
 	}
 	writeControlJSON(w, controlStatusResponse{
@@ -221,6 +221,8 @@ func (gw *BotGateway) handleControlMetrics(w http.ResponseWriter, r *http.Reques
 	fmt.Fprintf(w, "# TYPE reamesAgent_bot_recovery_processing gauge\nreamesAgent_bot_recovery_processing %d\n", recovery.Processing)
 	fmt.Fprintf(w, "# TYPE reamesAgent_bot_recovery_retry_pending gauge\nreamesAgent_bot_recovery_retry_pending %d\n", recovery.Interrupted+recovery.Failed)
 	fmt.Fprintf(w, "# TYPE reamesAgent_bot_recovery_checkpoints gauge\nreamesAgent_bot_recovery_checkpoints %d\n", recovery.Checkpoints)
+	fmt.Fprintf(w, "# TYPE reamesAgent_bot_outbound_obligations gauge\nreamesAgent_bot_outbound_obligations %d\n", recovery.Obligations)
+	fmt.Fprintf(w, "# TYPE reamesAgent_bot_outbound_obligations_ambiguous gauge\nreamesAgent_bot_outbound_obligations_ambiguous %d\n", recovery.ObligationAmbiguous)
 	fmt.Fprintln(w, "# TYPE reamesAgent_bot_adapter_messages_total counter")
 	for _, health := range gw.AdapterHealth() {
 		labels := adapterMetricLabels(health)

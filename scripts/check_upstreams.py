@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "docs" / "upstreams" / "upstreams.json"
 DEFAULT_LOCK = ROOT / "docs" / "upstreams" / "upstreams.lock.json"
 REVIEW_COMPLETE = "complete"
+FULL_GIT_SHA = re.compile(r"[0-9a-fA-F]{40}")
 
 
 AREA_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
@@ -440,11 +441,45 @@ def report_fingerprint(upstreams: list[dict[str, Any]]) -> str:
     return hashlib.sha256(payload).hexdigest()[:20]
 
 
-def accepted_lock_entry(up: dict[str, Any], previous: dict[str, Any]) -> dict[str, str]:
+def parse_accept_revisions(values: list[str]) -> dict[str, str]:
+    """Parse repeatable ID=SHA acceptance arguments with a full immutable SHA."""
+    revisions: dict[str, str] = {}
+    for value in values:
+        upstream_id, separator, revision = value.partition("=")
+        upstream_id = upstream_id.strip()
+        revision = revision.strip().lower()
+        if not separator or not upstream_id or not FULL_GIT_SHA.fullmatch(revision):
+            raise ValueError(
+                f"invalid --accept-revision {value!r}: expected ID=FULL_40_CHARACTER_GIT_SHA"
+            )
+        previous = revisions.get(upstream_id)
+        if previous and previous != revision:
+            raise ValueError(f"conflicting accepted revisions for upstream {upstream_id}")
+        revisions[upstream_id] = revision
+    return revisions
+
+
+def acceptance_revisions(
+    legacy_ids: list[str], accept_all: bool, update_lock: bool, values: list[str]
+) -> dict[str, str]:
+    if legacy_ids or accept_all or update_lock:
+        raise ValueError(
+            "unbound upstream acceptance is disabled; use --accept-revision ID=FULL_40_CHARACTER_GIT_SHA"
+        )
+    return parse_accept_revisions(values)
+
+
+def accepted_lock_entry(
+    up: dict[str, Any], previous: dict[str, Any], expected_revision: str
+) -> dict[str, str]:
     baseline, _ = lock_points(previous)
-    latest = str(up.get("latest", ""))
+    latest = str(up.get("latest", "")).lower()
     if not latest:
         raise ValueError(f"cannot accept {up['id']}: latest revision is unavailable")
+    if latest != expected_revision.lower():
+        raise ValueError(
+            f"cannot accept {up['id']}: remote {latest} does not match reviewed revision {expected_revision.lower()}"
+        )
     return {
         "branch": str(up["branch"]),
         "baseline": baseline or latest,
@@ -530,11 +565,21 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
     parser.add_argument("--out-dir", type=Path, default=ROOT / "artifacts" / "upstream-watch")
-    parser.add_argument("--accept", action="append", default=[], metavar="ID", help="Mark one upstream revision as reviewed; repeat for multiple IDs.")
-    parser.add_argument("--accept-all", action="store_true", help="Mark every successfully checked upstream revision as reviewed.")
-    parser.add_argument("--update-lock", action="store_true", help=argparse.SUPPRESS)  # legacy alias for --accept-all
+    parser.add_argument("--accept", action="append", default=[], metavar="ID", help=argparse.SUPPRESS)
+    parser.add_argument("--accept-all", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--update-lock", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--accept-revision",
+        action="append",
+        default=[],
+        metavar="ID=SHA",
+        help="Mark exactly one reviewed full Git SHA as accepted; repeat for multiple upstreams.",
+    )
     parser.add_argument("--deep", action="store_true", help="Fetch actual diff content and commit messages (slower, more network I/O).")
     args = parser.parse_args()
+    expected_revisions = acceptance_revisions(
+        args.accept, args.accept_all, args.update_lock, args.accept_revision
+    )
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8-sig"))
     validate_manifest(manifest)
@@ -546,9 +591,7 @@ def main() -> int:
         upstreams.append(analyze_upstream(up, lock_entries.get(up["id"], {}), deep=args.deep))
 
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    accepted_ids = set(args.accept)
-    if args.accept_all or args.update_lock:
-        accepted_ids = {u["id"] for u in upstreams if u["latest"]}
+    accepted_ids = set(expected_revisions)
     known_ids = {u["id"] for u in upstreams}
     unknown_ids = accepted_ids - known_ids
     if unknown_ids:
@@ -558,13 +601,21 @@ def main() -> int:
         for u in upstreams:
             if u["id"] in accepted_ids:
                 source = manifest_by_id[u["id"]]
+                expected_revision = expected_revisions[u["id"]]
+                if str(u.get("latest", "")).lower() != expected_revision:
+                    raise ValueError(
+                        f"cannot accept {u['id']}: remote {u.get('latest') or '<unavailable>'} "
+                        f"does not match reviewed revision {expected_revision}"
+                    )
                 baseline, _ = lock_points(lock_entries.get(u["id"], {}))
-                coverage = review_coverage(source, baseline or u["latest"], u["latest"])
+                coverage = review_coverage(source, baseline or expected_revision, expected_revision)
                 if source.get("required_review_areas") and coverage["status"] != REVIEW_COMPLETE:
                     detail = coverage["error"] or ", ".join(coverage["missing"])
                     raise ValueError(f"cannot accept {u['id']}: review coverage incomplete ({detail})")
-                lock_entries[u["id"]] = accepted_lock_entry(u, lock_entries.get(u["id"], {}))
-                u["reviewed"] = u["latest"]
+                lock_entries[u["id"]] = accepted_lock_entry(
+                    u, lock_entries.get(u["id"], {}), expected_revision
+                )
+                u["reviewed"] = expected_revision
                 u["changed"] = False
                 u["files"] = []
                 u["areas"] = {}

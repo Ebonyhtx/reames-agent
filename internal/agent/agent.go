@@ -480,6 +480,12 @@ type Agent struct {
 	// stormSig: a model keeps doing the same successful write, so there is no
 	// error for the failure-only storm breaker to see.
 	repeatSuccessCounts map[string]int
+
+	// activeTurnCreatedAt identifies the real/synthetic user message that began
+	// the currently running turn. Compaction may rewrite older history while a
+	// tool loop is active, but it must keep this message and everything after it
+	// verbatim so cancellation/crash recovery can retain completed tool pairs.
+	activeTurnCreatedAt atomic.Int64
 }
 
 // PreEditHook must durably capture the recovery state required before a
@@ -1173,6 +1179,10 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	a.loopGuardReceiptMark = 0
 	a.sink.Emit(event.Event{Kind: event.TurnStarted})
 	rawInput := input
+	var interruptedRecovery *provider.InterruptedTurnRecovery
+	if !MemoryCompilerSkipFromContext(ctx) {
+		interruptedRecovery = a.pendingInterruptedRecovery()
+	}
 	memoryCompilerInput := rawInput
 	if sourceInput, ok := MemoryCompilerSourceInputFromContext(ctx); ok {
 		memoryCompilerInput = sourceInput
@@ -1223,7 +1233,11 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 			}
 		}
 	}
-	a.session.Add(provider.Message{Role: provider.RoleUser, Content: input, Images: userImages(ctx)})
+	input = withInterruptedRecovery(input, interruptedRecovery)
+	userCreatedAt := time.Now().UnixMilli()
+	a.activeTurnCreatedAt.Store(userCreatedAt)
+	defer a.activeTurnCreatedAt.Store(0)
+	a.session.Add(provider.Message{Role: provider.RoleUser, Content: input, Images: userImages(ctx), CreatedAt: userCreatedAt})
 	if err := a.syncSession(); err != nil {
 		return err
 	}
@@ -1254,7 +1268,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 			prevPrefixShape = prefixShape
 		}
 
-		text, reasoning, signature, reasoningBlocks, calls, usage, interrupted, partialToolStarted, err := a.stream(ctx, step+1)
+		text, reasoning, signature, reasoningBlocks, calls, usage, interrupted, partialToolStarted, partialCalls, err := a.stream(ctx, step+1)
 		if err != nil {
 			// A provider may report usage before a terminal stream error. Account
 			// that receipt even when the visible response must be recovered.
@@ -1279,16 +1293,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 			}
 			if interrupted && streamRecoveries < maxStreamRecoveries {
 				streamRecoveries++
-				if hasVisibleFinalAnswer(text) {
-					a.session.Add(provider.Message{
-						Role:               provider.RoleAssistant,
-						Content:            text,
-						ReasoningContent:   reasoning,
-						ReasoningSignature: signature,
-						ReasoningBlocks:    reasoningBlocks,
-						MemoryCitations:    a.memoryCitations(),
-					})
-				}
+				a.recordInterruptedDisplay(text, reasoning, partialCalls, false)
 				a.session.Add(provider.Message{
 					Role:    provider.RoleUser,
 					Content: a.withTurnPreferences(streamRecoveryMessage(hasVisibleFinalAnswer(text), partialToolStarted)),
@@ -1300,6 +1305,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 				step-- // recovery retries do not consume the tool-round maxSteps budget
 				continue
 			}
+			a.recordInterruptedDisplay(text, reasoning, partialCalls, true)
 			return err
 		}
 		streamRecoveries = 0
@@ -1444,6 +1450,7 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 		// If the context was cancelled during tool execution, return after storing
 		// the batch results so the session keeps paired tool-call history.
 		if ctx.Err() != nil {
+			a.recordInterruptedDisplay("", "", nil, true)
 			return ctx.Err()
 		}
 
@@ -2331,7 +2338,7 @@ func streamRecoveryMessage(hasPartialText, hadPartialTool bool) string {
 	case hadPartialTool:
 		return "The previous assistant response was interrupted while a tool call was streaming. Continue the same task now. If a tool is still needed, issue a fresh complete tool call from scratch; do not rely on any partial tool-call arguments from the interrupted stream."
 	case hasPartialText:
-		return "The previous assistant response was interrupted during streaming. Continue the same task from immediately after the partial assistant message above. Do not repeat text that is already visible."
+		return "The previous assistant response was interrupted during streaming. Continue the same task now. Partial text remains visible to the user but was excluded from model context; avoid needlessly repeating it, and do not assume it was complete."
 	default:
 		return "The previous assistant response was interrupted during streaming before visible answer text was completed. Continue the same task now and provide the next useful response."
 	}
@@ -2342,10 +2349,10 @@ func streamRecoveryMessage(hasPartialText, hadPartialTool bool) string {
 // stream so a sink can re-render the streamed raw text as styled markdown. The
 // accumulated text and reasoning are also returned so the caller can round-trip
 // reasoning on the next turn.
-func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, []provider.ReasoningBlock, []provider.ToolCall, *provider.Usage, bool, bool, error) {
+func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, []provider.ReasoningBlock, []provider.ToolCall, *provider.Usage, bool, bool, []provider.ToolCall, error) {
 	release, err := a.acquireDelegationRound(ctx)
 	if err != nil {
-		return "", "", "", nil, nil, nil, false, false, err
+		return "", "", "", nil, nil, nil, false, false, nil, err
 	}
 	defer release()
 	ctx = provider.WithRetryNotify(ctx, func(info provider.RetryInfo) {
@@ -2357,7 +2364,7 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		Temperature: provider.OptionalTemperature(a.temperature),
 	})
 	if err != nil {
-		return "", "", "", nil, nil, nil, false, false, err
+		return "", "", "", nil, nil, nil, false, false, nil, err
 	}
 
 	// A PostLLMCall hook rewrites the whole reasoning block, so when one is wired
@@ -2370,6 +2377,7 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 	var signature string // provider-issued proof for the reasoning (Anthropic thinking)
 	var reasoningBlocks []provider.ReasoningBlock
 	var calls []provider.ToolCall
+	var partialCalls []provider.ToolCall
 	var usage *provider.Usage
 	var partialToolStarted bool
 	finishReasoning := func() (stored, display string) {
@@ -2392,12 +2400,12 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		select {
 		case <-ctx.Done():
 			stored, _ := finishReasoning()
-			return text.String(), stored, signature, reasoningBlocks, calls, usage, false, partialToolStarted, ctx.Err()
+			return text.String(), stored, signature, reasoningBlocks, calls, usage, false, partialToolStarted, partialCalls, ctx.Err()
 		case c, ok := <-ch:
 			if !ok {
 				if err := ctx.Err(); err != nil {
 					stored, _ := finishReasoning()
-					return text.String(), stored, signature, reasoningBlocks, calls, usage, false, partialToolStarted, err
+					return text.String(), stored, signature, reasoningBlocks, calls, usage, false, partialToolStarted, partialCalls, err
 				}
 				stored, display := finishReasoning()
 				if text.Len() > 0 || display != "" {
@@ -2408,7 +2416,7 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 						MemoryCitations: a.memoryCitations(),
 					})
 				}
-				return text.String(), stored, signature, reasoningBlocks, calls, usage, false, false, nil
+				return text.String(), stored, signature, reasoningBlocks, calls, usage, false, false, partialCalls, nil
 			}
 			chunk = c
 		}
@@ -2442,13 +2450,17 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 			// working instead of a stall. executeBatch emits the full dispatch
 			// (with args) once the call completes; the frontend merges by ID.
 			if tc := chunk.ToolCall; tc != nil {
+				partialCalls = upsertPartialToolCall(partialCalls, *tc)
 				a.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: event.Tool{
 					ID: tc.ID, Name: tc.Name, ReadOnly: a.toolReadOnly(tc.Name), Partial: true,
 				}})
 			}
 		case provider.ChunkToolCall:
 			partialToolStarted = true
-			calls = append(calls, *chunk.ToolCall)
+			if chunk.ToolCall != nil {
+				calls = append(calls, *chunk.ToolCall)
+				partialCalls = upsertPartialToolCall(partialCalls, *chunk.ToolCall)
+			}
 		case provider.ChunkUsage:
 			usage = chunk.Usage
 			a.lastUsage.Store(chunk.Usage)
@@ -2457,11 +2469,55 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		case provider.ChunkError:
 			if provider.IsStreamInterrupted(chunk.Err) {
 				stored, _ := finishReasoning()
-				return text.String(), stored, signature, reasoningBlocks, calls, usage, true, partialToolStarted, chunk.Err
+				return text.String(), stored, signature, reasoningBlocks, calls, usage, true, partialToolStarted, partialCalls, chunk.Err
 			}
-			return "", "", "", nil, nil, usage, false, false, chunk.Err
+			stored, _ := finishReasoning()
+			return text.String(), stored, signature, reasoningBlocks, calls, usage, false, partialToolStarted, partialCalls, chunk.Err
 		}
 	}
+}
+
+func upsertPartialToolCall(calls []provider.ToolCall, call provider.ToolCall) []provider.ToolCall {
+	for i := range calls {
+		if call.ID != "" && calls[i].ID == call.ID {
+			calls[i] = call
+			return calls
+		}
+	}
+	return append(calls, call)
+}
+
+func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provider.ToolCall, pending bool) {
+	displayCalls := make([]provider.ToolCall, 0, len(calls))
+	interrupted := make([]string, 0, len(calls))
+	seen := make(map[string]struct{}, len(calls))
+	for _, call := range calls {
+		name := strings.TrimSpace(call.Name)
+		key := call.ID + "\x00" + name
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		displayCalls = append(displayCalls, provider.ToolCall{ID: call.ID, Name: name})
+		if name != "" {
+			interrupted = append(interrupted, name)
+		}
+	}
+	a.session.Add(provider.Message{
+		Role:             provider.RoleTool,
+		Content:          text,
+		ReasoningContent: reasoning,
+		ToolCalls:        displayCalls,
+		ToolCallID:       provider.LocalOnlyToolID,
+		Name:             provider.LocalOnlyToolName,
+		LocalOnly:        true,
+		InterruptedTurn: &provider.InterruptedTurnRecovery{
+			Pending:                 pending,
+			InterruptedTools:        interrupted,
+			DroppedPartialText:      strings.TrimSpace(text) != "",
+			DroppedPartialReasoning: strings.TrimSpace(reasoning) != "",
+		},
+	})
 }
 
 func (a *Agent) memoryCitations() []provider.MemoryCitation {

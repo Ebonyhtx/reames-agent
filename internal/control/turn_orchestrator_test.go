@@ -535,9 +535,9 @@ func TestTurnOrchestratorStopHookCancelledContext(t *testing.T) {
 
 // TestTurnOrchestratorCancelPreservesVisibleUserPrompt verifies that when the
 // user explicitly cancels a visible turn (Ctrl+C), the real user prompt remains
-// in the session while incomplete assistant/tool remnants are stripped. Without
-// this, the next user message can lose the just-submitted context (#5499); if
-// the remnants remain, the model can re-execute interrupted work (#5286).
+// in the session while complete tool pairs remain canonical and unsafe fragments
+// become provider-excluded recovery records. Without this, the next user message
+// can lose the just-submitted context or blindly repeat completed work.
 func TestTurnOrchestratorCancelPreservesVisibleUserPrompt(t *testing.T) {
 	sess := agent.NewSession("you are a helpful agent")
 	// Pre-populate with a few messages from an earlier turn.
@@ -577,26 +577,24 @@ func TestTurnOrchestratorCancelPreservesVisibleUserPrompt(t *testing.T) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 
-	// The visible user prompt must stay, while assistant/tool remnants from the
-	// cancelled turn must be stripped.
+	// The visible user prompt and complete pair stay, followed by a local-only
+	// recovery marker that keeps the next provider request safe.
 	msgs := sess.Messages
-	if len(msgs) != preCount+1 {
-		t.Fatalf("session messages after cancel = %d, want pre-turn + user prompt %d: %+v", len(msgs), preCount+1, msgs)
+	if len(msgs) != preCount+4 {
+		t.Fatalf("session messages after cancel = %d, want pre-turn + user/pair/recovery %d: %+v", len(msgs), preCount+4, msgs)
+	}
+	if msgs[preCount].Role != provider.RoleUser || msgs[preCount].Content != "add config file abc" {
+		t.Fatalf("visible user message after cancel = %+v", msgs[preCount])
+	}
+	if msgs[preCount+1].Role != provider.RoleAssistant || msgs[preCount+2].Role != provider.RoleTool {
+		t.Fatalf("complete todo pair was not retained canonically: %+v", msgs[preCount:])
 	}
 	last := msgs[len(msgs)-1]
-	if last.Role != provider.RoleUser || last.Content != "add config file abc" {
-		t.Fatalf("last message after cancel = %+v, want preserved visible user prompt", last)
+	if !last.LocalOnly || last.InterruptedTurn == nil || !last.InterruptedTurn.Pending || len(last.InterruptedTurn.CompletedTools) != 1 || last.InterruptedTurn.CompletedTools[0].Name != "todo_write" {
+		t.Fatalf("interrupted recovery marker = %+v", last)
 	}
-	for _, m := range msgs[preCount+1:] {
-		if m.Role == provider.RoleAssistant || m.Role == provider.RoleTool {
-			t.Fatalf("cancelled turn remnant survived: %+v", m)
-		}
-	}
-
-	// todoState must also be reset: the in_progress todo written by the
-	// cancelled turn must not survive the strip.
-	if todos := c.Todos(); len(todos) != 0 {
-		t.Fatalf("Todos() after cancel = %v, want empty — cancelled todo_write leaked into canonical state", todos)
+	if todos := c.Todos(); len(todos) != 1 || todos[0].Status != "in_progress" {
+		t.Fatalf("Todos() after cancel = %v, want retained completed todo_write projection", todos)
 	}
 }
 
@@ -616,7 +614,7 @@ func TestTurnOrchestratorCancelFlushesCleanTranscriptToDisk(t *testing.T) {
 			wantNonSystem++
 		}
 	}
-	wantNonSystem++ // the cancelled visible turn's user prompt is preserved
+	wantNonSystem += 4 // visible user + complete pair + local recovery marker
 
 	runner := &cancelStrippingRunner{
 		session: sess,
@@ -645,8 +643,7 @@ func TestTurnOrchestratorCancelFlushesCleanTranscriptToDisk(t *testing.T) {
 	}
 
 	// Load the session file written after the strip and verify it contains the
-	// pre-cancel messages plus the visible user prompt — not the partial
-	// assistant/tool messages.
+	// pre-cancel messages plus the visible user, complete pair, and local marker.
 	loaded, err := agent.LoadSession(sessionPath)
 	if err != nil {
 		t.Fatalf("LoadSession: %v", err)
@@ -662,8 +659,8 @@ func TestTurnOrchestratorCancelFlushesCleanTranscriptToDisk(t *testing.T) {
 	if nonSystem != wantNonSystem {
 		t.Fatalf("on-disk message count (non-system) = %d, want %d — stale partial turn still on disk", nonSystem, wantNonSystem)
 	}
-	if last.Role != provider.RoleUser || last.Content != "do something" {
-		t.Fatalf("last on-disk message = %+v, want preserved visible user prompt", last)
+	if !last.LocalOnly || last.InterruptedTurn == nil || !last.InterruptedTurn.Pending {
+		t.Fatalf("last on-disk message = %+v, want local interrupted recovery marker", last)
 	}
 }
 

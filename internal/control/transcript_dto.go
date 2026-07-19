@@ -61,6 +61,7 @@ type TranscriptMessage struct {
 	Original        string                     `json:"original,omitempty"`
 	SteerText       string                     `json:"steerText,omitempty"`
 	Hidden          bool                       `json:"hidden,omitempty"`
+	Interrupted     bool                       `json:"interrupted,omitempty"`
 }
 
 // Transcript returns the current session history without leaking provider
@@ -82,6 +83,23 @@ func transcriptMessages(messages []provider.Message) []TranscriptMessage {
 	out := make([]TranscriptMessage, len(messages))
 	for i, message := range messages {
 		entry := TranscriptMessage{Index: i, Role: TranscriptRole(message.Role)}
+		if message.LocalOnly {
+			entry.Role = TranscriptAssistant
+			entry.Content = message.Content
+			entry.Reasoning = message.ReasoningContent
+			entry.Interrupted = message.InterruptedTurn != nil
+			if len(message.ToolCalls) > 0 {
+				entry.ToolCalls = make([]TranscriptToolCall, len(message.ToolCalls))
+				for j, call := range message.ToolCalls {
+					entry.ToolCalls[j] = TranscriptToolCall{ID: call.ID, Name: call.Name}
+				}
+			}
+			if entry.Content == "" && entry.Reasoning == "" && len(entry.ToolCalls) == 0 && !entry.Interrupted {
+				entry.Hidden = true
+			}
+			out[i] = entry
+			continue
+		}
 		switch message.Role {
 		case provider.RoleSystem:
 			entry.Hidden = true

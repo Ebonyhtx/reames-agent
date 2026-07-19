@@ -335,25 +335,34 @@ curl -X POST http://127.0.0.1:37913/send \
   }'
 ```
 
-The Gateway keeps a mode-0600 atomic delivery ledger at
-`<Reames Agent home>/bot/delivery-ledger.json`. It never stores message text,
-attachments, model output, or tool data—only remote message identity, state, and
-opaque adapter recovery cursors. Duplicate inbound events are suppressed across
-restarts, and a cursor is committed only after the final reply is actually sent.
-`/status`, control `/status`, and `/metrics` expose counts only, never remote IDs,
-cursor values, or the local path.
+The Gateway keeps a mode-0600 atomic schema-v2 delivery ledger at
+`<Reames Agent home>/bot/delivery-ledger.json`. It stores remote inbound identity,
+state, opaque adapter recovery cursors, and—after a successful Agent turn—the
+final text chunks required to resume an outbound reply without running the model
+again. It never stores inbound message text, attachments, tool data, approval/ask
+cards, progress messages, or raw errors. Each outbound obligation is limited to
+1 MiB and 512 text chunks; the whole ledger remains limited to 4 MiB. A
+long-lived OS file lock makes a second CLI Gateway or Desktop bot writer fail
+closed. `/status`, control `/status`, and `/metrics` expose counts only, never
+remote IDs, cursor values, the local path, or final-response text.
 
 The built-in Feishu, QQ, Weixin, and Telegram adapters already use durable
 claim/dedupe and the final-delivery gate. Telegram additionally maps
 `update_id` to the durable delivery identity and only advances the remote
 polling offset after the final reply was sent and the delivery ledger commit
-succeeded. A failed send keeps the same update unacknowledged for retry; a
-delivered duplicate after restart is not run through the Agent again but is
-acknowledged remotely. Feishu, QQ, and Weixin do not yet page message history
+succeeded. Before each final text chunk is sent, the Gateway persists an
+`attempting` state. A platform acknowledgement advances `next_chunk`; the last
+acknowledgement atomically removes the obligation, settles every merged inbound
+claim, and advances the contiguous cursor/Telegram offset. A duplicate inbound
+event that owns an existing obligation resumes that exact reply and does not
+create a Controller or run the model again. Feishu, QQ, and Weixin do not yet page message history
 missed while the process was completely offline. That requires a platform-specific history/resume
-API and real application credentials. Delivery is explicitly at-least-once: if
-one reply chunk succeeds and a later chunk fails, the cursor stays behind and a
-retry may duplicate the earlier chunk.
+API and real application credentials. Delivery is explicitly at-least-once. A
+crash after a platform accepted a chunk but before the local acknowledgement was
+committed is ambiguous, so recovery conservatively resends that unconfirmed
+chunk with a visible warning that it may be a duplicate. Chunks whose
+acknowledgements were durably committed are not resent. A purely `pending`
+obligation has never been attempted and is recovered without the warning.
 Queued messages keep their individual durable claims even when `collect`
 merges them, a queue-cap policy summarizes or drops an older entry, or an
 explicit interrupt/reset supersedes pending work. The Gateway settles those

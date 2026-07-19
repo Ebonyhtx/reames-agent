@@ -74,6 +74,13 @@ func ReplaceFile(tmp, dest string) error {
 		if renameCrossesDevice(err) {
 			return err
 		}
+		// Replacing a directory with a file is structurally impossible on every
+		// supported platform. Windows reports it as access denied, the same broad
+		// class sometimes used for a transient antivirus handle, so detect the
+		// destination shape before entering the sharing-lock retry ladder.
+		if info, statErr := os.Stat(dest); statErr == nil && info.IsDir() {
+			return err
+		}
 		if attempt >= maxReplaceRetries || !fileExists(tmp) {
 			return err
 		}

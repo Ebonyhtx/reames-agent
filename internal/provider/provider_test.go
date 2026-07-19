@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -31,6 +32,51 @@ func TestMessagesForRequestStripsLocalMetadataWithoutMutatingHistory(t *testing.
 	}
 	if !decorated[0].Edited || decorated[0].Original != "original" || len(decorated[1].MemoryCitations) != 1 {
 		t.Fatalf("persisted history was mutated: %+v", decorated)
+	}
+}
+
+func TestModelMessagesAndSanitizeDropLocalOnlyInterruptedOutput(t *testing.T) {
+	local := Message{
+		Role: RoleTool, ToolCallID: LocalOnlyToolID, Name: LocalOnlyToolName,
+		Content: "partial answer", ReasoningContent: "partial reasoning", LocalOnly: true,
+		ToolCalls:       []ToolCall{{ID: "partial", Name: "write_file"}},
+		InterruptedTurn: &InterruptedTurnRecovery{Pending: true, InterruptedTools: []string{"write_file"}},
+	}
+	in := []Message{
+		{Role: RoleUser, Content: "task"},
+		local,
+		{Role: RoleUser, Content: "continue"},
+	}
+	model := ModelMessages(in)
+	if len(model) != 2 || model[0].Content != "task" || model[1].Content != "continue" {
+		t.Fatalf("ModelMessages leaked or reordered local-only record: %+v", model)
+	}
+	wire := SanitizeToolPairing(in)
+	if len(wire) != 2 || wire[0].Content != "task" || wire[1].Content != "continue" {
+		t.Fatalf("SanitizeToolPairing leaked local-only record: %+v", wire)
+	}
+	session := NormalizeSessionMessages(in)
+	if len(session) != len(in) || !session[1].LocalOnly || session[1].Content != local.Content {
+		t.Fatalf("session normalization did not preserve local display: %+v", session)
+	}
+}
+
+func TestLocalOnlySentinelIsSafeWhenNewFieldsAreIgnoredByLegacyReader(t *testing.T) {
+	legacyView := []Message{
+		{Role: RoleUser, Content: "task"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "read_file", Arguments: `{}`}}},
+		{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: "ok"},
+		{Role: RoleTool, ToolCallID: LocalOnlyToolID, Name: LocalOnlyToolName, Content: "partial reasoning that must not leak"},
+		{Role: RoleUser, Content: "continue"},
+	}
+	wire := SanitizeToolPairing(legacyView)
+	if len(wire) != 4 {
+		t.Fatalf("legacy normalization kept local sentinel: %+v", wire)
+	}
+	for _, message := range wire {
+		if message.ToolCallID == LocalOnlyToolID || strings.Contains(message.Content, "must not leak") {
+			t.Fatalf("legacy normalization leaked display-only content: %+v", wire)
+		}
 	}
 }
 

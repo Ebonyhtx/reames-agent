@@ -40,6 +40,7 @@ var ChineseTraditional = Messages{
 	ResumePickHint:      "↑/↓ 移動 · Enter 恢復 · Esc 取消",
 
 	ChatThinking:                           "思考中…",
+	InterruptedRecovery:                    "本輪已中斷。部分輸出僅供顯示；繼續前請先檢查目前工作區。",
 	ChatThoughtForFmt:                      "思考了 %d 秒",
 	ChatStatusThinkingFmt:                  "%s 思考中… (%d 秒 · Esc 取消)",
 	ChatToolWorkingFmt:                     "%s 執行中 · %d 秒",

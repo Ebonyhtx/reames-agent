@@ -3812,13 +3812,14 @@ func (c *Controller) recoverInterruptedTurnState(path string) error {
 		c.applyCheckpointState(state)
 	}
 	msgs := c.executor.Session().Snapshot()
-	changed := marker.StartMessageIndex >= 0 && len(msgs) > marker.StartMessageIndex
+	start, found := resolveInterruptedTurnStart(msgs, marker.StartMessageIndex, marker.PreserveUser, marker.StartedAt, provider.Message{})
+	changed := found && len(msgs) > start
 	if changed {
 		var stripErr error
 		if marker.PreserveUser {
-			stripErr = c.stripCancelledVisibleTurnMessagesAfter(marker.StartMessageIndex)
+			stripErr = c.stripCancelledVisibleTurnMessagesAfter(start)
 		} else {
-			stripErr = c.stripTurnMessagesAfter(marker.StartMessageIndex)
+			stripErr = c.stripTurnMessagesAfter(start)
 		}
 		if stripErr != nil {
 			return stripErr
@@ -3920,6 +3921,303 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfter(idx int) error {
 		break
 	}
 	return c.replaceSessionAfterCancel(next)
+}
+
+// preserveInterruptedVisibleTurnMessagesAfter keeps the real user prompt and
+// fully paired tool rounds from a graceful cancellation/provider failure. Unsafe
+// assistant/tool fragments remain durable for display but are marked LocalOnly;
+// a bounded structural handoff is attached to the final local record.
+func (c *Controller) preserveInterruptedVisibleTurnMessagesAfter(idx int, fallback provider.Message) error {
+	if c.executor == nil {
+		return nil
+	}
+	msgs := c.executor.Session().Snapshot()
+	if start, ok := resolveInterruptedTurnStart(msgs, idx, true, c.inFlightTurnStartedAt(), fallback); ok {
+		idx = start
+	}
+	idx = max(0, min(idx, len(msgs)))
+	next := append([]provider.Message{}, msgs[:idx]...)
+	keptUser := false
+	userEnd := idx
+	for i, m := range msgs[idx:] {
+		if m.Role != provider.RoleUser || IsSyntheticUserMessage(m.Content) {
+			continue
+		}
+		if _, ok := agent.SteerText(m.Content); ok {
+			continue
+		}
+		m.Content = StripComposePrefixes(m.Content)
+		next = append(next, m)
+		keptUser = true
+		userEnd = idx + i + 1
+		break
+	}
+	if !keptUser && fallback.Role == provider.RoleUser {
+		fallback.Content = StripComposePrefixes(fallback.Content)
+		if strings.TrimSpace(fallback.Content) != "" {
+			fallback.Images = append([]string(nil), fallback.Images...)
+			next = append(next, fallback)
+			keptUser = true
+			userEnd = idx
+		}
+	}
+	if !keptUser && len(msgs) <= idx {
+		return nil
+	}
+
+	recovery := &provider.InterruptedTurnRecovery{Pending: true}
+	localIndexes := make([]int, 0, 1)
+	for i := userEnd; i < len(msgs); {
+		m := msgs[i]
+		if m.LocalOnly {
+			m.Role = provider.RoleTool
+			m.ToolCallID = provider.LocalOnlyToolID
+			m.Name = provider.LocalOnlyToolName
+			m.InterruptedTurn = nil
+			m.ToolCalls = displayOnlyToolCalls(m.ToolCalls)
+			next = append(next, m)
+			localIndexes = append(localIndexes, len(next)-1)
+			recovery.DroppedPartialText = recovery.DroppedPartialText || strings.TrimSpace(m.Content) != ""
+			recovery.DroppedPartialReasoning = recovery.DroppedPartialReasoning || strings.TrimSpace(m.ReasoningContent) != ""
+			for _, call := range m.ToolCalls {
+				recovery.InterruptedTools = appendUniqueString(recovery.InterruptedTools, call.Name)
+			}
+			i++
+			continue
+		}
+		if agent.IsCompactionSummary(m) {
+			next = append(next, m)
+			i++
+			continue
+		}
+		if end, ok := completeToolTurnEnd(msgs, i); ok {
+			next = append(next, msgs[i:end]...)
+			for k, call := range m.ToolCalls {
+				if toolResultWasInterrupted(msgs[i+1+k].Content) {
+					recovery.InterruptedTools = appendUniqueString(recovery.InterruptedTools, call.Name)
+					continue
+				}
+				recovery.CompletedTools = append(recovery.CompletedTools, interruptedToolSummary(call))
+			}
+			i = end
+			continue
+		}
+		switch m.Role {
+		case provider.RoleAssistant:
+			local := m
+			local.Role = provider.RoleTool
+			local.LocalOnly = true
+			local.ToolCallID = provider.LocalOnlyToolID
+			local.Name = provider.LocalOnlyToolName
+			local.InterruptedTurn = nil
+			local.ReasoningSignature = ""
+			local.ReasoningBlocks = nil
+			local.ToolCalls = displayOnlyToolCalls(local.ToolCalls)
+			next = append(next, local)
+			localIndexes = append(localIndexes, len(next)-1)
+			recovery.DroppedPartialText = recovery.DroppedPartialText || strings.TrimSpace(local.Content) != ""
+			recovery.DroppedPartialReasoning = recovery.DroppedPartialReasoning || strings.TrimSpace(local.ReasoningContent) != ""
+			for _, call := range local.ToolCalls {
+				recovery.InterruptedTools = appendUniqueString(recovery.InterruptedTools, call.Name)
+			}
+		case provider.RoleTool:
+			local := m
+			local.LocalOnly = true
+			local.ToolCalls = []provider.ToolCall{{ID: m.ToolCallID, Name: m.Name}}
+			recovery.InterruptedTools = appendUniqueString(recovery.InterruptedTools, m.Name)
+			local.ToolCallID = provider.LocalOnlyToolID
+			local.Name = provider.LocalOnlyToolName
+			next = append(next, local)
+			localIndexes = append(localIndexes, len(next)-1)
+		}
+		i++
+	}
+	if len(localIndexes) == 0 {
+		next = append(next, provider.Message{
+			Role: provider.RoleTool, ToolCallID: provider.LocalOnlyToolID,
+			Name: provider.LocalOnlyToolName, LocalOnly: true,
+		})
+		localIndexes = append(localIndexes, len(next)-1)
+	}
+	next[localIndexes[len(localIndexes)-1]].InterruptedTurn = recovery
+	return c.replaceSessionAfterCancel(next)
+}
+
+func (c *Controller) preserveAndCommitInterruptedTurn(startMessages int, fallback provider.Message) error {
+	if err := c.preserveInterruptedVisibleTurnMessagesAfter(startMessages, fallback); err != nil {
+		return fmt.Errorf("preserve interrupted turn: %w", err)
+	}
+	if err := c.commitInFlightTurn(startMessages); err != nil {
+		return fmt.Errorf("commit interrupted turn: %w", err)
+	}
+	return nil
+}
+
+func (c *Controller) hasInterruptedDisplayAfter(idx int, fallback provider.Message) bool {
+	if c.executor == nil {
+		return false
+	}
+	msgs := c.executor.Session().Snapshot()
+	if start, ok := resolveInterruptedTurnStart(msgs, idx, true, c.inFlightTurnStartedAt(), fallback); ok {
+		idx = start
+	}
+	idx = max(0, min(idx, len(msgs)))
+	for _, m := range msgs[idx:] {
+		if m.LocalOnly && m.InterruptedTurn != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Controller) inFlightTurnStartedAt() time.Time {
+	path := c.SessionPath()
+	if path == "" {
+		return time.Time{}
+	}
+	meta, ok, err := agent.LoadBranchMeta(path)
+	if err != nil || !ok || meta.InFlightTurn == nil {
+		return time.Time{}
+	}
+	return meta.InFlightTurn.StartedAt
+}
+
+func resolveInterruptedTurnStart(msgs []provider.Message, idx int, preserveUser bool, startedAt time.Time, fallback provider.Message) (int, bool) {
+	fallbackContent := ""
+	if fallback.Role == provider.RoleUser {
+		fallbackContent = StripComposePrefixes(fallback.Content)
+	}
+	matchesKind := func(m provider.Message) bool {
+		if m.Role != provider.RoleUser {
+			return false
+		}
+		if preserveUser {
+			if IsSyntheticUserMessage(m.Content) {
+				return false
+			}
+			if _, ok := agent.SteerText(m.Content); ok {
+				return false
+			}
+			if fallbackContent != "" && StripComposePrefixes(m.Content) != fallbackContent {
+				return false
+			}
+		}
+		return true
+	}
+	if !startedAt.IsZero() {
+		startedMillis := startedAt.UnixMilli()
+		for i, m := range msgs {
+			if matchesKind(m) && m.CreatedAt >= startedMillis {
+				return i, true
+			}
+		}
+	}
+	if fallbackContent != "" {
+		for i := len(msgs) - 1; i >= 0; i-- {
+			if matchesKind(msgs[i]) {
+				return i, true
+			}
+		}
+	}
+	if idx >= 0 && idx < len(msgs) && matchesKind(msgs[idx]) {
+		return idx, true
+	}
+	return 0, false
+}
+
+func completeToolTurnEnd(msgs []provider.Message, i int) (int, bool) {
+	if i < 0 || i >= len(msgs) {
+		return i, false
+	}
+	m := msgs[i]
+	if m.LocalOnly || m.Role != provider.RoleAssistant || len(m.ToolCalls) == 0 {
+		return i, false
+	}
+	end := i + 1
+	for end < len(msgs) && msgs[end].Role == provider.RoleTool && !msgs[end].LocalOnly {
+		end++
+	}
+	results := msgs[i+1 : end]
+	if len(results) != len(m.ToolCalls) {
+		return i, false
+	}
+	for k, call := range m.ToolCalls {
+		if strings.TrimSpace(call.Name) == "" || (call.Arguments != "" && !json.Valid([]byte(call.Arguments))) {
+			return i, false
+		}
+		if results[k].ToolCallID != call.ID || results[k].Name != call.Name {
+			return i, false
+		}
+	}
+	return end, true
+}
+
+func toolResultWasInterrupted(content string) bool {
+	content = strings.ToLower(strings.TrimSpace(content))
+	return strings.HasPrefix(content, "cancelled:") || strings.Contains(content, "context canceled") || strings.Contains(content, "context cancelled")
+}
+
+func displayOnlyToolCalls(calls []provider.ToolCall) []provider.ToolCall {
+	out := make([]provider.ToolCall, 0, len(calls))
+	for _, call := range calls {
+		out = append(out, provider.ToolCall{ID: call.ID, Name: strings.TrimSpace(call.Name)})
+	}
+	return out
+}
+
+func appendUniqueString(dst []string, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return dst
+	}
+	for _, existing := range dst {
+		if existing == value {
+			return dst
+		}
+	}
+	return append(dst, value)
+}
+
+func interruptedToolSummary(call provider.ToolCall) provider.InterruptedToolSummary {
+	summary := provider.InterruptedToolSummary{
+		ID: call.ID, Name: strings.TrimSpace(call.Name), Added: call.Added, Removed: call.Removed,
+	}
+	addFile := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" || path == "/dev/null" || len(summary.Files) >= 8 {
+			return
+		}
+		for _, existing := range summary.Files {
+			if existing == path {
+				return
+			}
+		}
+		summary.Files = append(summary.Files, path)
+	}
+	var args map[string]any
+	if json.Unmarshal([]byte(call.Arguments), &args) == nil {
+		for _, key := range []string{"path", "file", "file_path", "filename"} {
+			if value, ok := args[key].(string); ok {
+				addFile(value)
+			}
+		}
+	}
+	for _, line := range strings.Split(call.Diff, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "+++ b/"):
+			addFile(strings.TrimPrefix(line, "+++ b/"))
+		case strings.HasPrefix(line, "--- a/"):
+			addFile(strings.TrimPrefix(line, "--- a/"))
+		case strings.HasPrefix(line, "*** Update File: "):
+			addFile(strings.TrimPrefix(line, "*** Update File: "))
+		case strings.HasPrefix(line, "*** Add File: "):
+			addFile(strings.TrimPrefix(line, "*** Add File: "))
+		case strings.HasPrefix(line, "*** Delete File: "):
+			addFile(strings.TrimPrefix(line, "*** Delete File: "))
+		}
+	}
+	return summary
 }
 
 func (c *Controller) replaceSessionAfterCancel(msgs []provider.Message) error {

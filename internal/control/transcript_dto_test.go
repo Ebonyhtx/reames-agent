@@ -108,6 +108,29 @@ func TestTranscriptMessageDisplayKeyAndReplayContract(t *testing.T) {
 	}
 }
 
+func TestTranscriptMessagesProjectLocalInterruptedOutputAsSafeAssistantDisplay(t *testing.T) {
+	messages := []provider.Message{{
+		Role: provider.RoleTool, ToolCallID: provider.LocalOnlyToolID, Name: provider.LocalOnlyToolName,
+		Content: "partial answer", ReasoningContent: "partial reasoning", LocalOnly: true,
+		ToolCalls:       []provider.ToolCall{{ID: "partial-1", Name: "write_file", Arguments: `{"path":"secret.txt"}`}},
+		InterruptedTurn: &provider.InterruptedTurnRecovery{Pending: true},
+	}}
+	got := transcriptMessages(messages)
+	if len(got) != 1 || got[0].Role != TranscriptAssistant || !got[0].Interrupted || got[0].Content != "partial answer" || got[0].Reasoning != "partial reasoning" {
+		t.Fatalf("local interrupted projection = %+v", got)
+	}
+	if len(got[0].ToolCalls) != 1 || got[0].ToolCalls[0].Name != "write_file" || got[0].ToolCalls[0].Arguments != "" {
+		t.Fatalf("partial tool display leaked arguments or disappeared: %+v", got[0].ToolCalls)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "secret.txt") || strings.Contains(string(encoded), provider.LocalOnlyToolID) {
+		t.Fatalf("local sentinel or partial arguments crossed transcript transport: %s", encoded)
+	}
+}
+
 func TestLoadTranscriptAppliesDisplaySafetyToPersistedHistory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	session := agent.NewSession("SYSTEM-SECRET")

@@ -26,6 +26,15 @@ const (
 	RoleTool      Role = "tool"
 )
 
+// LocalOnlyToolName/ID make display-only records safe when a newer transcript
+// is opened by an older Reames binary that does not know Message.LocalOnly. Old
+// wire normalization treats the unmatched tool result as an orphan and drops it
+// instead of replaying unsafe partial output to the model.
+const (
+	LocalOnlyToolName = "__reames_local_only__"
+	LocalOnlyToolID   = "__reames_local_only__"
+)
+
 // Message is a single conversation message.
 type Message struct {
 	Role             Role     `json:"role"`
@@ -48,8 +57,38 @@ type Message struct {
 	ToolCallID      string           `json:"tool_call_id,omitempty"`    // links a tool result to its call
 	Name            string           `json:"name,omitempty"`            // tool message: tool name
 	MemoryCitations []MemoryCitation `json:"memoryCitations,omitempty"` // local UI metadata; provider requests ignore it
+	CreatedAt       int64            `json:"createdAt,omitempty"`       // local UI metadata; unix milliseconds; stripped before provider requests
 	Edited          bool             `json:"edited,omitempty"`          // local UI metadata; provider requests ignore it
 	Original        string           `json:"original,omitempty"`        // user prompt before inline edit
+	// LocalOnly marks durable transcript content that must never be sent to a
+	// provider. Interrupted streaming output uses it so every frontend can replay
+	// what the user saw without feeding partial reasoning or tool arguments into
+	// the next request.
+	LocalOnly       bool                     `json:"local_only,omitempty"`
+	InterruptedTurn *InterruptedTurnRecovery `json:"interrupted_turn,omitempty"`
+}
+
+// InterruptedTurnRecovery is the durable, provider-excluded handoff for a turn
+// that stopped before producing a clean final answer. It contains only bounded
+// structural facts; raw partial reasoning remains on the LocalOnly Message for
+// display and is never copied into the recovery prompt.
+type InterruptedTurnRecovery struct {
+	Pending                 bool                     `json:"pending,omitempty"`
+	CompletedTools          []InterruptedToolSummary `json:"completed_tools,omitempty"`
+	InterruptedTools        []string                 `json:"interrupted_tools,omitempty"`
+	DroppedPartialText      bool                     `json:"dropped_partial_text,omitempty"`
+	DroppedPartialReasoning bool                     `json:"dropped_partial_reasoning,omitempty"`
+}
+
+// InterruptedToolSummary records a completed, fully paired tool call without
+// duplicating its arguments or result. The canonical assistant/tool messages
+// immediately before the recovery record remain the source of truth.
+type InterruptedToolSummary struct {
+	ID      string   `json:"id,omitempty"`
+	Name    string   `json:"name"`
+	Files   []string `json:"files,omitempty"`
+	Added   int      `json:"added,omitempty"`
+	Removed int      `json:"removed,omitempty"`
 }
 
 // ReasoningBlock is a provider-issued reasoning envelope. Type is currently
@@ -139,13 +178,14 @@ func OptionalTemperature(v float64) *float64 {
 // responding to each 'tool_call_id'".
 const interruptedToolResult = "[no result: the previous turn was interrupted before this tool call completed]"
 
-// MessagesForRequest removes local display-only metadata before a message slice
-// crosses the Provider interface. Clean slices are returned unchanged; decorated
-// slices are shallow-cloned so the persisted transcript keeps its UI metadata.
+// MessagesForRequest removes provider-excluded records and local display-only
+// metadata before a message slice crosses the Provider interface. Clean slices
+// are returned unchanged; decorated slices are shallow-cloned so the persisted
+// transcript keeps its UI metadata.
 func MessagesForRequest(messages []Message) []Message {
 	needsClone := false
 	for _, message := range messages {
-		if len(message.MemoryCitations) > 0 || message.Edited || message.Original != "" {
+		if message.LocalOnly || len(message.MemoryCitations) > 0 || message.CreatedAt != 0 || message.Edited || message.Original != "" {
 			needsClone = true
 			break
 		}
@@ -153,13 +193,36 @@ func MessagesForRequest(messages []Message) []Message {
 	if !needsClone {
 		return messages
 	}
-	out := append([]Message(nil), messages...)
-	for i := range out {
-		out[i].MemoryCitations = nil
-		out[i].Edited = false
-		out[i].Original = ""
+	out := make([]Message, 0, len(messages))
+	for _, message := range messages {
+		if message.LocalOnly {
+			continue
+		}
+		message.MemoryCitations = nil
+		message.CreatedAt = 0
+		message.Edited = false
+		message.Original = ""
+		out = append(out, message)
 	}
 	return out
+}
+
+// ModelMessages removes durable display-only records before a request is
+// handed to any provider. Healthy sessions without such records keep their
+// original backing slice, preserving the allocation and prompt-cache fast path.
+func ModelMessages(messages []Message) []Message {
+	for _, message := range messages {
+		if message.LocalOnly {
+			out := make([]Message, 0, len(messages)-1)
+			for _, candidate := range messages {
+				if !candidate.LocalOnly {
+					out = append(out, candidate)
+				}
+			}
+			return out
+		}
+	}
+	return messages
 }
 
 // SanitizeToolPairing is the provider-side alias for NormalizeMessages. It repairs
@@ -210,9 +273,16 @@ func normalizeMessages(msgs []Message, dropOrphanTools bool) []Message {
 	out := make([]Message, 0, len(msgs))
 	for i := 0; i < len(msgs); {
 		m := msgs[i]
+		if m.LocalOnly {
+			if !dropOrphanTools {
+				out = append(out, m)
+			}
+			i++
+			continue
+		}
 		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
 			j := i + 1
-			for j < len(msgs) && msgs[j].Role == RoleTool {
+			for j < len(msgs) && msgs[j].Role == RoleTool && !msgs[j].LocalOnly {
 				j++
 			}
 			// Backfill empty tool-call names from the corresponding tool
@@ -251,9 +321,16 @@ func normalizeMessages(msgs []Message, dropOrphanTools bool) []Message {
 func tryNormalizeFastPath(msgs []Message, dropOrphanTools bool) ([]Message, bool) {
 	for i := 0; i < len(msgs); {
 		m := msgs[i]
+		if m.LocalOnly {
+			if dropOrphanTools {
+				return nil, false
+			}
+			i++
+			continue
+		}
 		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
 			j := i + 1
-			for j < len(msgs) && msgs[j].Role == RoleTool {
+			for j < len(msgs) && msgs[j].Role == RoleTool && !msgs[j].LocalOnly {
 				j++
 			}
 			if !toolTurnWellFormed(m.ToolCalls, msgs[i+1:j]) || needsToolCallArgRepair(m.ToolCalls) {

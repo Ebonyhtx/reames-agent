@@ -2,7 +2,7 @@
 
 > 状态：当前唯一执行路线
 >
-> 更新：2026-07-19
+> 更新：2026-07-20
 >
 > 规划方式：先关闭真实用户闭环，再扩展能力面
 
@@ -356,6 +356,22 @@ notarization、公开主题 registry
 - [x] 最终冻结继续推进到 Reasonix `8bb0e549`：LongCat/WebKit/export 可靠性已采用，Remote SSH 进入 P11，
   最新 Theme Pack settings-refresh 修复由 Reames `themePackRuntime` 既有统一边界等价覆盖并补显式回归；
   Scream `22a2adaf` 的 component-scoped TUI render 只登记为性能机制信号。
+- [x] 最新一级增量继续推进到 Reasonix `2301e248`：采用数字开头 Provider env、MCP stdio server request/
+  reply queue、Desktop 全 MCP/插件 lifecycle admission 与所有 visible/detached Controller reservation、
+  graceful interrupted-turn recovery 和 WebKit shortcut recorder focus；两项 Remote SSH 修复保持 P11。
+  Codex `3e2f7972` 的 TUI memory/side-thread 变化、Claude `015170d3` 无新增、Hermes `299e409f` cron/live
+  subagent 与 Grok Build `ba76b0a6` Stop/session/permission 只按二级战略或三级机制规则分类。见
+  `audits/2026-07-20-reasonix-8bb0e54-2301e24.md` 和
+  `audits/2026-07-20-upstream-strategic-reference-delta.md`。
+- [x] 提交前最新深扫继续审至 Codex `7844386e` 与 Hermes `1b17015f`：Codex TUI Markdown、visualization、
+  App-Server command lifecycle、replay retention、diff cloning 与 exec completion identity 七提交完成代码级
+  已有/延后分类；Reames typed `ToolProgress`/`ToolResult` 已保证输出不等于完成，P9 replay store 禁止保留
+  raw audio/progress/output delta，completion backfill 必须绑定 primary thread+turn。Hermes 的 Kimi adaptive thinking 信号补齐了仅对
+  Kimi/Moonshot 捕获无签名 thinking block 的续轮回放，Claude 仍要求 signature；cron profile 和 Electron
+  `simple-git`/session-color 修复当前非同构，隔离 spawn/settle/无网络噪声的 perf 方法进入后续 benchmark。
+  见 `audits/2026-07-20-codex-hermes-late-delta.md`。
+- [x] 上游接受命令强制绑定 `ID=完整40位SHA`；远端 HEAD 与人工审查 SHA 不一致时 fail closed，未绑定
+  `--accept`、`--accept-all` 和 `--update-lock` 已禁用，避免审查与写锁之间的 TOCTOU。
 
 ## P7：Reasonix Fleet 增量与 Gateway watchdog 收口
 
@@ -397,10 +413,15 @@ notarization、公开主题 registry
   退避、可取消 Stop、重复 Start 拒绝、Stop 后重启、`update_id` durable identity、原生 `message_id` reply，
   以及最终发送成功并 durable commit 后 offset 才推进均有 localhost 故障注入。真实 BotFather/token、群聊、
   审批/取消、掉线和节点重启仍为 `external-blocked`；见 `audits/2026-07-19-m6-telegram-durable-polling.md`。
-- [ ] Outbound final-response obligation：当前 inbound ledger 能保证失败不推进 cursor/Telegram offset，但平台
-  ACK 前崩溃后仍可能重跑 Agent 才重建答案。增加 0600、有界、身份绑定的最终答复 obligation，发送前持久化，
-  对 mid-send 歧义使用可见“可能重复”标记，成功后原子清除；恢复发送不得重跑模型，也不得把正文写入日志、
-  metrics 或 provider prompt。该项可由 localhost、进程中断和故障注入证明，不依赖真实 IM。
+- [x] Outbound final-response obligation：delivery ledger schema v2 在最终文本离开进程前持久化身份绑定的
+  obligation；每个 obligation 最多 1 MiB/512 个文本分片，整个账本仍限 4 MiB，并由同路径长生命周期 OS
+  文件锁保证 CLI Gateway 与 Desktop bot 不能并发写。每个分片发送前先原子写 `attempting`，平台 ACK 后才推进
+  `next_chunk`；最后一个 ACK 与全部 constituent inbound claims、连续 cursor/Telegram offset 在同一次原子写中
+  结算。冷启动直接恢复原答复，不创建 Controller、不重跑模型；`attempting`/`failed` 的 ACK 歧义会在首个恢复
+  分片添加可见“可能重复”标记，纯 `pending` 不误报。正文只存在 0600 本地 obligation，不进入日志、metrics、
+  status 或 Provider prompt；状态接口只显示数量。v1→v2 迁移、第二 writer fail-closed、发送前磁盘状态、多分片
+  断点、发送/commit 故障、重复入站、取消、扫描预算和 race 已有测试。详见
+  `audits/2026-07-20-m6-outbound-final-response-obligation.md`。
 - [ ] 渠道断线实证：内置飞书/QQ/微信适配器尚未实现可选 `RecoveryAdapter` 的真实历史分页/resume；Telegram
   long poll 依赖远端保留 update，也尚无独立历史补扫 API。当前已获得跨进程实时事件去重和最终投递门禁，
   但不能冒充完全离线期间的漏消息补扫。逐渠道实现后还须以真实凭据执行掉线、重连、历史补偿、审批/取消与
@@ -441,6 +462,13 @@ notarization、公开主题 registry
   fresh-human、generation identity、TUF/provenance、OS sandbox 和进程树回收，不接入无治理 marketplace。
 - 审计 Codex App-Server/headless 线程、命令、事件、审批和 MCP runtime 语义，只扩展现有
   `internal/control`/event wire；不引入第二套 Agent/runtime 或破坏传输无关边界。
+- App-Server replay store 只保留会话恢复必需的 canonical 事件；raw response item、realtime audio/transcript、
+  MCP progress、command/process output delta 不得进入持久 replay。Desktop `asyncRuntimeEmitter` 的 live queue
+  另做压力测试、有界 backpressure/drop 设计与顺序证明，不把 Serve 慢订阅者 drop 冒充 Desktop 已解决。
+- App-Server completion backfill、最终结算和 unsubscribe 必须先同时匹配 primary thread ID 与 turn ID；fixture
+  必须覆盖 child completion 先于 primary completion，且 child 不触发 `thread/read` 或顶层完成。
+- Desktop/Browser 性能基准使用隔离 home/profile、可复现 spawn/attach、显式启动 settle 和无 DNS/embed 噪声
+  fixture；基线记录平台、设备与 backend 连接状态，合成历史微基准不得冒充冷启动或流式 frame pacing。
 - 将 Codex `ultra` 的自动任务委派作为 Agent/runtime 能力单独验收；P8 只支持已证明的 Responses wire
   effort，不能把 `ultra -> max` 的兼容别名写成自动委派 parity。
 - OpenAI 官方预设已按 2026-07-19 公共 API 文档开放 `gpt-5.6-sol`、`gpt-5.6-terra`、
@@ -526,14 +554,14 @@ notarization、公开主题 registry
 P1/P2/P3/P4/P5 已关闭；P5 的 CI、CodeQL 与三平台 Desktop candidate 全绿
 → P6/P7 已关闭；P8 官方 OpenAI Responses/GPT 与 Anthropic Messages/Claude 的仓库内原生协议门槛已关闭，
   真实公网 API 回环仍为 external-blocked
-→ Reasonix 一级上游最新审至 `8bb0e549`：LongCat context、Linux WebKit 启动修复与可靠会话导出已采用，
-  Theme Pack settings-refresh 为已有等价并补回归；pane opacity 延后，Remote SSH 进入 P11。Codex `0fb559f0`、Claude `015170d3` 无新增；Hermes/Kimi
-  最新机制增量已逐项分类；权威 SHA 只看 lock
-→ Grok Build `98c3b24` 已纳入机制参考；后续增量重点比较 shell/permission/sandbox、
+→ Reasonix 一级上游最新审至 `2301e248`：Provider env、MCP stdio/lifecycle、中断轮次恢复与 WebKit focus
+  已采用，Remote SSH 两项进入 P11。Codex 二级战略审至 `7844386e`，Claude 仍为 `015170d3`；Hermes
+  最终审至 `1b17015f`，其中 `e361c5e2` 的 Kimi thinking 信号已窄化采用，其他机制增量已分类；权威 SHA 只看 lock
+→ Grok Build `ba76b0a6` 已按机制参考审查；后续增量重点比较 shell/permission/sandbox、
 durable session/subagent、TUI queue/interject、ACP/headless。不得照搬其 Plan Mode 的 shell/subagent 写入缺口，
 也不接入 xAI auth、telemetry、online memory、managed policy、marketplace 或 Rust 第二 runtime
-→ 当前 M6 已交付 Telegram durable long polling；下一无需凭据的可靠性缺口是 outbound final-response
-  obligation，随后继续逐渠道 RecoveryAdapter fixture。并行等待干净 Linux linger-enabled logout/reboot、
+→ 当前 M6 已交付 Telegram durable long polling 与 outbound final-response obligation；下一无需凭据的
+  可靠性工作是继续逐渠道 RecoveryAdapter fixture。并行等待干净 Linux linger-enabled logout/reboot、
   真实 watchdog kill/restart、Gateway recovery-status/system service 实启，以及真实 Provider/IM 回环
 → 仓库战略主线继续 P9 → P10 → P11：Codex-class 插件/headless、第一方 CDP Browser Control、受治理 Remote SSH；
   分别跟进 Codex/Claude 的代码级 Agent 能力，每条先完成 fixture/权限/沙箱/evidence 再补真实回环

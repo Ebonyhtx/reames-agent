@@ -4225,11 +4225,19 @@ func replaySectionsFor(history []control.TranscriptMessage, width int, _ *mdRend
 			content := control.StripComposePrefixes(m.Content)
 			out = append(out, renderUserBubble(content, width, false)+"\n\n")
 		case control.TranscriptAssistant:
-			body := strings.TrimSpace(m.Content)
-			if body == "" {
-				continue
+			if reasoning := strings.TrimSpace(m.Reasoning); reasoning != "" {
+				out = append(out, dim("  ▎ "+i18n.M.ChatThinking)+"\n"+reasoningBlock(reasoning, width, 0)+"\n\n")
 			}
-			out = append(out, renderAssistantMarkdown(body, width)+"\n\n")
+			body := strings.TrimSpace(m.Content)
+			if body != "" {
+				out = append(out, renderAssistantMarkdown(body, width)+"\n\n")
+			}
+			for _, call := range m.ToolCalls {
+				out = append(out, toolCard(call.Name, "", width)+"\n\n")
+			}
+			if m.Interrupted {
+				out = append(out, "  · "+i18n.M.InterruptedRecovery+"\n\n")
+			}
 		}
 	}
 	return out

@@ -18,7 +18,7 @@ ${markdown}
 - [ ] Complete the primary-base subsystem coverage record before accepting a revision
 - [ ] Record adopt/defer/ignore decisions
 - [ ] Open scoped implementation issues for accepted changes
-- [ ] Run \`python scripts/check_upstreams.py --accept <id>\` only after review
+- [ ] Run \`python scripts/check_upstreams.py --accept-revision <id>=<full-sha>\` only after review
 
 This is advisory-only. Never auto-merge upstream code.`;
 

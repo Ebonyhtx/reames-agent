@@ -135,6 +135,24 @@ func TestTranscriptDisplayKeyPreservesSidecarsWithoutReplayingReferencedContext(
 	}
 }
 
+func TestHistoryMessagesRestoreInterruptedLocalDisplayAndNotice(t *testing.T) {
+	got := historyMessagesWithPlannerDisplays(
+		providerTranscriptForTest([]provider.Message{{
+			Role: provider.RoleTool, ToolCallID: provider.LocalOnlyToolID, Name: provider.LocalOnlyToolName,
+			Content: "partial answer", ReasoningContent: "partial reasoning", LocalOnly: true,
+			ToolCalls:       []provider.ToolCall{{ID: "c1", Name: "write_file"}},
+			InterruptedTurn: &provider.InterruptedTurnRecovery{Pending: true},
+		}}),
+		nil, nil, nil,
+	)
+	if len(got) != 2 || got[0].Role != "assistant" || got[0].Content != "partial answer" || got[0].Reasoning != "partial reasoning" || len(got[0].ToolCalls) != 1 {
+		t.Fatalf("interrupted display projection = %+v", got)
+	}
+	if got[1].Role != "notice" || !strings.Contains(got[1].Content, "bounded recovery summary") {
+		t.Fatalf("interrupted recovery notice = %+v", got)
+	}
+}
+
 func TestHistoryMessagesCarryCheckpointTurnsAcrossHiddenSyntheticUsers(t *testing.T) {
 	msgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},

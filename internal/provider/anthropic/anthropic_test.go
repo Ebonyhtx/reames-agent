@@ -367,6 +367,74 @@ func TestBuildRequestThinking(t *testing.T) {
 	}
 }
 
+func TestKimiFamilyEndpointDetection(t *testing.T) {
+	tests := []struct {
+		name    string
+		baseURL string
+		model   string
+		want    bool
+	}{
+		{name: "coding host", baseURL: "https://api.kimi.com/coding/", model: "kimi-for-coding", want: true},
+		{name: "moonshot anthropic host", baseURL: "https://api.moonshot.cn/anthropic/v1", model: "custom", want: true},
+		{name: "private gateway model", baseURL: "https://llm.example.com/anthropic", model: "moonshotai/kimi-k2.5", want: true},
+		{name: "short release family", baseURL: "https://llm.example.com/anthropic", model: "k2-thinking", want: true},
+		{name: "lookalike host", baseURL: "https://api.kimi.com.example.net/anthropic", model: "custom", want: false},
+		{name: "claude", baseURL: "https://api.anthropic.com", model: "claude-opus-4-8", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isKimiFamilyEndpoint(tt.baseURL, tt.model); got != tt.want {
+				t.Fatalf("isKimiFamilyEndpoint(%q, %q) = %v, want %v", tt.baseURL, tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildRequestKimiReplaysCapturedUnsignedThinking(t *testing.T) {
+	c := &client{model: "kimi-for-coding", thinking: "adaptive", effort: "max", kimiFamily: true}
+	r := c.buildRequest(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "continue"},
+		{
+			Role: provider.RoleAssistant,
+			ReasoningBlocks: []provider.ReasoningBlock{{
+				Type: "thinking",
+				Text: "planning the tool call",
+			}},
+			ToolCalls: []provider.ToolCall{{ID: "t1", Name: "read_file", Arguments: `{}`}},
+		},
+		{Role: provider.RoleTool, ToolCallID: "t1", Content: "ok"},
+	}})
+	if r.Thinking == nil || r.Thinking.Type != "adaptive" || r.OutputConfig == nil || r.OutputConfig.Effort != "max" {
+		t.Fatalf("Kimi adaptive request = thinking:%+v output:%+v", r.Thinking, r.OutputConfig)
+	}
+	blocks := r.Messages[1].Content
+	if len(blocks) != 2 {
+		t.Fatalf("Kimi assistant blocks = %+v", blocks)
+	}
+	if blocks[0].Type != "thinking" || blocks[0].Thinking != "planning the tool call" || blocks[0].Signature != "" {
+		t.Fatalf("unsigned Kimi thinking block = %+v", blocks[0])
+	}
+	if blocks[1].Type != "tool_use" {
+		t.Fatalf("Kimi tool block = %+v", blocks[1])
+	}
+}
+
+func TestBuildRequestClaudeRejectsUnsignedThinking(t *testing.T) {
+	c := &client{model: "claude-opus-4-8", thinking: "adaptive"}
+	r := c.buildRequest(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "continue"},
+		{
+			Role:            provider.RoleAssistant,
+			ReasoningBlocks: []provider.ReasoningBlock{{Type: "thinking", Text: "unsigned"}},
+			ToolCalls:       []provider.ToolCall{{ID: "t1", Name: "read_file", Arguments: `{}`}},
+		},
+	}})
+	blocks := r.Messages[1].Content
+	if len(blocks) != 1 || blocks[0].Type != "tool_use" {
+		t.Fatalf("Claude must not replay unsigned thinking: %+v", blocks)
+	}
+}
+
 func TestBuildRequestReplaysOrderedReasoningBlocks(t *testing.T) {
 	c := &client{model: "claude-opus-4-8", thinking: "adaptive"}
 	r := c.buildRequest(provider.Request{Messages: []provider.Message{

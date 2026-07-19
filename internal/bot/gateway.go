@@ -168,6 +168,10 @@ type BotGateway struct {
 	controlServer           *controlHTTPServer
 	sessionOverrides        map[string]sessionRuntimeOverride
 	recovery                *deliveryLedger
+	activeObligations       map[string]bool
+	stopping                bool
+	turnWG                  sync.WaitGroup
+	deliveryWG              sync.WaitGroup
 
 	logger *slog.Logger
 }
@@ -317,6 +321,7 @@ func NewGatewayWithAdapterBindings(cfg GatewayConfig, adapters []AdapterBinding,
 		outboundMessageIDs:      make(map[string]time.Time),
 		adapterHealth:           make(map[string]*AdapterHealthSnapshot),
 		sessionOverrides:        make(map[string]sessionRuntimeOverride),
+		activeObligations:       make(map[string]bool),
 		logger:                  logger.With("component", "bot_gateway"),
 	}
 	gw.buildAllowlist()
@@ -383,8 +388,26 @@ func (gw *BotGateway) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	gw.mu.Lock()
 	gw.recovery = recovery
+	gw.stopping = false
+	gw.mu.Unlock()
 	started := make([]AdapterBinding, 0, len(gw.adapters))
+	startSucceeded := false
+	defer func() {
+		if startSucceeded {
+			return
+		}
+		for _, binding := range started {
+			_ = binding.Adapter.Stop()
+		}
+		gw.mu.Lock()
+		if gw.recovery == recovery {
+			gw.recovery = nil
+		}
+		gw.mu.Unlock()
+		recovery.close()
+	}()
 	var startErr []error
 	for _, binding := range gw.adapters {
 		if !gw.cfg.Enabled[binding.Platform] {
@@ -412,14 +435,24 @@ func (gw *BotGateway) Start(ctx context.Context) error {
 	if len(started) == 0 && len(startErr) > 0 {
 		return errors.Join(startErr...)
 	}
-	startErr = append(startErr, gw.recoverMissed(ctx, started)...)
+	limit := gw.cfg.RecoveryScanLimit
+	if limit <= 0 {
+		limit = defaultRecoveryScanLimit
+	}
+	remaining := limit
+	var obligationErrs []error
+	remaining, obligationErrs = gw.recoverOutboundObligations(ctx, remaining)
+	startErr = append(startErr, obligationErrs...)
+	var missedErrs []error
+	remaining, missedErrs = gw.recoverMissed(ctx, started, remaining)
+	startErr = append(startErr, missedErrs...)
+	if remaining == 0 {
+		gw.logger.Info("bot recovery scan reached global limit", "limit", limit)
+	}
 	gw.mu.Lock()
 	gw.startErr = startErr
 	gw.mu.Unlock()
 	if err := gw.startControlServer(ctx); err != nil {
-		for _, binding := range started {
-			_ = binding.Adapter.Stop()
-		}
 		return err
 	}
 
@@ -428,25 +461,22 @@ func (gw *BotGateway) Start(ctx context.Context) error {
 		go gw.dispatchLoop(ctx, binding)
 	}
 
+	startSucceeded = true
 	return nil
 }
 
-func (gw *BotGateway) recoverMissed(ctx context.Context, bindings []AdapterBinding) []error {
-	if gw.recovery == nil {
-		return nil
+func (gw *BotGateway) recoverMissed(ctx context.Context, bindings []AdapterBinding, remaining int) (int, []error) {
+	recovery := gw.recoveryLedger()
+	if recovery == nil || remaining <= 0 {
+		return remaining, nil
 	}
-	limit := gw.cfg.RecoveryScanLimit
-	if limit <= 0 {
-		limit = defaultRecoveryScanLimit
-	}
-	remaining := limit
 	var recoveryErrs []error
 	for _, binding := range bindings {
 		adapter, ok := binding.Adapter.(RecoveryAdapter)
 		if !ok || remaining <= 0 {
 			continue
 		}
-		messages, err := adapter.RecoverMissed(ctx, gw.recovery.checkpoints(binding), remaining)
+		messages, err := adapter.RecoverMissed(ctx, recovery.checkpoints(binding), remaining)
 		if err != nil {
 			recoveryErrs = append(recoveryErrs, fmt.Errorf("recover adapter %s: %w", binding.ID, err))
 			continue
@@ -466,10 +496,24 @@ func (gw *BotGateway) recoverMissed(ctx context.Context, bindings []AdapterBindi
 			gw.handleMessage(ctx, binding, msg)
 		}
 	}
-	if remaining == 0 {
-		gw.logger.Info("bot recovery scan reached global limit", "limit", limit)
+	return remaining, recoveryErrs
+}
+
+func (gw *BotGateway) recoverOutboundObligations(ctx context.Context, remaining int) (int, []error) {
+	recovery := gw.recoveryLedger()
+	if recovery == nil || remaining <= 0 {
+		return remaining, nil
 	}
-	return recoveryErrs
+	items := recovery.pendingOutboundObligations(remaining)
+	errList := make([]error, 0)
+	for _, item := range items {
+		remaining--
+		_, err := gw.sendOutboundObligation(ctx, item.Key)
+		if err != nil {
+			errList = append(errList, fmt.Errorf("recover outbound obligation %s: %w", item.Key[:12], err))
+		}
+	}
+	return remaining, errList
 }
 
 func (gw *BotGateway) AdapterCount() int {
@@ -499,7 +543,13 @@ func (gw *BotGateway) AdapterHealth() []AdapterHealthSnapshot {
 
 // DeliveryRecoveryHealth returns privacy-safe durable delivery ledger counts.
 func (gw *BotGateway) DeliveryRecoveryHealth() DeliveryRecoverySnapshot {
-	return gw.recovery.snapshot()
+	return gw.recoveryLedger().snapshot()
+}
+
+func (gw *BotGateway) recoveryLedger() *deliveryLedger {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	return gw.recovery
 }
 
 func (gw *BotGateway) setAdapterConfigured(binding AdapterBinding) {
@@ -609,6 +659,7 @@ func (gw *BotGateway) ensureAdapterHealthLocked(binding AdapterBinding) *Adapter
 func (gw *BotGateway) Stop() {
 	var states []*sessionState
 	gw.mu.Lock()
+	gw.stopping = true
 	for key, state := range gw.controllers {
 		states = append(states, state)
 		delete(gw.controllers, key)
@@ -625,6 +676,13 @@ func (gw *BotGateway) Stop() {
 		gw.markAdapterClosed(binding)
 	}
 	gw.stopControlServer()
+	gw.turnWG.Wait()
+	gw.deliveryWG.Wait()
+	gw.mu.Lock()
+	recovery := gw.recovery
+	gw.recovery = nil
+	gw.mu.Unlock()
+	recovery.close()
 }
 
 func (gw *BotGateway) dispatchLoop(ctx context.Context, binding AdapterBinding) {
@@ -650,14 +708,21 @@ func (gw *BotGateway) handleMessage(ctx context.Context, binding AdapterBinding,
 	// able to select another connection's routes, access policy, or ledger.
 	msg.ConnectionID = binding.ID
 	msg.Domain = binding.Domain
-	claimed, err := gw.recovery.claim(msg)
+	recovery := gw.recoveryLedger()
+	claimed, err := recovery.claim(msg)
 	if err != nil {
 		gw.notifyInboundSettlements(inboundDeliveryClaims(msg), false)
 		gw.logger.Error("bot inbound durable claim failed", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
 		return
 	}
 	if !claimed {
-		if gw.recovery.wasDelivered(msg) {
+		if obligationKey, _, ok := recovery.outboundObligationFor(msg); ok {
+			if _, err := gw.sendOutboundObligation(ctx, obligationKey); err != nil {
+				gw.logger.Warn("bot outbound obligation retry failed", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
+			}
+			return
+		}
+		if recovery.wasDelivered(msg) {
 			gw.notifyInboundSettlements(inboundDeliveryClaims(msg), true)
 		}
 		gw.logger.Debug("bot ignored already claimed inbound message", "platform", binding.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID))
@@ -786,7 +851,19 @@ func (gw *BotGateway) handleMessage(ctx context.Context, binding AdapterBinding,
 	// would unblock it: the session wedges until restart (#4701, #4863, #4402).
 	// Per-session serialization is still held by the session lock (active[key]),
 	// which the deferred Release inside runTurn clears.
-	go gw.runTurn(ctx, binding.Adapter, key, msg, cleanup)
+	gw.mu.Lock()
+	if gw.stopping {
+		gw.mu.Unlock()
+		gw.sessions.ForceRelease(key)
+		gw.flushReactionCleanups(key, cleanup)
+		return
+	}
+	gw.turnWG.Add(1)
+	gw.mu.Unlock()
+	go func() {
+		defer gw.turnWG.Done()
+		gw.runTurn(ctx, binding.Adapter, key, msg, cleanup)
+	}()
 }
 
 func (gw *BotGateway) queueMode(key string, msg InboundMessage) string {
@@ -1832,6 +1909,14 @@ func toolApprovalModeLabel(mode string) string {
 func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, msg InboundMessage, cleanup func()) {
 	gw.logger.Info("bot turn started", "platform", msg.Platform, "chat_type", msg.ChatType, "chat", hashID(msg.ChatID), "session", key[:8])
 	defer func() {
+		gw.mu.Lock()
+		stopping := gw.stopping
+		gw.mu.Unlock()
+		if stopping {
+			gw.sessions.ForceRelease(key)
+			gw.flushReactionCleanups(key, cleanup)
+			return
+		}
 		// 检查是否有等待队列中的消息
 		next := gw.sessions.Release(key)
 		if next != nil {
@@ -1869,6 +1954,7 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 	_ = adapter.SendTyping(ctx, msg.ChatID)
 
 	// 创建事件渲染 sink
+	recovery := gw.recoveryLedger()
 	renderAdapter := trackedRenderAdapter{
 		Adapter: adapter,
 		gw:      gw,
@@ -1906,6 +1992,7 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 	// Finish initializing the sink before publishing it as the live target: once
 	// setTarget runs, other goroutines can reach this sink via state.sink.Emit.
 	sink.ctrl = state.ctrl
+	sink.deferFinal = recovery != nil
 	state.sink.setTarget(sink)
 	defer state.sink.setTarget(nil)
 
@@ -1929,22 +2016,47 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 
 	// 运行一轮对话
 	err := state.ctrl.RunTurn(turnCtx, input)
-	sink.Emit(event.Event{Kind: event.TurnDone, Err: err})
+	sink.complete(err)
 	if err != nil {
 		gw.failInbound(msg, err)
 		gw.logger.Warn("turn error", "session", key[:8], "err", err)
 		return
 	}
-	if err := sink.finalDeliveryError(); err != nil {
-		gw.failInbound(msg, err)
-		gw.logger.Warn("turn final delivery incomplete", "session", key[:8], "err", err)
-		return
+	if sink.deferFinal {
+		messages, err := sink.drainFinalMessages()
+		if err != nil {
+			gw.failInbound(msg, err)
+			gw.logger.Warn("turn final response render incomplete", "session", key[:8], "err", err)
+			return
+		}
+		obligation, err := recovery.prepareOutboundObligation(msg, messages)
+		if err != nil {
+			gw.failInbound(msg, err)
+			gw.logger.Warn("turn final response obligation persist failed", "session", key[:8], "err", err)
+			return
+		}
+		obligationKey := deliveryRecordKey(obligation.Source, obligation.MessageID)
+		delivered, err := gw.sendOutboundObligation(ctx, obligationKey)
+		if err != nil {
+			gw.logger.Warn("turn final response delivery deferred for recovery", "session", key[:8], "err", err)
+			return
+		}
+		if !delivered {
+			gw.logger.Info("turn final response delivery already active or gateway stopping", "session", key[:8])
+			return
+		}
+	} else {
+		if err := sink.finalDeliveryError(); err != nil {
+			gw.failInbound(msg, err)
+			gw.logger.Warn("turn final delivery incomplete", "session", key[:8], "err", err)
+			return
+		}
+		if err := recovery.delivered(msg); err != nil {
+			gw.logger.Error("turn delivered but durable cursor commit failed", "session", key[:8], "err", err)
+			return
+		}
+		gw.notifyInboundSettlements(inboundDeliveryClaims(msg), true)
 	}
-	if err := gw.recovery.delivered(msg); err != nil {
-		gw.logger.Error("turn delivered but durable cursor commit failed", "session", key[:8], "err", err)
-		return
-	}
-	gw.notifyInboundSettlements(inboundDeliveryClaims(msg), true)
 	gw.logger.Info("bot turn completed", "platform", msg.Platform, "chat_type", msg.ChatType, "chat", hashID(msg.ChatID), "session", key[:8])
 }
 
@@ -1953,7 +2065,7 @@ func (gw *BotGateway) settleInbound(msg InboundMessage, deliveryErr error) {
 		gw.failInbound(msg, deliveryErr)
 		return
 	}
-	if err := gw.recovery.delivered(msg); err != nil {
+	if err := gw.recoveryLedger().delivered(msg); err != nil {
 		gw.logger.Error("bot inbound delivered but durable cursor commit failed", "platform", msg.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
 		return
 	}
@@ -1964,7 +2076,7 @@ func (gw *BotGateway) settleCanceledInbound(msg *InboundMessage) {
 	if msg == nil {
 		return
 	}
-	if err := gw.recovery.delivered(*msg); err != nil {
+	if err := gw.recoveryLedger().delivered(*msg); err != nil {
 		gw.logger.Error("canceled bot turn could not commit durable delivery", "platform", msg.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
 		return
 	}
@@ -1972,7 +2084,7 @@ func (gw *BotGateway) settleCanceledInbound(msg *InboundMessage) {
 }
 
 func (gw *BotGateway) settleCanceledSession(key string) {
-	claims, err := gw.recovery.deliveredSession(key)
+	claims, err := gw.recoveryLedger().deliveredSession(key)
 	if err != nil {
 		gw.logger.Error("canceled bot session could not commit durable delivery", "session", key, "err", err)
 		return
@@ -1981,7 +2093,7 @@ func (gw *BotGateway) settleCanceledSession(key string) {
 }
 
 func (gw *BotGateway) failCanceledSession(key string) {
-	claims, err := gw.recovery.failSession(key)
+	claims, err := gw.recoveryLedger().failSession(key)
 	if err != nil {
 		gw.logger.Error("canceled bot session failure could not be persisted", "session", key, "err", err)
 		return
@@ -1990,7 +2102,7 @@ func (gw *BotGateway) failCanceledSession(key string) {
 }
 
 func (gw *BotGateway) failInbound(msg InboundMessage, cause error) {
-	if err := gw.recovery.fail(msg, cause); err != nil {
+	if err := gw.recoveryLedger().fail(msg, cause); err != nil {
 		gw.logger.Error("bot inbound failure state could not be persisted", "platform", msg.Platform, "connection", msg.ConnectionID, "chat", hashID(msg.ChatID), "message", hashID(msg.MessageID), "err", err)
 		return
 	}
@@ -2474,6 +2586,98 @@ func inboundReplyMessageID(msg InboundMessage) string {
 		return reply
 	}
 	return strings.TrimSpace(msg.MessageID)
+}
+
+func (gw *BotGateway) beginOutboundDelivery(key string) bool {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
+	}
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	if gw.stopping || gw.activeObligations[key] {
+		return false
+	}
+	gw.activeObligations[key] = true
+	gw.deliveryWG.Add(1)
+	return true
+}
+
+func (gw *BotGateway) endOutboundDelivery(key string) {
+	gw.mu.Lock()
+	delete(gw.activeObligations, strings.TrimSpace(key))
+	gw.mu.Unlock()
+	gw.deliveryWG.Done()
+}
+
+func (gw *BotGateway) bindingForOutboundTarget(target outboundTarget) (AdapterBinding, bool) {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	for _, binding := range gw.adapters {
+		if binding.Platform == target.Platform &&
+			strings.TrimSpace(binding.ID) == strings.TrimSpace(target.ConnectionID) &&
+			strings.TrimSpace(binding.Domain) == strings.TrimSpace(target.Domain) {
+			return binding, true
+		}
+	}
+	return AdapterBinding{}, false
+}
+
+func (gw *BotGateway) sendOutboundObligation(ctx context.Context, key string) (bool, error) {
+	key = strings.TrimSpace(key)
+	if !gw.beginOutboundDelivery(key) {
+		return false, nil
+	}
+	defer gw.endOutboundDelivery(key)
+
+	gw.mu.Lock()
+	recovery := gw.recovery
+	gw.mu.Unlock()
+	if recovery == nil {
+		return true, errors.New("bot recovery ledger is disabled")
+	}
+	for {
+		obligation, ok := recovery.outboundObligation(key)
+		if !ok {
+			return true, nil
+		}
+		binding, ok := gw.bindingForOutboundTarget(obligation.Target)
+		if !ok {
+			return true, fmt.Errorf("no running adapter for outbound obligation target %q", obligation.Target.ConnectionID)
+		}
+		ambiguous := obligation.Status == obligationStatusAttempting || obligation.Status == obligationStatusFailed
+		attempt, err := recovery.beginOutboundAttempt(key)
+		if err != nil {
+			return true, err
+		}
+		text := attempt.Chunks[attempt.NextChunk]
+		if ambiguous {
+			text = recoveredReplyMarker + text
+		}
+		_, sendErr := gw.sendViaAdapter(ctx, binding, OutboundMessage{
+			ConnectionID: attempt.Target.ConnectionID,
+			Domain:       attempt.Target.Domain,
+			ChatID:       attempt.Target.ChatID,
+			ChatType:     attempt.Target.ChatType,
+			Text:         text,
+			ReplyToMsgID: attempt.Target.ReplyToMsgID,
+		})
+		if sendErr != nil {
+			if err := recovery.failOutboundAttempt(key); err != nil {
+				return true, errors.Join(sendErr, err)
+			}
+			gw.notifyInboundSettlements(attempt.Claims, false)
+			return true, sendErr
+		}
+		_, complete, claims, err := recovery.acknowledgeOutboundChunk(key)
+		if err != nil {
+			return true, err
+		}
+		if complete {
+			gw.notifyInboundSettlements(claims, true)
+			return true, nil
+		}
+	}
 }
 
 func (gw *BotGateway) sendViaAdapter(ctx context.Context, binding AdapterBinding, msg OutboundMessage) (SendResult, error) {

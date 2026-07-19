@@ -38,6 +38,9 @@ type renderSink struct {
 	progressCount int
 	finalSends    int
 	finalErr      error
+	deferFinal    bool
+	finalMessages []OutboundMessage
+	turnDone      bool
 }
 
 const (
@@ -77,6 +80,8 @@ func (s *renderSink) Emit(e event.Event) {
 		s.lastProgress = time.Time{}
 		s.finalSends = 0
 		s.finalErr = nil
+		s.finalMessages = nil
+		s.turnDone = false
 
 	case event.Reasoning:
 		if !s.inThinking {
@@ -155,8 +160,13 @@ func (s *renderSink) Emit(e event.Event) {
 		_ = s.send(msg)
 
 	case event.TurnDone:
+		if s.turnDone {
+			return
+		}
+		s.turnDone = true
 		// 刷新缓冲
-		s.flush()
+		deferFinal := s.deferFinal && e.Err == nil
+		s.flush(deferFinal)
 		if e.Err != nil {
 			if !strings.Contains(e.Err.Error(), "context canceled") {
 				_ = s.send(OutboundMessage{
@@ -194,7 +204,7 @@ func (s *renderSink) Emit(e event.Event) {
 	}
 }
 
-func (s *renderSink) flush() {
+func (s *renderSink) flush(deferFinal bool) {
 	for strings.TrimSpace(s.buf.String()) != "" {
 		idx := renderFlushIndex(s.buf.String(), renderSoftFlushAfter)
 		if idx <= 0 {
@@ -203,11 +213,11 @@ func (s *renderSink) flush() {
 		if idx <= 0 || idx > len(s.buf.String()) {
 			idx = len(s.buf.String())
 		}
-		s.flushPrefix(idx)
+		s.flushPrefix(idx, deferFinal)
 	}
 }
 
-func (s *renderSink) flushPrefix(idx int) {
+func (s *renderSink) flushPrefix(idx int, deferFinal bool) {
 	raw := s.buf.String()
 	if idx <= 0 || idx > len(raw) {
 		idx = len(raw)
@@ -220,14 +230,20 @@ func (s *renderSink) flushPrefix(idx int) {
 		s.lastFlush = time.Now()
 		return
 	}
-	err := s.send(OutboundMessage{
+	msg := OutboundMessage{
 		ConnectionID: s.connID,
 		Domain:       s.domain,
 		ChatID:       s.chatID,
 		ChatType:     s.chatType,
 		Text:         text,
 		ReplyToMsgID: s.replyTo,
-	})
+	}
+	var err error
+	if deferFinal {
+		s.finalMessages = append(s.finalMessages, msg)
+	} else {
+		err = s.send(msg)
+	}
 	s.finalSends++
 	if err != nil && s.finalErr == nil {
 		s.finalErr = err
@@ -369,6 +385,28 @@ func (s *renderSink) finalDeliveryError() error {
 		return errors.New("turn completed without a final response delivery")
 	}
 	return nil
+}
+
+func (s *renderSink) drainFinalMessages() ([]OutboundMessage, error) {
+	if !s.deferFinal {
+		return nil, errors.New("final response delivery is not deferred")
+	}
+	if s.finalErr != nil {
+		return nil, fmt.Errorf("final response render: %w", s.finalErr)
+	}
+	if len(s.finalMessages) == 0 {
+		return nil, errors.New("turn completed without a final response delivery")
+	}
+	messages := append([]OutboundMessage(nil), s.finalMessages...)
+	s.finalMessages = nil
+	return messages, nil
+}
+
+func (s *renderSink) complete(err error) {
+	if s.turnDone {
+		return
+	}
+	s.Emit(event.Event{Kind: event.TurnDone, Err: err})
 }
 
 func approvalKeyboard(id string) *InlineKeyboard {

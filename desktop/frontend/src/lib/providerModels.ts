@@ -94,7 +94,10 @@ export function apiKeyEnvFromProviderName(name: string): string {
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
-  if (stem) return `${stem}_API_KEY`;
+  if (stem) {
+    const validStem = /^[0-9]/.test(stem) ? `CUSTOM_${stem}` : stem;
+    return `${validStem}_API_KEY`;
+  }
   // When the provider name is entirely non-ASCII (e.g. Chinese characters),
   // generate a stable hash suffix so each custom provider gets a unique slot.
   const hash = fnv1a32(name.trim());

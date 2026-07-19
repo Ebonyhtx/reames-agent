@@ -1,7 +1,7 @@
 # Reames Agent 源流与参考项目治理
 
 > 状态：当前项目来源、上游跟踪和参考吸收的权威说明
-> 更新：2026-07-19
+> 更新：2026-07-20
 
 ## 1. 项目源流
 
@@ -36,6 +36,8 @@ Reasonix 是持续跟进的主上游，不是一次性参考。但 Reames Agent 
 - Codex 对应 GPT/OpenAI 原生 Responses、reasoning、tool/stream、多模态、App-Server/headless、插件和
   Browser/CDP 等代码级能力；
 - Claude Code 对应 Claude/Anthropic Messages、thinking、tool/vision/cache、插件/Skill/Hook 与会话体验；
+- “原生支持”不能由一个 OpenAI-compatible/Anthropic-compatible endpoint 或模型名称证明：必须分别验证官方
+  wire、流式事件、reasoning/thinking replay、usage/cache、tool/vision、错误语义与相关 Agent/runtime 能力；
 - 两者有新提交时 Upstream Watch 必须给出 `review-required`，启用路径级 diff，并进行逐提交/逐文件能力
   审查；不能只根据 CHANGELOG、release notes 或 GitHub 页面决定 Reames 是否“已跟进”。
 
@@ -355,3 +357,57 @@ Scream 均逐项 `--accept`，未使用 `--accept-all`。完整证据见：
 - `audits/2026-07-19-reasonix-65fcd46-8bb0e54.md`
 - `upstreams/reviews/reasonix-generation-65fcd46-8bb0e54.json`
 - `upstreams/reviews/reasonix-current.json`
+
+## 15. 2026-07-20 Hermes obligation 机制采用
+
+Hermes 在 2026-07-19 增量中暴露的 outbound final-response obligation 缺口已完成机制级采用。Reames
+没有复制 Hermes 的 Python/Electron Gateway 或第二套 runtime，而是在现有 Go `internal/bot` delivery ledger、
+render 和 Gateway 中加入 schema-v2 最终文本 obligation、单 writer OS 锁、发送前 `attempting`、逐分片 ACK、
+最后 ACK 与 inbound cursor 原子结算，以及 mid-send 歧义的可见“可能重复”标记。重复 inbound 直接恢复原答复，
+不创建 Controller、不调用 Provider。
+
+该采用不改变上游层级：Reasonix 仍是唯一一级源码上游；Codex/Claude 仍是二级战略代码上游；Hermes 仍只提供
+Gateway/运维机制信号。完整边界与测试见
+`audits/2026-07-20-m6-outbound-final-response-obligation.md`。
+
+## 16. 2026-07-20 Reasonix 与战略/机制参考再冻结
+
+本轮深扫与代码审查固定到：
+
+| 层级 | 项目 | reviewed SHA | 结论 |
+|---|---|---|---|
+| 一级 | DeepSeek Reasonix | `2301e24827bf62c7584f34c4f541c432dd4f6e0b` | 6 个提交逐项审查；采用 Provider env、MCP stdio/lifecycle、中断恢复和 WebKit focus，Remote SSH 延后 P11 |
+| 二级 | OpenAI Codex | `3e2f79727a4e8ddfc8e3acb838d496b121094b9e` | 6 个 TUI 内存/side-thread 提交已代码级分类；无 Responses/App-Server/Browser wire 增量 |
+| 二级 | Claude Code | `015170d3fd84fb57ef4685a64b673fadd0690dc1` | 无新公开源码，不从 changelog 伪造 parity |
+| 三级 | Hermes | `299e409f15aa5615a8a64be488580be92cda351e` | cron profile 进入 M7；subagent live view 只从 Reames canonical child transcript 投影 |
+| 三级 | Grok Build | `ba76b0a683fa52e4e60685017b85905451be17bc` | Stop gate、session import、permission deny budget 等只形成 P9/安全机制信号 |
+
+Reasonix 的 MCP 生命周期采用保留 Reames 更强的 identity receipt、launcher pin、provenance、destructive
+approval 和所有 visible/detached Controller reservation；不跟随上游删除 trust workflow。Codex/Claude 的
+二级地位继续要求未来提交进行真实 code/wire review，其余项目仍无版本 parity 义务。
+
+完整证据：
+
+- `audits/2026-07-20-reasonix-8bb0e54-2301e24.md`
+- `upstreams/reviews/reasonix-generation-8bb0e54-2301e24.json`
+- `audits/2026-07-20-upstream-strategic-reference-delta.md`
+
+## 17. 2026-07-20 Codex / Hermes 提交前增量
+
+最终提交前深扫发现 Codex `3e2f7972..7844386e` 和 Hermes `299e409f..1b17015f`。Codex 前 6 个提交为
+TUI Markdown/visualization context/command lifecycle/replay/diff 性能，最后一个修复多 Agent exec completion
+backfill identity：Reames 的 typed `ToolProgress`/`ToolResult` 与中断 `LocalOnly` 已覆盖“输出不等于完成”；
+CLI finalized Markdown 已提交为 ANSI transcript，单 diff 也不深克隆 Go string backing bytes，child sink 不转发
+`TurnDone`。P9 明确禁止把 raw audio/progress/output delta 写入 replay store，且 completion backfill 必须同时
+绑定 primary thread+turn；另需 benchmark Desktop 无界 live emitter，动态 Mermaid/visualization 不做静态缓存。
+
+Hermes 的 cron profile 与 Electron `simple-git` spaced-path/session-color 修复对当前单 home Go/Wails runtime 非同构；
+Kimi adaptive thinking 则暴露了真实同构缺口。Reames 已在不放宽 Claude 边界的前提下允许 Kimi/Moonshot
+Anthropic stream 捕获的无签名 thinking block 续轮回放，通用 `ReasoningContent` 仍不能跨 Provider 伪装。
+Hermes 隔离 spawn/settle/无网络噪声的 Desktop perf 方法进入 P9/P10 benchmark 合同，不复制 Electron harness。
+
+旧的未绑定 `--accept` 在 Codex 移动期间暴露 TOCTOU，本批已改为强制
+`--accept-revision ID=FULL_SHA`，并禁用 `--accept`/`--accept-all`/`--update-lock`。Codex 与 Hermes 最终
+reviewed SHA 为 `7844386e3de08febd13075eaaaf0e6f9dbe52c58` 和
+`1b17015f7a8d0c0d68b1f08aa389538e7fd172e3`；精确 SHA 接受后 11/11 无变化。完整证据见
+`audits/2026-07-20-codex-hermes-late-delta.md`。

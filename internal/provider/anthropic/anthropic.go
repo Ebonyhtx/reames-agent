@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -124,6 +125,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		baseURL:     root,
 		model:       cfg.Model,
 		mimo:        provider.IsMiMoEndpoint(root),
+		kimiFamily:  isKimiFamilyEndpoint(root, cfg.Model),
 		thinking:    thinking,
 		effort:      effort,
 		vision:      vision,
@@ -147,6 +149,7 @@ type client struct {
 	baseURL     string
 	model       string
 	mimo        bool   // official MiMo Anthropic endpoints require draft 2020-12 tuple syntax
+	kimiFamily  bool   // Kimi/Moonshot Messages endpoints replay unsigned thinking blocks
 	thinking    string // "adaptive" enables extended thinking; "" = off (config-driven)
 	effort      string // output_config.effort: low|medium|high|xhigh|max; "" = provider default
 	vision      bool   // model accepts image input — embed attached images as base64 image blocks
@@ -155,6 +158,43 @@ type client struct {
 	http        *http.Client
 	idleTimeout time.Duration // SSE stall watchdog window; defaultStreamIdleTimeout unless a test overrides
 	authed      atomic.Bool   // a request has succeeded — gate transient-401 retry
+}
+
+var kimiFamilyModelPrefixes = []string{
+	"kimi-", "kimi_",
+	"moonshot-", "moonshot_",
+	"k1.", "k1-",
+	"k2.", "k2-",
+	"k25", "k2.5",
+}
+
+// isKimiFamilyEndpoint identifies Anthropic-Messages-compatible Kimi/Moonshot
+// endpoints. Official hosts are recognized directly; a model-family match also
+// covers private gateways that preserve Kimi's replay contract behind a custom
+// hostname. The result only relaxes signature presence for captured Anthropic
+// thinking blocks—it never turns generic ReasoningContent into provider-native
+// history, so switching a session from another provider cannot forge Kimi wire.
+func isKimiFamilyEndpoint(baseURL, model string) bool {
+	host := ""
+	if parsed, err := url.Parse(strings.TrimSpace(baseURL)); err == nil {
+		host = strings.ToLower(parsed.Hostname())
+	}
+	for _, domain := range []string{"api.kimi.com", "moonshot.ai", "moonshot.cn"} {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+
+	model = strings.ToLower(strings.TrimSpace(model))
+	if i := strings.LastIndex(model, "/"); i >= 0 {
+		model = model[i+1:]
+	}
+	for _, prefix := range kimiFamilyModelPrefixes {
+		if strings.HasPrefix(model, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // StreamError preserves Anthropic's structured SSE error type.
@@ -315,15 +355,16 @@ func (c *client) buildRequest(req provider.Request) anthRequest {
 			appendBlocks("user", contentBlock{Type: "tool_result", ToolUseID: m.ToolCallID, Content: content})
 		case provider.RoleAssistant:
 			var blocks []contentBlock
-			// Replay the signed thinking block first (Anthropic requires it precede
-			// the tool_use it led to). Only when thinking is on and we have both the
-			// text and its signature — reasoning without a signature (e.g. from an
-			// openai-compatible provider) can't be replayed as a thinking block.
+			// Replay provider-native thinking blocks before the tool_use they led to.
+			// Claude requires a signature. Kimi/Moonshot's Anthropic-compatible wire
+			// returns and requires unsigned thinking blocks, so that family may replay
+			// a captured ReasoningBlock without a signature. Generic ReasoningContent
+			// still cannot cross this boundary because it may come from another wire.
 			if c.thinking == "adaptive" {
 				for _, block := range m.ReasoningBlocks {
 					switch block.Type {
 					case "thinking":
-						if block.Text != "" && block.Signature != "" {
+						if block.Text != "" && (block.Signature != "" || c.kimiFamily) {
 							blocks = append(blocks, contentBlock{Type: "thinking", Thinking: block.Text, Signature: block.Signature})
 						}
 					case "redacted_thinking":

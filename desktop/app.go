@@ -155,6 +155,13 @@ type App struct {
 	// synchronously claimed its own run/rotation gate, never for the full turn.
 	pluginRuntimeGate sync.RWMutex
 
+	// runtimeBuildGate is the admission barrier for asynchronous tab controller
+	// builds. Plugin/MCP writers take it after pluginRuntimeGate and before
+	// runtimeRebuildMu, then supersede every admitted old-generation build.
+	// Keeping this separate avoids recursively taking pluginRuntimeGate.RLock
+	// from session operations (Fork/Open) that already hold that read lock.
+	runtimeBuildGate sync.RWMutex
+
 	// deferredRebuild tracks tabs whose settings were saved but whose runtime
 	// could not refresh because the session lease was held by another process.
 	deferredRebuild deferredRebuildState
@@ -4586,7 +4593,16 @@ func historyMessagesWithPlannerDisplaysAndLookups(
 			hm.ToolName = m.ToolName
 			hm.Content, hm.ToolResultArchived, hm.ToolResultError = historyToolResultContent(m.Content, m.ToolCallID != "")
 		}
-		out = append(out, hm)
+		hasVisibleInterruptedContent := strings.TrimSpace(hm.Content) != "" || strings.TrimSpace(hm.Reasoning) != "" || len(hm.ToolCalls) > 0
+		if !m.Interrupted || hasVisibleInterruptedContent {
+			out = append(out, hm)
+		}
+		if m.Interrupted {
+			out = append(out, HistoryMessage{
+				Role: "notice", Level: "info",
+				Content: "This turn was interrupted. Partial output is kept for reference; only completed tool pairs and a bounded recovery summary enter the next model turn. Inspect the workspace before continuing or reverting changes.",
+			})
+		}
 		if m.Role == control.TranscriptUser && m.DisplayKey != "" {
 			if turns := plannerByUserHash[m.DisplayKey]; len(turns) > 0 {
 				out = append(out, cloneHistoryMessages(turns[0].Messages)...)
@@ -6557,15 +6573,56 @@ type MCPServerInput struct {
 	TrustedReadOnlyTools []string          `json:"trustedReadOnlyTools"`
 }
 
+// beginMCPRuntimeMutation reserves the complete Desktop capability surface for
+// one MCP lifecycle change. Lock order is deliberately shared with package
+// plugin mutation: turn/plugin admission -> async-build admission -> synchronous
+// rebuild gate -> every live Controller's runtime reservation ->
+// App/Host/Registry/config work performed by the caller. Startup builds admitted
+// before the writer arrived are superseded; empty tabs restart only after the
+// writer gates are released.
+func (a *App) beginMCPRuntimeMutation() (func(), error) {
+	a.pluginRuntimeGate.Lock()
+	a.runtimeBuildGate.Lock()
+	a.runtimeRebuildMu.Lock()
+
+	restart := []*WorkspaceTab(nil)
+	unlock := func() {
+		a.runtimeRebuildMu.Unlock()
+		a.runtimeBuildGate.Unlock()
+		a.pluginRuntimeGate.Unlock()
+		a.restartPluginStartupBuilds(restart)
+	}
+	if err := a.ensureLiveControllersRuntimeMutationAllowed("MCP server"); err != nil {
+		unlock()
+		return nil, err
+	}
+	restart = a.supersedePluginStartupBuilds()
+	releaseControllers, err := a.beginLiveControllerRuntimeMutation("MCP server")
+	if err != nil {
+		unlock()
+		return nil, err
+	}
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			releaseControllers()
+			unlock()
+		})
+	}, nil
+}
+
 // AddMCPServer connects a server live and persists it to config (Customize → MCP →
 // Add). Returns the number of tools it exposed.
 func (a *App) AddMCPServer(in MCPServerInput) (int, error) {
+	release, err := a.beginMCPRuntimeMutation()
+	if err != nil {
+		return 0, err
+	}
+	defer release()
 	ctrl := a.activeCtrl()
 	if ctrl == nil {
 		return 0, fmt.Errorf("no active session")
-	}
-	if controllerHasActiveRuntimeWork(ctrl) {
-		return 0, rebuildControllerActiveWorkError("MCP server")
 	}
 	entry := config.PluginEntry{
 		Name:                 in.Name,
@@ -6587,12 +6644,14 @@ func (a *App) AddMCPServer(in MCPServerInput) (int, error) {
 // UpdateMCPServer edits a persisted external MCP server. The name is the stable
 // identity; callers must remove + add if they want to rename a server.
 func (a *App) UpdateMCPServer(name string, in MCPServerInput) error {
+	release, err := a.beginMCPRuntimeMutation()
+	if err != nil {
+		return err
+	}
+	defer release()
 	ctrl := a.activeCtrl()
 	if ctrl == nil {
 		return fmt.Errorf("no active session")
-	}
-	if controllerHasActiveRuntimeWork(ctrl) {
-		return rebuildControllerActiveWorkError("MCP server")
 	}
 	if strings.TrimSpace(in.Name) != "" && strings.TrimSpace(in.Name) != name {
 		return fmt.Errorf("renaming MCP servers is not supported; remove and add a new server")
@@ -6651,12 +6710,14 @@ func (a *App) UpdateMCPServer(name string, in MCPServerInput) error {
 
 // RemoveMCPServer disconnects a live server and drops it from config (the row's ✕).
 func (a *App) RemoveMCPServer(name string) error {
+	release, err := a.beginMCPRuntimeMutation()
+	if err != nil {
+		return err
+	}
+	defer release()
 	tab, ctrl := a.activeTabAndCtrl()
 	if tab == nil || ctrl == nil {
 		return fmt.Errorf("no active session")
-	}
-	if controllerHasActiveRuntimeWork(ctrl) {
-		return rebuildControllerActiveWorkError("MCP server")
 	}
 	disconnected := ctrl.DisconnectMCPServer(name)
 	removed, err := a.removeDesktopMCPServer(name)
@@ -6680,18 +6741,20 @@ func (a *App) RemoveMCPServer(name string) error {
 // a fresh handshake and tool re-registration), then reconnects.  Failures are
 // recorded on the Host so the UI can render them.
 func (a *App) ReconnectMCPServer(name string) error {
+	release, err := a.beginMCPRuntimeMutation()
+	if err != nil {
+		return err
+	}
+	defer release()
 	tab, ctrl := a.activeTabAndCtrl()
 	if tab == nil || ctrl == nil {
 		return fmt.Errorf("no active session")
-	}
-	if controllerHasActiveRuntimeWork(ctrl) {
-		return rebuildControllerActiveWorkError("MCP server")
 	}
 	ctrl.DisconnectMCPServer(name)
 	if h := ctrl.Host(); h != nil {
 		h.ClearFailure(name)
 	}
-	_, err := a.connectConfiguredMCPServerForTab(tab, name)
+	_, err = a.connectConfiguredMCPServerForTab(tab, name)
 	if err != nil {
 		if plugin.IsServerAlreadyConnected(err) {
 			a.mu.Lock()
@@ -6715,12 +6778,14 @@ func (a *App) ReconnectMCPServer(name string) error {
 // ReverifyMCPServer explicitly accepts the current identity after a drift
 // failure, preserving only the receipt's previously selected reader names.
 func (a *App) ReverifyMCPServer(name string) error {
+	release, err := a.beginMCPRuntimeMutation()
+	if err != nil {
+		return err
+	}
+	defer release()
 	ctrl := a.activeCtrl()
 	if ctrl == nil {
 		return fmt.Errorf("no active session")
-	}
-	if controllerHasActiveRuntimeWork(ctrl) {
-		return rebuildControllerActiveWorkError("MCP server")
 	}
 	entry, found, err := a.desktopMCPServerForEdit(name)
 	if err != nil {
@@ -6745,12 +6810,14 @@ func (a *App) ReverifyMCPServer(name string) error {
 // clears the current session's cached connection failure. It does not remove the
 // server itself or try to sign the user out of the third-party browser session.
 func (a *App) ClearMCPServerAuthentication(name string) error {
+	release, err := a.beginMCPRuntimeMutation()
+	if err != nil {
+		return err
+	}
+	defer release()
 	ctrl := a.activeCtrl()
 	if ctrl == nil {
 		return fmt.Errorf("no active session")
-	}
-	if controllerHasActiveRuntimeWork(ctrl) {
-		return rebuildControllerActiveWorkError("MCP server")
 	}
 	if _, _, _, err := config.ClearPluginAuthenticationInSource(name); err != nil {
 		return err
@@ -6763,12 +6830,14 @@ func (a *App) ClearMCPServerAuthentication(name string) error {
 }
 
 func (a *App) updateMCPServerTrustedReadOnlyTools(name string, update func([]string) []string) error {
+	release, err := a.beginMCPRuntimeMutation()
+	if err != nil {
+		return err
+	}
+	defer release()
 	ctrl := a.activeCtrl()
 	if ctrl == nil {
 		return fmt.Errorf("no active session")
-	}
-	if controllerHasActiveRuntimeWork(ctrl) {
-		return rebuildControllerActiveWorkError("MCP server")
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -6826,6 +6895,11 @@ func (a *App) UntrustMCPServerTool(name, toolName string) error {
 // for this session, off disconnects it (config untouched either way — like Claude
 // Code's per-conversation enable/disable, it resets on the next session start).
 func (a *App) SetMCPServerEnabled(name string, enabled bool) error {
+	release, err := a.beginMCPRuntimeMutation()
+	if err != nil {
+		return err
+	}
+	defer release()
 	a.mu.RLock()
 	tab := a.activeTabLocked()
 	var ctrl control.SessionAPI
@@ -6837,9 +6911,6 @@ func (a *App) SetMCPServerEnabled(name string, enabled bool) error {
 	a.mu.RUnlock()
 	if tab == nil || ctrl == nil {
 		return fmt.Errorf("no active session")
-	}
-	if controllerHasActiveRuntimeWork(ctrl) {
-		return rebuildControllerActiveWorkError("MCP server")
 	}
 	configuredEntry, hasConfiguredEntry, err := a.desktopMCPServerForEdit(name)
 	if err != nil {
@@ -6910,10 +6981,12 @@ func (a *App) connectConfiguredMCPServerForTab(tab *WorkspaceTab, name string) (
 // retired tier field.
 func (a *App) SetMCPServerTier(name, tier string) error {
 	tier = normalizeMCPTier(tier)
-	tab, ctrl := a.activeTabAndCtrl()
-	if tab != nil && controllerHasActiveRuntimeWork(ctrl) {
-		return rebuildControllerActiveWorkError("MCP server")
+	release, err := a.beginMCPRuntimeMutation()
+	if err != nil {
+		return err
 	}
+	defer release()
+	tab, ctrl := a.activeTabAndCtrl()
 	updated, found, err := a.desktopMCPServerForEdit(name)
 	if err != nil {
 		return err

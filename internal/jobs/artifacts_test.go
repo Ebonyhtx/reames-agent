@@ -368,10 +368,13 @@ func TestSetActiveSessionPathReportsMigrationFailure(t *testing.T) {
 	if err := os.WriteFile(ArtifactDir(sessionPath), []byte("not a dir"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	var noticesMu sync.Mutex
 	var notices []string
 	m := NewManager(event.FuncSink(func(e event.Event) {
 		if e.Kind == event.Notice {
+			noticesMu.Lock()
 			notices = append(notices, e.Text)
+			noticesMu.Unlock()
 		}
 	}))
 	defer m.Close()
@@ -386,15 +389,18 @@ func TestSetActiveSessionPathReportsMigrationFailure(t *testing.T) {
 	if len(res) != 1 || !strings.Contains(res[0].Output, "job artifact incomplete: migration:") {
 		t.Fatalf("wait after migration failure = %+v, want artifact error", res)
 	}
+	noticesMu.Lock()
+	capturedNotices := append([]string(nil), notices...)
+	noticesMu.Unlock()
 	found := false
-	for _, notice := range notices {
+	for _, notice := range capturedNotices {
 		if strings.Contains(notice, "job artifact migration failed") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("migration failure notice not emitted, got %q", notices)
+		t.Fatalf("migration failure notice not emitted, got %q", capturedNotices)
 	}
 }
 

@@ -36,6 +36,9 @@ const scrollManagerSource = readFileSync(resolve(here, "../lib/useScrollManager.
 const i18nSource = readFileSync(resolve(here, "../lib/i18n.tsx"), "utf8");
 const mainSource = readFileSync(resolve(here, "../main.tsx"), "utf8");
 const packageSource = readFileSync(resolve(here, "../../package.json"), "utf8");
+const packageScripts = (JSON.parse(packageSource) as { scripts?: Record<string, string> }).scripts ?? {};
+const scriptCommands = (name: string): string[] =>
+  (packageScripts[name] ?? "").split("&&").map((command) => command.trim()).filter(Boolean);
 const viteSource = readFileSync(resolve(here, "../../vite.config.ts"), "utf8");
 const distPlaceholder = readFileSync(resolve(here, "../../dist/.gitkeep"));
 const wordmarkSource = readFileSync(resolve(here, "../assets/logo-wordmark.svg"), "utf8");
@@ -98,10 +101,18 @@ ok(
   "every production stylesheet stays behind syntax and z-index gates",
 );
 ok(
-  packageSource.includes('"pretest": "tsx src/__tests__/theme-pack.test.ts && tsx src/__tests__/appearance-panel.test.tsx"') &&
-    packageSource.includes('"pretest:all": "tsx src/__tests__/theme-pack.test.ts && tsx src/__tests__/appearance-panel.test.tsx && tsx src/__tests__/session-export.test.ts"') &&
-    packageSource.includes('"prebuild": "tsx src/__tests__/session-export.test.ts"'),
-  "controlled theme and export contracts run in their required frontend lifecycles",
+  [
+    "tsx src/__tests__/theme-pack.test.ts",
+    "tsx src/__tests__/appearance-panel.test.tsx",
+  ].every((command) => scriptCommands("pretest").includes(command)) &&
+    [
+      "tsx src/__tests__/theme-pack.test.ts",
+      "tsx src/__tests__/appearance-panel.test.tsx",
+      "tsx src/__tests__/session-export.test.ts",
+      "tsx src/__tests__/shortcuts-recorder-focus.test.tsx",
+    ].every((command) => scriptCommands("pretest:all").includes(command)) &&
+    scriptCommands("prebuild").includes("tsx src/__tests__/session-export.test.ts"),
+  "controlled theme, export, and shortcut contracts run in their required frontend lifecycles",
 );
 ok(
   distPlaceholder.byteLength === 0 &&

@@ -348,13 +348,23 @@ func (a *App) RemovePlugin(name, planID string) (PluginOperationView, error) {
 
 func (a *App) SetPluginEnabled(name string, enabled bool, expectedDigest string, grantedPermissions []string) error {
 	a.pluginRuntimeGate.Lock()
-	defer a.pluginRuntimeGate.Unlock()
+	a.runtimeBuildGate.Lock()
 	a.runtimeRebuildMu.Lock()
-	defer a.runtimeRebuildMu.Unlock()
+	var restart []*WorkspaceTab
+	defer func() {
+		a.runtimeRebuildMu.Unlock()
+		a.runtimeBuildGate.Unlock()
+		a.pluginRuntimeGate.Unlock()
+		a.restartPluginStartupBuilds(restart)
+	}()
 	if err := a.ensurePluginRuntimeMutationAllowed(); err != nil {
 		return err
 	}
-	release, err := a.beginPluginRuntimeMutation()
+	// Invalidate every controller build admitted against the old plugin
+	// generation before snapshotting and reserving the published runtimes.
+	// runtimeBuildGate blocks later admissions until this mutation releases.
+	restart = a.supersedePluginStartupBuilds()
+	release, err := a.beginLiveControllerRuntimeMutation("plugins")
 	if err != nil {
 		return err
 	}
@@ -373,7 +383,6 @@ func (a *App) SetPluginEnabled(name string, enabled bool, expectedDigest string,
 		return err
 	}
 	if !enabled {
-		a.supersedePluginStartupBuilds()
 		revokePluginRuntimeTargets(a.snapshotPluginRuntimeTargets(), name)
 	}
 	a.invalidateSkillRootsCache()
@@ -540,13 +549,23 @@ func (a *App) ensurePluginRuntimeMutationAllowed() error {
 // revoke against the controllers currently published by the app.
 func (a *App) applyPluginOperation(run func() (PluginOperationView, error)) (PluginOperationView, error) {
 	a.pluginRuntimeGate.Lock()
-	defer a.pluginRuntimeGate.Unlock()
+	a.runtimeBuildGate.Lock()
 	a.runtimeRebuildMu.Lock()
-	defer a.runtimeRebuildMu.Unlock()
+	var restart []*WorkspaceTab
+	defer func() {
+		a.runtimeRebuildMu.Unlock()
+		a.runtimeBuildGate.Unlock()
+		a.pluginRuntimeGate.Unlock()
+		a.restartPluginStartupBuilds(restart)
+	}()
 	if err := a.ensurePluginRuntimeMutationAllowed(); err != nil {
 		return PluginOperationView{}, err
 	}
-	release, err := a.beginPluginRuntimeMutation()
+	// Applied install/update/remove operations can all change the runtime
+	// generation. Supersede old startup builds before the operation so none can
+	// publish between the live-controller snapshot and package mutation.
+	restart = a.supersedePluginStartupBuilds()
+	release, err := a.beginLiveControllerRuntimeMutation("plugins")
 	if err != nil {
 		return PluginOperationView{}, err
 	}
@@ -556,7 +575,6 @@ func (a *App) applyPluginOperation(run func() (PluginOperationView, error)) (Plu
 		return out, err
 	}
 	if pluginOperationReplacesRuntime(out) {
-		a.supersedePluginStartupBuilds()
 		if name := pluginOperationName(out); name != "" {
 			revokePluginRuntimeTargets(a.snapshotPluginRuntimeTargets(), name)
 		}
@@ -567,7 +585,7 @@ func (a *App) applyPluginOperation(run func() (PluginOperationView, error)) (Plu
 	return out, nil
 }
 
-func (a *App) beginPluginRuntimeMutation() (func(), error) {
+func (a *App) beginLiveControllerRuntimeMutation(setting string) (func(), error) {
 	targets := a.snapshotPluginRuntimeTargets()
 	releases := make([]func(), 0, len(targets))
 	releaseAll := func() {
@@ -587,7 +605,7 @@ func (a *App) beginPluginRuntimeMutation() (func(), error) {
 		release, err := guard.BeginRuntimeMutation()
 		if err != nil {
 			releaseAll()
-			return nil, rebuildControllerActiveWorkError("plugins")
+			return nil, rebuildControllerActiveWorkError(setting)
 		}
 		releases = append(releases, release)
 	}
@@ -620,24 +638,28 @@ func pluginOperationName(out PluginOperationView) string {
 }
 
 // supersedePluginStartupBuilds prevents a controller assembled from the old
-// plugin state from publishing after the lifecycle callback has revoked the
-// controllers that were already visible. Non-active empty tabs restart against
-// the new state; the active tab is rebuilt synchronously by the caller.
-func (a *App) supersedePluginStartupBuilds() {
+// plugin/MCP state from publishing after the lifecycle callback has changed the
+// controllers that were already visible. It returns empty tabs that need a new
+// build, but deliberately does not restart them while the mutation writer gates
+// are held: startTabControllerBuild claims runtimeBuildGate for admission.
+func (a *App) supersedePluginStartupBuilds() []*WorkspaceTab {
 	var restart []*WorkspaceTab
 	a.mu.Lock()
-	activeID := a.activeTabID
 	for _, tab := range a.tabs {
 		if tab == nil || tab.removed || tab.buildCancel == nil {
 			continue
 		}
 		a.supersedeTabBuildLocked(tab)
-		if tab.Ctrl == nil && tab.ID != activeID {
+		if tab.Ctrl == nil {
 			restart = append(restart, tab)
 		}
 	}
 	a.mu.Unlock()
-	for _, tab := range restart {
+	return restart
+}
+
+func (a *App) restartPluginStartupBuilds(tabs []*WorkspaceTab) {
+	for _, tab := range tabs {
 		a.startTabControllerBuild(tab)
 	}
 }

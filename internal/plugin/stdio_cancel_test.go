@@ -1,7 +1,11 @@
 package plugin
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"testing"
 	"time"
 )
@@ -94,5 +98,141 @@ func TestStdioCallCancelReturnsContextCanceled(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("stdio call did not return within 2s of cancel")
+	}
+}
+
+func TestStdioInitializeHandlesNotificationsAndServerPing(t *testing.T) {
+	serverReads, clientWrites := io.Pipe()
+	clientReads, serverWrites := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientWrites.Close()
+		_ = serverReads.Close()
+		_ = serverWrites.Close()
+		_ = clientReads.Close()
+	})
+
+	tr := &stdioTransport{
+		name:    "matlab",
+		stdin:   clientWrites,
+		stdout:  bufio.NewReader(clientReads),
+		stderr:  &tailBuffer{limit: 1024},
+		pending: map[int]chan rpcResponse{},
+	}
+	go tr.readLoop()
+
+	serverDone := make(chan error, 1)
+	go func() {
+		dec := json.NewDecoder(serverReads)
+		enc := json.NewEncoder(serverWrites)
+		var initialize struct {
+			ID     int    `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := dec.Decode(&initialize); err != nil {
+			serverDone <- fmt.Errorf("decode initialize: %w", err)
+			return
+		}
+		for _, method := range []string{"notifications/tools/list_changed", "notifications/resources/list_changed"} {
+			if err := enc.Encode(map[string]any{"jsonrpc": "2.0", "method": method}); err != nil {
+				serverDone <- err
+				return
+			}
+		}
+		if err := enc.Encode(map[string]any{"jsonrpc": "2.0", "id": "server-ping", "method": "ping"}); err != nil {
+			serverDone <- err
+			return
+		}
+		var pingResponse struct {
+			ID     string         `json:"id"`
+			Result map[string]any `json:"result"`
+		}
+		if err := dec.Decode(&pingResponse); err != nil {
+			serverDone <- fmt.Errorf("decode ping response: %w", err)
+			return
+		}
+		if pingResponse.ID != "server-ping" || pingResponse.Result == nil {
+			serverDone <- fmt.Errorf("ping response = %+v", pingResponse)
+			return
+		}
+		if err := enc.Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      initialize.ID,
+			"result": map[string]any{
+				"protocolVersion": protocolVersion,
+				"serverInfo":      map[string]any{"name": "matlab", "version": "0.11.2"},
+				"capabilities":    map[string]any{},
+			},
+		}); err != nil {
+			serverDone <- err
+			return
+		}
+		var initialized struct {
+			Method string `json:"method"`
+		}
+		if err := dec.Decode(&initialized); err != nil {
+			serverDone <- err
+			return
+		}
+		if initialized.Method != "notifications/initialized" {
+			serverDone <- fmt.Errorf("final method = %q", initialized.Method)
+			return
+		}
+		serverDone <- nil
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	client := &Client{name: "matlab", t: tr}
+	if err := client.initialize(ctx); err != nil {
+		t.Fatalf("initialize with server notifications and ping: %v", err)
+	}
+	select {
+	case err := <-serverDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("server did not complete the MCP initialization handshake")
+	}
+}
+
+func TestStdioReadLoopStaysLiveWhenReplyWriterIsBlocked(t *testing.T) {
+	stdinReads, stdinWrites := io.Pipe()
+	stdoutReads, stdoutWrites := io.Pipe()
+	t.Cleanup(func() {
+		_ = stdinReads.Close()
+		_ = stdinWrites.Close()
+		_ = stdoutReads.Close()
+		_ = stdoutWrites.Close()
+	})
+
+	tr := &stdioTransport{
+		name:    "jammed",
+		stdin:   stdinWrites,
+		stdout:  bufio.NewReader(stdoutReads),
+		stderr:  &tailBuffer{limit: 1024},
+		pending: map[int]chan rpcResponse{},
+	}
+	waiting := make(chan rpcResponse, 1)
+	tr.pending[7] = waiting
+	go tr.readLoop()
+
+	go func() {
+		for i := 0; i < 2*stdioReplyQueueBound; i++ {
+			line := fmt.Sprintf(`{"jsonrpc":"2.0","id":"srv-%d","method":"ping"}`+"\n", i)
+			if _, err := io.WriteString(stdoutWrites, line); err != nil {
+				return
+			}
+		}
+		_, _ = io.WriteString(stdoutWrites, `{"jsonrpc":"2.0","id":7,"result":{}}`+"\n")
+	}()
+
+	select {
+	case resp := <-waiting:
+		if resp.ID != 7 {
+			t.Fatalf("routed response id = %d, want 7", resp.ID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("readLoop stopped routing responses while the reply writer was blocked")
 	}
 }

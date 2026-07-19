@@ -414,14 +414,22 @@ func TestRunRecoversInterruptedStreamAfterPartialText(t *testing.T) {
 		t.Fatalf("recorded requests = %d, want 2", len(reqs))
 	}
 	second := reqs[1].Messages
-	if len(second) < 3 {
-		t.Fatalf("second request should include partial assistant and recovery prompt: %+v", second)
+	for _, message := range second {
+		if message.LocalOnly || message.Content == "partial " {
+			t.Fatalf("partial assistant leaked into provider recovery request: %+v", second)
+		}
 	}
-	if second[len(second)-2].Role != provider.RoleAssistant || second[len(second)-2].Content != "partial " {
-		t.Fatalf("partial assistant was not preserved before recovery: %+v", second)
-	}
-	if second[len(second)-1].Role != provider.RoleUser || !strings.Contains(second[len(second)-1].Content, "Do not repeat") {
+	if second[len(second)-1].Role != provider.RoleUser || !strings.Contains(second[len(second)-1].Content, "excluded from model context") {
 		t.Fatalf("recovery prompt missing duplicate guard: %+v", second[len(second)-1])
+	}
+	var local provider.Message
+	for _, message := range a.Session().Messages {
+		if message.LocalOnly {
+			local = message
+		}
+	}
+	if local.Content != "partial " || local.InterruptedTurn == nil || local.InterruptedTurn.Pending {
+		t.Fatalf("partial assistant was not retained as consumed display-only history: %+v", local)
 	}
 
 	var streamed strings.Builder
@@ -487,16 +495,63 @@ func TestRunRecoversInterruptedPartialToolCallWithoutExecutingIt(t *testing.T) {
 		t.Fatalf("Run should recover the interrupted tool-call stream, got %v", err)
 	}
 
+	var displayOnly provider.Message
 	for _, m := range a.Session().Messages {
-		if m.Role == provider.RoleTool {
+		if m.Role == provider.RoleTool && !m.LocalOnly {
 			t.Fatalf("partial tool call should not have executed or produced a tool result: %+v", m)
 		}
+		if m.LocalOnly {
+			displayOnly = m
+		}
+	}
+	if len(displayOnly.ToolCalls) != 1 || displayOnly.ToolCalls[0].Name != "echo" || displayOnly.ToolCalls[0].Arguments != "" {
+		t.Fatalf("partial tool call was not retained safely for display: %+v", displayOnly)
 	}
 	reqs := mp.Requests()
 	second := reqs[1].Messages
 	last := second[len(second)-1]
 	if last.Role != provider.RoleUser || !strings.Contains(last.Content, "fresh complete tool call") {
 		t.Fatalf("partial-tool recovery prompt missing fresh-call instruction: %+v", last)
+	}
+}
+
+func TestRunGenericStreamErrorPersistsLocalDisplayAndInjectsBoundedRecovery(t *testing.T) {
+	apiErr := errors.New("upstream reset")
+	mp := testutil.NewMock("m",
+		testutil.Turn{Reasoning: "private partial reasoning", Text: "visible partial", ChunkError: apiErr},
+		testutil.Turn{Text: "continued safely"},
+	)
+	session := NewSession("system")
+	a := New(mp, echoRegistry(), session, Options{}, event.Discard)
+
+	if err := a.Run(context.Background(), "change the file"); !errors.Is(err, apiErr) {
+		t.Fatalf("first Run error = %v, want %v", err, apiErr)
+	}
+	msgs := session.Snapshot()
+	last := msgs[len(msgs)-1]
+	if !last.LocalOnly || last.InterruptedTurn == nil || !last.InterruptedTurn.Pending {
+		t.Fatalf("terminal stream error did not leave pending local recovery: %+v", last)
+	}
+	if last.Content != "visible partial" || last.ReasoningContent != "private partial reasoning" {
+		t.Fatalf("local display lost streamed output: %+v", last)
+	}
+
+	if err := a.Run(context.Background(), "continue"); err != nil {
+		t.Fatalf("second Run: %v", err)
+	}
+	req := mp.Requests()[1]
+	for _, message := range req.Messages {
+		if message.LocalOnly || strings.Contains(message.Content, "visible partial") || strings.Contains(message.ReasoningContent, "private partial reasoning") {
+			t.Fatalf("unsafe partial output leaked to provider: %+v", req.Messages)
+		}
+	}
+	lastUser := req.Messages[len(req.Messages)-1]
+	if lastUser.Role != provider.RoleUser || !strings.Contains(lastUser.Content, "<interrupted-turn-recovery>") ||
+		!strings.Contains(lastUser.Content, "unsafe_partial_output: excluded") || !strings.HasSuffix(lastUser.Content, "continue") {
+		t.Fatalf("next user turn missing bounded recovery block: %+v", lastUser)
+	}
+	if got := StripTransientUserBlocks(lastUser.Content); got != "continue" {
+		t.Fatalf("recovery block leaked into user display: %q", got)
 	}
 }
 

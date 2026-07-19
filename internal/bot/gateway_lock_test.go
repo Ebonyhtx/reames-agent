@@ -3,7 +3,7 @@ package bot
 import (
 	"io"
 	"log/slog"
-	"sync"
+	"runtime"
 	"testing"
 	"time"
 
@@ -79,36 +79,36 @@ func TestBotGatewayToolApprovalModeConcurrentWithConfigReaders(t *testing.T) {
 		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
-	defer func() {
-		close(stop)
-		wg.Wait()
-	}()
-	wg.Add(1)
+	// Keep both sides finite. The former stop-driven writer kept allocating until
+	// the reader returned and repeatedly tripped Go's Windows GC in normal CI.
+	// The shared start edge orders neither loop after the other, so -race still
+	// observes any missing map lock even if one goroutine happens to run first.
+	const iterations = 200
+	start := make(chan struct{})
+	writerDone := make(chan struct{})
 	go func() {
-		defer wg.Done()
+		defer close(writerDone)
+		<-start
 		modes := []string{control.ToolApprovalYolo, control.ToolApprovalAsk, control.ToolApprovalAuto}
-		for i := 0; ; i++ {
-			select {
-			case <-stop:
-				return
-			default:
-			}
+		for i := 0; i < iterations; i++ {
 			mode := modes[i%len(modes)]
 			gw.UpdateConnectionToolApprovalMode("feishu-lark", mode)
 			gw.mu.Lock()
 			gw.updateToolApprovalModeDefaultLocked(InboundMessage{Platform: PlatformFeishu}, mode)
 			gw.updateToolApprovalModeDefaultLocked(InboundMessage{}, mode)
 			gw.mu.Unlock()
+			runtime.Gosched()
 		}
 	}()
 
+	close(start)
 	connMsg := InboundMessage{Platform: PlatformFeishu, ConnectionID: "feishu-lark", ChatType: ChatDM, ChatID: "chat", UserID: "user"}
-	for i := 0; i < 200; i++ {
+	for i := 0; i < iterations; i++ {
 		gw.sessionOptionsForMessage(connMsg)
 		gw.sessionOptionsForMessage(InboundMessage{Platform: PlatformFeishu})
 		projects := gw.buildProjectIndex()
 		gw.buildSessionIndex(projects)
+		runtime.Gosched()
 	}
+	<-writerDone
 }

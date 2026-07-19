@@ -43,6 +43,7 @@ var English = Messages{
 	ResumePickHint:  "↑/↓ move · Enter resume · Esc cancel",
 
 	ChatThinking:                           "thinking…",
+	InterruptedRecovery:                    "Turn interrupted. Partial output is display-only; inspect the workspace before continuing.",
 	ChatThoughtForFmt:                      "thought for %ds",
 	ChatStatusThinkingFmt:                  "%s thinking… (%ds · Esc cancels)",
 	ChatToolWorkingFmt:                     "%s working · %ds",

@@ -54,6 +54,23 @@ func TestReplaySectionsKeepAssistantIdentity(t *testing.T) {
 	}
 }
 
+func TestReplaySectionsRestoreInterruptedDisplayAndNotice(t *testing.T) {
+	defer restoreThemeForTest(colorEnabled, activeCLITheme)
+	colorEnabled = false
+	configureCLITheme("dark")
+
+	sections := replaySectionsFor([]control.TranscriptMessage{{
+		Role: control.TranscriptAssistant, Content: "partial answer", Reasoning: "partial reasoning",
+		ToolCalls: []control.TranscriptToolCall{{ID: "c1", Name: "write_file"}}, Interrupted: true,
+	}}, 60, nil)
+	joined := ansi.Strip(strings.Join(sections, ""))
+	for _, want := range []string{"partial reasoning", "partial answer", "Write", "Turn interrupted"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("interrupted replay missing %q: %s", want, joined)
+		}
+	}
+}
+
 func TestScrollbarThumb(t *testing.T) {
 	if _, size := scrollbarThumb(10, 0, 5); size != 0 {
 		t.Errorf("content within viewport should have no thumb, got size %d", size)

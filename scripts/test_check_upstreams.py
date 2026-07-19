@@ -174,9 +174,39 @@ class AnalysisTests(unittest.TestCase):
         accepted = watch.accepted_lock_entry(
             {"id": "reasonix", "branch": "main-v2", "latest": "c" * 40},
             self.lock,
+            "c" * 40,
         )
         self.assertEqual(accepted["baseline"], "a" * 40)
         self.assertEqual(accepted["reviewed"], "c" * 40)
+
+    def test_accept_revision_requires_full_sha(self):
+        with self.assertRaisesRegex(ValueError, "FULL_40_CHARACTER_GIT_SHA"):
+            watch.parse_accept_revisions(["codex=abc123"])
+
+    def test_accept_revision_rejects_conflicting_duplicates(self):
+        with self.assertRaisesRegex(ValueError, "conflicting accepted revisions"):
+            watch.parse_accept_revisions([f"codex={'a' * 40}", f"codex={'b' * 40}"])
+
+    def test_accept_revision_normalizes_sha(self):
+        self.assertEqual(
+            {"codex": "a" * 40},
+            watch.parse_accept_revisions([f"codex={'A' * 40}"]),
+        )
+
+    def test_unbound_acceptance_options_are_disabled(self):
+        legacy_options = [(["codex"], False, False), ([], True, False), ([], False, True)]
+        for legacy_ids, accept_all, update_lock in legacy_options:
+            with self.subTest(legacy_ids=legacy_ids, accept_all=accept_all, update_lock=update_lock):
+                with self.assertRaisesRegex(ValueError, "unbound upstream acceptance is disabled"):
+                    watch.acceptance_revisions(legacy_ids, accept_all, update_lock, [])
+
+    def test_accept_rejects_remote_head_different_from_reviewed_sha(self):
+        with self.assertRaisesRegex(ValueError, "does not match reviewed revision"):
+            watch.accepted_lock_entry(
+                {"id": "codex", "branch": "main", "latest": "b" * 40},
+                self.lock,
+                "c" * 40,
+            )
 
     def test_primary_base_without_complete_coverage_stays_review_required(self):
         upstream = {

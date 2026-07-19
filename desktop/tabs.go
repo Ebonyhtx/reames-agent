@@ -2644,6 +2644,15 @@ func (a *App) closeTabRuntime(tab *WorkspaceTab) {
 // same way buildController works for the single-controller App. On success it
 // wires the controller and flips Ready; on failure it stores StartupErr.
 func (a *App) startTabControllerBuild(tab *WorkspaceTab) {
+	// Startup builds are runtime-capability readers. Claim admission before
+	// loading config or assembling a controller so a concurrent plugin/MCP
+	// mutation can either observe a fully published controller or supersede the
+	// admitted generation before changing the shared Host/Registry surface.
+	// Keep this lock at the admission wrapper, not in
+	// buildTabControllerWithContext: synchronous settings rebuilds call that
+	// function while already holding pluginRuntimeGate for a writer mutation.
+	a.runtimeBuildGate.RLock()
+	defer a.runtimeBuildGate.RUnlock()
 	if config.SafeModeRequested() {
 		a.mu.Lock()
 		if tab == nil || tab.removed {

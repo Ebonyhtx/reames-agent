@@ -137,6 +137,10 @@
 | [P8 原生 GPT / Claude Provider parity 审计](audits/2026-07-19-p8-native-gpt-claude-provider-parity.md) | OpenAI Responses encrypted reasoning replay、Anthropic Messages ordered redacted thinking、原生预设、fixture 证据与真实 API external-blocked 边界 |
 | [M6 持久渠道恢复审计](audits/2026-07-19-m6-durable-channel-recovery.md) | 跨重启入站 claim/dedupe、连续游标、最终发送门禁、受限补扫适配器、隐私状态投影与真实 IM external-blocked 边界 |
 | [M6 Telegram 持久长轮询审计](audits/2026-07-19-m6-telegram-durable-polling.md) | 正式 Telegram Adapter、env-only token、long-poll deadline/retry、最终投递后 offset 门禁与 localhost 故障注入 |
+| [M6 最终答复 obligation 审计](audits/2026-07-20-m6-outbound-final-response-obligation.md) | 最终文本发送前持久化、ACK 歧义可见恢复、多分片断点、单 writer、隐私投影与不重跑模型证据 |
+| [Reasonix 8bb0e549..2301e248 增量审计](audits/2026-07-20-reasonix-8bb0e54-2301e24.md) | Provider env、MCP stdio/lifecycle、中断轮次恢复、WebKit focus 采用及 Remote SSH 延后 |
+| [Codex / Claude / Hermes / Grok 最新增量审计](audits/2026-07-20-upstream-strategic-reference-delta.md) | 二级战略代码审查、Claude 无新增与三级机制信号的明确层级边界 |
+| [Codex / Hermes 提交前最新增量审计](audits/2026-07-20-codex-hermes-late-delta.md) | Codex TUI/command lifecycle 三提交代码级分类、Kimi 无签名 thinking 窄回放修复及最新冻结 |
 | [Hermes / Impeccable 最新增量审计](audits/2026-07-19-upstream-hermes-impeccable-delta.md) | Hermes installer、dotenv、MCP/Markdown 代码级分类与 Impeccable 设计/治理信号 |
 | [Codex / Hermes / Scream 提交前增量审计](audits/2026-07-19-codex-hermes-scream-precommit-delta.md) | Codex audio/code-mode 与 paginated App-Server 线程语义、Hermes Desktop 订阅粒度及 Scream TUI 性能信号 |
 | [Reasonix 2335d0df..a46fc6f 增量审计](audits/2026-07-19-reasonix-2335d0d-a46fc6f.md) | 测试隔离、Windows batch/save/session/resize、context window、本地可靠性采用及明确延后/拒绝 |

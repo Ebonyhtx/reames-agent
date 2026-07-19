@@ -19,7 +19,7 @@
     "test:theme-pack": "tsx src/__tests__/theme-pack.test.ts",
     "test:appearance-panel": "tsx src/__tests__/appearance-panel.test.tsx",
     "pretest": "tsx src/__tests__/theme-pack.test.ts && tsx src/__tests__/appearance-panel.test.tsx",
-    "pretest:all": "tsx src/__tests__/theme-pack.test.ts && tsx src/__tests__/appearance-panel.test.tsx && tsx src/__tests__/session-export.test.ts",
+    "pretest:all": "tsx src/__tests__/theme-pack.test.ts && tsx src/__tests__/appearance-panel.test.tsx && tsx src/__tests__/session-export.test.ts && tsx src/__tests__/shortcuts-recorder-focus.test.tsx",
     "test:todo-visibility": "node scripts/test-todo-visibility.mjs",
     "test:session-export": "tsx src/__tests__/session-export.test.ts",
     "typecheck": "tsc --noEmit",
