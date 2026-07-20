@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -738,10 +739,7 @@ func FilterRegistry(parent *tool.Registry, names []string, exclude ...string) *t
 	for _, e := range exclude {
 		ex[e] = true
 	}
-	src := names
-	if len(src) == 0 {
-		src = parent.Names()
-	}
+	src := resolveAllowedToolNames(parent, names)
 	for _, name := range src {
 		if ex[name] {
 			continue
@@ -800,10 +798,7 @@ func ReadOnlySubagentToolRegistryForDepth(parent *tool.Registry, names []string,
 	if parent == nil {
 		return sub
 	}
-	src := names
-	if len(src) == 0 {
-		src = parent.Names()
-	}
+	src := resolveAllowedToolNames(parent, names)
 	for _, name := range src {
 		if ex[name] {
 			continue
@@ -827,6 +822,46 @@ func ReadOnlySubagentToolRegistryForDepth(parent *tool.Registry, names []string,
 		sub.Add(tl)
 	}
 	return sub
+}
+
+// resolveAllowedToolNames maps literal portable MCP references only when they
+// resolve uniquely, and expands explicit patterns against canonical provider
+// tool names. Unknown or ambiguous literals grant nothing.
+func resolveAllowedToolNames(parent *tool.Registry, names []string) []string {
+	if parent == nil {
+		return nil
+	}
+	if len(names) == 0 {
+		return parent.Names()
+	}
+	available := parent.Names()
+	seen := map[string]bool{}
+	out := make([]string, 0, len(names))
+	appendOne := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	for _, ref := range names {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		if strings.ContainsAny(ref, "*?[") {
+			for _, candidate := range available {
+				if matched, err := path.Match(ref, candidate); err == nil && matched {
+					appendOne(candidate)
+				}
+			}
+			continue
+		}
+		_, canonical, ambiguous := parent.ResolveCall(ref)
+		if canonical != "" && len(ambiguous) == 0 {
+			appendOne(canonical)
+		}
+	}
+	return out
 }
 
 // FilterReadOnlyRegistry builds a sub-registry containing only tools whose

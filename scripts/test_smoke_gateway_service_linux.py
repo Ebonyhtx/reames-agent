@@ -45,6 +45,7 @@ class GatewayServiceLinuxSmokeTests(unittest.TestCase):
             "uninstall_completed",
             "unit_removed",
             "unit_load_state_after_uninstall",
+            "idempotent_uninstall_completed",
             "external_blocked",
             "errors",
         ):
@@ -87,6 +88,9 @@ class GatewayServiceLinuxSmokeTests(unittest.TestCase):
         self.assertIn("verify_webhook(", source)
         self.assertIn("webhook_unreachable(", source)
         self.assertIn('result.unit_load_state_after_uninstall != "not-found"', source)
+        self.assertEqual(
+            source.count('gateway_args(binary, "uninstall", service_name)'), 3
+        )
 
     @unittest.skipIf(platform.system() == "Linux", "non-Linux classification")
     def test_non_linux_rejects_before_reading_binary(self) -> None:

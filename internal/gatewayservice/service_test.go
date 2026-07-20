@@ -603,6 +603,342 @@ func TestLinuxStartNowFalseRollbackLeavesServiceStateUntouched(t *testing.T) {
 	}
 }
 
+func linuxUninstallTestPlan(unitPath string) Plan {
+	return Plan{
+		GOOS:     "linux",
+		Action:   "uninstall",
+		Commands: []Command{{Name: "systemctl", Args: []string{"--user", "disable", "--now", "reames-agent-gateway.service"}}},
+		Deletes:  []string{unitPath},
+		PostCommands: []Command{{
+			Name: "systemctl",
+			Args: []string{"--user", "daemon-reload"},
+		}},
+	}
+}
+
+func TestLinuxUninstallTransactionVerifiesAbsentState(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deps := defaultApplyDeps()
+	probeCalls := 0
+	deps.probeLinuxState = func(_ context.Context, _ Options, unitExists bool, _ commandRunner) (linuxServiceState, []string, error) {
+		probeCalls++
+		switch probeCalls {
+		case 1:
+			if !unitExists {
+				t.Fatal("snapshot probe did not observe the existing unit")
+			}
+			return linuxServiceState{enabled: true, active: true}, []string{"snapshot state"}, nil
+		case 2:
+			if unitExists {
+				t.Fatal("postcondition probe still expected the unit to exist")
+			}
+			return linuxServiceState{}, []string{"verified absent"}, nil
+		default:
+			t.Fatalf("probe calls = %d, want 2", probeCalls)
+			return linuxServiceState{}, nil, nil
+		}
+	}
+	var calls []string
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		verb := systemctlVerb(command)
+		calls = append(calls, verb)
+		return verb + " output", nil
+	}
+
+	result, err := applyLinuxUninstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, linuxUninstallTestPlan(unitPath), deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(unitPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("unit survived successful uninstall: %v", statErr)
+	}
+	if got := strings.Join(calls, ","); got != "disable,daemon-reload" {
+		t.Fatalf("uninstall commands = %s", got)
+	}
+	outputs := strings.Join(result.Outputs, "\n")
+	for _, want := range []string{"snapshot state", "disable output", "daemon-reload output", "verified absent"} {
+		if !strings.Contains(outputs, want) {
+			t.Fatalf("uninstall outputs missing %q:\n%s", want, outputs)
+		}
+	}
+}
+
+func TestLinuxUninstallIsIdempotentWhenDefinitionAndManagerStateAreAbsent(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "missing.service")
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(_ context.Context, _ Options, unitExists bool, _ commandRunner) (linuxServiceState, []string, error) {
+		if unitExists {
+			t.Fatal("missing unit reported as existing")
+		}
+		return linuxServiceState{}, []string{"already absent"}, nil
+	}
+	deps.remove = func(string) error {
+		t.Fatal("idempotent uninstall attempted a delete")
+		return nil
+	}
+	deps.runCommand = func(context.Context, Command) (string, error) {
+		t.Fatal("idempotent uninstall invoked systemctl mutation")
+		return "", nil
+	}
+
+	result, err := applyLinuxUninstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, linuxUninstallTestPlan(unitPath), deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(result.Outputs, "\n"); got != "already absent" {
+		t.Fatalf("idempotent uninstall outputs = %q", got)
+	}
+}
+
+func TestLinuxUninstallReloadFailureRestoresDefinitionAndState(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(unitPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{enabled: true, active: true}, nil, nil
+	}
+	var calls []string
+	reloads := 0
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		verb := systemctlVerb(command)
+		calls = append(calls, verb)
+		if verb == "daemon-reload" {
+			reloads++
+			if reloads == 1 {
+				return "forward reload output", errors.New("injected uninstall reload failure")
+			}
+		}
+		return "rollback " + verb + " output", nil
+	}
+
+	result, err := applyLinuxUninstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, linuxUninstallTestPlan(unitPath), deps)
+	if err == nil || !strings.Contains(err.Error(), "injected uninstall reload failure") {
+		t.Fatalf("uninstall error = %v", err)
+	}
+	data, readErr := os.ReadFile(unitPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != "old unit\n" {
+		t.Fatalf("restored unit = %q", data)
+	}
+	info, statErr := os.Stat(unitPath)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if info.Mode().Perm() != before.Mode().Perm() {
+		t.Fatalf("restored mode = %#o, want %#o", info.Mode().Perm(), before.Mode().Perm())
+	}
+	if got := strings.Join(calls, ","); got != "disable,daemon-reload,daemon-reload,enable,restart" {
+		t.Fatalf("uninstall rollback commands = %s", got)
+	}
+	outputs := strings.Join(result.Outputs, "\n")
+	for _, want := range []string{"forward reload output", "rollback daemon-reload output", "rollback enable output", "rollback restart output"} {
+		if !strings.Contains(outputs, want) {
+			t.Fatalf("uninstall rollback outputs missing %q:\n%s", want, outputs)
+		}
+	}
+}
+
+func TestLinuxUninstallDeleteFailureRestoresManagerStateWithoutReload(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{enabled: true, active: true}, nil, nil
+	}
+	deps.remove = func(string) error { return errors.New("injected uninstall delete failure") }
+	var calls []string
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		calls = append(calls, systemctlVerb(command))
+		return "", nil
+	}
+
+	_, err := applyLinuxUninstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, linuxUninstallTestPlan(unitPath), deps)
+	if err == nil || !strings.Contains(err.Error(), "injected uninstall delete failure") {
+		t.Fatalf("uninstall error = %v", err)
+	}
+	if got := strings.Join(calls, ","); got != "disable,enable,restart" {
+		t.Fatalf("delete-failure rollback commands = %s", got)
+	}
+	if data, readErr := os.ReadFile(unitPath); readErr != nil || string(data) != "old unit\n" {
+		t.Fatalf("unit after delete failure = %q, %v", data, readErr)
+	}
+}
+
+func TestLinuxUninstallPostconditionFailureRollsBack(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deps := defaultApplyDeps()
+	probeCalls := 0
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		probeCalls++
+		if probeCalls == 1 {
+			return linuxServiceState{enabled: true, active: true}, nil, nil
+		}
+		return linuxServiceState{}, []string{"orphan manager state"}, errors.New("service still loaded")
+	}
+	var calls []string
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		calls = append(calls, systemctlVerb(command))
+		return "", nil
+	}
+
+	result, err := applyLinuxUninstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, linuxUninstallTestPlan(unitPath), deps)
+	if err == nil || !strings.Contains(err.Error(), "verify linux gateway service uninstall") || !strings.Contains(err.Error(), "service still loaded") {
+		t.Fatalf("uninstall postcondition error = %v", err)
+	}
+	if got := strings.Join(calls, ","); got != "disable,daemon-reload,daemon-reload,enable,restart" {
+		t.Fatalf("postcondition rollback commands = %s", got)
+	}
+	if data, readErr := os.ReadFile(unitPath); readErr != nil || string(data) != "old unit\n" {
+		t.Fatalf("unit after postcondition rollback = %q, %v", data, readErr)
+	}
+	if !strings.Contains(strings.Join(result.Outputs, "\n"), "orphan manager state") {
+		t.Fatalf("postcondition diagnostics missing from outputs: %#v", result.Outputs)
+	}
+}
+
+func TestLinuxUninstallRestoreWriteFailureFailsClosed(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{enabled: true, active: true}, nil, nil
+	}
+	deps.atomicWriteFile = func(string, []byte, os.FileMode) error {
+		return errors.New("injected uninstall restore failure")
+	}
+	var calls []string
+	deps.runCommand = func(_ context.Context, command Command) (string, error) {
+		verb := systemctlVerb(command)
+		calls = append(calls, verb)
+		if verb == "daemon-reload" {
+			return "", errors.New("injected forward reload failure")
+		}
+		return "", nil
+	}
+
+	_, err := applyLinuxUninstall(context.Background(), Options{Name: defaultServiceName, Scope: "user"}, linuxUninstallTestPlan(unitPath), deps)
+	if err == nil {
+		t.Fatal("uninstall succeeded, want degraded rollback failure")
+	}
+	for _, want := range []string{"injected forward reload failure", "injected uninstall restore failure", "degraded", "manual repair"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("uninstall error = %v, want %q", err, want)
+		}
+	}
+	if got := strings.Join(calls, ","); got != "disable,daemon-reload" {
+		t.Fatalf("manager state changed after restore write failure: %s", got)
+	}
+	if _, statErr := os.Stat(unitPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("unit unexpectedly exists after degraded restore: %v", statErr)
+	}
+}
+
+func TestLinuxUninstallRollbackUsesFreshContextAfterCancellation(t *testing.T) {
+	unitPath := filepath.Join(t.TempDir(), "reames-agent-gateway.service")
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancelForward := context.WithCancel(context.Background())
+	defer cancelForward()
+	deps := defaultApplyDeps()
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		return linuxServiceState{enabled: true, active: true}, nil, nil
+	}
+	rollbackContextCreated := false
+	deps.newRollbackContext = func(parent context.Context) (context.Context, context.CancelFunc) {
+		if !errors.Is(parent.Err(), context.Canceled) {
+			t.Fatalf("rollback parent error = %v, want canceled", parent.Err())
+		}
+		rollbackContextCreated = true
+		return context.WithCancel(context.Background())
+	}
+	var calls []string
+	deps.runCommand = func(commandCtx context.Context, command Command) (string, error) {
+		verb := systemctlVerb(command)
+		calls = append(calls, verb)
+		if len(calls) == 1 {
+			cancelForward()
+			return "forward canceled output", context.Canceled
+		}
+		if commandCtx.Err() != nil {
+			t.Fatalf("rollback command inherited cancellation: %v", commandCtx.Err())
+		}
+		return "rollback " + verb + " output", nil
+	}
+
+	result, err := applyLinuxUninstall(ctx, Options{Name: defaultServiceName, Scope: "user"}, linuxUninstallTestPlan(unitPath), deps)
+	if !errors.Is(err, context.Canceled) || !rollbackContextCreated {
+		t.Fatalf("uninstall err=%v rollbackContext=%v", err, rollbackContextCreated)
+	}
+	if got := strings.Join(calls, ","); got != "disable,enable,restart" {
+		t.Fatalf("canceled uninstall rollback commands = %s", got)
+	}
+	if data, readErr := os.ReadFile(unitPath); readErr != nil || string(data) != "old unit\n" {
+		t.Fatalf("unit after canceled uninstall = %q, %v", data, readErr)
+	}
+	outputs := strings.Join(result.Outputs, "\n")
+	for _, want := range []string{"forward canceled output", "rollback enable output", "rollback restart output"} {
+		if !strings.Contains(outputs, want) {
+			t.Fatalf("canceled uninstall outputs missing %q:\n%s", want, outputs)
+		}
+	}
+}
+
+func TestApplyWithDepsUsesLinuxUninstallTransaction(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	unitPath := filepath.Join(configHome, "systemd", "user", defaultServiceName+".service")
+	if err := os.MkdirAll(filepath.Dir(unitPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(unitPath, []byte("old unit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deps := defaultApplyDeps()
+	deps.goos = "linux"
+	probeCalls := 0
+	deps.probeLinuxState = func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error) {
+		probeCalls++
+		if probeCalls == 1 {
+			return linuxServiceState{enabled: true, active: true}, nil, nil
+		}
+		return linuxServiceState{}, nil, nil
+	}
+	deps.runCommand = func(context.Context, Command) (string, error) { return "", nil }
+
+	result, err := applyWithDeps(context.Background(), Options{Action: "uninstall", Executable: "/usr/bin/reames-agent"}, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Plan.Deletes) != 1 || result.Plan.Deletes[0] != unitPath {
+		t.Fatalf("uninstall plan deletes = %#v, want %s", result.Plan.Deletes, unitPath)
+	}
+	if probeCalls != 2 {
+		t.Fatalf("transaction probes = %d, want snapshot + postcondition", probeCalls)
+	}
+	if _, statErr := os.Stat(unitPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("applyWithDeps left unit behind: %v", statErr)
+	}
+}
+
 func TestApplyDryRunAndSystemScopeHaveNoSideEffects(t *testing.T) {
 	deps := defaultApplyDeps()
 	deps.goos = "linux"

@@ -46,11 +46,13 @@ scripts/install.sh --dry-run --home "$HOME/.reames-agent" --gateway --channels f
 凭据来源 `<Reames Agent home>/.env`，并声明服务定义只绑定
 `REAMES_AGENT_HOME`、不嵌入 secret 值。
 仓库里的 `python scripts/smoke_gateway_headless.py` 会用隔离 home 和真实 CLI
-二进制验证 `gateway setup --dry-run` 零落盘、正式 setup 原子写入和幂等重跑，
-再验证 `gateway doctor --home` 与 `gateway install --dry-run --home`。烟测不手写
-Gateway TOML、不创建 synthetic `.env`，doctor 应准确报告 secret 环境变量未设置，
-因此适合作为无真实 IM secret 的服务器部署预检；加上
-`--out artifacts/headless-gateway-smoke.json` 可保存机器可读的部署预检证据。
+二进制验证 `gateway setup --dry-run` 零落盘、正式 setup 原子写入和幂等重跑；随后执行共享的
+`gateway recovery-status --json`，要求健康配置返回 schema v1 和零 findings，再临时注入损坏 TOML，
+要求 exit code 1 与 `config.invalid`，最后逐字节恢复原配置。烟测还会验证
+`gateway doctor --home` 与 `gateway install --dry-run --home`，不手写正常 Gateway TOML、
+不创建 synthetic `.env`，且 recovery/doctor/service-plan 证据均不得加载或泄露凭据值。因此它适合作为
+无真实 IM secret 的服务器部署预检；加上 `--out artifacts/headless-gateway-smoke.json` 可保存包含
+`recovery_preflight` section 的机器可读证据。
 
 Linux 上还可运行 `python scripts/smoke_gateway_service_linux.py --binary /absolute/path/to/reames-agent --out artifacts/gateway-systemd-user-smoke.json`，用随机本地 Feishu webhook challenge 验证真实 systemd user service 的安装、同名重装、status、restart、stop/start、journal 和 uninstall。该 smoke 不需要真实 Provider/IM 凭据，但必须在已经运行的 systemd user manager 中执行；报告中的 `linger_state` 和 `external_blocked` 必须保留，登录会话内通过不等于 SSH 断开或云主机重启后仍常驻。
 
@@ -227,7 +229,7 @@ reames-agent gateway run --home "$HOME/.reames-agent" --channels feishu
 
 正式命令会按平台选择 service manager：Linux 使用 user systemd，macOS 使用 launchd，Windows 使用 Scheduled Task。`--scope system` 只渲染计划并要求管理员/root 手动确认，避免误改系统级服务。
 
-Linux user-scope 的 `gateway install` 会在写入后先执行 `systemd-analyze --user verify`，并在变更前快照旧 unit 的 bytes/mode 与 enabled/active 状态。写入、reload、enable、restart 或 is-active 失败时会尝试恢复快照；如果旧 unit 写回或恢复后的 daemon-reload 失败，会 fail closed、停止后续 manager 操作并明确要求人工修复。该自动回滚范围只覆盖 Linux user-scope install，不适用于 macOS launchd、Windows Scheduled Task、uninstall 或 `--scope system`。
+Linux user-scope 的 `gateway install` 会在写入后先执行 `systemd-analyze --user verify`，并在变更前快照旧 unit 的 bytes/mode 与 enabled/active 状态。写入、reload、enable、restart 或 is-active 失败时会尝试恢复快照。`gateway uninstall` 现在复用同一快照边界：unit 与 manager 都已缺失时幂等返回；否则执行 `disable --now`、删除、reload 后再次验证 manager 已不存在，任一步失败或取消都会尝试写回旧 unit 并恢复原 enabled/active。旧 unit 写回或恢复后的 daemon-reload 失败时会 fail closed、停止后续 manager 操作并明确要求人工修复。该自动事务只覆盖 Linux user scope，不适用于 macOS launchd、Windows Scheduled Task 或 `--scope system`。
 
 Linux systemd 可在 install 时显式传 `--watchdog-sec 60s`。`0` 为默认且继续渲染
 `Type=simple`；正值最小 2 秒，非 Linux 或非 install 操作会 fail closed。启用后 unit 使用

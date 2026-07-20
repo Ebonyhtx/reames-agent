@@ -363,6 +363,12 @@ notarization、公开主题 registry
   subagent 与 Grok Build `ba76b0a6` Stop/session/permission 只按二级战略或三级机制规则分类。见
   `audits/2026-07-20-reasonix-8bb0e54-2301e24.md` 和
   `audits/2026-07-20-upstream-strategic-reference-delta.md`。
+- [x] Reasonix `2301e248..43993f5a` 插件 Skill MCP 绑定修复已代码级采用：Registry 对
+  raw/visible/portable/Claude-style 名称只做唯一 canonical 解析且不改变 Provider schema；installed package
+  provenance 贯穿 skill root、live/lazy MCP 与 fingerprint-valid cache；全部 Skill 入口在调用时注入 host-only
+  binding，权限、Plan Mode、Hook、Evidence 和子代理 allowlist 使用 canonical identity。Reames 不存在
+  `use_capability` proxy，因此不冒充 cache-only 子代理代理能力；package-qualified slash UX 保持 P9。见
+  `audits/2026-07-20-reasonix-2301e24-43993f5.md`。
 - [x] 提交前最新深扫继续审至 Codex `7844386e` 与 Hermes `1b17015f`：Codex TUI Markdown、visualization、
   App-Server command lifecycle、replay retention、diff cloning 与 exec completion identity 七提交完成代码级
   已有/延后分类；Reames typed `ToolProgress`/`ToolResult` 已保证输出不等于完成，P9 replay store 禁止保留
@@ -398,7 +404,7 @@ notarization、公开主题 registry
 ## M6：远程与多渠道
 
 - 服务器 CLI/TUI：单二进制安装、SSH/tmux 交互、`run` 一次性任务、服务器用户级 `REAMES_AGENT_HOME` 与真实 API key。
-- Gateway service：独立后台进程承载飞书/微信/QQ/Telegram 等社交通道；已补 Linux systemd、Windows Scheduled Task、macOS launchd 生命周期、`REAMES_AGENT_HOME` service 绑定、`gateway run --home`、headless smoke，以及 `gateway setup` 的四渠道 secret-env-only、fail-closed access、redacted dry-run、原子幂等配置事务。credential-free 预检现用同一实际 CLI 二进制和隔离 home 覆盖 setup → doctor → service-plan、localhost Provider 一次性任务/会话持久化、feedback submit → summary → draft 和敏感值脱敏；新增 `gateway recovery-status`，且 `gateway run` 在普通 runtime 前强制执行共享 Guard preflight。Linux systemd 安装可 opt-in `--watchdog-sec`：preflight 和至少一个 adapter 启动后才 `READY=1`，adapter 状态健康时喂 `WATCHDOG=1`，全部关闭/错误后停止心跳，SIGINT/SIGTERM 发送 `STOPPING=1` 并做 30 秒 bounded shutdown。WSL2 的真实 systemd user manager又覆盖 unit 静态验证、带空格路径、install、同名重装立即生效、status、restart、stop/start、journal、webhook readiness、卸载后 `LoadState=not-found`，并修复 uninstall 顺序与 service unit 编码。Linux user-scope install 现进一步以旧 unit bytes/mode 和 enabled/active 快照做自动事务，`systemd-analyze --user verify`、前向命令、取消和回滚失败均有 fail-closed 故障注入；该保证不外推到 system scope、macOS launchd 或 Windows Scheduled Task（见 `audits/2026-07-10-headless-gateway-smoke.md`、`audits/2026-07-13-m6-gateway-setup.md`、`audits/2026-07-13-m6-clean-node-operations-preflight.md`、`audits/2026-07-13-m6-linux-systemd-lifecycle.md`、`audits/2026-07-14-m6-recovery-transactions.md`、`audits/2026-07-17-p2-offline-guard-safe-mode.md`、`audits/2026-07-19-p7-upstream-gateway-watchdog.md`）。该 WSL 用户 `Linger=no`，下一步仍需在干净 Linux 云节点验证 logout/reboot 常驻、真实 watchdog kill/restart 和新恢复命令实启，再做真实 Provider 与 IM 渠道回环。
+- Gateway service：独立后台进程承载飞书/微信/QQ/Telegram 等社交通道；已补 Linux systemd、Windows Scheduled Task、macOS launchd 生命周期、`REAMES_AGENT_HOME` service 绑定、`gateway run --home`、headless smoke，以及 `gateway setup` 的四渠道 secret-env-only、fail-closed access、redacted dry-run、原子幂等配置事务。credential-free 预检现用同一实际 CLI 二进制和隔离 home 覆盖 setup → recovery-status → doctor → service-plan、localhost Provider 一次性任务/会话持久化、feedback submit → summary → draft 和敏感值脱敏；recovery-status 同时验证健康 config 的 schema v1/零 findings，以及损坏 TOML 的 exit 1/`config.invalid` fail-closed、配置逐字节恢复和凭据不加载。`gateway run` 在普通 runtime 前强制执行同一共享 Guard preflight。Linux systemd 安装可 opt-in `--watchdog-sec`：preflight 和至少一个 adapter 启动后才 `READY=1`，adapter 状态健康时喂 `WATCHDOG=1`，全部关闭/错误后停止心跳，SIGINT/SIGTERM 发送 `STOPPING=1` 并做 30 秒 bounded shutdown。WSL2 的真实 systemd user manager又覆盖 unit 静态验证、带空格路径、install、同名重装立即生效、status、restart、stop/start、journal、webhook readiness 与卸载后 `LoadState=not-found`。Linux user-scope install 与 uninstall 现都以旧 unit bytes/mode 和 enabled/active 快照做自动事务：install 覆盖 verify/write/reload/enable/restart/is-active；uninstall 在 disable/delete/reload 后验证 manager 已缺失，任一前向命令、取消、postcondition 或回滚失败均有 fail-closed 故障注入。该保证不外推到 system scope、macOS launchd 或 Windows Scheduled Task（见 `audits/2026-07-10-headless-gateway-smoke.md`、`audits/2026-07-13-m6-gateway-setup.md`、`audits/2026-07-13-m6-clean-node-operations-preflight.md`、`audits/2026-07-13-m6-linux-systemd-lifecycle.md`、`audits/2026-07-14-m6-recovery-transactions.md`、`audits/2026-07-17-p2-offline-guard-safe-mode.md`、`audits/2026-07-19-p7-upstream-gateway-watchdog.md`、`audits/2026-07-20-m6-linux-uninstall-transaction.md`）。该历史 WSL 用户 `Linger=no`；本轮宿主因 `0x800705aa` 未能重新启动 WSL，不能冒充当前提交的真实 manager smoke。下一步仍需在干净 Linux 云节点验证 logout/reboot 常驻、真实 watchdog kill/restart 和新恢复命令实启，再做真实 Provider 与 IM 渠道回环。
 - Server/Web：作为可选远程控制面，提供鉴权、CSRF/Origin、租约、SSE/WS 重连、速率限制和审计。
 - 部署：Docker、systemd、反向代理和健康检查已有基线；敏感的 home/state `backup create/verify/restore`、仅新目标恢复、候选/安装后健康检查、保留 immediate predecessor 的 updater 与 `upgrade --rollback` 已有本地自动证据。内嵌 manifest 只证明自洽，多根恢复没有 durable crash journal，公开签名 release 和干净云节点实启仍需外部证据。
 - 反馈中心：已建立 `internal/feedback` schema、本地 JSONL 账本、`serve` 的 `POST /api/feedback`、`GET /api/feedback/summary` 与 `POST /api/feedback/draft`，以及 SSH 运维可用的 `reames-agent feedback submit|summary|draft --home PATH`，先完成脱敏、去重、本地聚合和维护草稿，再接人工确认后的 Issue 发布。
@@ -579,14 +585,19 @@ notarization、公开主题 registry
 P1/P2/P3/P4/P5 已关闭；P5 的 CI、CodeQL 与三平台 Desktop candidate 全绿
 → P6/P7 已关闭；P8 官方 OpenAI Responses/GPT 与 Anthropic Messages/Claude 的仓库内原生协议门槛已关闭，
   真实公网 API 回环仍为 external-blocked
-→ Reasonix 一级上游最新审至 `2301e248`：Provider env、MCP stdio/lifecycle、中断轮次恢复与 WebKit focus
-  已采用，Remote SSH 两项进入 P11。Codex 二级战略审至 `678157ac`，Claude 仍为 `015170d3`；Hermes
-  最终审至 `dd418284`，其中 Kimi thinking 已窄化采用，最新 thread/perf/session-color 机制已分类；权威 SHA 只看 lock
+→ Reasonix 一级上游最新审至 `43993f5a`：插件 Skill 的 MCP package provenance、portable alias、runtime
+  binding 与 canonical security identity 已采用；Provider schema 保持稳定，Remote SSH 两项仍进入 P11。
+  Codex 二级战略审至 `678157ac`，Claude 仍为 `015170d3`；Hermes
+  最终审至 `a7d7c02c`，其中 Kimi thinking 已窄化采用，最新 thread/perf/session-color 机制已分类；权威 SHA 只看 lock
+→ 后续 Watch 已发现 Reasonix `77fd1a47`、Codex `eceb3eea`、Hermes `3d7e1c5f`、MiMo `b7b2092a`、
+  Scream `ae8cd938` 与 Kimi `c5b6103b`；当前集中批次保持 reviewed lock 不变，下一批按 lock → latest
+  做代码级分类，优先一级 Reasonix 与二级 Codex，不自动 merge/cherry-pick
 → Grok Build `ba76b0a6` 已按机制参考审查；后续增量重点比较 shell/permission/sandbox、
 durable session/subagent、TUI queue/interject、ACP/headless。不得照搬其 Plan Mode 的 shell/subagent 写入缺口，
 也不接入 xAI auth、telemetry、online memory、managed policy、marketplace 或 Rust 第二 runtime
-→ 当前 M6 已交付 Telegram/微信 durable long polling、实时 adapter 背压与 outbound final-response obligation；
-  下一无需凭据的可靠性工作是继续逐渠道审批/取消/reconnect fixture。并行等待干净 Linux linger-enabled logout/reboot、
+→ 当前 M6 已交付 Telegram/微信 durable long polling、实时 adapter 背压、outbound final-response obligation，
+  以及 Linux user-scope install/uninstall 故障可回滚事务；下一无需凭据的可靠性工作是继续逐渠道审批/取消/reconnect fixture，
+  并审计 macOS launchd/Windows Scheduled Task 的同等级事务。并行等待干净 Linux linger-enabled logout/reboot、
   真实 watchdog kill/restart、Gateway recovery-status/system service 实启，以及真实 Provider/IM 回环
 → 仓库战略主线继续 P9 → P10 → P11：Codex-class 插件/headless、第一方 CDP Browser Control、受治理 Remote SSH；
   分别跟进 Codex/Claude 的代码级 Agent 能力，每条先完成 fixture/权限/沙箱/evidence 再补真实回环

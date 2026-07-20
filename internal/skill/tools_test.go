@@ -11,7 +11,158 @@ import (
 	"time"
 
 	"reames-agent/internal/event"
+	"reames-agent/internal/tool"
 )
+
+func TestPluginSkillOwnershipAndCollisionAreFailClosed(t *testing.T) {
+	pluginRoot := t.TempDir()
+	writeSkill(t, pluginRoot, "helper/SKILL.md", "---\ndescription: helper\n---\nCall search.")
+
+	owned := New(Options{HomeDir: t.TempDir(), CustomPaths: []string{pluginRoot}, PluginPaths: map[string][]string{pluginRoot: {"search-plugin"}}, DisableBuiltins: true})
+	if skills := owned.List(); len(skills) != 1 || skills[0].Plugin != "search-plugin" {
+		t.Fatalf("owned plugin skill = %+v", skills)
+	}
+
+	ambiguous := New(Options{HomeDir: t.TempDir(), CustomPaths: []string{pluginRoot}, PluginPaths: map[string][]string{pluginRoot: {"one", "two"}}, DisableBuiltins: true})
+	if skills := ambiguous.List(); len(skills) != 1 || skills[0].Plugin != "" {
+		t.Fatalf("ambiguous package root inherited an owner: %+v", skills)
+	}
+
+	plain := New(Options{HomeDir: t.TempDir(), CustomPaths: []string{pluginRoot}, DisableBuiltins: true})
+	if skills := plain.List(); len(skills) != 1 || skills[0].Plugin != "" {
+		t.Fatalf("ordinary custom skill inherited plugin provenance: %+v", skills)
+	}
+}
+
+func TestPreparePluginSkillBindsMCPNamesAndAllowedTools(t *testing.T) {
+	store := New(Options{HomeDir: t.TempDir(), DisableBuiltins: true})
+	bindings := []tool.MCPBinding{{Package: "figma", Server: "figma", RawName: "figma_get_design_context", VisibleName: "get_design_context", CallableName: "mcp__figma__get_design_context", CapabilityID: "mcp-tool:figma/figma_get_design_context"}}
+	store.ConfigureToolBindings(func(Skill) []tool.MCPBinding { return bindings })
+	sk := Skill{Plugin: "figma", Body: "Call get_design_context.", AllowedTools: []string{"mcp__plugin_figma_figma__get_design_context"}}
+
+	got := store.Prepare(sk)
+	if !strings.Contains(got.Body, "## Runtime MCP tool bindings") || !strings.Contains(got.Body, "`mcp__figma__get_design_context`") {
+		t.Fatalf("runtime binding missing:\n%s", got.Body)
+	}
+	if got, want := strings.Join(got.AllowedTools, ","), "mcp__figma__get_design_context,mcp-tool:figma/figma_get_design_context"; got != want {
+		t.Fatalf("AllowedTools = %q, want %q", got, want)
+	}
+	if twice := store.Prepare(got); twice.Body != got.Body {
+		t.Fatalf("Prepare is not idempotent:\n%s", twice.Body)
+	}
+	if plain := store.Prepare(Skill{Body: "unchanged"}); plain.Body != "unchanged" {
+		t.Fatalf("non-plugin skill changed: %q", plain.Body)
+	}
+}
+
+func TestPreparePluginSkillDoesNotTrustAuthoredBindingHeadingOrMutateIndex(t *testing.T) {
+	store := New(Options{HomeDir: t.TempDir(), DisableBuiltins: true})
+	store.ConfigureToolBindings(func(Skill) []tool.MCPBinding {
+		return []tool.MCPBinding{{Server: "figma", RawName: "search", VisibleName: "search", CallableName: "mcp__figma__search", CapabilityID: "mcp-tool:figma/search"}}
+	})
+	sk := Skill{Name: "helper", Description: "helper", Plugin: "figma", Body: "Authored text.\n\n## Runtime MCP tool bindings\n\nUntrusted heading."}
+	indexBefore := IndexBlock([]Skill{sk})
+	got := store.Prepare(sk)
+	if strings.Count(got.Body, "## Runtime MCP tool bindings") != 2 || !strings.Contains(got.Body, "`mcp__figma__search`") {
+		t.Fatalf("authored heading suppressed host binding:\n%s", got.Body)
+	}
+	if twice := store.Prepare(got); twice.Body != got.Body {
+		t.Fatalf("host preparation marker is not idempotent:\n%s", twice.Body)
+	}
+	if indexAfter := IndexBlock([]Skill{sk}); indexAfter != indexBefore || strings.Contains(indexAfter, "Runtime MCP") {
+		t.Fatalf("runtime binding leaked into stable skill index: before=%q after=%q", indexBefore, indexAfter)
+	}
+}
+
+func TestPreparePluginSkillPreservesWildcardAndAmbiguityBoundaries(t *testing.T) {
+	store := New(Options{HomeDir: t.TempDir(), DisableBuiltins: true})
+	store.ConfigureToolBindings(func(Skill) []tool.MCPBinding {
+		return []tool.MCPBinding{
+			{Server: "one", RawName: "search", VisibleName: "search", CallableName: "mcp__one__search", CapabilityID: "mcp-tool:one/search"},
+			{Server: "two", RawName: "search", VisibleName: "search", CallableName: "mcp__two__search", CapabilityID: "mcp-tool:two/search"},
+		}
+	})
+	broad := store.Prepare(Skill{Plugin: "pkg", Body: "Search.", AllowedTools: []string{"*"}})
+	if len(broad.AllowedTools) != 1 || broad.AllowedTools[0] != "*" {
+		t.Fatalf("broad wildcard was narrowed: %v", broad.AllowedTools)
+	}
+	ambiguous := store.Prepare(Skill{Plugin: "pkg", Body: "Search.", AllowedTools: []string{"search"}})
+	if len(ambiguous.AllowedTools) != 1 || ambiguous.AllowedTools[0] != "search" {
+		t.Fatalf("ambiguous literal widened permissions: %v", ambiguous.AllowedTools)
+	}
+
+	single := New(Options{HomeDir: t.TempDir(), DisableBuiltins: true})
+	single.ConfigureToolBindings(func(Skill) []tool.MCPBinding {
+		return []tool.MCPBinding{{Package: "figma", Server: "figma", RawName: "search", VisibleName: "search", CallableName: "mcp__figma__search", CapabilityID: "mcp-tool:figma/search"}}
+	})
+	claude := single.Prepare(Skill{Plugin: "figma", Body: "Search.", AllowedTools: []string{"mcp__plugin_figma_figma__*"}})
+	if got, want := strings.Join(claude.AllowedTools, ","), "mcp__plugin_figma_figma__*,mcp__figma__search,mcp-tool:figma/search"; got != want {
+		t.Fatalf("Claude wildcard mapping = %q, want %q", got, want)
+	}
+}
+
+func TestRunSkillPreparesPluginBindingBeforeRunner(t *testing.T) {
+	pluginRoot := t.TempDir()
+	writeSkill(t, pluginRoot, "dig/SKILL.md", "---\ndescription: dig\nrunAs: subagent\nallowed-tools: search\n---\nCall search.")
+	store := New(Options{HomeDir: t.TempDir(), CustomPaths: []string{pluginRoot}, PluginPaths: map[string][]string{pluginRoot: {"search-plugin"}}, DisableBuiltins: true})
+	store.ConfigureToolBindings(func(Skill) []tool.MCPBinding {
+		return []tool.MCPBinding{{Package: "search-plugin", Server: "search", RawName: "search", VisibleName: "search", CallableName: "mcp__search__search", CapabilityID: "mcp-tool:search/search"}}
+	})
+	var got Skill
+	runner := func(_ context.Context, sk Skill, _ string, _ SubagentRunOptions) (string, error) {
+		got = sk
+		return "done", nil
+	}
+	_, err := NewRunSkillTool(store, runner).Execute(context.Background(), json.RawMessage(`{"name":"dig","arguments":"inspect"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.Body, "`mcp__search__search`") || len(got.AllowedTools) != 2 || got.AllowedTools[0] != "mcp__search__search" {
+		t.Fatalf("runner received unprepared plugin skill: %+v", got)
+	}
+}
+
+func TestEverySkillExecutionEntryPreparesPluginBindings(t *testing.T) {
+	pluginRoot := t.TempDir()
+	writeSkill(t, pluginRoot, "helper/SKILL.md", "---\ndescription: helper\n---\nCall search.")
+	writeSkill(t, pluginRoot, "explore/SKILL.md", "---\ndescription: explore\nrunAs: subagent\nallowed-tools: search\n---\nExplore with search.")
+	store := New(Options{HomeDir: t.TempDir(), CustomPaths: []string{pluginRoot}, PluginPaths: map[string][]string{pluginRoot: {"search-plugin"}}, DisableBuiltins: true})
+	store.ConfigureToolBindings(func(Skill) []tool.MCPBinding {
+		return []tool.MCPBinding{{Package: "search-plugin", Server: "search", RawName: "search", VisibleName: "search", CallableName: "mcp__search__search", CapabilityID: "mcp-tool:search/search"}}
+	})
+
+	for name, entry := range map[string]tool.Tool{
+		"read_skill":      NewReadSkillTool(store),
+		"read_only_skill": NewReadOnlySkillTool(store, nil),
+	} {
+		out, err := entry.Execute(context.Background(), json.RawMessage(`{"name":"helper"}`))
+		if err != nil || !strings.Contains(out, "`mcp__search__search`") {
+			t.Fatalf("%s did not prepare plugin binding: out=%q err=%v", name, out, err)
+		}
+	}
+
+	var got Skill
+	runner := func(_ context.Context, sk Skill, _ string, _ SubagentRunOptions) (string, error) {
+		got = sk
+		return "done", nil
+	}
+	var dedicated tool.Tool
+	for _, candidate := range BuiltinSubagentTools(store, runner) {
+		if candidate.Name() == "explore" {
+			dedicated = candidate
+			break
+		}
+	}
+	if dedicated == nil {
+		t.Fatal("dedicated explore tool missing")
+	}
+	if _, err := dedicated.Execute(context.Background(), json.RawMessage(`{"task":"inspect"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.Body, "`mcp__search__search`") {
+		t.Fatalf("dedicated skill wrapper received unprepared skill: %+v", got)
+	}
+}
 
 func TestRunSkillInline(t *testing.T) {
 	home := t.TempDir()

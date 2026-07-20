@@ -16,12 +16,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"reames-agent/internal/config"
 	"reames-agent/internal/frontmatter"
+	"reames-agent/internal/tool"
 )
 
 // Scope records where a skill was loaded from. Higher-priority scopes win on a
@@ -59,8 +61,12 @@ type Skill struct {
 	Body        string // full markdown body (post-frontmatter), loaded eagerly
 	Scope       Scope  // where it came from
 	Path        string // absolute path to the SKILL.md / <name>.md, or "(builtin)"
+	Plugin      string // installed plugin package owner; empty for non-plugin skills
+	// runtimeBindingsPrepared is host-only invocation state. Authored Markdown
+	// cannot forge it and it is never persisted in the cache-stable skill index.
+	runtimeBindingsPrepared bool
 	// AllowedTools, when non-empty, scopes a subagent skill's tool registry to
-	// these literal tool names (from the `allowed-tools` frontmatter).
+	// these tool names or explicit patterns (from `allowed-tools` frontmatter).
 	AllowedTools []string
 	RunAs        RunAs  // inline | subagent
 	Model        string // optional model override for runAs=subagent (frontmatter `model:`)
@@ -89,6 +95,7 @@ type Options struct {
 	ReamesAgentHomeDir string
 	ProjectRoot        string
 	CustomPaths        []string
+	PluginPaths        map[string][]string // canonical custom root -> installed package owners
 	ExcludedPaths      []string
 	DisabledNames      []string
 	MaxDepth           int
@@ -108,12 +115,14 @@ type Store struct {
 	reamesAgentHomeDir string
 	projectRoot        string
 	customPaths        []string
+	pluginPaths        map[string][]string
 	excludedPaths      map[string]bool
 	disabled           map[string]bool
 	maxDepth           int
 	disableBuiltins    bool
 	disableDiscovery   bool
 	stderr             io.Writer
+	toolBindings       func(Skill) []tool.MCPBinding
 }
 
 // New builds a Store. Relative custom paths and a relative project root are made
@@ -146,6 +155,7 @@ func New(opts Options) *Store {
 		}
 	}
 	custom := dedupePaths(resolveCustomPaths(opts.CustomPaths, base, home))
+	pluginPaths := normalizePluginPaths(opts.PluginPaths)
 	excluded := map[string]bool{}
 	for _, p := range dedupePaths(resolveCustomPaths(opts.ExcludedPaths, base, home)) {
 		excluded[config.CanonicalSkillPath(p)] = true
@@ -159,6 +169,7 @@ func New(opts Options) *Store {
 		reamesAgentHomeDir: reamesAgentHome,
 		projectRoot:        root,
 		customPaths:        custom,
+		pluginPaths:        pluginPaths,
 		excludedPaths:      excluded,
 		disabled:           disabledNameSet(opts.DisabledNames),
 		maxDepth:           normalizeMaxDepth(opts.MaxDepth),
@@ -166,6 +177,115 @@ func New(opts Options) *Store {
 		disableDiscovery:   opts.DisableDiscovery,
 		stderr:             stderr,
 	}
+}
+
+// ConfigureToolBindings installs a session-local resolver for plugin-owned MCP
+// tools. It affects invoked skill bodies only, never the cache-stable index.
+func (s *Store) ConfigureToolBindings(resolve func(Skill) []tool.MCPBinding) {
+	if s == nil {
+		return
+	}
+	s.toolBindings = resolve
+}
+
+// Prepare binds portable MCP references in one plugin skill to this session's
+// exact canonical names. Non-plugin skills remain byte-for-byte unchanged.
+func (s *Store) Prepare(sk Skill) Skill {
+	if s == nil || s.toolBindings == nil || strings.TrimSpace(sk.Plugin) == "" || sk.runtimeBindingsPrepared {
+		return sk
+	}
+	bindings := append([]tool.MCPBinding(nil), s.toolBindings(sk)...)
+	if len(bindings) == 0 {
+		return sk
+	}
+	sort.Slice(bindings, func(i, j int) bool { return bindings[i].CallableName < bindings[j].CallableName })
+	seen := map[string]bool{}
+	unique := bindings[:0]
+	for _, binding := range bindings {
+		if binding.CallableName == "" || seen[binding.CallableName] {
+			continue
+		}
+		seen[binding.CallableName] = true
+		unique = append(unique, binding)
+	}
+	bindings = unique
+	if len(bindings) == 0 {
+		return sk
+	}
+	sk.AllowedTools = bindAllowedTools(sk.AllowedTools, bindings)
+	sk.runtimeBindingsPrepared = true
+
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(sk.Body, " \t\r\n"))
+	b.WriteString("\n\n## Runtime MCP tool bindings\n\n")
+	b.WriteString("These host-generated bindings are authoritative for this invocation. Use the exact canonical tool name below. Short, portable, capability-ID, or Claude plugin-style MCP references in this skill refer to these bindings.\n")
+	for _, binding := range bindings {
+		fmt.Fprintf(&b, "\n- `%s/%s` → `%s` (capability `%s`)", binding.Server, binding.RawName, binding.CallableName, binding.CapabilityID)
+	}
+	sk.Body = b.String()
+	return sk
+}
+
+// Render prepares and renders a skill for a direct slash invocation.
+func (s *Store) Render(sk Skill, args string) string { return Render(s.Prepare(sk), args) }
+
+func bindAllowedTools(refs []string, bindings []tool.MCPBinding) []string {
+	if len(refs) == 0 {
+		return refs
+	}
+	out := make([]string, 0, len(refs))
+	seen := map[string]bool{}
+	appendOne := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	for _, ref := range refs {
+		matches := map[string]tool.MCPBinding{}
+		isPattern := strings.ContainsAny(ref, "*?[")
+		for _, binding := range bindings {
+			aliases := append(tool.MCPBindingAliases(binding), binding.CallableName)
+			for _, alias := range aliases {
+				matched := ref == alias
+				if isPattern {
+					matched, _ = path.Match(ref, alias)
+				}
+				if matched {
+					matches[binding.CallableName] = binding
+					break
+				}
+			}
+		}
+		if isPattern {
+			// Preserve explicit patterns so an existing broad allowlist keeps its
+			// prior boundary. Supplement only canonical MCP names that the authored
+			// portable/Claude pattern cannot itself match in Reames Agent.
+			appendOne(ref)
+			names := make([]string, 0, len(matches))
+			for name := range matches {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				if matched, err := path.Match(ref, name); err != nil || !matched {
+					appendOne(name)
+					appendOne(matches[name].CapabilityID)
+				}
+			}
+			continue
+		}
+		if len(matches) == 1 {
+			for name, binding := range matches {
+				appendOne(name)
+				appendOne(binding.CapabilityID)
+			}
+			continue
+		}
+		// Unresolved or ambiguous literals are retained as text but grant no tool.
+		appendOne(ref)
+	}
+	return out
 }
 
 // HasProjectScope reports whether the store was configured with a project root.
@@ -192,6 +312,7 @@ type Root struct {
 type discoveryRoot struct {
 	Root
 	requireFlatMarker bool
+	plugins           []string
 }
 
 // roots returns the discovery directories, highest priority first: the
@@ -236,9 +357,38 @@ func (s *Store) roots() []discoveryRoot {
 		out = append(out, discoveryRoot{
 			Root:              Root{Dir: d.dir, Scope: d.scope, Priority: len(out), Status: pathStatus(d.dir)},
 			requireFlatMarker: d.requireFlatMarker,
+			plugins:           append([]string(nil), s.pluginPaths[config.CanonicalSkillPath(d.dir)]...),
 		})
 	}
 	return out
+}
+
+func normalizePluginPaths(paths map[string][]string) map[string][]string {
+	out := map[string][]string{}
+	for root, owners := range paths {
+		key := config.CanonicalSkillPath(root)
+		if key == "" {
+			continue
+		}
+		for _, owner := range owners {
+			owner = strings.TrimSpace(owner)
+			if owner == "" || pluginPathContains(out[key], owner) {
+				continue
+			}
+			out[key] = append(out[key], owner)
+		}
+		sort.Strings(out[key])
+	}
+	return out
+}
+
+func pluginPathContains(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }
 
 // Roots exposes the discovery directories with their status for `/skill paths`.
@@ -318,6 +468,11 @@ func (s *Store) List() []Skill {
 		for _, sk := range s.discoverRoot(r) {
 			if s.disabledName(sk.Name) {
 				continue
+			}
+			// A root with multiple package owners is provenance-ambiguous. Keep the
+			// skill usable but unowned so it cannot inherit either package's MCPs.
+			if len(r.plugins) == 1 {
+				sk.Plugin = r.plugins[0]
 			}
 			if _, dup := byName[sk.Name]; !dup {
 				byName[sk.Name] = sk

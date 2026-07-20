@@ -190,6 +190,7 @@ type lazyTool struct {
 	shared           *lazySpawn
 	name             string // namespaced "mcp__<server>__<tool>"
 	rawName          string // original server-local tool name, when cached
+	visibleName      string // raw name after configured prefix stripping
 	desc             string
 	schema           json.RawMessage
 	securityMu       sync.RWMutex
@@ -220,7 +221,14 @@ func (lt *lazyTool) MCPServerName() string {
 	}
 	return lt.shared.spec.Name
 }
-func (lt *lazyTool) MCPRawToolName() string { return lt.rawName }
+func (lt *lazyTool) MCPRawToolName() string     { return lt.rawName }
+func (lt *lazyTool) MCPVisibleToolName() string { return lt.visibleName }
+func (lt *lazyTool) MCPPackageName() string {
+	if lt.shared == nil {
+		return ""
+	}
+	return lt.shared.spec.PackagePolicy.Owner
+}
 
 // PlanModeUntrustedReadOnly mirrors remoteTool: true for a declared external
 // reader that lacks receipt authority, even while ReadOnly() remains false.
@@ -457,6 +465,7 @@ func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, se
 				shared:           shared,
 				name:             toolName(spec.Name, visibleName),
 				rawName:          ct.Name,
+				visibleName:      visibleName,
 				desc:             ct.Description,
 				schema:           ct.Schema,
 				declaredReadOnly: declared,

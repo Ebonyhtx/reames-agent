@@ -34,6 +34,7 @@ func mergeInstalledPluginPackages(cfg *Config, root string) []string {
 			if !stringSliceContainsPath(cfg.Skills.Paths, skillRoot) {
 				cfg.Skills.Paths = append(cfg.Skills.Paths, skillRoot)
 			}
+			cfg.addPluginSkillOwner(skillRoot, item.Installed.Name)
 		}
 		for name, srv := range pkg.Manifest.MCPServers {
 			if pluginNameExists(cfg.Plugins, name) {
@@ -60,6 +61,40 @@ func mergeInstalledPluginPackages(cfg *Config, root string) []string {
 		}
 	}
 	return warnings
+}
+
+func (c *Config) addPluginSkillOwner(root, owner string) {
+	if c == nil {
+		return
+	}
+	root = CanonicalSkillPath(root)
+	owner = strings.TrimSpace(owner)
+	if root == "" || owner == "" {
+		return
+	}
+	if c.pluginPackageSkillOwners == nil {
+		c.pluginPackageSkillOwners = map[string][]string{}
+	}
+	for _, existing := range c.pluginPackageSkillOwners[root] {
+		if existing == owner {
+			return
+		}
+	}
+	c.pluginPackageSkillOwners[root] = append(c.pluginPackageSkillOwners[root], owner)
+	sort.Strings(c.pluginPackageSkillOwners[root])
+}
+
+// PluginPackageSkillOwners returns installed package owners keyed by canonical
+// skill-root path. The defensive copy keeps runtime provenance host-owned.
+func (c *Config) PluginPackageSkillOwners() map[string][]string {
+	if c == nil || len(c.pluginPackageSkillOwners) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(c.pluginPackageSkillOwners))
+	for root, owners := range c.pluginPackageSkillOwners {
+		out[root] = append([]string(nil), owners...)
+	}
+	return out
 }
 
 func pluginPackageCommand(root, command string) string {

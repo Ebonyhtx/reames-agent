@@ -17,6 +17,7 @@ import (
 	"reames-agent/internal/hook"
 	"reames-agent/internal/memory"
 	"reames-agent/internal/skill"
+	"reames-agent/internal/tool"
 )
 
 type fakeAutoPlanClassifier struct {
@@ -35,6 +36,25 @@ type fakeTurnRunner struct {
 	inputs               []string
 	memoryCompilerInputs []string
 	memoryCompilerSkips  []bool
+}
+
+func TestRunSkillPreparesPluginMCPBindings(t *testing.T) {
+	pluginRoot := t.TempDir()
+	writeControlSkill(t, pluginRoot, "helper/SKILL.md", "---\ndescription: Plugin helper\n---\nCall search.")
+	store := skill.New(skill.Options{
+		HomeDir: t.TempDir(), CustomPaths: []string{pluginRoot},
+		PluginPaths: map[string][]string{pluginRoot: {"search-plugin"}}, DisableBuiltins: true,
+	})
+	store.ConfigureToolBindings(func(skill.Skill) []tool.MCPBinding {
+		return []tool.MCPBinding{{Package: "search-plugin", Server: "search", RawName: "search", VisibleName: "search", CallableName: "mcp__search__search", CapabilityID: "mcp-tool:search/search"}}
+	})
+	c := New(Options{SkillStore: store, Skills: store.List()})
+	defer c.Close()
+
+	sent, ok := c.RunSkill("/helper inspect")
+	if !ok || !strings.Contains(sent, "## Runtime MCP tool bindings") || !strings.Contains(sent, "`mcp__search__search`") {
+		t.Fatalf("RunSkill did not prepare plugin binding: found=%v sent=%q", ok, sent)
+	}
 }
 
 func (f *fakeTurnRunner) Run(ctx context.Context, input string) error {

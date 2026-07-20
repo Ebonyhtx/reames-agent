@@ -3,10 +3,11 @@
 
 This is intentionally stronger than a text contract and weaker than a real IM
 round trip: it runs the actual CLI binary against an isolated Reames Agent home,
-applies `gateway setup`, checks `gateway doctor --home`, renders a service-manager
-dry-run plan, completes a localhost-backed one-shot CLI turn, and exercises the
-local feedback ledger through maintenance-draft generation. It does not start a
-background service and never requires real provider or bot secrets.
+applies `gateway setup`, executes the shared recovery-status preflight, checks
+`gateway doctor --home`, renders a service-manager dry-run plan, completes a
+localhost-backed one-shot CLI turn, and exercises the local feedback ledger
+through maintenance-draft generation. It does not start a background service
+and never requires real provider or bot secrets.
 """
 
 from __future__ import annotations
@@ -239,7 +240,15 @@ def assert_sensitive_values_absent_from_tree(root: Path) -> None:
 
 
 def assert_report_sections_complete(report: dict[str, object]) -> None:
-    for section in ("setup", "doctor", "service_plan", "foreground_run", "cli_run", "feedback"):
+    for section in (
+        "setup",
+        "recovery_preflight",
+        "doctor",
+        "service_plan",
+        "foreground_run",
+        "cli_run",
+        "feedback",
+    ):
         value = report.get(section)
         if not isinstance(value, dict) or not value:
             raise AssertionError(f"smoke report section {section!r} is missing or empty")
@@ -312,6 +321,75 @@ def run_cli_preflight(
         "session_persisted": persisted,
         "session_files": len(session_files),
         "synthetic_key_not_persisted": LOOPBACK_KEY not in config_path.read_text(encoding="utf-8"),
+    }
+
+
+def run_recovery_preflight(
+    binary: Path,
+    home: Path,
+    workspace: Path,
+    env: dict[str, str],
+) -> dict[str, object]:
+    args = [
+        str(binary),
+        "gateway",
+        "recovery-status",
+        "--json",
+        "--home",
+        str(home),
+        "--root",
+        str(workspace),
+    ]
+    clean_output = run(args, env=env)
+    clean = json.loads(clean_output)
+    checks = clean.get("config", {}).get("checks", [])
+    global_check = next(
+        (
+            check
+            for check in checks
+            if isinstance(check, dict) and check.get("scope") == "global"
+        ),
+        {},
+    )
+    if clean.get("schemaVersion") != 1 or clean.get("findings") != []:
+        raise AssertionError(f"clean recovery preflight is not healthy: {clean_output}")
+    if global_check.get("exists") is not True or global_check.get("valid") is not True:
+        raise AssertionError(f"clean recovery preflight did not validate config.toml: {clean_output}")
+
+    config_path = home / "config.toml"
+    original_config = config_path.read_bytes()
+    try:
+        config_path.write_text("[broken\n", encoding="utf-8")
+        broken_code, broken_output = run_result(args, env=env)
+    finally:
+        config_path.write_bytes(original_config)
+    if broken_code != 1:
+        raise AssertionError(
+            "broken recovery preflight did not fail closed "
+            f"(exit={broken_code}):\n{broken_output}"
+        )
+    broken = json.loads(broken_output)
+    findings = broken.get("findings")
+    invalid_projected = isinstance(findings, list) and any(
+        isinstance(finding, dict) and finding.get("code") == "config.invalid"
+        for finding in findings
+    )
+    if not invalid_projected:
+        raise AssertionError(f"broken config was not projected by recovery-status: {broken_output}")
+    if config_path.read_bytes() != original_config:
+        raise AssertionError("recovery preflight fixture did not restore config.toml exactly")
+
+    evidence = clean_output + broken_output
+    assert_not_contains(evidence, SMOKE_APP_ID)
+    assert_sensitive_values_absent(evidence)
+    return {
+        "schema_version": clean["schemaVersion"],
+        "clean_config_valid": global_check.get("valid") is True,
+        "clean_findings_empty": clean.get("findings") == [],
+        "broken_exit_fail_closed": broken_code == 1,
+        "broken_config_projected": invalid_projected,
+        "config_restored_exactly": config_path.read_bytes() == original_config,
+        "credentials_not_loaded": SMOKE_APP_ID not in evidence,
     }
 
 
@@ -425,6 +503,8 @@ def smoke(binary: Path, home: Path) -> dict[str, object]:
         "no_credential_file": not (home / ".env").exists(),
     }
 
+    recovery_contracts = run_recovery_preflight(binary, home, workspace, env)
+
     doctor = run(
         [
             str(binary),
@@ -523,6 +603,7 @@ def smoke(binary: Path, home: Path) -> dict[str, object]:
         "home": str(home),
         "workspace": str(workspace),
         "setup": setup_contracts,
+        "recovery_preflight": recovery_contracts,
         "doctor": doctor_contracts,
         "service_plan": plan_contracts,
         "foreground_run": foreground_contracts,

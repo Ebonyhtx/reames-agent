@@ -9,7 +9,6 @@ import (
 
 	"reames-agent/internal/agent"
 	"reames-agent/internal/planmode"
-	"reames-agent/internal/skill"
 )
 
 // PlanModeMarker is prepended to every user turn while plan mode is on. It rides
@@ -635,7 +634,7 @@ func (c *Controller) RunSkill(input string) (sent string, found bool) {
 	}
 	name := strings.TrimPrefix(fields[0], "/")
 	if sk, ok := c.skills.byName(name); ok {
-		return skill.Render(sk, strings.Join(fields[1:], " ")), true
+		return c.skills.render(sk, strings.Join(fields[1:], " ")), true
 	}
 	return "", false
 }

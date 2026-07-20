@@ -2,8 +2,8 @@
   "version": 1,
   "upstream": "reasonix",
   "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-  "reviewed": "2301e24827bf62c7584f34c4f541c432dd4f6e0b",
-  "updated_at": "2026-07-20T02:35:00+08:00",
+  "reviewed": "43993f5a10cd4afa46febf53ed9f7ab2a1ceab5b",
+  "updated_at": "2026-07-20T11:02:15+08:00",
   "areas": {
     "source-baseline": {
       "status": "complete",
@@ -15,7 +15,8 @@
         "docs/audits/2026-07-19-reasonix-2335d0d-a46fc6f.md closes 2335d0df..a46fc6f commit-by-commit and records adopted, equivalent, deferred, and rejected behavior",
         "docs/audits/2026-07-19-reasonix-a46fc6f-65fcd46.md closes the five reliability/Remote SSH commits and separates direct adoption from Theme schema and roadmap work",
         "docs/audits/2026-07-19-reasonix-65fcd46-8bb0e54.md proves the latest Theme Pack refresh fix is already enforced by the Reames theme runtime",
-        "docs/audits/2026-07-20-reasonix-8bb0e54-2301e24.md closes all six latest commits with code-level adopted, stronger-boundary, partial, and deferred decisions"
+        "docs/audits/2026-07-20-reasonix-8bb0e54-2301e24.md closes all six latest commits with code-level adopted, stronger-boundary, partial, and deferred decisions",
+        "docs/audits/2026-07-20-reasonix-2301e24-43993f5.md adopts package-aware plugin Skill MCP bindings while preserving Reames trust, schema, and direct-registry boundaries"
       ]
     },
     "active-refs-tags": {
@@ -27,7 +28,8 @@
         "reasonix-generation-2335d0d-a46fc6f.json records 21 commits, 16 non-merge commits, 106 files, active refs and the three exact fix/perf commits",
         "reasonix-generation-a46fc6f-65fcd46.json records all five non-merge commits, 141 files, current tags and the exact fix/perf selection",
         "reasonix-generation-65fcd46-8bb0e54.json records the single four-file Theme Pack refresh commit",
-        "reasonix-generation-8bb0e54-2301e24.json records all six commits, 120 changed files, current tags, active refs, paths, and review areas"
+        "reasonix-generation-8bb0e54-2301e24.json records all six commits, 120 changed files, current tags, active refs, paths, and review areas",
+        "reasonix-generation-2301e24-43993f5.json records the one 19-file binding/security commit, current tags, active refs, paths, and review areas"
       ]
     },
     "agent-runtime": {
@@ -37,7 +39,8 @@
         "M4 audits cover Goal/Todo/evidence, durable child effects, writer worktrees, and crash recovery",
         "2335d0df Fleet scheduler/write claims were reviewed and not substituted for Reames worktree delivery, rooted effects, and tree-wide budgets",
         "dd929bf2 bounded save waits and shutdown recovery are adopted; 2b43e0f8 cancelled-turn display history remains explicitly deferred without weakening canonical transcript cleanup",
-        "2301e248 interrupted-turn partial display and bounded next-turn recovery facts are adopted while cold-crash checkpoint rollback remains stronger"
+        "2301e248 interrupted-turn partial display and bounded next-turn recovery facts are adopted while cold-crash checkpoint rollback remains stronger",
+        "43993f5a portable MCP calls now resolve only to a unique canonical tool, and Agent permission, Plan Mode, Hook, Evidence, subagent effects, and repeat-success identities consume that canonical name"
       ]
     },
     "controller-transports": {
@@ -46,7 +49,8 @@
         "docs/ARCHITECTURE.md records the empty transport runtime import allowlist and shared SessionAPI/command/event boundary",
         "work profiles are assembled in internal/boot and reused by Desktop, CLI, Serve, Bot, and ACP",
         "2335d0df..a46fc6f test-state isolation and shutdown recovery preserve the shared Controller boundary rather than adding a Desktop-only Agent runtime",
-        "4bd70c9f Desktop MCP lifecycle is adapted through pluginRuntimeGate, runtimeBuildGate, runtimeRebuildMu, and every Controller BeginRuntimeMutation reservation"
+        "4bd70c9f Desktop MCP lifecycle is adapted through pluginRuntimeGate, runtimeBuildGate, runtimeRebuildMu, and every Controller BeginRuntimeMutation reservation",
+        "43993f5a skill preparation reaches run/read/read-only/dedicated tool entry points plus boot, Controller slash, and reload rendering without creating a transport-specific runtime"
       ]
     },
     "provider-cache": {
@@ -57,7 +61,8 @@
         "internal/boot tests prove balanced and delivery share the same complete tool schema while each stable prefix remains deterministic",
         "c77af74c per-model context_window is adopted through provider overrides, TOML, Desktop DTOs, discovery merge, and frontend validation",
         "00af3a03 corrects LongCat-2.0 to 1,048,576 tokens and is adopted with a narrow untouched-official-preset migration",
-        "d8d3e5e0 digit-leading custom provider credentials are adopted through stable legal env-key generation and frontend regression coverage"
+        "d8d3e5e0 digit-leading custom provider credentials are adopted through stable legal env-key generation and frontend regression coverage",
+        "43993f5a portable MCP aliases remain host-only metadata; Provider schema count, names, order, and canonical bytes stay unchanged"
       ]
     },
     "tools-mcp-plugins": {
@@ -67,7 +72,8 @@
         "2026-07-18 parity audit adopts persistent-session fixes but explicitly rejects upstream trust simplification",
         "2335d0df named profile discovery remains a future UX candidate and cannot create a second plugin/tool or scheduler runtime",
         "b9890356 and 1a8b6f82 Windows batch Hook semantics are adopted without bypassing package-owned OS sandboxing",
-        "4bd70c9f server ping/method-not-found replies, bounded reply queue, serialized stdio writes, EOF handling, and Desktop-wide MCP/plugin lifecycle reservations are adopted; upstream trust-workflow deletion is rejected"
+        "4bd70c9f server ping/method-not-found replies, bounded reply queue, serialized stdio writes, EOF handling, and Desktop-wide MCP/plugin lifecycle reservations are adopted; upstream trust-workflow deletion is rejected",
+        "43993f5a package owner now propagates from installed skill roots and PackagePolicy-owned live/lazy MCP tools into host-only runtime bindings; exact names win, ambiguous aliases fail closed, live registry supersedes fingerprint-valid cache, and Reames does not claim the absent use_capability proxy"
       ]
     },
     "permissions-sandbox": {
@@ -162,7 +168,8 @@
         "reasonix-generation-2335d0d-a46fc6f.json enumerates all 21 commits, 16 non-merge commits, 106 changed files and three exact fix/perf commits; all three are adopted at the relevant Reames boundary",
         "reasonix-generation-a46fc6f-65fcd46.json enumerates five commits and 141 files; LongCat, Linux WebKit and export reliability are adopted, while Theme schema and Remote SSH are explicitly deferred",
         "reasonix-generation-65fcd46-8bb0e54.json enumerates one non-merge commit and four files; its Theme Pack refresh invariant is existing-equivalent and now has an explicit Reames regression",
-        "reasonix-generation-8bb0e54-2301e24.json enumerates all six non-merge commits and 120 changed files; the code audit adopts provider env, MCP stdio/lifecycle, interrupted recovery, and the WebKit focus fix while deferring both Remote SSH commits"
+        "reasonix-generation-8bb0e54-2301e24.json enumerates all six non-merge commits and 120 changed files; the code audit adopts provider env, MCP stdio/lifecycle, interrupted recovery, and the WebKit focus fix while deferring both Remote SSH commits",
+        "reasonix-generation-2301e24-43993f5.json enumerates the one non-merge commit and 19 changed files; the code audit adopts its MCP/Plugin Skill security behavior with explicit Reames adaptations"
       ]
     }
   }

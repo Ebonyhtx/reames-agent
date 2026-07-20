@@ -14,7 +14,7 @@ import (
 	"reames-agent/internal/fileutil"
 )
 
-const linuxInstallRollbackTimeout = 15 * time.Second
+const linuxServiceRollbackTimeout = 15 * time.Second
 
 type commandRunner func(context.Context, Command) (string, error)
 
@@ -23,7 +23,7 @@ type linuxServiceState struct {
 	active  bool
 }
 
-type linuxInstallSnapshot struct {
+type linuxServiceSnapshot struct {
 	unitExists bool
 	unitData   []byte
 	unitMode   os.FileMode
@@ -35,6 +35,12 @@ type linuxInstallProgress struct {
 	reloadAttempted  bool
 	enableAttempted  bool
 	runtimeAttempted bool
+}
+
+type linuxUninstallProgress struct {
+	disableAttempted bool
+	unitRemoved      bool
+	reloadAttempted  bool
 }
 
 type applyDeps struct {
@@ -60,7 +66,7 @@ func defaultApplyDeps() applyDeps {
 		runCommand:      executeCommand,
 		probeLinuxState: probeLinuxServiceState,
 		newRollbackContext: func(parent context.Context) (context.Context, context.CancelFunc) {
-			return context.WithTimeout(context.WithoutCancel(parent), linuxInstallRollbackTimeout)
+			return context.WithTimeout(context.WithoutCancel(parent), linuxServiceRollbackTimeout)
 		},
 	}
 }
@@ -86,8 +92,13 @@ func applyWithDeps(ctx context.Context, opts Options, deps applyDeps) (Result, e
 	if normalized.Scope == "system" {
 		return Result{Plan: plan}, errors.New("system-scope gateway service changes require manual approval; re-run with --dry-run and install the rendered plan as administrator/root")
 	}
-	if plan.GOOS == "linux" && plan.Action == "install" {
-		return applyLinuxInstall(ctx, normalized, plan, deps)
+	if plan.GOOS == "linux" {
+		switch plan.Action {
+		case "install":
+			return applyLinuxInstall(ctx, normalized, plan, deps)
+		case "uninstall":
+			return applyLinuxUninstall(ctx, normalized, plan, deps)
+		}
 	}
 	return applyGenericPlan(ctx, plan, deps)
 }
@@ -126,7 +137,7 @@ func applyLinuxInstall(ctx context.Context, opts Options, plan Plan, deps applyD
 		return result, fmt.Errorf("linux gateway install rendered %d service definitions, want 1", len(plan.Files))
 	}
 	unit := plan.Files[0]
-	snapshot, outputs, err := snapshotLinuxInstall(ctx, opts, unit.Path, deps)
+	snapshot, outputs, err := snapshotLinuxService(ctx, opts, unit.Path, deps)
 	result.Outputs = append(result.Outputs, outputs...)
 	if err != nil {
 		return result, err
@@ -159,6 +170,77 @@ func applyLinuxInstall(ctx context.Context, opts Options, plan Plan, deps applyD
 	return result, nil
 }
 
+func applyLinuxUninstall(ctx context.Context, opts Options, plan Plan, deps applyDeps) (Result, error) {
+	result := Result{Plan: plan}
+	if len(plan.Deletes) != 1 {
+		return result, fmt.Errorf("linux gateway uninstall rendered %d service definitions to delete, want 1", len(plan.Deletes))
+	}
+	unitPath := plan.Deletes[0]
+	snapshot, outputs, err := snapshotLinuxService(ctx, opts, unitPath, deps)
+	result.Outputs = append(result.Outputs, outputs...)
+	if err != nil {
+		return result, err
+	}
+	if !snapshot.unitExists {
+		// A cleanly absent unit and manager state make uninstall idempotent. The
+		// snapshot probe has already rejected orphaned or ambiguous state.
+		return result, nil
+	}
+
+	progress := linuxUninstallProgress{}
+	for _, command := range plan.Commands {
+		if command.Name == "systemctl" && systemctlVerb(command) == "disable" {
+			progress.disableAttempted = true
+		}
+		if err := runAndRecord(ctx, &result.Outputs, command, deps.runCommand); err != nil {
+			rollbackOutputs, rollbackErr := rollbackLinuxUninstall(ctx, opts, unitPath, snapshot, progress, deps)
+			result.Outputs = append(result.Outputs, rollbackOutputs...)
+			if rollbackErr != nil {
+				return result, errors.Join(err, fmt.Errorf("rollback linux gateway service uninstall: %w", rollbackErr))
+			}
+			return result, err
+		}
+	}
+
+	if err := deps.remove(unitPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		applyErr := fmt.Errorf("delete service definition %s: %w", unitPath, err)
+		rollbackOutputs, rollbackErr := rollbackLinuxUninstall(ctx, opts, unitPath, snapshot, progress, deps)
+		result.Outputs = append(result.Outputs, rollbackOutputs...)
+		if rollbackErr != nil {
+			return result, errors.Join(applyErr, fmt.Errorf("rollback linux gateway service uninstall: %w", rollbackErr))
+		}
+		return result, applyErr
+	}
+	progress.unitRemoved = true
+
+	for _, command := range plan.PostCommands {
+		if command.Name == "systemctl" && systemctlVerb(command) == "daemon-reload" {
+			progress.reloadAttempted = true
+		}
+		if err := runAndRecord(ctx, &result.Outputs, command, deps.runCommand); err != nil {
+			rollbackOutputs, rollbackErr := rollbackLinuxUninstall(ctx, opts, unitPath, snapshot, progress, deps)
+			result.Outputs = append(result.Outputs, rollbackOutputs...)
+			if rollbackErr != nil {
+				return result, errors.Join(err, fmt.Errorf("rollback linux gateway service uninstall: %w", rollbackErr))
+			}
+			return result, err
+		}
+	}
+
+	_, outputs, err = deps.probeLinuxState(ctx, opts, false, deps.runCommand)
+	result.Outputs = append(result.Outputs, outputs...)
+	if err != nil {
+		applyErr := fmt.Errorf("verify linux gateway service uninstall: %w", err)
+		rollbackOutputs, rollbackErr := rollbackLinuxUninstall(ctx, opts, unitPath, snapshot, progress, deps)
+		result.Outputs = append(result.Outputs, rollbackOutputs...)
+		if rollbackErr != nil {
+			return result, errors.Join(applyErr, fmt.Errorf("rollback linux gateway service uninstall: %w", rollbackErr))
+		}
+		return result, applyErr
+	}
+	return result, nil
+}
+
 func (progress *linuxInstallProgress) recordAttempt(command Command) {
 	if command.Name != "systemctl" {
 		return
@@ -173,8 +255,8 @@ func (progress *linuxInstallProgress) recordAttempt(command Command) {
 	}
 }
 
-func snapshotLinuxInstall(ctx context.Context, opts Options, unitPath string, deps applyDeps) (linuxInstallSnapshot, []string, error) {
-	var snapshot linuxInstallSnapshot
+func snapshotLinuxService(ctx context.Context, opts Options, unitPath string, deps applyDeps) (linuxServiceSnapshot, []string, error) {
+	var snapshot linuxServiceSnapshot
 	info, err := deps.lstat(unitPath)
 	switch {
 	case err == nil:
@@ -202,7 +284,7 @@ func snapshotLinuxInstall(ctx context.Context, opts Options, unitPath string, de
 	return snapshot, outputs, nil
 }
 
-func rollbackLinuxInstall(parent context.Context, opts Options, unitPath string, snapshot linuxInstallSnapshot, progress linuxInstallProgress, deps applyDeps) ([]string, error) {
+func rollbackLinuxInstall(parent context.Context, opts Options, unitPath string, snapshot linuxServiceSnapshot, progress linuxInstallProgress, deps applyDeps) ([]string, error) {
 	if !progress.unitWritten {
 		return nil, nil
 	}
@@ -238,17 +320,17 @@ func rollbackLinuxInstall(parent context.Context, opts Options, unitPath string,
 		if progress.reloadAttempted && definitionRemoved {
 			run(Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "daemon-reload")})
 		}
-		return outputs, degradedLinuxInstallRollback(errors.Join(rollbackErrors...))
+		return outputs, degradedLinuxServiceRollback(errors.Join(rollbackErrors...))
 	}
 
 	if err := deps.atomicWriteFile(unitPath, snapshot.unitData, snapshot.unitMode); err != nil {
-		return outputs, degradedLinuxInstallRollback(fmt.Errorf("restore service definition %s: %w", unitPath, err))
+		return outputs, degradedLinuxServiceRollback(fmt.Errorf("restore service definition %s: %w", unitPath, err))
 	}
 	if progress.reloadAttempted {
 		before := len(rollbackErrors)
 		run(Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "daemon-reload")})
 		if len(rollbackErrors) != before {
-			return outputs, degradedLinuxInstallRollback(errors.Join(rollbackErrors...))
+			return outputs, degradedLinuxServiceRollback(errors.Join(rollbackErrors...))
 		}
 	}
 	if progress.enableAttempted {
@@ -265,10 +347,54 @@ func rollbackLinuxInstall(parent context.Context, opts Options, unitPath string,
 			run(serviceCommand("stop"))
 		}
 	}
-	return outputs, degradedLinuxInstallRollback(errors.Join(rollbackErrors...))
+	return outputs, degradedLinuxServiceRollback(errors.Join(rollbackErrors...))
 }
 
-func degradedLinuxInstallRollback(err error) error {
+func rollbackLinuxUninstall(parent context.Context, opts Options, unitPath string, snapshot linuxServiceSnapshot, progress linuxUninstallProgress, deps applyDeps) ([]string, error) {
+	if !progress.disableAttempted && !progress.unitRemoved && !progress.reloadAttempted {
+		return nil, nil
+	}
+	ctx, cancel := deps.newRollbackContext(parent)
+	defer cancel()
+
+	var outputs []string
+	var rollbackErrors []error
+	run := func(command Command) {
+		if err := runAndRecord(ctx, &outputs, command, deps.runCommand); err != nil {
+			rollbackErrors = append(rollbackErrors, err)
+		}
+	}
+	serviceName := opts.Name + ".service"
+	serviceCommand := func(verb string) Command {
+		return Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, verb, serviceName)}
+	}
+
+	if progress.unitRemoved {
+		if err := deps.atomicWriteFile(unitPath, snapshot.unitData, snapshot.unitMode); err != nil {
+			return outputs, degradedLinuxServiceRollback(fmt.Errorf("restore service definition %s: %w", unitPath, err))
+		}
+		before := len(rollbackErrors)
+		run(Command{Name: "systemctl", Args: systemctlArgs(opts.Scope, "daemon-reload")})
+		if len(rollbackErrors) != before {
+			return outputs, degradedLinuxServiceRollback(errors.Join(rollbackErrors...))
+		}
+	}
+	if progress.disableAttempted {
+		if snapshot.service.enabled {
+			run(serviceCommand("enable"))
+		} else {
+			run(serviceCommand("disable"))
+		}
+		if snapshot.service.active {
+			run(serviceCommand("restart"))
+		} else {
+			run(serviceCommand("stop"))
+		}
+	}
+	return outputs, degradedLinuxServiceRollback(errors.Join(rollbackErrors...))
+}
+
+func degradedLinuxServiceRollback(err error) error {
 	if err == nil {
 		return nil
 	}

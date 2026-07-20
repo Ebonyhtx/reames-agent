@@ -1543,7 +1543,7 @@ func (c *Client) listTools(ctx context.Context) ([]tool.Tool, error) {
 		info.TrustedReader = trusted
 		toolInfos = append(toolInfos, info)
 		tools = append(tools, &remoteTool{
-			client: c, name: toolName(c.name, visibleName), rawName: t.Name, desc: t.Description,
+			client: c, name: toolName(c.name, visibleName), rawName: t.Name, visibleName: visibleName, desc: t.Description,
 			schema: schema, outputSchema: t.OutputSchema, declaredReadOnly: declared,
 			readOnly: trusted, readOnlyTrusted: trusted, destructive: destructive,
 		})
@@ -1596,12 +1596,15 @@ func (c *Client) cachedTools() ([]tool.Tool, bool) {
 	return append([]tool.Tool(nil), c.toolAdapters...), true
 }
 
-// toolName builds the model-visible namespaced name "mcp__<server>__<tool>",
-// matching Claude Code. Spaces in either part are normalised to underscores so
-// the name is a clean identifier the model can call.
+// toolName builds Reames Agent's canonical model-visible MCP name. Portable and
+// Claude plugin-qualified references are resolved by tool.Registry without
+// exposing duplicate provider schemas.
 func toolName(server, raw string) string {
 	return ToolPrefix(server) + normalizeName(raw)
 }
+
+// ModelToolName returns the canonical model-visible name for one MCP tool.
+func ModelToolName(server, raw string) string { return toolName(server, raw) }
 
 // ToolPrefix is the model-visible namespace prefix for every tool from server.
 func ToolPrefix(server string) string {
@@ -1671,6 +1674,7 @@ type remoteTool struct {
 	client           *Client
 	name             string // namespaced "mcp__<server>__<tool>"
 	rawName          string // original name for tools/call
+	visibleName      string // raw name after configured prefix stripping
 	desc             string
 	schema           json.RawMessage
 	outputSchema     json.RawMessage
@@ -1691,7 +1695,14 @@ func (t *remoteTool) MCPServerName() string {
 	}
 	return t.client.name
 }
-func (t *remoteTool) MCPRawToolName() string { return t.rawName }
+func (t *remoteTool) MCPRawToolName() string     { return t.rawName }
+func (t *remoteTool) MCPVisibleToolName() string { return t.visibleName }
+func (t *remoteTool) MCPPackageName() string {
+	if t.client == nil {
+		return ""
+	}
+	return t.client.spec.PackagePolicy.Owner
+}
 
 // ReadOnly reflects identity-bound reader authority, not readOnlyHint alone.
 // Product composition roots keep it false until a matching receipt covers the

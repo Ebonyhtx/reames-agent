@@ -218,6 +218,30 @@ type MCPMetadata interface {
 	MCPRawToolName() string
 }
 
+// MCPVisibleMetadata exposes the server-local name after any configured raw
+// prefix stripping. Skill authors commonly use this shorter portable name.
+type MCPVisibleMetadata interface {
+	MCPVisibleToolName() string
+}
+
+// MCPPackageMetadata identifies the installed plugin package that contributed
+// an MCP server. Empty means the server came from ordinary user/workspace config.
+type MCPPackageMetadata interface {
+	MCPPackageName() string
+}
+
+// MCPBinding describes one MCP capability and the exact provider-visible name
+// bound to it in this registry. Bindings are host-only metadata: aliases never
+// enter provider schemas or alter their stable ordering.
+type MCPBinding struct {
+	Package      string
+	Server       string
+	RawName      string
+	VisibleName  string
+	CallableName string
+	CapabilityID string
+}
+
 // SnipHint describes how context maintenance should shorten a stale, oversized
 // result this tool produced. Head/Tail are the line counts kept from each end
 // when the result has many lines; HeadChars/TailChars bound the kept runes when
@@ -394,6 +418,124 @@ func (r *Registry) Get(name string) (Tool, bool) {
 
 	t, ok := r.tools[name]
 	return t, ok
+}
+
+// MCPBindings returns live MCP capability bindings in canonical-name order.
+func (r *Registry) MCPBindings() []MCPBinding {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	out := make([]MCPBinding, 0, len(r.tools))
+	for _, t := range r.tools {
+		if binding, ok := mcpBinding(t); ok {
+			out = append(out, binding)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CallableName < out[j].CallableName })
+	return out
+}
+
+// ResolveCall resolves an exact provider-visible name or a unique portable MCP
+// reference. Exact registered names always win. Ambiguous aliases return their
+// sorted canonical candidates and are never executed.
+func (r *Registry) ResolveCall(name string) (resolved Tool, canonical string, candidates []string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if t, ok := r.tools[name]; ok {
+		return t, name, nil
+	}
+	matches := map[string]Tool{}
+	for canonicalName, t := range r.tools {
+		binding, ok := mcpBinding(t)
+		if !ok {
+			continue
+		}
+		for _, alias := range mcpBindingAliases(binding) {
+			if name == alias {
+				matches[canonicalName] = t
+				break
+			}
+		}
+	}
+	if len(matches) == 1 {
+		for canonicalName, t := range matches {
+			return t, canonicalName, nil
+		}
+	}
+	if len(matches) > 1 {
+		candidates = make([]string, 0, len(matches))
+		for canonicalName := range matches {
+			candidates = append(candidates, canonicalName)
+		}
+		sort.Strings(candidates)
+	}
+	return nil, "", candidates
+}
+
+func mcpBinding(t Tool) (MCPBinding, bool) {
+	meta, ok := t.(MCPMetadata)
+	if !ok {
+		return MCPBinding{}, false
+	}
+	server := strings.TrimSpace(meta.MCPServerName())
+	raw := strings.TrimSpace(meta.MCPRawToolName())
+	if server == "" || raw == "" {
+		return MCPBinding{}, false
+	}
+	visible := raw
+	if v, ok := t.(MCPVisibleMetadata); ok && strings.TrimSpace(v.MCPVisibleToolName()) != "" {
+		visible = strings.TrimSpace(v.MCPVisibleToolName())
+	}
+	pkg := ""
+	if p, ok := t.(MCPPackageMetadata); ok {
+		pkg = strings.TrimSpace(p.MCPPackageName())
+	}
+	return MCPBinding{
+		Package:      pkg,
+		Server:       server,
+		RawName:      raw,
+		VisibleName:  visible,
+		CallableName: t.Name(),
+		CapabilityID: "mcp-tool:" + server + "/" + raw,
+	}, true
+}
+
+func mcpBindingAliases(binding MCPBinding) []string {
+	aliases := []string{
+		binding.RawName,
+		binding.VisibleName,
+		binding.Server + "/" + binding.RawName,
+		binding.Server + "/" + binding.VisibleName,
+		binding.CapabilityID,
+		"mcp-tool:" + binding.Server + "/" + binding.VisibleName,
+		"mcp__" + portableMCPPart(binding.Server) + "__" + portableMCPPart(binding.RawName),
+		"mcp__" + portableMCPPart(binding.Server) + "__" + portableMCPPart(binding.VisibleName),
+	}
+	if binding.Package != "" {
+		prefix := "mcp__plugin_" + portableMCPPart(binding.Package) + "_" + portableMCPPart(binding.Server) + "__"
+		aliases = append(aliases, prefix+portableMCPPart(binding.RawName), prefix+portableMCPPart(binding.VisibleName))
+	}
+	return aliases
+}
+
+// MCPBindingAliases returns accepted portable references for binding. The only
+// provider-visible name remains MCPBinding.CallableName.
+func MCPBindingAliases(binding MCPBinding) []string {
+	return append([]string(nil), mcpBindingAliases(binding)...)
+}
+
+func portableMCPPart(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
 
 // Len returns the number of registered tools.

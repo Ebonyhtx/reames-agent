@@ -16,6 +16,17 @@ type subagentRegistryTool struct {
 	result   string
 }
 
+type subagentMCPTool struct {
+	subagentRegistryTool
+	server  string
+	raw     string
+	visible string
+}
+
+func (t subagentMCPTool) MCPServerName() string      { return t.server }
+func (t subagentMCPTool) MCPRawToolName() string     { return t.raw }
+func (t subagentMCPTool) MCPVisibleToolName() string { return t.visible }
+
 func (t subagentRegistryTool) Name() string { return t.name }
 func (t subagentRegistryTool) Description() string {
 	return "Execute a command in the shell and return combined stdout/stderr."
@@ -100,6 +111,36 @@ func TestSubagentToolRegistryFiltersUnavailableToolsAndWrapsBash(t *testing.T) {
 	}
 	if _, err := bash.Execute(context.Background(), json.RawMessage(`{"command":"sleep 1","run_in_background":true}`)); err == nil || !strings.Contains(err.Error(), "background bash is unavailable in subagents") {
 		t.Fatalf("background bash should return a subagent-specific error, got %v", err)
+	}
+}
+
+func TestSubagentRegistryResolvesUniquePortableMCPAndExplicitPatterns(t *testing.T) {
+	parent := tool.NewRegistry()
+	parent.Add(subagentMCPTool{subagentRegistryTool: subagentRegistryTool{name: "mcp__figma__search", readOnly: true}, server: "figma", raw: "figma_search", visible: "search"})
+	parent.Add(subagentRegistryTool{name: "read_file", readOnly: true})
+	parent.Add(subagentRegistryTool{name: "write_file"})
+
+	portable := FilterRegistry(parent, []string{"search", "mcp-tool:figma/figma_search"})
+	if got := portable.Names(); len(got) != 1 || got[0] != "mcp__figma__search" {
+		t.Fatalf("portable allowed-tools = %v, want one canonical MCP tool", got)
+	}
+
+	pattern := FilterRegistry(parent, []string{"mcp__figma__*"})
+	if got := pattern.Names(); len(got) != 1 || got[0] != "mcp__figma__search" {
+		t.Fatalf("explicit MCP pattern = %v", got)
+	}
+	broad := FilterRegistry(parent, []string{"*"}, "write_file")
+	if _, ok := broad.Get("read_file"); !ok {
+		t.Fatalf("explicit broad pattern omitted reader: %v", broad.Names())
+	}
+	if _, ok := broad.Get("write_file"); ok {
+		t.Fatalf("exclude boundary was bypassed by wildcard: %v", broad.Names())
+	}
+
+	parent.Add(subagentMCPTool{subagentRegistryTool: subagentRegistryTool{name: "mcp__other__search", readOnly: true}, server: "other", raw: "search", visible: "search"})
+	ambiguous := FilterRegistry(parent, []string{"search"})
+	if ambiguous.Len() != 0 {
+		t.Fatalf("ambiguous portable alias granted tools: %v", ambiguous.Names())
 	}
 }
 

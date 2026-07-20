@@ -93,6 +93,15 @@ func TestLoadMergesVerifiedPluginSkillRootsAndMCP(t *testing.T) {
 	if len(cfg.Skills.Paths) == 0 || cfg.Skills.Paths[len(cfg.Skills.Paths)-1] != filepath.Join(root, "skills") {
 		t.Fatalf("skills paths = %#v", cfg.Skills.Paths)
 	}
+	owners := cfg.PluginPackageSkillOwners()
+	canonicalRoot := CanonicalSkillPath(filepath.Join(root, "skills"))
+	if got := owners[canonicalRoot]; len(got) != 1 || got[0] != "superpowers" {
+		t.Fatalf("plugin skill owners = %#v, want superpowers for %q", owners, canonicalRoot)
+	}
+	owners[canonicalRoot][0] = "tampered"
+	if got := cfg.PluginPackageSkillOwners()[canonicalRoot]; len(got) != 1 || got[0] != "superpowers" {
+		t.Fatalf("PluginPackageSkillOwners did not return a defensive copy: %#v", got)
+	}
 	if len(cfg.Plugins) != 1 || cfg.Plugins[0].Name != "helper" || cfg.Plugins[0].PluginPackageOwner() != "superpowers" {
 		t.Fatalf("plugin MCP server = %+v", cfg.Plugins)
 	}

@@ -67,7 +67,15 @@ class HeadlessGatewaySmokeTests(unittest.TestCase):
     def test_report_guard_rejects_null_evidence_section(self) -> None:
         report = {
             section: {"verified": True}
-            for section in ("setup", "doctor", "service_plan", "foreground_run", "cli_run", "feedback")
+            for section in (
+                "setup",
+                "recovery_preflight",
+                "doctor",
+                "service_plan",
+                "foreground_run",
+                "cli_run",
+                "feedback",
+            )
         }
         smoke.assert_report_sections_complete(report)
         report["feedback"] = None

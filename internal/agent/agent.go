@@ -530,8 +530,8 @@ func (a *Agent) PreviewFileDiff(name string, args json.RawMessage) (event.FileDi
 	if a == nil || a.tools == nil {
 		return event.FileDiff{}, false
 	}
-	t, ok := a.tools.Get(name)
-	if !ok {
+	t, _, ambiguous := a.tools.ResolveCall(name)
+	if t == nil || len(ambiguous) > 0 {
 		return event.FileDiff{}, false
 	}
 	ch, ok := tool.PreviewChange(t, args)
@@ -2554,7 +2554,8 @@ func (a *Agent) systemPrompt() string {
 // parallelised.
 func (a *Agent) executeBatch(ctx context.Context, calls []provider.ToolCall) []string {
 	for _, c := range calls {
-		t, ok := a.tools.Get(c.Name)
+		t, _, ambiguous := a.tools.ResolveCall(c.Name)
+		ok := t != nil && len(ambiguous) == 0
 		ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ReadOnly: ok && tool.InvocationReadOnly(t, json.RawMessage(c.Arguments))}
 		ev.FileDiff = event.FileDiff{Diff: c.Diff, Added: c.Added, Removed: c.Removed}
 		if ok && ev.Diff == "" && ev.Added == 0 && ev.Removed == 0 {
@@ -2642,7 +2643,8 @@ func (a *Agent) executeBatch(ctx context.Context, calls []provider.ToolCall) []s
 
 	for i, c := range calls {
 		o := outcomes[i]
-		t, ok := a.tools.Get(c.Name)
+		t, _, ambiguous := a.tools.ResolveCall(c.Name)
+		ok := t != nil && len(ambiguous) == 0
 		a.sink.Emit(event.Event{Kind: event.ToolResult, Tool: event.Tool{
 			ID:         c.ID,
 			Name:       c.Name,
@@ -2661,7 +2663,8 @@ func (a *Agent) executeBatch(ctx context.Context, calls []provider.ToolCall) []s
 		records := make([]memorycompiler.ToolRecord, 0, len(calls))
 		for i, c := range calls {
 			o := outcomes[i]
-			t, ok := a.tools.Get(c.Name)
+			t, _, ambiguous := a.tools.ResolveCall(c.Name)
+			ok := t != nil && len(ambiguous) == 0
 			records = append(records, memorycompiler.ToolRecord{
 				ID:         c.ID,
 				Name:       c.Name,
@@ -2692,8 +2695,8 @@ func (a *Agent) withPreviewFileDiffs(calls []provider.ToolCall) []provider.ToolC
 		if out[i].Diff != "" || out[i].Added != 0 || out[i].Removed != 0 {
 			continue
 		}
-		t, ok := a.tools.Get(out[i].Name)
-		if !ok {
+		t, _, ambiguous := a.tools.ResolveCall(out[i].Name)
+		if t == nil || len(ambiguous) > 0 {
 			continue
 		}
 		if ch, ok := tool.PreviewChange(t, json.RawMessage(out[i].Arguments)); ok {
@@ -2739,8 +2742,8 @@ func parallelisable(r *tool.Registry, call provider.ToolCall) bool {
 	if call.Name == "complete_step" || call.Name == "todo_write" {
 		return false
 	}
-	t, ok := r.Get(call.Name)
-	return ok && tool.InvocationReadOnly(t, json.RawMessage(call.Arguments))
+	t, _, ambiguous := r.ResolveCall(call.Name)
+	return t != nil && len(ambiguous) == 0 && tool.InvocationReadOnly(t, json.RawMessage(call.Arguments))
 }
 
 func runParallel(ctx context.Context, start, end int, run func(int)) int {
@@ -2927,27 +2930,33 @@ type toolOutcome struct {
 // — the caller emits ToolDispatch/ToolResult — so it is safe to invoke from
 // parallel goroutines.
 func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutcome {
-	t, ok := a.tools.Get(call.Name)
-	if !ok {
+	t, canonicalName, ambiguous := a.tools.ResolveCall(call.Name)
+	if len(ambiguous) > 0 {
+		msg := fmt.Sprintf("ambiguous MCP tool reference %q; use one of: %s", call.Name, strings.Join(ambiguous, ", "))
+		return toolOutcome{output: "error: " + msg, errMsg: msg}
+	}
+	if t == nil {
 		return toolOutcome{
 			output: fmt.Sprintf("error: unknown tool %q", call.Name),
 			errMsg: fmt.Sprintf("unknown tool %q", call.Name),
 		}
 	}
+	securityCall := call
+	securityCall.Name = canonicalName
 	callArgs := json.RawMessage(call.Arguments)
 	callReadOnly := tool.InvocationReadOnly(t, callArgs)
 	destructiveMCP := false
 	if destructive, ok := t.(tool.MCPDestructive); ok {
 		destructiveMCP = destructive.MCPDestructiveHint()
 	}
-	if out, blocked := a.repeatedSuccessBlock(call, t); blocked {
+	if out, blocked := a.repeatedSuccessBlock(securityCall, t); blocked {
 		return toolOutcome{
 			output:  out,
 			blocked: true,
 			errMsg:  loopGuardBlockErrMsg,
 		}
 	}
-	if out, blocked := a.staleAnchorEditBlock(call); blocked {
+	if out, blocked := a.staleAnchorEditBlock(securityCall); blocked {
 		return toolOutcome{
 			output:  out,
 			blocked: true,
@@ -2979,10 +2988,10 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 			untrusted = false
 		}
 		declaredReader := callReadOnly || untrusted
-		if decision := a.planModeDecision(call.Name, declaredReader, untrusted, safety, callArgs); decision.Blocked {
+		if decision := a.planModeDecision(canonicalName, declaredReader, untrusted, safety, callArgs); decision.Blocked {
 			trustAllowed := false
 			if decision.ReadOnlyCommandTrust != nil {
-				if allow, outcome, handled := a.checkPlanModeBashReadOnlyTrust(ctx, call, decision.ReadOnlyCommandTrust); handled {
+				if allow, outcome, handled := a.checkPlanModeBashReadOnlyTrust(ctx, securityCall, decision.ReadOnlyCommandTrust); handled {
 					if !allow {
 						return outcome
 					}
@@ -2990,7 +2999,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 					planModeTrustedReadOnly = true
 				}
 			} else if declaredReader && untrusted && safety != planmode.PlanSafetyUnsafe {
-				if allow, outcome, handled := a.checkPlanModeMCPReadOnlyTrust(ctx, call, t); handled {
+				if allow, outcome, handled := a.checkPlanModeMCPReadOnlyTrust(ctx, securityCall, t); handled {
 					if !allow {
 						return outcome
 					}
@@ -3016,7 +3025,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 				blocked: true, errMsg: "blocked: fresh human approval unavailable",
 			}
 		}
-		allow, detail, err := freshGate.CheckFreshHumanApproval(ctx, call.Name, callArgs, "The MCP server marks this tool destructive. Review the exact server, tool, and arguments before allowing this call.")
+		allow, detail, err := freshGate.CheckFreshHumanApproval(ctx, canonicalName, callArgs, "The MCP server marks this tool destructive. Review the exact server, tool, and arguments before allowing this call.")
 		if err != nil {
 			return toolOutcome{output: fmt.Sprintf("blocked: %s (%v)", detail, err), blocked: true, errMsg: fmt.Sprintf("blocked: %v", err)}
 		}
@@ -3040,7 +3049,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 		}
 		if !callReadOnly {
 			if preflight, ok := a.gate.(StructuredApprovalPreflightGate); ok {
-				allow, reason, err := preflight.CheckStructuredApprovalPreflight(ctx, call.Name, callArgs)
+				allow, reason, err := preflight.CheckStructuredApprovalPreflight(ctx, canonicalName, callArgs)
 				if err != nil {
 					return toolOutcome{output: fmt.Sprintf("blocked: %s (%v)", reason, err), blocked: true, errMsg: fmt.Sprintf("blocked: %v", err)}
 				}
@@ -3072,7 +3081,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 					errMsg:  "blocked: structured human approval unavailable",
 				}
 			}
-			allow, reason, err := structuredGate.CheckStructuredApproval(ctx, call.Name, callArgs, plan)
+			allow, reason, err := structuredGate.CheckStructuredApproval(ctx, canonicalName, callArgs, plan)
 			if err != nil {
 				return toolOutcome{
 					output:  fmt.Sprintf("blocked: %s (%v)", reason, err),
@@ -3092,7 +3101,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	}
 	if a.gate != nil && !structuredApprovalHandled && !freshApprovalHandled {
 		readOnly := callReadOnly || planModeTrustedReadOnly
-		allow, reason, err := a.gate.Check(ctx, call.Name, callArgs, readOnly)
+		allow, reason, err := a.gate.Check(ctx, canonicalName, callArgs, readOnly)
 		if err != nil {
 			return toolOutcome{
 				output:  fmt.Sprintf("blocked: %s (%v)", reason, err),
@@ -3123,7 +3132,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	// PreToolUse hooks run after permission is granted but before the call: a
 	// gating hook (exit 2) refuses it, surfaced to the model like a gate denial.
 	if a.hooks != nil {
-		if block, msg := a.hooks.PreToolUse(ctx, call.Name, json.RawMessage(call.Arguments)); block {
+		if block, msg := a.hooks.PreToolUse(ctx, canonicalName, callArgs); block {
 			if msg == "" {
 				msg = "blocked by a PreToolUse hook"
 			}
@@ -3175,7 +3184,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 		}
 	}
 	if mutationAttempt && a.subagentEffects != nil {
-		intent := evidence.ReceiptFromToolCall(call.Name, callArgs, false, callReadOnly)
+		intent := evidence.ReceiptFromToolCall(canonicalName, callArgs, false, callReadOnly)
 		intent.ToolCallID = call.ID
 		intent.MutationAttempt = true
 		intent.Paths = receiptPathsWithPreview(intent.Paths, previewedChanges)
@@ -3228,8 +3237,8 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	toolErr := err
 	var effectErr error
 	if a.evidence != nil {
-		if call.Name == "complete_step" {
-			rec := evidence.ReceiptFromToolCall(call.Name, callArgs, toolErr == nil, callReadOnly)
+		if canonicalName == "complete_step" {
+			rec := evidence.ReceiptFromToolCall(canonicalName, callArgs, toolErr == nil, callReadOnly)
 			rec.ToolCallID = call.ID
 			rec.MutationAttempt = mutationAttempt
 			rec.Paths = receiptPathsWithPreview(rec.Paths, previewedChanges)
@@ -3241,7 +3250,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 				a.advanceCanonicalTodo(rec.Step)
 			}
 		} else {
-			rec := evidence.ReceiptFromToolCall(call.Name, callArgs, toolErr == nil, callReadOnly)
+			rec := evidence.ReceiptFromToolCall(canonicalName, callArgs, toolErr == nil, callReadOnly)
 			rec.ToolCallID = call.ID
 			rec.MutationAttempt = mutationAttempt
 			rec.Paths = receiptPathsWithPreview(rec.Paths, previewedChanges)
@@ -3249,7 +3258,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 			if a.subagentEffects != nil {
 				effectErr = a.subagentEffects.record(rec, a.subagentDepth)
 			}
-			if toolErr == nil && call.Name == "todo_write" {
+			if toolErr == nil && canonicalName == "todo_write" {
 				a.setTodoState(rec.Todos)
 			}
 		}
@@ -3260,7 +3269,7 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 	// PostToolUse hooks observe the result (they can't block); fired whether the
 	// call succeeded or errored, since the tool did run.
 	if a.hooks != nil {
-		a.hooks.PostToolUse(ctx, call.Name, json.RawMessage(call.Arguments), result)
+		a.hooks.PostToolUse(ctx, canonicalName, callArgs, result)
 	}
 	if err != nil {
 		detail := result
@@ -3274,11 +3283,11 @@ func (a *Agent) executeOne(ctx context.Context, call provider.ToolCall) toolOutc
 		body, truncMsg := truncateToolOutput(fmt.Sprintf("error: %v\n%s", err, detail))
 		return toolOutcome{output: body, errMsg: firstLine(err.Error()), truncated: truncMsg != "", truncMsg: truncMsg}
 	}
-	a.recordRepeatSuccess(call, t)
+	a.recordRepeatSuccess(securityCall, t)
 	// A foreground `task` sub-agent just finished — its result is the final answer.
 	// (A backgrounded one returns a "Started…" string and stops later in a job, so
 	// it doesn't fire here.) SubagentStop lets a hook react to delegated work.
-	if a.hooks != nil && call.Name == "task" && !isBackgroundTaskCall(call.Arguments) {
+	if a.hooks != nil && canonicalName == "task" && !isBackgroundTaskCall(call.Arguments) {
 		a.hooks.SubagentStop(ctx, result)
 	}
 	body, truncMsg := truncateToolOutput(result)
@@ -3648,8 +3657,8 @@ func isBackgroundTaskCall(args string) bool {
 // toolReadOnly reports a tool's ReadOnly classification by name (false for an
 // unknown tool), for stamping early ToolDispatch events.
 func (a *Agent) toolReadOnly(name string) bool {
-	t, ok := a.tools.Get(name)
-	return ok && t.ReadOnly()
+	t, _, ambiguous := a.tools.ResolveCall(name)
+	return t != nil && len(ambiguous) == 0 && t.ReadOnly()
 }
 
 // firstLine returns s up to its first newline — a one-line failure summary for

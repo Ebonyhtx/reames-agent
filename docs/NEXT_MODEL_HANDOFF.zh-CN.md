@@ -62,9 +62,12 @@ usage/cache、tool/vision、错误与 runtime 行为。
   final-response obligation 也已关闭：最终文本发送前持久化，平台 ACK 后逐分片提交，最后 ACK 与 inbound
   claims/cursor 原子结算；冷启动直接恢复原答复，不重跑模型，ACK 歧义显示“可能重复”。真实渠道历史
   分页/掉线回环仍未完成。
-- Reasonix 最新 `8bb0e549..2301e248` 已完成代码级采用：数字开头 Provider env、MCP stdio reply queue、
+- Reasonix 最新已代码级审至 `43993f5a`：`8bb0e549..2301e248` 的数字开头 Provider env、MCP stdio reply queue、
   Desktop 全 MCP/插件 lifecycle admission 与 visible/detached Controller reservation、中断轮次 LocalOnly
-  恢复和 WebKit recorder focus 已落地；Remote SSH UX/host-key 保持 P11。Codex 二级战略审至
+  恢复和 WebKit recorder focus 已落地；`2301e248..43993f5a` 又采用插件 Skill package provenance、
+  portable/raw/visible/Claude MCP 名称唯一 canonical 解析、host-only runtime binding，以及 permission/
+  Plan Mode/Hook/Evidence/子代理 canonical identity。Provider schema 不增加 alias；Reames 没有
+  `use_capability` proxy，不冒充 cache-only 子代理代理能力。Remote SSH UX/host-key 保持 P11。Codex 二级战略审至
   `678157ac`：除前批 TUI/command/replay/exec identity 外，新增 paginated name canonical store、动态 cell 重测和
   fresh/fork/resume subagent backfill 请求边界；Claude 无新增。Hermes 审至 `a7d7c02c`，其中 Kimi/Moonshot
   thinking 已窄化采用，custom endpoint/模型刷新已有等价，selector race 与 cold-start/first-token perf 进入
@@ -75,9 +78,28 @@ usage/cache、tool/vision、错误与 runtime 行为。
   `weixin/accounts`；飞书/QQ/微信实时队列满时
   改为可取消背压。P9 Desktop `asyncRuntimeEmitter` 已完成 2048 项上限、瞬态 delta 合并、零语义 drop
   和 race/微基准；原生 WebView frame pacing 仍未由合成 benchmark 证明。
+- 上述渠道/背压批已作为 `ece4749d` 推到 `main`：正式 SHA 的 clean clone、12 个 CLI/Guard 目标、
+  credential-free Gateway smoke、151 项 scripts tests（2 skipped）和全部本地合同通过，CI
+  `29710160714` 全绿。push CodeQL `29710160737` 的 actions/javascript 曾在 GitHub 官方 Actions/API
+  partial outage 中被 503/上传重试耗尽中断；同一 HEAD 后续定时 CodeQL `29722077096` 已成功，恢复了该
+  已提交基线的完整远端安全证据。它不替代当前未提交批次自己的最终 CI/CodeQL。
+- 当前后续批把 Linux user-scope `gateway uninstall` 提升为与 install 同等级的事务：mutation 前快照
+  unit bytes/mode 和 enabled/active，缺失状态幂等，disable/delete/reload 后验证 manager absent；取消、
+  命令或 postcondition 失败会用未取消恢复上下文写回 unit 并恢复原状态，恢复写盘/reload 再失败则
+  degraded/manual-repair。目标包普通与 race 测试已通过；当前宿主启动 WSL 时返回 `0x800705aa`，没有
+  冒充新的真实 systemd smoke。权威边界见
+  `audits/2026-07-20-m6-linux-uninstall-transaction.md`。
+- 同批 headless smoke 已把实际构建二进制的 `gateway recovery-status --json` 纳入纵向预检。报告新增非空
+  `recovery_preflight` section：健康 config 必须为 schema v1、global valid、零 findings；临时损坏 TOML
+  必须 exit 1 并投影 `config.invalid`；随后逐字节恢复原 config，且 app ID 与 synthetic Provider key 不得
+  进入命令输出、报告或持久证据。该 fixture 不读取真实 API key，也不冒充 service-manager 实启。
 - 后续方向已由用户明确：P8 官方 OpenAI Responses/GPT 与 Claude parity 已关闭；P9 Codex-class
   Plugin/Skill/Hook/MCP/headless；P10 第一方 CDP Browser Control；P11 受治理 Remote SSH。现有兼容端点、插件基础或
   `web_search`/`web_fetch`/Playwright MCP 不能冒充这些阶段完成。
+- 2026-07-20 14:21 UTC 的后续 Upstream Watch 又发现 6 个远端移动：Reasonix
+  `43993f5a..77fd1a47`、Codex `678157ac..eceb3eea`、Hermes `a7d7c02c..3d7e1c5f`、MiMo
+  `ec413ade..b7b2092a`、Scream `22a2adaf..ae8cd938` 与 Kimi `df689955..c5b6103b`；Impeccable 检查失败。
+  当前集中批次不自动扩展或推进 lock，下一批只审 lock → latest，优先 Reasonix/Codex，不能把发现报告写成已接受。
 - 当前树只保留 Go/Wails 产品；旧 Hermes/Python/Electron/TUI/plugin/test/package、`site/`、`workers/`
   已删除，public-readiness 会阻止其回归。
 - 内置工具 24 个；CLI 与 Guard 均支持 linux/darwin/windows × amd64/arm64、`CGO_ENABLED=0`。
@@ -89,7 +111,7 @@ usage/cache、tool/vision、错误与 runtime 行为。
 
 | 项目 | reviewed SHA | 决策角色 |
 |---|---|---|
-| DeepSeek Reasonix | `2301e24827bf62c7584f34c4f541c432dd4f6e0b` | 唯一一级主源码上游；DeepSeek 原生与主 runtime |
+| DeepSeek Reasonix | `43993f5a10cd4afa46febf53ed9f7ab2a1ceab5b` | 唯一一级主源码上游；DeepSeek 原生与主 runtime |
 | Hermes | `a7d7c02cb6db071eced4ac82e24f878588619600` | 三级 Gateway/错误/运维机制参考；Provider/selector/perf/provenance 信号已分类 |
 | Codex | `678157acaa819d5510adfe359abb5d0392cfe461` | 二级战略；GPT/Responses、协议、插件、Hook/LSP/CDP/App-Server |
 | MiMo Code | `ec413adeccfcb65ccb63a708bb6136644ea13c79` | 三级设计/Skill 体验参考；checkpointed learning state 候选 |
@@ -265,6 +287,13 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
 - Reasonix 最终 `65fcd465..8bb0e549` 修复设置刷新覆盖活动 Theme Pack。Reames 已由统一
   `themePackRuntime.effectiveStyle/apply` 等价覆盖，本批新增显式回归，证明刷新配置不替换活动包，清包后恢复
   最新配置基底；生产代码无需复制 helper。
+- Reasonix `2301e248..43993f5a` 只有一个 19 文件提交，但属于插件安全边界：Reames 已增加
+  `Registry.ResolveCall/MCPBindings`、live/lazy package metadata、installed skill-root owner、Skill Prepare/Render、
+  canonical Agent security identity 与子代理唯一 allowlist 映射。多 package owner root 保持 unowned；live
+  registry 压过旧 cache，只有当前 Spec fingerprint 命中的 cache 可注入延迟 binding。权威审计和机器账本：
+  `audits/2026-07-20-reasonix-2301e24-43993f5.md`、
+  `docs/upstreams/reviews/reasonix-generation-2301e24-43993f5.json`、
+  `docs/upstreams/reviews/reasonix-current.json`。
 
 ## 6. 本批本地验证
 
@@ -276,14 +305,22 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
 - linux/darwin/windows × amd64/arm64 的 CLI 与 Guard，共 12 个 `CGO_ENABLED=0` 目标；
 - Gateway credential-free clean-node smoke：真实构建二进制、隔离 home、localhost Provider、持久会话与
   feedback 生命周期，`status=passed`；
-- scripts 全发现 151 项测试通过、2 项按平台跳过；deploy/release/docs/public、安装器、Desktop
+- scripts 全发现 155 项测试通过、2 项按平台跳过；deploy/release/docs/public、安装器、Desktop
   artifact/candidate/native/interaction/accessibility/recovery/plugin lifecycle 合同和 Issue reconciliation 全部通过；
-- 最终绑定 SHA 的 `--deep` 为 11/11、`changed_count=0`；
+- 本批上游接受时绑定 SHA 的 `--deep` 为 11/11、`changed_count=0`；后续监测已发现上述 6 个新移动，
+  当前 lock 与机器账本仍只证明已审到的 SHA；
 - 上游：Codex `678157ac`、Hermes `a7d7c02c` 与 MiMo `ec413ade` 逐提交/逐文件审查；最终接受强制使用绑定完整 SHA 的
   `--accept-revision`，未绑定 `--accept`/`--accept-all`/`--update-lock` 已禁用；
 - Kimi：Anthropic provider 定向测试证明官方 host/model family 识别、无签名原生 thinking block 续轮回放、
   lookalike host 拒绝和 Claude signature 边界；provider/config 全组通过；
 - 高风险定向 race 覆盖微信/飞书/QQ/Telegram，以及 Desktop emitter/tab sink；
+- 最新 Reasonix MCP/Plugin Skill 与 Linux uninstall transaction 批的 `tool/plugin/config/skill/agent/control/boot/gatewayservice`
+  普通测试、vet、完整 race 与 focused `-count=20` 已通过；本批工作树 Root/Desktop/Frontend、scripts、
+  credential-free smoke 和 12 个跨目标也已完成，仍需从正式提交建立 clean clone；
+- 首次 clean clone 在 Root/Desktop 并行负载下暴露 `pluginpkg.LoadState` 的 Windows 发布窗口：已有 state 在
+  `MoveFileEx` 替换时曾被一次 `not exist` 误判为空。修复后，外部读取在已存在 state 上与 mutation 共用
+  进程锁和 OS lifecycle lock，持锁的首次 mutation 仍允许缺失；`pluginpkg` 全包 `-count=20`、race
+  `-count=5` 及 Root/Desktop 全量已通过。最终 clean-clone 证据必须来自包含该修复的提交；
 - `BenchmarkAsyncRuntimeEmitterCoalescedBacklog` 在 Windows amd64 独立 5 轮中位数约 `1.3 µs/op`，只证明 Go 队列合并开销，
   不冒充原生 WebView frame pacing。
 

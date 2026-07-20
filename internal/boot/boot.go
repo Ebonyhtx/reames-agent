@@ -413,6 +413,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	skillStore := skill.New(skill.Options{
 		ProjectRoot:      root,
 		CustomPaths:      cfg.SkillCustomPaths(),
+		PluginPaths:      cfg.PluginPackageSkillOwners(),
 		ExcludedPaths:    cfg.SkillExcludedPaths(),
 		DisabledNames:    cfg.DisabledSkillNames(),
 		MaxDepth:         cfg.SkillMaxDepth(),
@@ -422,7 +423,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 	skills := skillStore.List()
 	allSkillStore := skillStore
 	if !cfg.SafeMode() {
-		allSkillStore = skill.New(skill.Options{ProjectRoot: root, CustomPaths: cfg.SkillCustomPaths(), ExcludedPaths: cfg.SkillExcludedPaths(), MaxDepth: cfg.SkillMaxDepth(), Stderr: io.Discard})
+		allSkillStore = skill.New(skill.Options{ProjectRoot: root, CustomPaths: cfg.SkillCustomPaths(), PluginPaths: cfg.PluginPackageSkillOwners(), ExcludedPaths: cfg.SkillExcludedPaths(), MaxDepth: cfg.SkillMaxDepth(), Stderr: io.Discard})
 	}
 	allSkills := allSkillStore.List()
 	if !tokenEconomy && !cfg.SafeMode() {
@@ -634,6 +635,17 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 		}
 	}
 	registerBackground(bgSpecs)
+	// Runtime-only MCP bindings let installed plugin skills keep portable or
+	// Claude-authored tool names without changing provider schemas. Live server
+	// metadata wins; a deferred server may use only a fingerprint-valid cache.
+	skillBindingSpecs := PluginSpecsForRootWithOptions(cfg.Plugins, root, pluginSpecOptions)
+	resolveSkillBindings := func(sk skill.Skill) []tool.MCPBinding {
+		return skillMCPBindings(sk, reg, skillBindingSpecs)
+	}
+	skillStore.ConfigureToolBindings(resolveSkillBindings)
+	if allSkillStore != skillStore {
+		allSkillStore.ConfigureToolBindings(resolveSkillBindings)
+	}
 
 	for _, msg := range demoteMessages {
 		sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: msg})
@@ -1160,7 +1172,7 @@ func Build(ctx context.Context, opts Options) (*control.Controller, error) {
 				slashEntries = append(slashEntries, command.SlashEntry{
 					Name:        sk.Name,
 					Description: sk.Description,
-					Render:      func(args []string) string { return skill.Render(sk, strings.Join(args, " ")) },
+					Render:      func(args []string) string { return skillStore.Render(sk, strings.Join(args, " ")) },
 				})
 			}
 		}
@@ -1979,6 +1991,47 @@ func pluginSpecFromEntryWithOptions(e config.PluginEntry, workspaceRoot string, 
 			Network:       true,
 		},
 	}, workspaceRoot)
+}
+
+func skillMCPBindings(sk skill.Skill, reg *tool.Registry, specs []plugin.Spec) []tool.MCPBinding {
+	owner := strings.TrimSpace(sk.Plugin)
+	if owner == "" {
+		return nil
+	}
+	var out []tool.MCPBinding
+	liveServers := map[string]bool{}
+	if reg != nil {
+		for _, binding := range reg.MCPBindings() {
+			liveServers[binding.Server] = true
+			if binding.Package == owner {
+				out = append(out, binding)
+			}
+		}
+	}
+	for _, spec := range specs {
+		if strings.TrimSpace(spec.PackagePolicy.Owner) != owner || liveServers[spec.Name] {
+			continue
+		}
+		cached, ok := plugin.LoadCachedSchema(spec.Name, plugin.SpecFingerprint(spec))
+		if !ok || cached == nil {
+			continue
+		}
+		for _, cachedTool := range cached.Tools {
+			visible := cachedTool.Name
+			if spec.StripRawPrefix != "" {
+				visible = strings.TrimPrefix(visible, spec.StripRawPrefix)
+			}
+			out = append(out, tool.MCPBinding{
+				Package:      owner,
+				Server:       spec.Name,
+				RawName:      cachedTool.Name,
+				VisibleName:  visible,
+				CallableName: plugin.ModelToolName(spec.Name, visible),
+				CapabilityID: "mcp-tool:" + spec.Name + "/" + cachedTool.Name,
+			})
+		}
+	}
+	return out
 }
 
 func secondsDuration(seconds int) time.Duration {

@@ -32,6 +32,7 @@ import (
 	"reames-agent/internal/processpolicy"
 	"reames-agent/internal/provider"
 	"reames-agent/internal/sandbox"
+	"reames-agent/internal/skill"
 	"reames-agent/internal/tool"
 	"reames-agent/internal/tool/builtin"
 )
@@ -47,6 +48,44 @@ func (bootPluginRuntimeTool) Execute(context.Context, json.RawMessage) (string, 
 	return "", nil
 }
 func (bootPluginRuntimeTool) ReadOnly() bool { return true }
+
+func TestSkillMCPBindingsUseOnlyValidOwnedCacheAndPreferLiveRegistry(t *testing.T) {
+	t.Setenv("REAMES_AGENT_HOME", t.TempDir())
+	spec := plugin.Spec{
+		Name: "figma", StripRawPrefix: "figma_",
+		PackagePolicy: processpolicy.PackagePolicy{Owner: "design-plugin"},
+	}
+	if err := plugin.SaveCachedSchema(spec.Name, plugin.CachedSchema{
+		SpecHash: plugin.SpecFingerprint(spec),
+		Tools:    []plugin.CachedTool{{Name: "figma_get_design_context", Schema: json.RawMessage(`{"type":"object"}`)}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := skillMCPBindings(skill.Skill{Plugin: "design-plugin"}, nil, []plugin.Spec{spec})
+	if len(got) != 1 || got[0].VisibleName != "get_design_context" || got[0].CallableName != plugin.ModelToolName("figma", "get_design_context") || got[0].CapabilityID != "mcp-tool:figma/figma_get_design_context" {
+		t.Fatalf("cached skill bindings = %+v", got)
+	}
+	stale := spec
+	stale.Command = "changed-command"
+	if staleBindings := skillMCPBindings(skill.Skill{Plugin: "design-plugin"}, nil, []plugin.Spec{stale}); len(staleBindings) != 0 {
+		t.Fatalf("fingerprint-stale cache supplied bindings: %+v", staleBindings)
+	}
+	if foreign := skillMCPBindings(skill.Skill{Plugin: "other-plugin"}, nil, []plugin.Spec{spec}); len(foreign) != 0 {
+		t.Fatalf("foreign package inherited bindings: %+v", foreign)
+	}
+
+	reg := tool.NewRegistry()
+	host := plugin.NewHost()
+	t.Cleanup(host.Close)
+	live := plugin.LazyToolset(spec, &plugin.CachedSchema{Tools: []plugin.CachedTool{{Name: "figma_current_tool", Schema: json.RawMessage(`{"type":"object"}`)}}}, host, reg, context.Background(), false)
+	for _, candidate := range live {
+		reg.Add(candidate)
+	}
+	got = skillMCPBindings(skill.Skill{Plugin: "design-plugin"}, reg, []plugin.Spec{spec})
+	if len(got) != 1 || got[0].RawName != "figma_current_tool" || got[0].Package != "design-plugin" {
+		t.Fatalf("live registry did not supersede cached surface or preserve package provenance: %+v", got)
+	}
+}
 
 func TestPluginRuntimeCallbacksHonorDynamicMCPOwnerTakeover(t *testing.T) {
 	reg := tool.NewRegistry()

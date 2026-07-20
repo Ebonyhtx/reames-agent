@@ -89,7 +89,7 @@ func Install(reamesAgentHome string, req InstallRequest) (InstallResult, error) 
 
 	var result InstallResult
 	err = withStateLock(reamesAgentHome, func() error {
-		st, err := LoadState(reamesAgentHome)
+		st, err := loadStateUnlocked(reamesAgentHome)
 		if err != nil {
 			return err
 		}
@@ -776,7 +776,7 @@ func RollbackApproved(reamesAgentHome string, req RollbackRequest) (InstalledPlu
 	var restored InstalledPlugin
 	var warnings []string
 	err := withStateLock(reamesAgentHome, func() error {
-		st, err := LoadState(reamesAgentHome)
+		st, err := loadStateUnlocked(reamesAgentHome)
 		if err != nil {
 			return err
 		}
@@ -845,7 +845,7 @@ func UninstallApproved(reamesAgentHome string, req UninstallRequest) (InstalledP
 	var found bool
 	var warnings []string
 	err := withStateLock(reamesAgentHome, func() error {
-		st, err := LoadState(reamesAgentHome)
+		st, err := loadStateUnlocked(reamesAgentHome)
 		if err != nil {
 			return err
 		}

@@ -75,6 +75,7 @@ class GatewayServiceSmokeResult:
     uninstall_completed: bool = False
     unit_removed: bool = False
     unit_load_state_after_uninstall: str = ""
+    idempotent_uninstall_completed: bool = False
     temp_cleaned: bool = False
     kept_temp: bool = False
     external_blocked: list[str] = field(
@@ -471,6 +472,13 @@ def run_smoke(binary: Path, *, keep_temp: bool = False) -> GatewayServiceSmokeRe
                 "uninstalled unit remains loaded: "
                 f"{result.unit_load_state_after_uninstall!r}"
             )
+        second_uninstall_output = run(
+            gateway_args(binary, "uninstall", service_name), env=env, timeout=30
+        )
+        outputs.append(second_uninstall_output)
+        result.idempotent_uninstall_completed = (
+            "gateway service uninstall completed" in second_uninstall_output
+        )
 
         required = [
             result.config_written,
@@ -501,6 +509,7 @@ def run_smoke(binary: Path, *, keep_temp: bool = False) -> GatewayServiceSmokeRe
             result.token_absent_from_unit,
             result.uninstall_completed,
             result.unit_removed,
+            result.idempotent_uninstall_completed,
         ]
         if not all(required):
             raise RuntimeError(f"gateway service lifecycle contract incomplete: {required}")

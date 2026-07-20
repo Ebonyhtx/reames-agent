@@ -16,10 +16,13 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
+import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +34,8 @@ DEFAULT_MANIFEST = ROOT / "docs" / "upstreams" / "upstreams.json"
 DEFAULT_LOCK = ROOT / "docs" / "upstreams" / "upstreams.lock.json"
 REVIEW_COMPLETE = "complete"
 FULL_GIT_SHA = re.compile(r"[0-9a-fA-F]{40}")
+COMMAND_TIMEOUT_SECONDS = max(1, int(os.environ.get("REAMES_UPSTREAM_COMMAND_TIMEOUT_SECONDS", "20")))
+GITHUB_ATOM_COMMIT = re.compile(r"Grit::Commit/([0-9a-fA-F]{40})")
 
 
 AREA_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
@@ -77,6 +82,7 @@ def run(args: list[str], cwd: Path | None = None, check: bool = True) -> subproc
         errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        timeout=COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -93,6 +99,43 @@ def git_ls_remote(repo: str) -> dict[str, str]:
         else:
             refs.setdefault(ref, sha)
     return refs
+
+
+def github_repo_parts(repo: str) -> tuple[str, str]:
+    parsed = urllib.parse.urlsplit(repo)
+    parts = [part for part in parsed.path.strip("/").split("/") if part]
+    if parsed.scheme != "https" or parsed.netloc.lower() != "github.com" or len(parts) != 2:
+        raise ValueError(f"unsupported GitHub repository URL: {repo}")
+    return parts[0], parts[1].removesuffix(".git")
+
+
+def github_request_text(url: str) -> str:
+    request = urllib.request.Request(url, headers={"User-Agent": "reames-agent-upstream-watch"})
+    with urllib.request.urlopen(request, timeout=COMMAND_TIMEOUT_SECONDS) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def github_atom_branch_head(repo: str, branch: str) -> str:
+    owner, name = github_repo_parts(repo)
+    encoded_branch = urllib.parse.quote(branch, safe="")
+    feed = github_request_text(f"https://github.com/{owner}/{name}/commits/{encoded_branch}.atom")
+    match = GITHUB_ATOM_COMMIT.search(feed)
+    if not match:
+        raise ValueError(f"GitHub Atom feed did not expose a commit for branch {branch}")
+    return match.group(1).lower()
+
+
+def remote_refs(repo: str, branch: str) -> tuple[dict[str, str], str]:
+    try:
+        return git_ls_remote(repo), "git-ls-remote"
+    except (OSError, subprocess.SubprocessError, ValueError) as git_error:
+        try:
+            head = github_atom_branch_head(repo, branch)
+        except (OSError, ValueError) as atom_error:
+            raise OSError(
+                f"git ls-remote failed ({git_error}); GitHub Atom fallback failed ({atom_error})"
+            ) from atom_error
+        return {f"refs/heads/{branch}": head}, "github-atom"
 
 
 def semver_key(tag: str) -> tuple[int, ...]:
@@ -158,8 +201,21 @@ def comparison_evidence(
         return [], {}
     with tempfile.TemporaryDirectory(prefix="reames-upstream-") as tmp:
         work = Path(tmp)
-        fetch_error = fetch_comparison_refs(work, repo, branch, base_sha, head_sha)
+        try:
+            fetch_error = fetch_comparison_refs(work, repo, branch, base_sha, head_sha)
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            fetch_error = str(exc).strip()[:500] or type(exc).__name__
         if fetch_error:
+            try:
+                patch = github_compare_patch(repo, base_sha, head_sha)
+                files = changed_files_from_patch(patch)
+                if files:
+                    fallback = {"warning": fetch_error}
+                    if deep:
+                        fallback["diff"] = patch.strip()[:50000]
+                    return files, fallback if deep else {}
+            except (OSError, ValueError):
+                pass
             unavailable = [{"status": "?", "path": f"<diff unavailable: {fetch_error}>"}]
             return unavailable, {"error": fetch_error} if deep else {}
 
@@ -194,6 +250,39 @@ def comparison_evidence(
         elif "error" not in result:
             result["error"] = f"diff failed: {patch.stderr.strip()[:200]}"
         return files, result
+
+
+def github_compare_patch(repo: str, base_sha: str, head_sha: str) -> str:
+    owner, name = github_repo_parts(repo)
+    patch = github_request_text(f"https://github.com/{owner}/{name}/compare/{base_sha}...{head_sha}.patch")
+    if not patch.strip():
+        raise ValueError("GitHub compare patch was empty")
+    return patch
+
+
+def changed_files_from_patch(patch: str) -> list[dict[str, str]]:
+    files: list[dict[str, str]] = []
+    for block in re.split(r"(?=^diff --git )", patch, flags=re.MULTILINE):
+        first_line = block.partition("\n")[0]
+        if not first_line.startswith("diff --git "):
+            continue
+        try:
+            header = shlex.split(first_line)
+        except ValueError:
+            continue
+        if len(header) < 4:
+            continue
+        path = header[3].removeprefix("b/")
+        status = "M"
+        if "\nnew file mode " in block:
+            status = "A"
+        elif "\ndeleted file mode " in block:
+            status = "D"
+            path = header[2].removeprefix("a/")
+        elif "\nrename from " in block and "\nrename to " in block:
+            status = "R"
+        files.append({"status": status, "path": path})
+    return files
 
 
 def diff_changed_files(repo: str, branch: str, base_sha: str, head_sha: str) -> list[dict[str, str]]:
@@ -346,7 +435,7 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool 
     baseline, reviewed = lock_points(lock_entry)
     coverage = review_coverage(up, baseline, reviewed)
     try:
-        refs = git_ls_remote(up["repo"])
+        refs, transport = remote_refs(up["repo"], branch)
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
         error = str(exc).strip()[:500] or type(exc).__name__
         return {
@@ -369,6 +458,7 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool 
             "recommendation": "Upstream check failed; inspect network, repository, and branch configuration.",
             "deep": None,
             "coverage": coverage,
+            "transport": "unavailable",
         }
 
     branch_ref = f"refs/heads/{branch}"
@@ -419,6 +509,7 @@ def analyze_upstream(up: dict[str, Any], lock_entry: dict[str, Any], deep: bool 
         "deep": deep_info if deep else None,
         "recommendation": rec,
         "coverage": coverage,
+        "transport": transport,
     }
 
 
@@ -523,6 +614,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- Source baseline: `{u['baseline']}`",
             f"- Reviewed: `{u['reviewed']}`",
             f"- Latest: `{u['latest']}`",
+            f"- Remote transport: `{u.get('transport', 'unknown')}`",
             f"- Decision: **{u['decision']}**",
             f"- Risk: **{u['risk']}**",
             f"- Recommendation: {u['recommendation']}",

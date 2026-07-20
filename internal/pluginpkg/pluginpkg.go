@@ -269,11 +269,42 @@ func RuntimeStateDir(reamesAgentHome, name string) string {
 	return filepath.Join(InstallRoot(reamesAgentHome, name), "state")
 }
 
+// LoadState reads the published lifecycle state while holding the same process
+// and OS locks used by mutations. Checking for an existing state before taking
+// the locks preserves the fresh/failed-first-install empty-state contract. Once
+// a state exists, serialising the open with publication prevents a Windows
+// MoveFileEx race from being misread as a temporarily empty plugin registry.
 func LoadState(reamesAgentHome string) (State, error) {
+	statePath := StatePath(reamesAgentHome)
+	if _, err := os.Lstat(statePath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return State{Version: StateSchemaVersion}, nil
+		}
+		return State{}, err
+	}
+
+	stateMu.Lock()
+	defer stateMu.Unlock()
+	unlock, err := acquireStateFileLock(StateLockPath(reamesAgentHome))
+	if err != nil {
+		return State{}, err
+	}
+	defer unlock()
+	return loadStateFile(reamesAgentHome, false)
+}
+
+// loadStateUnlocked is used only while withStateLock already owns the process
+// and OS lifecycle locks. Missing state is valid there for the first mutation
+// that creates a new installation state.
+func loadStateUnlocked(reamesAgentHome string) (State, error) {
+	return loadStateFile(reamesAgentHome, true)
+}
+
+func loadStateFile(reamesAgentHome string, allowMissing bool) (State, error) {
 	var st State
 	b, err := os.ReadFile(StatePath(reamesAgentHome))
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) && allowMissing {
 			return State{Version: StateSchemaVersion}, nil
 		}
 		return State{}, err
@@ -357,7 +388,7 @@ var stateMu sync.Mutex
 
 func withStateMutation(reamesAgentHome string, fn func(State) (State, error)) error {
 	return withStateLock(reamesAgentHome, func() error {
-		st, err := LoadState(reamesAgentHome)
+		st, err := loadStateUnlocked(reamesAgentHome)
 		if err != nil {
 			return err
 		}

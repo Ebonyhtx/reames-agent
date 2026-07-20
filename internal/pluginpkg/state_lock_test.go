@@ -154,6 +154,45 @@ func TestStateLoadDuringSaveNeverSeesTornFile(t *testing.T) {
 	}
 }
 
+func TestLoadStateWaitsForLifecycleLockBeforeReading(t *testing.T) {
+	home := t.TempDir()
+	if err := Upsert(home, InstalledPlugin{Name: "seed", Root: "plugins/seed", Enabled: true}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	unlock, err := acquireStateFileLock(StateLockPath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type result struct {
+		state State
+		err   error
+	}
+	loaded := make(chan result, 1)
+	go func() {
+		state, err := LoadState(home)
+		loaded <- result{state: state, err: err}
+	}()
+	select {
+	case got := <-loaded:
+		unlock()
+		t.Fatalf("LoadState returned while lifecycle lock was held: %+v, %v", got.state, got.err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case got := <-loaded:
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		if len(got.state.Plugins) != 1 || got.state.Plugins[0].Name != "seed" {
+			t.Fatalf("state = %+v, want the single seed plugin", got.state.Plugins)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("LoadState did not resume after lifecycle lock release")
+	}
+}
+
 func TestStateCrossProcessUpsertAndRemoveDoNotLoseUpdates(t *testing.T) {
 	home := t.TempDir()
 	const removeCount = 8

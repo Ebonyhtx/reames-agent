@@ -64,6 +64,7 @@ type Config struct {
 	providerSources          map[string]providerSourceScope
 	shadowedProjectProviders []ProviderEntry
 	expansionEnv             map[string]string
+	pluginPackageSkillOwners map[string][]string
 	safeMode                 bool
 }
 

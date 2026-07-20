@@ -162,13 +162,24 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(result["deep"]["commits"], "abc change")
         comparison.assert_called_once_with(self.upstream["repo"], "main-v2", "b" * 40, "c" * 40, deep=True)
 
+    @mock.patch.object(watch, "github_atom_branch_head", side_effect=OSError("atom unavailable"))
     @mock.patch.object(watch, "git_ls_remote", side_effect=subprocess.CalledProcessError(2, ["git"]))
-    def test_one_failed_upstream_becomes_report_data(self, _ls_remote):
+    def test_one_failed_upstream_becomes_report_data(self, _ls_remote, _atom):
         result = watch.analyze_upstream(self.upstream, self.lock)
 
         self.assertEqual(result["decision"], "check-failed")
         self.assertEqual(result["risk"], "unknown")
         self.assertTrue(result["error"])
+
+    @mock.patch.object(watch, "comparison_evidence", return_value=([], {}))
+    @mock.patch.object(watch, "github_atom_branch_head", return_value="c" * 40)
+    @mock.patch.object(watch, "git_ls_remote", side_effect=subprocess.CalledProcessError(2, ["git"]))
+    def test_atom_feed_recovers_branch_head_when_git_transport_fails(self, _ls_remote, _atom, _comparison):
+        result = watch.analyze_upstream(self.upstream, self.lock)
+
+        self.assertEqual("c" * 40, result["latest"])
+        self.assertEqual("github-atom", result["transport"])
+        self.assertEqual("review-required", result["decision"])
 
     def test_accept_preserves_source_baseline(self):
         accepted = watch.accepted_lock_entry(
@@ -278,6 +289,62 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual("中英提交\n", result.stdout)
         self.assertEqual("utf-8", run.call_args.kwargs["encoding"])
         self.assertEqual("replace", run.call_args.kwargs["errors"])
+        self.assertEqual(watch.COMMAND_TIMEOUT_SECONDS, run.call_args.kwargs["timeout"])
+
+    @mock.patch.object(watch, "github_atom_branch_head", side_effect=OSError("atom unavailable"))
+    @mock.patch.object(
+        watch,
+        "git_ls_remote",
+        side_effect=subprocess.TimeoutExpired(["git", "ls-remote"], timeout=1),
+    )
+    def test_timed_out_upstream_becomes_report_data(self, _ls_remote, _atom):
+        result = watch.analyze_upstream(self.upstream, self.lock)
+
+        self.assertEqual("check-failed", result["decision"])
+        self.assertEqual("unknown", result["risk"])
+        self.assertIn("timed out", result["error"])
+
+    def test_changed_files_from_patch_preserves_basic_statuses(self):
+        patch = """diff --git a/old.txt b/old.txt
+deleted file mode 100644
+--- a/old.txt
++++ /dev/null
+diff --git a/new.txt b/new.txt
+new file mode 100644
+--- /dev/null
++++ b/new.txt
+diff --git a/live.go b/live.go
+--- a/live.go
++++ b/live.go
+"""
+
+        self.assertEqual(
+            [
+                {"status": "D", "path": "old.txt"},
+                {"status": "A", "path": "new.txt"},
+                {"status": "M", "path": "live.go"},
+            ],
+            watch.changed_files_from_patch(patch),
+        )
+
+    @mock.patch.object(
+        watch,
+        "github_compare_patch",
+        return_value="diff --git a/live.go b/live.go\n--- a/live.go\n+++ b/live.go\n",
+    )
+    @mock.patch.object(
+        watch,
+        "fetch_comparison_refs",
+        side_effect=subprocess.TimeoutExpired(["git", "fetch"], timeout=1),
+    )
+    def test_compare_patch_recovers_when_git_fetch_times_out(self, _fetch, _patch):
+        files, deep = watch.comparison_evidence(
+            self.upstream["repo"], "main-v2", "a" * 40, "b" * 40, deep=True
+        )
+
+        self.assertEqual([{"status": "M", "path": "live.go"}], files)
+        self.assertIn("timed out", deep["warning"])
+        self.assertIn("diff --git", deep["diff"])
 
     @mock.patch.object(watch, "fetch_comparison_refs", return_value="")
     @mock.patch.object(watch, "run")
