@@ -83,10 +83,11 @@ usage/cache、tool/vision、错误与 runtime 行为。
   `29710160714` 全绿。push CodeQL `29710160737` 的 actions/javascript 曾在 GitHub 官方 Actions/API
   partial outage 中被 503/上传重试耗尽中断；同一 HEAD 后续定时 CodeQL `29722077096` 已成功，恢复了该
   已提交基线的完整远端安全证据。它不替代当前未提交批次自己的最终 CI/CodeQL。
-- 当前后续批把 Linux user-scope `gateway uninstall` 提升为与 install 同等级的事务：mutation 前快照
+- 提交 `a6d6fd07` 把 Linux user-scope `gateway uninstall` 提升为与 install 同等级的事务：mutation 前快照
   unit bytes/mode 和 enabled/active，缺失状态幂等，disable/delete/reload 后验证 manager absent；取消、
   命令或 postcondition 失败会用未取消恢复上下文写回 unit 并恢复原状态，恢复写盘/reload 再失败则
-  degraded/manual-repair。目标包普通与 race 测试已通过；当前宿主启动 WSL 时返回 `0x800705aa`，没有
+  degraded/manual-repair。该提交的完整 clean clone、CI `29754127548` 8/8 与 CodeQL `29754135162`
+  3/3 已通过；当前宿主启动 WSL 时返回 `0x800705aa`，没有
   冒充新的真实 systemd smoke。权威边界见
   `audits/2026-07-20-m6-linux-uninstall-transaction.md`。
 - 同批 headless smoke 已把实际构建二进制的 `gateway recovery-status --json` 纳入纵向预检。报告新增非空
@@ -316,20 +317,18 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
 - 高风险定向 race 覆盖微信/飞书/QQ/Telegram，以及 Desktop emitter/tab sink；
 - 最新 Reasonix MCP/Plugin Skill 与 Linux uninstall transaction 批的 `tool/plugin/config/skill/agent/control/boot/gatewayservice`
   普通测试、vet、完整 race 与 focused `-count=20` 已通过；本批工作树 Root/Desktop/Frontend、scripts、
-  credential-free smoke 和 12 个跨目标也已完成，仍需从正式提交建立 clean clone；
+  credential-free smoke 和 12 个跨目标也已完成；
 - 首次 clean clone 在 Root/Desktop 并行负载下暴露 `pluginpkg.LoadState` 的 Windows 发布窗口：已有 state 在
   `MoveFileEx` 替换时曾被一次 `not exist` 误判为空。修复后，外部读取在已存在 state 上与 mutation 共用
   进程锁和 OS lifecycle lock，持锁的首次 mutation 仍允许缺失；`pluginpkg` 全包 `-count=20`、race
-  `-count=5` 及 Root/Desktop 全量已通过。最终 clean-clone 证据必须来自包含该修复的提交；
+  `-count=5` 及 Root/Desktop 全量已通过。包含该修复的 `a6d6fd07` clean clone 随后重跑 Root、Desktop、
+  Frontend、baseline、155 项 scripts tests、Gateway smoke 与 12 个跨目标并全部通过；
 - `BenchmarkAsyncRuntimeEmitterCoalescedBacklog` 在 Windows amd64 独立 5 轮中位数约 `1.3 µs/op`，只证明 Go 队列合并开销，
   不冒充原生 WebView frame pacing。
 
-提交前不得把旧 detached SHA、早期 clean clone、插件 smoke 或历史 run ID 当作本批证据。正式提交后必须从该
-提交建立新的 `F:\reames-agent-clean-verify`，重跑 Root、Desktop、Frontend、公开清洁与上游治理门槛；只有
-clean clone 通过且最终 push SHA 的 CI/CodeQL 全绿，才可关闭本批公开交付门槛。
-
-远端完成声明必须使用最终 push 提交对应的 CI/CodeQL。为避免仅写回 run ID 又触发一次 CI，本文件不
-硬编码本批 run ID；新会话使用：
+本批代码交付证据固定为 `a6d6fd07136453041c275e40f4f8e2b4f9bca04f`：clean clone 全量通过，push CI
+`29754127548` 8/8、CodeQL `29754135162` 3/3。本文件所在的证据闭环提交仍必须用自身 HEAD 的远端结果
+验证，不能拿 `a6d6fd07` 的绿色状态替代；新会话统一使用：
 
 ```powershell
 gh run list --commit (git rev-parse HEAD) --limit 20

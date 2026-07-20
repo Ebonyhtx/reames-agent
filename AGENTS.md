@@ -108,7 +108,7 @@ python scripts/check_upstreams.py --out-dir artifacts/upstream-watch
 - 产品方向以 `docs/PROJECT.md` 为准，执行顺序以 `docs/DEVELOPMENT_PLAN.md` 为准。
 - M0、M1、M2、M3、M4 已按路线图门槛关闭；M5 所有可由仓库、clean clone 和 CI/CodeQL 验证的事项已收口。
 - 当前唯一未关闭的 M5 项是需要真实运营主体的公开 registry 密钥仪式、生产 endpoint、实际轮换/compromise drill 与 provenance policy，保持 `external-blocked`。
-- P1 writer worktree 隔离与 P2 Offline Guard/Safe Mode 的仓库内机制已关闭；Guard、CLI/Serve/Desktop/Gateway 共用 `internal/repair`，Safe Mode 为 recovery-only 且不装配 Provider/Controller/Agent。M6 Linux user-scope Gateway install/uninstall 均已进入可故障回滚事务；本批工作树全量、12 个 CLI/Guard 交叉目标和 credential-free smoke 已通过，下一交付门槛是正式提交的 clean clone、远端 CI/CodeQL，以及干净节点和 macOS/Windows service transaction 证据。
+- P1 writer worktree 隔离与 P2 Offline Guard/Safe Mode 的仓库内机制已关闭；Guard、CLI/Serve/Desktop/Gateway 共用 `internal/repair`，Safe Mode 为 recovery-only 且不装配 Provider/Controller/Agent。M6 Linux user-scope Gateway install/uninstall 均已进入可故障回滚事务；代码提交 `a6d6fd07` 的完整 clean clone、12 个 CLI/Guard 交叉目标、credential-free smoke、CI `29754127548` 8/8 与 CodeQL `29754135162` 3/3 已通过。下一交付门槛是干净节点和 macOS/Windows service transaction 证据。
 - Reasonix 一级上游已代码级审至 `43993f5a`；插件 Skill 的 MCP package provenance、唯一 canonical alias 解析、runtime binding 与权限/Hook/Evidence 身份已吸收，Provider schema 不暴露别名。
 - 主分支只保留 Go/Wails 产品；旧 Hermes/Python/Electron/TUI/plugin/test/package 树已删除，参考机制只从 `F:\code-reference` 按治理规则吸收。
 - 已有 24 个内置工具和 6 目标交叉编译；完成声明必须以测试、真实交互或发布证据为准。

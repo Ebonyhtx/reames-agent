@@ -596,7 +596,8 @@ P1/P2/P3/P4/P5 已关闭；P5 的 CI、CodeQL 与三平台 Desktop candidate 全
 durable session/subagent、TUI queue/interject、ACP/headless。不得照搬其 Plan Mode 的 shell/subagent 写入缺口，
 也不接入 xAI auth、telemetry、online memory、managed policy、marketplace 或 Rust 第二 runtime
 → 当前 M6 已交付 Telegram/微信 durable long polling、实时 adapter 背压、outbound final-response obligation，
-  以及 Linux user-scope install/uninstall 故障可回滚事务；下一无需凭据的可靠性工作是继续逐渠道审批/取消/reconnect fixture，
+  以及 Linux user-scope install/uninstall 故障可回滚事务；代码提交 `a6d6fd07` 的 clean clone、CI
+  `29754127548` 8/8 与 CodeQL `29754135162` 3/3 已通过。下一无需凭据的可靠性工作是继续逐渠道审批/取消/reconnect fixture，
   并审计 macOS launchd/Windows Scheduled Task 的同等级事务。并行等待干净 Linux linger-enabled logout/reboot、
   真实 watchdog kill/restart、Gateway recovery-status/system service 实启，以及真实 Provider/IM 回环
 → 仓库战略主线继续 P9 → P10 → P11：Codex-class 插件/headless、第一方 CDP Browser Control、受治理 Remote SSH；

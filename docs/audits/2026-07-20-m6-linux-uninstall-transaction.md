@@ -60,8 +60,9 @@ config。机器报告新增非空 `recovery_preflight` section，并证明 app I
 目标包普通测试、race 与新增测试 `-count=20` 均通过；同一工作树的 Root build/vet/全 `internal/...`、
 Desktop build/vet/全测试、Frontend `test:all`/production build/bundle budget、155 项 scripts tests、
 credential-free Gateway smoke 以及 linux/darwin/windows × amd64/arm64 的 CLI/Guard 12 个
-`CGO_ENABLED=0` 目标也已通过。正式提交的 clean clone 与最终 push SHA 的远端 CI/CodeQL 仍是后续门槛，
-不能由工作树证据替代。
+`CGO_ENABLED=0` 目标也已通过。代码提交 `a6d6fd07136453041c275e40f4f8e2b4f9bca04f` 的完整 clean clone、
+CI `29754127548` 8/8 与 CodeQL `29754135162` 3/3 随后全部通过。本审计所在的证据闭环提交仍以自身
+HEAD 的远端结果为最终门槛，不能复用旧 SHA 的绿色状态。
 
 ## 证据边界
 
