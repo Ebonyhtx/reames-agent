@@ -368,6 +368,10 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
 - linux/darwin/windows × amd64/arm64 的 CLI 与 Guard，共 12 个 `CGO_ENABLED=0` 最终源码目标通过；
 - `git diff --check`。
 
+首个 `7b51ce95` push 的 CodeQL 3/3 与 CI 其余 7/8 job 通过；Windows `Desktop Go` 没有断言失败，
+而是在完整套件 `300.068s` 被 workflow 的 `-timeout 300s` 终止。后续修复将该 job 对齐到本地和
+clean clone 使用的 600 秒正式门槛，不减少测试集合。
+
 以上本地证据不能替代最终 HEAD 的 clean clone 和 CI/CodeQL；交付时必须核对同一 SHA，不得引用
 `84ea60fe` 或更早提交的绿色结果冒充本批证据。
 

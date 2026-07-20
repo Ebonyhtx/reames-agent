@@ -70,6 +70,11 @@ Gateway 缺口：远端审批/问答身份、`/stop` 取消事务、四渠道连
 交叉目标。仍需以正式 commit 后的 clean clone 和该最终 HEAD 的远端 CI/CodeQL 闭环；本地 fixture
 不替代真实 IM 证据。
 
+首个 push 的 CI 其余七个 job 全部通过，但 Windows `Desktop Go` 在无断言失败时被 workflow 的
+`go test` 全局 300 秒闸门终止；日志显示总套件到 `300.068s`，本地与 clean clone 同套分别约
+174–194 秒。修复只把该 job 对齐到项目正式 600 秒门槛，不跳过测试或放宽任何断言；最终完成声明
+仍以修复 HEAD 自身的 CI/CodeQL 为准。
+
 ## 未关闭边界
 
 - 真实四渠道文本、审批、取消、掉线、重连、平台保留窗口和进程/节点重启；

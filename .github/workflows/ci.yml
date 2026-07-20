@@ -36,7 +36,7 @@ jobs:
           cache-dependency-path: desktop/go.sum
       - name: Test desktop module
         working-directory: desktop
-        run: go test . -count=1 -timeout 300s
+        run: go test . -count=1 -timeout 600s
 
   desktop-frontend:
     name: Desktop frontend
