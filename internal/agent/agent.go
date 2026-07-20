@@ -348,6 +348,10 @@ type Agent struct {
 	steerMu       sync.Mutex
 	steerQueue    []string
 	steerConsumed bool
+	// steerRunActive is true only while Run can consume or flush queued guidance.
+	// A steer that arrives after the exit flush must be rejected so the caller can
+	// deliver it as a normal turn instead of parking it in an invisible queue.
+	steerRunActive bool
 
 	// evidence is a per-user-turn ledger of host-observed tool receipts. It lets
 	// complete_step validate that cited evidence happened before the claim.
@@ -845,21 +849,47 @@ func midTurnSteerMessage(text string) string {
 // user text; it does not trim spaces so the history replay matches the live
 // Steer event rendering character-for-character.
 func SteerText(content string) (string, bool) {
-	after, found := strings.CutPrefix(content, MidTurnSteerPrefix)
-	if !found {
-		return "", false
+	s := content
+	for {
+		if after, found := strings.CutPrefix(s, MidTurnSteerPrefix); found {
+			// Strip only the separator inserted by midTurnSteerMessage. Preserve
+			// the user's own leading and trailing whitespace for faithful replay.
+			return strings.TrimPrefix(after, "\n"), true
+		}
+		next, ok := trimLeadingSteerWrapper(s)
+		if !ok {
+			return "", false
+		}
+		s = next
 	}
-	// Strip only the "\n" separator, preserving the user's original text.
-	after = strings.TrimPrefix(after, "\n")
-	return after, true
 }
 
-// Steer queues a message for mid-turn injection.
-func (a *Agent) Steer(text string) {
+// trimLeadingSteerWrapper removes one transient language preference block that
+// withTurnPreferences may place ahead of the steer marker.
+func trimLeadingSteerWrapper(content string) (string, bool) {
+	s := strings.TrimLeft(content, " \t\r\n")
+	for _, tag := range []string{"response-language", "reasoning-language"} {
+		if !strings.HasPrefix(s, "<"+tag+">") {
+			continue
+		}
+		if rest, ok := trimLeadingTransientBlock(s, tag); ok {
+			return rest, true
+		}
+	}
+	return content, false
+}
+
+// Steer queues a message for mid-turn injection and reports whether the active
+// turn accepted it. On false the caller must deliver it another way.
+func (a *Agent) Steer(text string) bool {
 	a.steerMu.Lock()
 	defer a.steerMu.Unlock()
+	if !a.steerRunActive {
+		return false
+	}
 	a.steerQueue = append(a.steerQueue, text)
 	a.steerConsumed = false
+	return true
 }
 
 // SteerConsumed returns true when the steer queue became empty after the last consume.
@@ -881,11 +911,22 @@ func (a *Agent) consumeSteer() (string, bool) {
 	return t, true
 }
 
-func (a *Agent) clearSteerQueue() {
+// flushSteerQueue closes steer intake and persists guidance that arrived after
+// the loop's final consume boundary. Those messages remain visible in history
+// and reach the model on the next turn instead of being silently discarded.
+func (a *Agent) flushSteerQueue() {
 	a.steerMu.Lock()
-	defer a.steerMu.Unlock()
+	pending := a.steerQueue
 	a.steerQueue = nil
-	a.steerConsumed = false
+	if len(pending) > 0 {
+		a.steerConsumed = true
+	}
+	a.steerRunActive = false
+	a.steerMu.Unlock()
+	for _, text := range pending {
+		a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(midTurnSteerMessage(text))})
+		a.sink.Emit(event.Event{Kind: event.Steer, Text: text})
+	}
 }
 
 func (a *Agent) steerQueueLen() int {
@@ -1166,9 +1207,10 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 		a.workspaceLease.BeginRun()
 		defer a.workspaceLease.EndRun()
 	}
-	defer a.clearSteerQueue()
+	defer a.flushSteerQueue()
 	a.steerMu.Lock()
 	a.steerConsumed = false
+	a.steerRunActive = true
 	a.steerMu.Unlock()
 	if a.evidence != nil {
 		a.evidence.Rotate()

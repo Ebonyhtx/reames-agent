@@ -119,12 +119,87 @@ type Policy struct {
 // New builds a Policy from config string slices and a mode string ("ask" by
 // default). Malformed rule strings are dropped.
 func New(mode string, allow, ask, deny []string) Policy {
+	safeAllow, _ := FilterUnsafePersistentAllowRules(allow)
 	return Policy{
 		Mode:  ParseDecision(mode),
-		Allow: parseRules(allow),
+		Allow: parseRules(safeAllow),
 		Ask:   parseRules(ask),
 		Deny:  parseRules(deny),
 	}
+}
+
+var unsafeBashAllowPrefixes = map[string]bool{
+	"/bin/bash": true, "/bin/bash\x00-c": true, "/bin/bash\x00-lc": true,
+	"/bin/sh": true, "/bin/sh\x00-c": true, "/bin/sh\x00-lc": true,
+	"/bin/zsh": true, "/bin/zsh\x00-c": true, "/bin/zsh\x00-lc": true,
+	"rscript": true, "bash": true, "bash\x00-c": true, "bash\x00-lc": true,
+	"bun": true, "bun\x00-e": true, "bun\x00-run": true,
+	"cmd": true, "cmd\x00/c": true, "cmd\x00/k": true,
+	"cmd.exe": true, "cmd.exe\x00/c": true, "cmd.exe\x00/k": true,
+	"dash": true, "dash\x00-c": true, "deno": true, "deno\x00eval": true,
+	"env": true, "fish": true, "fish\x00-c": true, "git": true,
+	"julia": true, "julia\x00-e": true, "ksh": true, "ksh\x00-c": true,
+	"lua": true, "lua\x00-e": true, "node": true, "node\x00-e": true,
+	"nodejs": true, "nodejs\x00-e": true, "npm\x00run": true,
+	"osascript": true, "perl": true, "perl\x00-e": true,
+	"php": true, "php\x00-r": true, "pnpm\x00run": true,
+	"powershell": true, "powershell\x00-command": true, "powershell\x00-encodedcommand": true, "powershell\x00-file": true, "powershell\x00-c": true,
+	"powershell.exe": true, "powershell.exe\x00-command": true, "powershell.exe\x00-encodedcommand": true, "powershell.exe\x00-file": true, "powershell.exe\x00-c": true,
+	"pwsh": true, "pwsh\x00-command": true, "pwsh\x00-encodedcommand": true, "pwsh\x00-file": true, "pwsh\x00-c": true, "pwsh\x00-e": true, "pwsh\x00-ec": true, "pwsh\x00-f": true,
+	"py": true, "py\x00-3": true, "pypy": true, "pypy3": true,
+	"python": true, "python\x00-": true, "python\x00-c": true,
+	"python3": true, "python3\x00-": true, "python3\x00-c": true,
+	"pythonw": true, "pyw": true, "rm": true,
+	"ruby": true, "ruby\x00-e": true, "sh": true, "sh\x00-c": true, "sh\x00-lc": true,
+	"sudo": true, "yarn\x00run": true, "zsh": true, "zsh\x00-c": true, "zsh\x00-lc": true,
+}
+
+// UnsafePersistentAllowRule reports whether rule grants a broad shell,
+// interpreter, privilege wrapper, or package-script prefix. Exact commands are
+// not rejected; the unsafe shape is the reusable wildcard grant.
+func UnsafePersistentAllowRule(rule string) bool {
+	parsed, ok := ParseRule(rule)
+	if !ok || canonicalRuleTool(parsed.Tool) != "bash" || parsed.Literal {
+		return false
+	}
+	if strings.TrimSpace(parsed.Subject) == "" {
+		return true
+	}
+	prefix := strings.TrimSpace(parsed.Subject)
+	switch {
+	case strings.HasSuffix(prefix, ":*"):
+		prefix = strings.TrimSpace(strings.TrimSuffix(prefix, ":*"))
+	case strings.HasSuffix(prefix, " *"):
+		prefix = strings.TrimSpace(strings.TrimSuffix(prefix, " *"))
+	default:
+		return false
+	}
+	fields, malformed := shellparse.StaticFields(prefix)
+	if malformed != "" || len(fields) == 0 {
+		return false
+	}
+	for i := range fields {
+		fields[i] = strings.ToLower(fields[i])
+	}
+	if strings.EqualFold(fields[0], "rm") {
+		return true
+	}
+	return unsafeBashAllowPrefixes[strings.Join(fields, "\x00")]
+}
+
+// FilterUnsafePersistentAllowRules removes unsafe reusable Bash grants while
+// preserving order and exact commands. It is used both at config load and at
+// the runtime gate so old files fail closed even before they are rewritten.
+func FilterUnsafePersistentAllowRules(rules []string) (safe, removed []string) {
+	safe = make([]string, 0, len(rules))
+	for _, rule := range rules {
+		if UnsafePersistentAllowRule(rule) {
+			removed = append(removed, rule)
+			continue
+		}
+		safe = append(safe, rule)
+	}
+	return safe, removed
 }
 
 // Decide evaluates a tool call. readOnly is the tool's own classification; args
@@ -501,7 +576,10 @@ func RememberRuleForScope(toolName, subject string) string {
 	subject = strings.TrimSpace(subject)
 	if subject != "" && toolName == "bash" {
 		if pattern := BashCommandPrefix(subject); pattern != "" {
-			return "Bash(" + pattern + ")"
+			rule := "Bash(" + pattern + ")"
+			if !UnsafePersistentAllowRule(rule) {
+				return rule
+			}
 		}
 		return "Bash(" + subject + ")"
 	}
@@ -525,7 +603,10 @@ func SessionGrantRuleForScope(toolName, subject string) string {
 	subject = strings.TrimSpace(subject)
 	if toolName == "bash" && subject != "" {
 		if pattern := BashCommandPrefix(subject); pattern != "" {
-			return "Bash(" + pattern + ")"
+			rule := "Bash(" + pattern + ")"
+			if !UnsafePersistentAllowRule(rule) {
+				return rule
+			}
 		}
 		return "Bash(" + subject + ")"
 	}

@@ -56,7 +56,7 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
 - 24 个内置工具，具备权限、沙箱、检查点、记忆、技能、插件、定时任务、LSP 和证据账本等模块。
 - M3 Desktop 日用化已关闭：关闭态/次级界面与简中/繁中词典按需拆包并受真实产物硬预算保护，模态隔离、Transcript 语义和严格 Windows UIA 可访问性 smoke 已交付。commit `68218d6` 的 CI `29262192635` 8/8、CodeQL `29262193090` 3/3；candidate `29262541971` 的 Linux/macOS installed 与 Windows 全链路均通过。Windows native cold/warm 为 7.031/2.016 秒；interaction 完成 19 请求、五类失败恢复、停止和同 project/workspace/session 恢复，跳转前 marker present 但 offscreen、assistant 不在 UIA，严格 InvokePattern 定位问题 1 后 user/assistant 均 present + onscreen，`recovery_verified=true`；strict accessibility 随后实际执行并通过。三份 smoke 的 `boundary_changes=[]` 且无 errors。自动证据不等于 NVDA/Narrator 实际听感或 Windows High Contrast 人工验证。
 - M6 的无界面配置与 credential-free 运维预检已形成纵向链路：`gateway setup` 支持飞书/Lark、QQ、微信和 Telegram，secret 只引用大写环境变量名，访问控制 fail closed，dry-run 零落盘，更新原子、幂等并保留其他连接、route、access 和 session mappings；同一隔离 home 的真实 CLI 二进制覆盖 setup → `gateway recovery-status` 健康 schema/零 findings 与损坏 TOML `config.invalid` fail-closed → doctor → service-plan、localhost Provider 一次性 `run`/会话落盘、反馈脱敏/去重/维护草稿，预检后精确恢复配置且证据不加载凭据值。WSL2 真实 systemd user manager 进一步通过带空格 binary/home/workspace 的 install、同名重装生效、status、restart、stop/start、journal、loopback webhook readiness 与 uninstall `LoadState=not-found`，但 `Linger=no`，不替代 logout/reboot、干净云节点、真实 Provider 或真实 IM 回环证据。
-- M6 本地恢复基线已补齐三条确定性链路：Linux user-scope `gateway install` 会先执行 `systemd-analyze --user verify`，并对旧 unit bytes/mode、enabled/active 状态做快照和分层回滚；`gateway uninstall` 同样先快照、在 disable/delete/reload 后验证 manager 已缺失，取消或故障时用独立恢复上下文写回定义并恢复原状态，恢复定义/reload 再失败则 fail closed 要求人工修复；`backup create/verify/restore` 支持 home/state 分根、已知凭据排除、内嵌哈希自洽验证和仅恢复到不存在的新目标；CLI updater 会实际执行候选与安装后 `version` 健康检查、保留 `<executable>.previous`，并支持互斥锁保护的 `upgrade --rollback`。代码提交 `a6d6fd07` 的完整 clean clone、CI `29754127548` 8/8 与 CodeQL `29754135162` 3/3 已通过。这些证据不等于跨根崩溃原子性、Windows 目标目录 ACL 保护、macOS/Windows Gateway 事务，也不替代干净云节点或公开签名 release 的实际演练。
+- M6 本地恢复基线已补齐 Linux、macOS 与 Windows 三套 user-scope service transaction：systemd 快照 unit bytes/mode 与 enabled/active，launchd 快照 plist bytes/mode 与 loaded/running，Scheduled Task 通过 PowerShell `ScheduledTasks` 的结构化 JSON 快照 exists/enabled/running 并保存精确 Export XML，不解析本地化 `schtasks` 文本。三者在前向命令、取消、写删或 postcondition 失败时使用不继承取消的恢复上下文，并在恢复定义/manager 失败时 fail closed 要求人工修复。macOS 当前只有 deterministic fault injection；Windows 另有当前宿主只读 absent 探针，但没有真实任务 mutation/lifecycle 证据。`backup create/verify/restore` 和 updater rollback 边界不变。上一提交 `a6d6fd07` 的 clean clone、CI/CodeQL 只证明 Linux 基线，不替代当前未提交批次、干净节点或公开签名 release。
 - M6 Gateway core 已吸收 Hermes durable channel recovery 信号：CLI/Desktop 共用 Reames home 下的 0600 原子 schema-v2 投递账本，消息先 claim 再进入访问控制/排队/Agent；重复消息跨重启抑制，遗留 processing 冷启动转为可重试。游标按远端频道和单调序列只推进连续成功前缀；collect/debounce 合并、queue-cap summarize/drop、interrupt 与 `/stop|/new|/reset|/use|/attach` 均保留或显式结算全部 constituent claims。成功 turn 的最终文本先保存为最多 1 MiB/512 分片、身份绑定的 outbound obligation；发送每个分片前持久化 `attempting`，ACK 后推进 `next_chunk`，最后 ACK 与全部 inbound claims/cursor 在一次原子写中结算。重启直接恢复原答复而不重跑模型；ACK 与本地 commit 之间的歧义会显示“可能重复”，纯 pending 不误报。同一路径 OS 文件锁阻止 CLI Gateway 与 Desktop bot 双 writer；4 MiB 总账本、损坏/超限/身份漂移/写失败均 fail closed，日志、status、metrics 和 Provider prompt 不含答复正文。Telegram 已成为正式 long-poll Adapter：`getMe`、deadline、退避、Stop、`update_id` durable identity、原生 reply 和最终 commit 后 offset 推进均有 localhost 故障注入。飞书/QQ/微信仍缺真实历史分页 `RecoveryAdapter`，Telegram 也尚无独立历史 API 补扫；完全离线补消息与真实 IM 掉线回环继续保持 adapter/external-blocked。详见 `audits/2026-07-19-m6-durable-channel-recovery.md`、`audits/2026-07-19-m6-telegram-durable-polling.md` 与 `audits/2026-07-20-m6-outbound-final-response-obligation.md`。
 - M4 Agent 可靠性已按路线图门槛关闭：所有 Goal completion 统一通过 Todo/project checks，v2 sidecar 持久化 Goal/Plan/Todo、最小 root 项目检查引用和 child journal cursor；委派树共享预算，可写 child receipt/checkpoint 归并给祖先，持久 subagent 在 Provider/tool/compaction 边界保存 transcript 并以 `interrupted` + `continue_from` 显式恢复。Previewable built-in writer/checkpoint restore 使用 `os.Root` resolve-beneath I/O；每个 visible/synthetic turn 都有独立恢复 checkpoint，in-flight commit anchor 让冷启动在“完整提交则保留、否则 workspace/runtime/transcript 一起回滚”之间 fail closed。Conversation/RewindBoth 另有 `prepared -> resources_applied` journal，checkpoint 只在资源提交后退休。`AtomicWriteFile` 已移除 Windows 原地复制降级，跨设备 rename fail closed，并补 write-through/父目录同步。该完成声明严格限于可预览文件 writer 与会话本地资源：完整 evidence/预算仍非跨进程账本，child-only bash 不是 durable root proof，shell/MCP/external API 和后台 opaque side effect 不具备逐文件门禁或 exactly-once，ACL/xattr/硬链接身份也不恢复。
 - M5 插件生命周期信任机制已关闭所有可由仓库、clean clone 和 CI/CodeQL 验证的事项：原生 schema v1、精确权限、不可变 generation、默认禁用、`preview/planId/apply`、跨进程状态锁和 `os.Root` 受管路径已有故障注入与完整生命周期测试。Desktop、CLI、Bot、Serve/event wire 和 ACP 共用 fresh-human 结构化审批；generation 变化或禁用会原子阻止新 work 起跑，串行 rebuild，并撤销旧 MCP/Hook/Skill runtime。package-owned Hook/MCP 使用最小环境、独立 state/tmp、严格 OS sandbox、敏感读取阻断和进程树回收；真实 `obra/superpowers@d72560e462a74e10d161b7f993d5fc3282bfa1e2` 已完成 Windows sandbox E2E。commit `13016c6` 加入无默认 endpoint/TOFU 的官方 `go-tuf/v2` registry client，绑定 full commit、canonical tree digest、manifest 权限和 provenance assertion。commit `9295f8b` 又加入显式带外 root 的只读生产策略审计，验证连续 root 旧/新双阈值、角色 key 隔离、到期窗口和完整 metadata/index/attestation 字节，并在成功报告中保留人员仪式、HSM、endpoint/monitor 与 DSSE/SLSA policy 等 `externalRequired`。该提交的 clean clone、本地全量门禁、普通 CI `29510215514` 8/8 与 CodeQL `29510215449` 3/3 全绿，Node.js 24 action majors 的远端日志不再出现 Node.js 20 弃用告警。M5 唯一未关闭项保持 `external-blocked`：直接 GitHub 未签名，以及真实运营公开 registry 的生产 endpoint、人员/HSM 密钥仪式、实际轮换/compromise drill 和独立 DSSE/SLSA policy verifier。package process 允许网络、跨平台硬 CPU/RSS 配额不统一仍是明确安全限制，但不以 mock 冒充生产 registry 证据，也不重新打开已验收的 M5 仓库内合同。
@@ -102,27 +102,34 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
   升级、按会话审批和 dead-driver 重连进入 P10。它们均未被包装成 P8 已完成能力。
 - 参考项目最新增量已按锁文件人工接受：Kimi 的 Auto/YOLO 文案准确性已转化为三语权限契约测试；Hermes 的 session-state 单一投影、profile prewarm 和 best-effort stream fence、Codex 的集中 MCP runtime、MiMo 的 CLI-only 演示脚本路径均只作为架构回归信号，不引入 Python/Electron/Rust 或第二套 runtime。Reasonix 新增的多套生产 release workflow 不继承；Reames 反而增加全 workflow 发布写权限/动作棘轮，继续只允许无 secrets、`contents: read` 的候选构建。外部风险仍是公开 registry 运营、干净云节点 logout/reboot、真实 IM 回环和生产签名链。
 - Hermes `7a43ab04..34e66a0d` 与 Impeccable `8967edc9..e4ab5e24` 已完成代码级增量分类：采用 Windows PowerShell 5.1 的 `install.ps1` 纯 ASCII 字节棘轮，并修复 Reames 全局凭据 `.env` 的 UTF-16 安全读取/成功写入后 UTF-8 规范化；UTF-32、损坏编码、嵌入 NUL 与截断 UTF-16 均拒绝写回且保留原字节。Hermes 的空白值 quoting、`key_env` 与动态 home 在 Reames 已有等价边界；Python completed-future timeout/OOM spin 对 Go context MCP 非同构；增量 Markdown lexer 是 `ReactMarkdown` 长回复的真实性能候选，但必须先证明 remark/rehype/GFM/math/Mermaid 的 AST/DOM 等价，不能直接复制；Impeccable inset-shadow stripe 检查仅作为未来非状态装饰的设计信号，其窄化到单规则与规范文件集合的豁免、未知策略参数 fail closed 和生成副本同步则作为治理信号。详见 `audits/2026-07-19-upstream-hermes-impeccable-delta.md`。
-- 最新一级上游已代码级审至 Reasonix `43993f5a`：在 LongCat/Linux WebKit/安全会话导出和 Theme Pack
+- 最新一级上游已代码级审至 Reasonix `77fd1a47`：在 LongCat/Linux WebKit/安全会话导出和 Theme Pack
   等价回归基础上，本批继续采用数字开头 Provider env、MCP stdio server request/有界 reply queue、全部
   Desktop MCP/插件 lifecycle admission 与 visible/detached Controller reservation、graceful interrupted-turn
   recovery 和 WebKit shortcut recorder focus；最新插件 Skill 修复又补齐 package-owned MCP provenance、
   raw/visible/portable/Claude-style 名称到唯一 canonical tool 的解析、host-only runtime binding、稳定 Provider
   schema，以及 permission/Plan Mode/Hook/Evidence/子代理统一 canonical identity。Reames 保留 identity-bound
   trust 与冷崩溃 checkpoint rollback，且不虚构当前不存在的 `use_capability` proxy；
-  Remote SSH UX/host-key 两项继续进入 P11。Codex 二级战略审至 `678157ac`，Claude 仍为 `015170d3`；
+  后续又采用 ACP active-turn steering、workspace virtual stable key、cc-switch app identity 与显式 Goal；
+  automatic Plan 继续保持 default-off 显式 opt-in，Remote SSH UX/host-key 进入 P11。Codex 二级战略审至 `eceb3eea`，
+  危险宽泛 exec allow 已在 Reames permission runtime fail closed；Claude 仍为 `015170d3`；
   Hermes `e361c5e2` 的 Kimi adaptive thinking 信号已补齐无签名 provider-native block 的窄回放，cron
   profile/Windows `simple-git` 路径仍只按机制层分类；Codex raw replay retention、finalized Markdown cache
   和 diff cloning 作为 P9 合同/性能信号；最新三提交又固定 paginated explicit name、动态 cell 重测及
-  fresh/fork/resume subagent backfill/request 复用边界。Hermes 最终审至 `a7d7c02c`：custom endpoint/目标
+  fresh/fork/resume subagent backfill/request 复用边界。Hermes 后续最终审至 `456f18b1`：custom endpoint/目标
   Provider 刷新已有等价，selector race 进入回归合同，cold-start/first-token/唯一调试端口/warm-cache 方法进入
-  P9/P10 benchmark；全零 revision fallback 因削弱 provenance 被拒绝。MiMo `ec413ade` 的 checkpointed
-  learning Skill 只作未来通用 Skill 状态机制候选；Grok Build `ba76b0a6` 不改变层级。完整结论见
+  P9/P10 benchmark；其 credential/transcript/sandbox、stream EOF 与 delivery-attempt 信号也已有等价或更强边界，
+  全零 revision fallback 因削弱 provenance 被拒绝。MiMo 已审至 `b7b2092a`，路径规范化/空消息已有等价，
+  GPT reasoning-only final 因违反可见答复合同拒绝；Scream `ae8cd938` 的国内检索/TUI 信号进入 M7/P9，Kimi
+  `c2d7bebd` unified transcript 与 live child permission propagation 进入 P9，Impeccable `b906b414` 的 source
+  lock/event identity/current findings 进入 P10/Hook 治理。Grok Build `ba76b0a6` 不改变层级。完整结论见
   `audits/2026-07-20-reasonix-8bb0e54-2301e24.md`、
-  `audits/2026-07-20-reasonix-2301e24-43993f5.md` 与
+  `audits/2026-07-20-reasonix-2301e24-43993f5.md`、
+  `audits/2026-07-21-reasonix-43993f5-77fd1a4-codex-delta.md` 与
   `audits/2026-07-20-upstream-strategic-reference-delta.md`、
   `audits/2026-07-20-codex-hermes-late-delta.md` 与
   `audits/2026-07-20-codex-hermes-final-delta.md`、
-  `audits/2026-07-20-hermes-mimo-final-delta.md`。
+  `audits/2026-07-20-hermes-mimo-final-delta.md` 与
+  `audits/2026-07-21-upstream-hermes-mimo-scream-kimi-impeccable-delta.md`。
 - 新增 `internal/testenv` 并接入会写状态的 Go/Desktop 测试包，隔离 HOME/USERPROFILE、XDG、AppData、TEMP/TMP 以及 Reames home/state/cache override；本批测试不会再默认把配置、worktree lease 和大量临时小文件写入真实用户目录或 C 盘通用 Temp。
 - 继承自早期迁移的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package 元数据以及 `site/`、`workers/` 已在完成运行引用和替代实现审计后从当前树删除；参考机制只保留在 Git 历史和 `F:\code-reference`，不得重新整套 vendor。
 

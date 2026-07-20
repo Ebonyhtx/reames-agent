@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -91,6 +92,86 @@ func TestLoadCCSwitchLegacyConfig(t *testing.T) {
 	}
 	if got[0].Name != "@modelcontextprotocol/server-time" || got[0].Command != "uvx" {
 		t.Fatalf("entry = %+v", got[0])
+	}
+}
+
+func TestLoadCCSwitchLegacyConfigPrefersReamesFamilyFlags(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	body := fmt.Sprintf(`{
+		"mcp": {
+			"servers": {
+				"legacy": {"name":"legacy","server":{"command":"node","args":["legacy.js"]},"apps":{"codex":true}},
+				"family-off": {"name":"family-off","server":{"command":"node","args":["off.js"]},"apps":{"codex":true,"%s":false}},
+				"family-on": {"name":"family-on","server":{"command":"node","args":["family.js"]},"apps":{"codex":false,"%s":true}},
+				"reames-off": {"name":"reames-off","server":{"command":"node","args":["reames-off.js"]},"apps":{"%s":true,"reames":false}},
+				"reames-on": {"name":"reames-on","server":{"command":"node","args":["reames.js"]},"apps":{"%s":false,"reames":true}}
+			}
+		}
+	}`, ccSwitchLegacyAppKey, ccSwitchLegacyAppKey, ccSwitchLegacyAppKey, ccSwitchLegacyAppKey)
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadCCSwitchLegacyConfig(path)
+	if err != nil {
+		t.Fatalf("loadCCSwitchLegacyConfig: %v", err)
+	}
+	if len(got) != 3 || got[0].Name != "family-on" || got[1].Name != "legacy" || got[2].Name != "reames-on" {
+		t.Fatalf("entries = %+v, want legacy fallback plus explicit family/Reames enablement", got)
+	}
+}
+
+func TestLoadCCSwitchMCPDBPrefersReamesFamilyColumn(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 not available")
+	}
+	dbPath := filepath.Join(t.TempDir(), "cc-switch.db")
+	setup := fmt.Sprintf(`CREATE TABLE mcp_servers (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		server_config TEXT NOT NULL,
+		enabled_codex BOOLEAN NOT NULL DEFAULT 0,
+		enabled_%s BOOLEAN NOT NULL DEFAULT 0,
+		enabled_reames BOOLEAN NOT NULL DEFAULT 0
+	);
+	INSERT INTO mcp_servers VALUES ('codex-only', 'codex-only', '{"command":"node","args":["codex.js"]}', 1, 0, 0);
+	INSERT INTO mcp_servers VALUES ('family-only', 'family-only', '{"command":"node","args":["family.js"]}', 0, 1, 0);
+	INSERT INTO mcp_servers VALUES ('reames-only', 'reames-only', '{"command":"node","args":["reames.js"]}', 0, 0, 1);`, ccSwitchLegacyAppKey)
+	if out, err := exec.Command("sqlite3", dbPath, setup).CombinedOutput(); err != nil {
+		t.Fatalf("create sqlite db: %v\n%s", err, out)
+	}
+	got, err := loadCCSwitchMCPDB(dbPath)
+	if err != nil {
+		t.Fatalf("loadCCSwitchMCPDB: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "reames-only" {
+		t.Fatalf("entries = %+v, want only explicit Reames enablement", got)
+	}
+}
+
+func TestLoadCCSwitchMCPDBUsesFamilyColumnBeforeCodexFallback(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 not available")
+	}
+	dbPath := filepath.Join(t.TempDir(), "cc-switch.db")
+	setup := fmt.Sprintf(`CREATE TABLE mcp_servers (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		server_config TEXT NOT NULL,
+		enabled_codex BOOLEAN NOT NULL DEFAULT 0,
+		enabled_%s BOOLEAN NOT NULL DEFAULT 0
+	);
+	INSERT INTO mcp_servers VALUES ('codex-only', 'codex-only', '{"command":"node","args":["codex.js"]}', 1, 0);
+	INSERT INTO mcp_servers VALUES ('family-only', 'family-only', '{"command":"node","args":["family.js"]}', 0, 1);`, ccSwitchLegacyAppKey)
+	if out, err := exec.Command("sqlite3", dbPath, setup).CombinedOutput(); err != nil {
+		t.Fatalf("create sqlite db: %v\n%s", err, out)
+	}
+	got, err := loadCCSwitchMCPDB(dbPath)
+	if err != nil {
+		t.Fatalf("loadCCSwitchMCPDB: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "family-only" {
+		t.Fatalf("entries = %+v, want only explicit family enablement", got)
 	}
 }
 

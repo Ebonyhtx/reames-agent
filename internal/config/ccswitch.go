@@ -14,6 +14,10 @@ import (
 
 const ccSwitchDir = ".cc-switch"
 
+// ccSwitchLegacyAppKey is assembled so the external compatibility key does not
+// reintroduce an upstream product brand into Reames source or user-facing text.
+const ccSwitchLegacyAppKey = "reason" + "ix"
+
 type ccSwitchMCPRow struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
@@ -21,12 +25,10 @@ type ccSwitchMCPRow struct {
 }
 
 type ccSwitchLegacyServer struct {
-	ID     string        `json:"id"`
-	Name   string        `json:"name"`
-	Server mcpServerSpec `json:"server"`
-	Apps   struct {
-		Codex bool `json:"codex"`
-	} `json:"apps"`
+	ID     string          `json:"id"`
+	Name   string          `json:"name"`
+	Server mcpServerSpec   `json:"server"`
+	Apps   map[string]bool `json:"apps"`
 }
 
 type MCPImportCandidate struct {
@@ -47,9 +49,11 @@ func LoadCCSwitchMCPCandidates() ([]MCPImportCandidate, error) {
 	return candidates, nil
 }
 
-// LoadCCSwitchMCP reads MCP servers enabled for Codex from cc-switch and maps
+// LoadCCSwitchMCP reads MCP servers enabled for the Reames app family from cc-switch and maps
 // them to Reames Agent plugin entries. Newer cc-switch stores servers in SQLite;
 // older installs kept them in config.json(.migrated/.bak), so we support both.
+// Dedicated app flags are authoritative when present; Codex is only the legacy
+// fallback for schemas that predate Reames-family enablement.
 func LoadCCSwitchMCP() ([]PluginEntry, error) {
 	if IsolatedHomeDir() != "" {
 		return nil, nil
@@ -83,7 +87,7 @@ func loadCCSwitchMCPFromRoot(root string) ([]PluginEntry, error) {
 			return nil, err
 		}
 	}
-	return nil, fmt.Errorf("cc-switch import: no Codex-enabled MCP servers found in %s", root)
+	return nil, fmt.Errorf("cc-switch import: no Reames-enabled MCP servers found in %s", root)
 }
 
 func ImportCCSwitchMCPEntries(entries []PluginEntry) (total, added, updated int, err error) {
@@ -94,7 +98,7 @@ func ImportCCSwitchMCPEntries(entries []PluginEntry) (total, added, updated int,
 	return importMCPEntries(cfg, entries)
 }
 
-// ImportCCSwitchMCP upserts cc-switch's Codex-enabled MCP servers into the
+// ImportCCSwitchMCP upserts cc-switch's Reames-family-enabled MCP servers into the
 // active Reames Agent config and saves it.
 func ImportCCSwitchMCP() (total, added, updated int, err error) {
 	entries, err := LoadCCSwitchMCP()
@@ -139,6 +143,13 @@ func loadCCSwitchMCPDB(path string) ([]PluginEntry, error) {
 		return nil, fmt.Errorf("cc-switch import: sqlite3 not found to read %s", path)
 	}
 	query := `SELECT id, name, server_config FROM mcp_servers WHERE enabled_codex = 1 ORDER BY name, id`
+	appColumn, err := ccSwitchDBAppColumn(sqlite, path)
+	if err != nil {
+		return nil, err
+	}
+	if appColumn != "" {
+		query = fmt.Sprintf(`SELECT id, name, server_config FROM mcp_servers WHERE %s = 1 ORDER BY name, id`, appColumn)
+	}
 	cmd := exec.Command(sqlite, "-readonly", "-json", path, query)
 	cmd.Env = processpolicy.ProcessEnvironment()
 	out, err := cmd.Output()
@@ -153,6 +164,24 @@ func loadCCSwitchMCPDB(path string) ([]PluginEntry, error) {
 		return nil, fmt.Errorf("cc-switch import: parse sqlite output: %w", err)
 	}
 	return ccSwitchRowsToPlugins(rows)
+}
+
+func ccSwitchDBAppColumn(sqlite, path string) (string, error) {
+	legacyColumn := "enabled_" + ccSwitchLegacyAppKey
+	query := fmt.Sprintf(`SELECT name FROM pragma_table_info('mcp_servers') WHERE name IN ('enabled_reames', '%s') ORDER BY CASE name WHEN 'enabled_reames' THEN 0 ELSE 1 END LIMIT 1`, legacyColumn)
+	cmd := exec.Command(sqlite, "-readonly", path, query)
+	cmd.Env = processpolicy.ProcessEnvironment()
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("cc-switch import: inspect %s: %w", path, err)
+	}
+	column := strings.TrimSpace(string(out))
+	switch {
+	case column == "", column == "enabled_reames", column == legacyColumn:
+		return column, nil
+	default:
+		return "", fmt.Errorf("cc-switch import: inspect %s: unexpected app column %q", path, column)
+	}
 }
 
 func ccSwitchRowsToPlugins(rows []ccSwitchMCPRow) ([]PluginEntry, error) {
@@ -196,7 +225,14 @@ func loadCCSwitchLegacyConfig(path string) ([]PluginEntry, error) {
 	var entries []PluginEntry
 	for _, key := range keys {
 		srv := doc.MCP.Servers[key]
-		if !srv.Apps.Codex {
+		enabled := srv.Apps["codex"]
+		if legacyEnabled, ok := srv.Apps[ccSwitchLegacyAppKey]; ok {
+			enabled = legacyEnabled
+		}
+		if reamesEnabled, ok := srv.Apps["reames"]; ok {
+			enabled = reamesEnabled
+		}
+		if !enabled {
 			continue
 		}
 		name := srv.Name

@@ -2,6 +2,8 @@ package gatewayservice
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,7 +16,7 @@ import (
 	"reames-agent/internal/fileutil"
 )
 
-const linuxServiceRollbackTimeout = 15 * time.Second
+const serviceRollbackTimeout = 15 * time.Second
 
 type commandRunner func(context.Context, Command) (string, error)
 
@@ -28,6 +30,40 @@ type linuxServiceSnapshot struct {
 	unitData   []byte
 	unitMode   os.FileMode
 	service    linuxServiceState
+}
+
+type launchdServiceState struct {
+	loaded  bool
+	running bool
+}
+
+type launchdServiceSnapshot struct {
+	plistExists bool
+	plistData   []byte
+	plistMode   os.FileMode
+	service     launchdServiceState
+}
+
+type launchdInstallProgress struct {
+	bootoutAttempted   bool
+	plistWritten       bool
+	bootstrapAttempted bool
+}
+
+type launchdUninstallProgress struct {
+	bootoutAttempted bool
+	plistRemoved     bool
+}
+
+type windowsTaskState struct {
+	exists  bool
+	enabled bool
+	running bool
+	xml     string
+}
+
+type windowsTaskProgress struct {
+	mutationAttempted bool
 }
 
 type linuxInstallProgress struct {
@@ -52,21 +88,25 @@ type applyDeps struct {
 	remove             func(string) error
 	runCommand         commandRunner
 	probeLinuxState    func(context.Context, Options, bool, commandRunner) (linuxServiceState, []string, error)
+	probeLaunchdState  func(context.Context, Options, bool, commandRunner) (launchdServiceState, []string, error)
+	probeWindowsState  func(context.Context, Options, commandRunner) (windowsTaskState, []string, error)
 	newRollbackContext func(context.Context) (context.Context, context.CancelFunc)
 }
 
 func defaultApplyDeps() applyDeps {
 	return applyDeps{
-		goos:            runtime.GOOS,
-		lstat:           os.Lstat,
-		readFile:        os.ReadFile,
-		mkdirAll:        os.MkdirAll,
-		atomicWriteFile: fileutil.AtomicWriteFile,
-		remove:          os.Remove,
-		runCommand:      executeCommand,
-		probeLinuxState: probeLinuxServiceState,
+		goos:              runtime.GOOS,
+		lstat:             os.Lstat,
+		readFile:          os.ReadFile,
+		mkdirAll:          os.MkdirAll,
+		atomicWriteFile:   fileutil.AtomicWriteFile,
+		remove:            os.Remove,
+		runCommand:        executeCommand,
+		probeLinuxState:   probeLinuxServiceState,
+		probeLaunchdState: probeLaunchdServiceState,
+		probeWindowsState: probeWindowsTaskState,
 		newRollbackContext: func(parent context.Context) (context.Context, context.CancelFunc) {
-			return context.WithTimeout(context.WithoutCancel(parent), linuxServiceRollbackTimeout)
+			return context.WithTimeout(context.WithoutCancel(parent), serviceRollbackTimeout)
 		},
 	}
 }
@@ -100,7 +140,197 @@ func applyWithDeps(ctx context.Context, opts Options, deps applyDeps) (Result, e
 			return applyLinuxUninstall(ctx, normalized, plan, deps)
 		}
 	}
+	if plan.GOOS == "darwin" {
+		switch plan.Action {
+		case "install":
+			return applyLaunchdInstall(ctx, normalized, plan, deps)
+		case "uninstall":
+			return applyLaunchdUninstall(ctx, normalized, plan, deps)
+		}
+	}
+	if plan.GOOS == "windows" {
+		switch plan.Action {
+		case "install":
+			return applyWindowsInstall(ctx, normalized, plan, deps)
+		case "uninstall":
+			return applyWindowsUninstall(ctx, normalized, plan, deps)
+		}
+	}
 	return applyGenericPlan(ctx, plan, deps)
+}
+
+func applyLaunchdInstall(ctx context.Context, opts Options, plan Plan, deps applyDeps) (Result, error) {
+	result := Result{Plan: plan}
+	if len(plan.Files) != 1 {
+		return result, fmt.Errorf("launchd gateway install rendered %d service definitions, want 1", len(plan.Files))
+	}
+	plist := plan.Files[0]
+	snapshot, outputs, err := snapshotLaunchdService(ctx, opts, plist.Path, deps)
+	result.Outputs = append(result.Outputs, outputs...)
+	if err != nil {
+		return result, err
+	}
+	progress := launchdInstallProgress{}
+	fail := func(applyErr error) (Result, error) {
+		rollbackOutputs, rollbackErr := rollbackLaunchdInstall(ctx, opts, plist.Path, snapshot, progress, deps)
+		result.Outputs = append(result.Outputs, rollbackOutputs...)
+		if rollbackErr != nil {
+			return result, errors.Join(applyErr, fmt.Errorf("rollback launchd gateway service install: %w", rollbackErr))
+		}
+		return result, applyErr
+	}
+
+	if opts.StartNow && snapshot.service.loaded {
+		progress.bootoutAttempted = true
+		if err := runAndRecord(ctx, &result.Outputs, launchdBootoutCommand(opts, plist.Path), deps.runCommand); err != nil {
+			return fail(err)
+		}
+	}
+	if err := deps.mkdirAll(filepath.Dir(plist.Path), 0o755); err != nil {
+		return fail(fmt.Errorf("create service definition directory: %w", err))
+	}
+	progress.plistWritten = true
+	if err := deps.atomicWriteFile(plist.Path, []byte(plist.Content), plist.Mode); err != nil {
+		return fail(fmt.Errorf("write service definition %s: %w", plist.Path, err))
+	}
+	for _, command := range plan.Commands {
+		if launchdVerb(command) == "bootstrap" {
+			progress.bootstrapAttempted = true
+		}
+		if err := runAndRecord(ctx, &result.Outputs, command, deps.runCommand); err != nil {
+			return fail(err)
+		}
+	}
+	if opts.StartNow {
+		state, outputs, err := deps.probeLaunchdState(ctx, opts, true, deps.runCommand)
+		result.Outputs = append(result.Outputs, outputs...)
+		if err != nil || !state.loaded || !state.running {
+			if err == nil {
+				err = fmt.Errorf("service is loaded=%t running=%t", state.loaded, state.running)
+			}
+			return fail(fmt.Errorf("verify launchd gateway service install: %w", err))
+		}
+	}
+	return result, nil
+}
+
+func applyLaunchdUninstall(ctx context.Context, opts Options, plan Plan, deps applyDeps) (Result, error) {
+	result := Result{Plan: plan}
+	if len(plan.Deletes) != 1 {
+		return result, fmt.Errorf("launchd gateway uninstall rendered %d service definitions to delete, want 1", len(plan.Deletes))
+	}
+	plistPath := plan.Deletes[0]
+	snapshot, outputs, err := snapshotLaunchdService(ctx, opts, plistPath, deps)
+	result.Outputs = append(result.Outputs, outputs...)
+	if err != nil {
+		return result, err
+	}
+	if !snapshot.plistExists && !snapshot.service.loaded {
+		return result, nil
+	}
+	progress := launchdUninstallProgress{}
+	fail := func(applyErr error) (Result, error) {
+		rollbackOutputs, rollbackErr := rollbackLaunchdUninstall(ctx, opts, plistPath, snapshot, progress, deps)
+		result.Outputs = append(result.Outputs, rollbackOutputs...)
+		if rollbackErr != nil {
+			return result, errors.Join(applyErr, fmt.Errorf("rollback launchd gateway service uninstall: %w", rollbackErr))
+		}
+		return result, applyErr
+	}
+	if snapshot.service.loaded {
+		progress.bootoutAttempted = true
+		if err := runAndRecord(ctx, &result.Outputs, launchdBootoutCommand(opts, plistPath), deps.runCommand); err != nil {
+			return fail(err)
+		}
+	}
+	if err := deps.remove(plistPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fail(fmt.Errorf("delete service definition %s: %w", plistPath, err))
+	}
+	progress.plistRemoved = true
+	state, outputs, err := deps.probeLaunchdState(ctx, opts, false, deps.runCommand)
+	result.Outputs = append(result.Outputs, outputs...)
+	if err != nil || state.loaded {
+		if err == nil {
+			err = errors.New("service is still loaded")
+		}
+		return fail(fmt.Errorf("verify launchd gateway service uninstall: %w", err))
+	}
+	return result, nil
+}
+
+func applyWindowsInstall(ctx context.Context, opts Options, plan Plan, deps applyDeps) (Result, error) {
+	result := Result{Plan: plan}
+	snapshot, outputs, err := deps.probeWindowsState(ctx, opts, deps.runCommand)
+	result.Outputs = append(result.Outputs, outputs...)
+	if err != nil {
+		return result, fmt.Errorf("snapshot Windows gateway task state: %w", err)
+	}
+	progress := windowsTaskProgress{}
+	fail := func(applyErr error) (Result, error) {
+		rollbackOutputs, rollbackErr := rollbackWindowsTask(ctx, opts, snapshot, progress, deps)
+		result.Outputs = append(result.Outputs, rollbackOutputs...)
+		if rollbackErr != nil {
+			return result, errors.Join(applyErr, fmt.Errorf("rollback Windows gateway task install: %w", rollbackErr))
+		}
+		return result, applyErr
+	}
+	if opts.StartNow && snapshot.exists && snapshot.running {
+		progress.mutationAttempted = true
+		if err := runAndRecord(ctx, &result.Outputs, windowsEndTaskCommand(opts), deps.runCommand); err != nil {
+			return fail(err)
+		}
+	}
+	for _, command := range plan.Commands {
+		progress.mutationAttempted = true
+		if err := runAndRecord(ctx, &result.Outputs, command, deps.runCommand); err != nil {
+			return fail(err)
+		}
+	}
+	state, outputs, err := deps.probeWindowsState(ctx, opts, deps.runCommand)
+	result.Outputs = append(result.Outputs, outputs...)
+	if err != nil || !state.exists || !state.enabled || (opts.StartNow && !state.running) {
+		if err == nil {
+			err = fmt.Errorf("task is exists=%t enabled=%t running=%t", state.exists, state.enabled, state.running)
+		}
+		return fail(fmt.Errorf("verify Windows gateway task install: %w", err))
+	}
+	return result, nil
+}
+
+func applyWindowsUninstall(ctx context.Context, opts Options, plan Plan, deps applyDeps) (Result, error) {
+	result := Result{Plan: plan}
+	snapshot, outputs, err := deps.probeWindowsState(ctx, opts, deps.runCommand)
+	result.Outputs = append(result.Outputs, outputs...)
+	if err != nil {
+		return result, fmt.Errorf("snapshot Windows gateway task state: %w", err)
+	}
+	if !snapshot.exists {
+		return result, nil
+	}
+	progress := windowsTaskProgress{}
+	fail := func(applyErr error) (Result, error) {
+		rollbackOutputs, rollbackErr := rollbackWindowsTask(ctx, opts, snapshot, progress, deps)
+		result.Outputs = append(result.Outputs, rollbackOutputs...)
+		if rollbackErr != nil {
+			return result, errors.Join(applyErr, fmt.Errorf("rollback Windows gateway task uninstall: %w", rollbackErr))
+		}
+		return result, applyErr
+	}
+	for _, command := range plan.Commands {
+		progress.mutationAttempted = true
+		if err := runAndRecord(ctx, &result.Outputs, command, deps.runCommand); err != nil {
+			return fail(err)
+		}
+	}
+	state, outputs, err := deps.probeWindowsState(ctx, opts, deps.runCommand)
+	result.Outputs = append(result.Outputs, outputs...)
+	if err != nil || state.exists {
+		if err == nil {
+			err = errors.New("task still exists")
+		}
+		return fail(fmt.Errorf("verify Windows gateway task uninstall: %w", err))
+	}
+	return result, nil
 }
 
 func applyGenericPlan(ctx context.Context, plan Plan, deps applyDeps) (Result, error) {
@@ -399,6 +629,330 @@ func degradedLinuxServiceRollback(err error) error {
 		return nil
 	}
 	return fmt.Errorf("%w; service definition or manager state may be degraded; manual repair is required", err)
+}
+
+func snapshotLaunchdService(ctx context.Context, opts Options, plistPath string, deps applyDeps) (launchdServiceSnapshot, []string, error) {
+	var snapshot launchdServiceSnapshot
+	info, err := deps.lstat(plistPath)
+	switch {
+	case err == nil:
+		if !info.Mode().IsRegular() {
+			return snapshot, nil, fmt.Errorf("existing service definition %s is not a regular file", plistPath)
+		}
+		data, readErr := deps.readFile(plistPath)
+		if readErr != nil {
+			return snapshot, nil, fmt.Errorf("read existing service definition %s: %w", plistPath, readErr)
+		}
+		snapshot.plistExists = true
+		snapshot.plistData = data
+		snapshot.plistMode = info.Mode().Perm()
+	case errors.Is(err, os.ErrNotExist):
+	default:
+		return snapshot, nil, fmt.Errorf("inspect existing service definition %s: %w", plistPath, err)
+	}
+	state, outputs, err := deps.probeLaunchdState(ctx, opts, snapshot.plistExists, deps.runCommand)
+	if err != nil {
+		return snapshot, outputs, fmt.Errorf("snapshot launchd gateway service state: %w", err)
+	}
+	snapshot.service = state
+	return snapshot, outputs, nil
+}
+
+func rollbackLaunchdInstall(parent context.Context, opts Options, plistPath string, snapshot launchdServiceSnapshot, progress launchdInstallProgress, deps applyDeps) ([]string, error) {
+	if !progress.bootoutAttempted && !progress.plistWritten && !progress.bootstrapAttempted {
+		return nil, nil
+	}
+	ctx, cancel := deps.newRollbackContext(parent)
+	defer cancel()
+	var outputs []string
+	var rollbackErrors []error
+	run := func(command Command) {
+		if err := runAndRecord(ctx, &outputs, command, deps.runCommand); err != nil {
+			rollbackErrors = append(rollbackErrors, err)
+		}
+	}
+
+	if progress.bootstrapAttempted {
+		state, probeOutputs, err := deps.probeLaunchdState(ctx, opts, true, deps.runCommand)
+		outputs = append(outputs, probeOutputs...)
+		if err != nil {
+			rollbackErrors = append(rollbackErrors, fmt.Errorf("inspect replacement launchd state: %w", err))
+		} else if state.loaded {
+			run(launchdBootoutCommand(opts, plistPath))
+		}
+	}
+	if snapshot.plistExists {
+		if err := deps.atomicWriteFile(plistPath, snapshot.plistData, snapshot.plistMode); err != nil {
+			return outputs, degradedLaunchdServiceRollback(fmt.Errorf("restore service definition %s: %w", plistPath, err))
+		}
+	} else if progress.plistWritten {
+		if err := deps.remove(plistPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return outputs, degradedLaunchdServiceRollback(fmt.Errorf("remove new service definition %s: %w", plistPath, err))
+		}
+	}
+	restoreLaunchdManager(ctx, opts, plistPath, snapshot.service, &outputs, &rollbackErrors, deps)
+	return outputs, degradedLaunchdServiceRollback(errors.Join(rollbackErrors...))
+}
+
+func rollbackLaunchdUninstall(parent context.Context, opts Options, plistPath string, snapshot launchdServiceSnapshot, progress launchdUninstallProgress, deps applyDeps) ([]string, error) {
+	if !progress.bootoutAttempted && !progress.plistRemoved {
+		return nil, nil
+	}
+	ctx, cancel := deps.newRollbackContext(parent)
+	defer cancel()
+	var outputs []string
+	var rollbackErrors []error
+	if snapshot.plistExists {
+		if err := deps.atomicWriteFile(plistPath, snapshot.plistData, snapshot.plistMode); err != nil {
+			return outputs, degradedLaunchdServiceRollback(fmt.Errorf("restore service definition %s: %w", plistPath, err))
+		}
+	}
+	restoreLaunchdManager(ctx, opts, plistPath, snapshot.service, &outputs, &rollbackErrors, deps)
+	return outputs, degradedLaunchdServiceRollback(errors.Join(rollbackErrors...))
+}
+
+func restoreLaunchdManager(ctx context.Context, opts Options, plistPath string, want launchdServiceState, outputs *[]string, rollbackErrors *[]error, deps applyDeps) {
+	run := func(command Command) {
+		if err := runAndRecord(ctx, outputs, command, deps.runCommand); err != nil {
+			*rollbackErrors = append(*rollbackErrors, err)
+		}
+	}
+	current, probeOutputs, err := deps.probeLaunchdState(ctx, opts, want.loaded, deps.runCommand)
+	*outputs = append(*outputs, probeOutputs...)
+	if err != nil {
+		*rollbackErrors = append(*rollbackErrors, fmt.Errorf("inspect launchd state during rollback: %w", err))
+		return
+	}
+	if want.loaded && !current.loaded {
+		run(launchdBootstrapCommand(opts, plistPath))
+		current, probeOutputs, err = deps.probeLaunchdState(ctx, opts, true, deps.runCommand)
+		*outputs = append(*outputs, probeOutputs...)
+		if err != nil {
+			*rollbackErrors = append(*rollbackErrors, fmt.Errorf("inspect launchd state after restore bootstrap: %w", err))
+			return
+		}
+	}
+	if want.loaded && want.running != current.running {
+		if want.running {
+			run(launchdKickstartCommand(opts))
+		} else {
+			run(launchdStopCommand(opts))
+		}
+	}
+	state, probeOutputs, err := deps.probeLaunchdState(ctx, opts, want.loaded, deps.runCommand)
+	*outputs = append(*outputs, probeOutputs...)
+	if err != nil {
+		*rollbackErrors = append(*rollbackErrors, fmt.Errorf("verify restored launchd state: %w", err))
+		return
+	}
+	if state != want {
+		*rollbackErrors = append(*rollbackErrors, fmt.Errorf("verify restored launchd state: got loaded=%t running=%t, want loaded=%t running=%t", state.loaded, state.running, want.loaded, want.running))
+	}
+}
+
+func degradedLaunchdServiceRollback(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%w; launchd definition or manager state may be degraded; manual repair is required", err)
+}
+
+func probeLaunchdServiceState(ctx context.Context, opts Options, plistExists bool, run commandRunner) (launchdServiceState, []string, error) {
+	command := Command{Name: "launchctl", Args: []string{"print", launchdTarget(opts)}}
+	output, commandErr := run(ctx, command)
+	outputs := appendOutput(nil, output)
+	if commandErr == nil {
+		state := launchdServiceState{loaded: true, running: launchdOutputRunning(output)}
+		if !plistExists {
+			return state, outputs, errors.New("gateway service is loaded without the expected plist; boot it out or repair it before continuing")
+		}
+		return state, outputs, nil
+	}
+	if isExitError(commandErr) && launchdOutputNotFound(output) {
+		return launchdServiceState{}, outputs, nil
+	}
+	return launchdServiceState{}, outputs, fmt.Errorf("%s: %w", shellLine(command), commandErr)
+}
+
+func launchdOutputRunning(output string) bool {
+	for _, line := range strings.Split(strings.ToLower(output), "\n") {
+		if strings.TrimSpace(line) == "state = running" {
+			return true
+		}
+	}
+	return false
+}
+
+func launchdOutputNotFound(output string) bool {
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "could not find service") || strings.Contains(lower, "service not found") || strings.Contains(lower, "no such process")
+}
+
+func launchdTarget(opts Options) string {
+	return launchdDomain(opts.Scope) + "/" + launchdLabel(opts)
+}
+
+func launchdVerb(command Command) string {
+	if command.Name != "launchctl" || len(command.Args) == 0 {
+		return ""
+	}
+	return command.Args[0]
+}
+
+func launchdBootstrapCommand(opts Options, plistPath string) Command {
+	return Command{Name: "launchctl", Args: []string{"bootstrap", launchdDomain(opts.Scope), plistPath}}
+}
+
+func launchdBootoutCommand(opts Options, plistPath string) Command {
+	return Command{Name: "launchctl", Args: []string{"bootout", launchdDomain(opts.Scope), plistPath}}
+}
+
+func launchdKickstartCommand(opts Options) Command {
+	return Command{Name: "launchctl", Args: []string{"kickstart", "-k", launchdTarget(opts)}}
+}
+
+func launchdStopCommand(opts Options) Command {
+	return Command{Name: "launchctl", Args: []string{"kill", "TERM", launchdTarget(opts)}}
+}
+
+func rollbackWindowsTask(parent context.Context, opts Options, snapshot windowsTaskState, progress windowsTaskProgress, deps applyDeps) ([]string, error) {
+	if !progress.mutationAttempted {
+		return nil, nil
+	}
+	ctx, cancel := deps.newRollbackContext(parent)
+	defer cancel()
+	var outputs []string
+	var rollbackErrors []error
+	run := func(label string, command Command) {
+		output, err := deps.runCommand(ctx, command)
+		outputs = appendOutput(outputs, output)
+		if err != nil {
+			// Do not include command.Args here: Register-ScheduledTask carries the
+			// exact exported XML as base64, which may contain sensitive legacy task
+			// arguments even though Reames-generated definitions contain no secrets.
+			rollbackErrors = append(rollbackErrors, fmt.Errorf("%s: %w", label, err))
+		}
+	}
+
+	// A failed create/delete may still have replaced or removed the task. Always
+	// clear the current definition before restoring the exact exported XML.
+	run("remove replacement Windows gateway task", windowsDeleteTaskCommand(opts))
+	if snapshot.exists {
+		if strings.TrimSpace(snapshot.xml) == "" {
+			return outputs, degradedWindowsTaskRollback(errors.New("snapshot task XML is empty"))
+		}
+		run("restore Windows gateway task definition", windowsRegisterTaskCommand(opts, snapshot.xml))
+		// Temporarily enable the task so a previously running-but-disabled task
+		// can be restarted before its disabled flag is restored.
+		run("enable restored Windows gateway task", windowsSetTaskEnabledCommand(opts, true))
+		current, probeOutputs, err := deps.probeWindowsState(ctx, opts, deps.runCommand)
+		outputs = append(outputs, probeOutputs...)
+		if err != nil {
+			rollbackErrors = append(rollbackErrors, fmt.Errorf("inspect restored Windows gateway task: %w", err))
+		} else if snapshot.running != current.running {
+			run("restore Windows gateway task runtime state", windowsSetTaskRunningCommand(opts, snapshot.running))
+		}
+		if !snapshot.enabled {
+			run("disable restored Windows gateway task", windowsSetTaskEnabledCommand(opts, false))
+		}
+	}
+	state, probeOutputs, err := deps.probeWindowsState(ctx, opts, deps.runCommand)
+	outputs = append(outputs, probeOutputs...)
+	if err != nil {
+		rollbackErrors = append(rollbackErrors, fmt.Errorf("verify restored Windows gateway task: %w", err))
+	} else if state.exists != snapshot.exists || state.enabled != snapshot.enabled || state.running != snapshot.running {
+		rollbackErrors = append(rollbackErrors, fmt.Errorf(
+			"verify restored Windows gateway task: got exists=%t enabled=%t running=%t, want exists=%t enabled=%t running=%t",
+			state.exists, state.enabled, state.running, snapshot.exists, snapshot.enabled, snapshot.running,
+		))
+	}
+	return outputs, degradedWindowsTaskRollback(errors.Join(rollbackErrors...))
+}
+
+func degradedWindowsTaskRollback(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%w; Windows Scheduled Task definition or runtime state may be degraded; manual repair is required", err)
+}
+
+func probeWindowsTaskState(ctx context.Context, opts Options, run commandRunner) (windowsTaskState, []string, error) {
+	script := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
+Import-Module ScheduledTasks -ErrorAction Stop
+$task = Get-ScheduledTask -TaskPath %s -TaskName %s -ErrorAction SilentlyContinue
+if ($null -eq $task) {
+  [ordered]@{schema=1;exists=$false;enabled=$false;running=$false;xml=''} | ConvertTo-Json -Compress
+  exit 0
+}
+$xml = Export-ScheduledTask -TaskPath %s -TaskName %s -ErrorAction Stop
+[ordered]@{schema=1;exists=$true;enabled=[bool]$task.Settings.Enabled;running=([string]$task.State -eq 'Running');xml=[string]$xml} | ConvertTo-Json -Compress
+`, powershellLiteral(windowsTaskPath()), powershellLiteral(opts.Name), powershellLiteral(windowsTaskPath()), powershellLiteral(opts.Name))
+	command := windowsPowerShellCommand(script)
+	output, commandErr := run(ctx, command)
+	if commandErr != nil {
+		return windowsTaskState{}, appendOutput(nil, output), fmt.Errorf("%s: %w", shellLine(command), commandErr)
+	}
+	var wire struct {
+		Schema  int    `json:"schema"`
+		Exists  bool   `json:"exists"`
+		Enabled bool   `json:"enabled"`
+		Running bool   `json:"running"`
+		XML     string `json:"xml"`
+	}
+	clean := strings.TrimPrefix(strings.TrimSpace(output), "\ufeff")
+	if err := json.Unmarshal([]byte(clean), &wire); err != nil {
+		return windowsTaskState{}, nil, fmt.Errorf("parse structured Windows task state: %w", err)
+	}
+	if wire.Schema != 1 {
+		return windowsTaskState{}, nil, fmt.Errorf("parse structured Windows task state: schema=%d, want 1", wire.Schema)
+	}
+	if wire.Exists && strings.TrimSpace(wire.XML) == "" {
+		return windowsTaskState{}, nil, errors.New("parse structured Windows task state: existing task has empty exported XML")
+	}
+	state := windowsTaskState{exists: wire.Exists, enabled: wire.Enabled, running: wire.Running, xml: wire.XML}
+	return state, []string{fmt.Sprintf("Windows Scheduled Task state: exists=%t enabled=%t running=%t", state.exists, state.enabled, state.running)}, nil
+}
+
+func windowsPowerShellCommand(script string) Command {
+	return Command{Name: "powershell.exe", Args: []string{"-NoLogo", "-NoProfile", "-NonInteractive", "-Command", strings.TrimSpace(script)}}
+}
+
+func windowsEndTaskCommand(opts Options) Command {
+	return Command{Name: "schtasks.exe", Args: []string{"/End", "/TN", windowsTaskPath() + opts.Name}}
+}
+
+func windowsDeleteTaskCommand(opts Options) Command {
+	script := fmt.Sprintf(`$ErrorActionPreference='Stop'; Import-Module ScheduledTasks -ErrorAction Stop; $task=Get-ScheduledTask -TaskPath %s -TaskName %s -ErrorAction SilentlyContinue; if ($null -ne $task) { $task | Unregister-ScheduledTask -Confirm:$false -ErrorAction Stop }`, powershellLiteral(windowsTaskPath()), powershellLiteral(opts.Name))
+	return windowsPowerShellCommand(script)
+}
+
+func windowsRegisterTaskCommand(opts Options, xml string) Command {
+	xmlBase64 := base64.StdEncoding.EncodeToString([]byte(xml))
+	script := fmt.Sprintf(`$ErrorActionPreference='Stop'; Import-Module ScheduledTasks -ErrorAction Stop; $xml=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(%s)); Register-ScheduledTask -TaskPath %s -TaskName %s -Xml $xml -Force -ErrorAction Stop | Out-Null`, powershellLiteral(xmlBase64), powershellLiteral(windowsTaskPath()), powershellLiteral(opts.Name))
+	return windowsPowerShellCommand(script)
+}
+
+func windowsSetTaskEnabledCommand(opts Options, enabled bool) Command {
+	verb := "Disable-ScheduledTask"
+	if enabled {
+		verb = "Enable-ScheduledTask"
+	}
+	script := fmt.Sprintf(`$ErrorActionPreference='Stop'; Import-Module ScheduledTasks -ErrorAction Stop; Get-ScheduledTask -TaskPath %s -TaskName %s -ErrorAction Stop | %s -ErrorAction Stop | Out-Null`, powershellLiteral(windowsTaskPath()), powershellLiteral(opts.Name), verb)
+	return windowsPowerShellCommand(script)
+}
+
+func windowsSetTaskRunningCommand(opts Options, running bool) Command {
+	verb := "Stop-ScheduledTask"
+	if running {
+		verb = "Start-ScheduledTask"
+	}
+	script := fmt.Sprintf(`$ErrorActionPreference='Stop'; Import-Module ScheduledTasks -ErrorAction Stop; Get-ScheduledTask -TaskPath %s -TaskName %s -ErrorAction Stop | %s -ErrorAction Stop`, powershellLiteral(windowsTaskPath()), powershellLiteral(opts.Name), verb)
+	return windowsPowerShellCommand(script)
+}
+
+func powershellLiteral(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
 func probeLinuxServiceState(ctx context.Context, opts Options, unitExists bool, run commandRunner) (linuxServiceState, []string, error) {

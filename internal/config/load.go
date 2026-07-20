@@ -10,6 +10,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"reames-agent/internal/permission"
 	"reames-agent/internal/provider"
 )
 
@@ -126,6 +127,11 @@ func LoadForRoot(root string) (*Config, error) {
 	backfillDeepSeekOfficialPrices(cfg)
 	normalizeEffortConfig(cfg)
 	backfillDeepSeekPro(cfg)
+	var removedUnsafeAllows []string
+	cfg.Permissions.Allow, removedUnsafeAllows = permission.FilterUnsafePersistentAllowRules(cfg.Permissions.Allow)
+	if len(removedUnsafeAllows) > 0 {
+		slog.Warn("ignored unsafe broad permission allow rules", "rules", removedUnsafeAllows)
+	}
 	cfg.Agent.AutoPlan = userAutoPlanMode()
 	cfg.CredentialsStore = credentialsStoreMode()
 	cfg.setExpansionEnv(expansionEnv)

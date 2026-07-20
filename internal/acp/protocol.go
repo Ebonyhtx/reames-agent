@@ -64,6 +64,18 @@ type AgentCapabilities struct {
 	SessionCapabilities SessionCapabilities `json:"sessionCapabilities,omitempty"`
 	PromptCapabilities  PromptCapabilities  `json:"promptCapabilities"`
 	MCPCapabilities     MCPCapabilities     `json:"mcpCapabilities"`
+	Meta                map[string]any      `json:"_meta,omitempty"`
+}
+
+// ReamesExtensionCapabilities advertises Reames-specific ACP extensions.
+// ACP v1 reserves agentCapabilities._meta for vendor capability discovery.
+type ReamesExtensionCapabilities struct {
+	SessionSteer *SessionSteerCapability `json:"sessionSteer,omitempty"`
+}
+
+// SessionSteerCapability identifies the vendor-namespaced steering method.
+type SessionSteerCapability struct {
+	Method string `json:"method"`
 }
 
 // EmptyCapability serializes to {} for ACP capability flags.
@@ -383,6 +395,18 @@ type SessionPromptParams struct {
 	SessionID string         `json:"sessionId"`
 	Prompt    []ContentBlock `json:"prompt"`
 }
+
+// SessionSteerParams injects user guidance into an active prompt without
+// cancelling it.
+type SessionSteerParams struct {
+	SessionID string         `json:"sessionId"`
+	Prompt    []ContentBlock `json:"prompt"`
+}
+
+// SessionSteerResult acknowledges that the active turn accepted the guidance.
+type SessionSteerResult struct{}
+
+const sessionSteerMethod = "_reames-agent/session/steer"
 
 // StopReason tells the client why a turn ended. Values match main's wire.
 type StopReason string

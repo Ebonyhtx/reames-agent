@@ -258,7 +258,7 @@ func launchdPlan(opts Options) (Plan, error) {
 }
 
 func windowsPlan(opts Options) (Plan, error) {
-	taskName := `\ReamesAgent\` + opts.Name
+	taskName := windowsTaskPath() + opts.Name
 	plan := Plan{GOOS: "windows", Action: opts.Action}
 	switch opts.Action {
 	case "install":
@@ -286,6 +286,10 @@ func windowsPlan(opts Options) (Plan, error) {
 	}
 	plan.Notes = append(plan.Notes, "Windows uses Scheduled Task for the gateway service")
 	return plan, nil
+}
+
+func windowsTaskPath() string {
+	return `\ReamesAgent\`
 }
 
 func appendCredentialNotes(plan *Plan, opts Options) {

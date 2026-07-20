@@ -528,6 +528,9 @@ func (c *Config) AddPermissionRule(list, rule string) error {
 	if _, ok := permission.ParseRule(rule); !ok {
 		return fmt.Errorf("invalid permission rule %q (want \"ToolName\" or \"ToolName(glob)\")", rule)
 	}
+	if strings.EqualFold(strings.TrimSpace(list), listAllow) && permission.UnsafePersistentAllowRule(rule) {
+		return fmt.Errorf("unsafe broad allow rule %q: use an exact command or a narrower subcommand/script prefix", rule)
+	}
 	for _, existing := range *target {
 		if existing == rule {
 			return nil // already present

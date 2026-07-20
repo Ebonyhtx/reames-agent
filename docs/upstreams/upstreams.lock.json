@@ -1,42 +1,42 @@
 {
   "version": 2,
-  "updated_at": "2026-07-20T03:02:15Z",
+  "updated_at": "2026-07-20T17:55:01Z",
   "upstreams": {
     "reasonix": {
       "branch": "main-v2",
       "baseline": "07c65c22226e4886004215168230e1e1edad734b",
-      "reviewed": "43993f5a10cd4afa46febf53ed9f7ab2a1ceab5b",
-      "latest_seen": "43993f5a10cd4afa46febf53ed9f7ab2a1ceab5b"
+      "reviewed": "77fd1a47be89498febe16a940621f79cc84f0b92",
+      "latest_seen": "77fd1a47be89498febe16a940621f79cc84f0b92"
     },
     "hermes": {
       "branch": "main",
       "baseline": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
-      "reviewed": "a7d7c02cb6db071eced4ac82e24f878588619600",
-      "latest_seen": "a7d7c02cb6db071eced4ac82e24f878588619600"
+      "reviewed": "456f18b19c4208115acbf0c6b226af49916b5480",
+      "latest_seen": "456f18b19c4208115acbf0c6b226af49916b5480"
     },
     "codex": {
       "branch": "main",
       "baseline": "f6e251c3ac6573a4d6eccddea6ad12587868485f",
-      "reviewed": "678157acaa819d5510adfe359abb5d0392cfe461",
-      "latest_seen": "678157acaa819d5510adfe359abb5d0392cfe461"
+      "reviewed": "eceb3eeaf3a68d732596fd8c0e8a6807f9166770",
+      "latest_seen": "eceb3eeaf3a68d732596fd8c0e8a6807f9166770"
     },
     "mimo": {
       "branch": "main",
       "baseline": "ba87f5d48d7d3e77145fce6797faebf016fd23c6",
-      "reviewed": "ec413adeccfcb65ccb63a708bb6136644ea13c79",
-      "latest_seen": "ec413adeccfcb65ccb63a708bb6136644ea13c79"
+      "reviewed": "b7b2092a27def7b14df663fc7698165806185635",
+      "latest_seen": "b7b2092a27def7b14df663fc7698165806185635"
     },
     "impeccable": {
       "branch": "main",
       "baseline": "7190295f3de31bc1e10ab42f740d69cf35a88ac3",
-      "reviewed": "e4ab5e24bdf5321b72163d2fbcbe6fa985c848ba",
-      "latest_seen": "e4ab5e24bdf5321b72163d2fbcbe6fa985c848ba"
+      "reviewed": "b906b41462c26c359e452040994685ce6d8e4008",
+      "latest_seen": "b906b41462c26c359e452040994685ce6d8e4008"
     },
     "scream-code": {
       "branch": "main",
       "baseline": "946eda69896ac161223bdb830acc62e4b6c8228e",
-      "reviewed": "22a2adaf8a459ab6bcfda028cc74b4c9b7e5f11f",
-      "latest_seen": "22a2adaf8a459ab6bcfda028cc74b4c9b7e5f11f"
+      "reviewed": "ae8cd938c54abcb29a720af064b9e26d9b129d06",
+      "latest_seen": "ae8cd938c54abcb29a720af064b9e26d9b129d06"
     },
     "agentark": {
       "branch": "main",
@@ -53,8 +53,8 @@
     "kimi-code": {
       "branch": "main",
       "baseline": "f30781bb273321f3e3bbb548a9d0724ab6299fc6",
-      "reviewed": "df6899553962d1764c9f4c3bec1b63c811cb425e",
-      "latest_seen": "df6899553962d1764c9f4c3bec1b63c811cb425e"
+      "reviewed": "c2d7bebd04106473bb4dbab2903756aa3f14a880",
+      "latest_seen": "c2d7bebd04106473bb4dbab2903756aa3f14a880"
     },
     "awesome-design-md": {
       "branch": "main",

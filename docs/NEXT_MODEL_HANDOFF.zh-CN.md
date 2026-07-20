@@ -1,6 +1,6 @@
 # Reames Agent 新会话无痛交接
 
-> 日期：2026-07-20
+> 日期：2026-07-21
 >
 > 仓库：`F:\reames-agent`
 >
@@ -62,16 +62,19 @@ usage/cache、tool/vision、错误与 runtime 行为。
   final-response obligation 也已关闭：最终文本发送前持久化，平台 ACK 后逐分片提交，最后 ACK 与 inbound
   claims/cursor 原子结算；冷启动直接恢复原答复，不重跑模型，ACK 歧义显示“可能重复”。真实渠道历史
   分页/掉线回环仍未完成。
-- Reasonix 最新已代码级审至 `43993f5a`：`8bb0e549..2301e248` 的数字开头 Provider env、MCP stdio reply queue、
+- Reasonix 最新已代码级审至 `77fd1a47`：`8bb0e549..2301e248` 的数字开头 Provider env、MCP stdio reply queue、
   Desktop 全 MCP/插件 lifecycle admission 与 visible/detached Controller reservation、中断轮次 LocalOnly
   恢复和 WebKit recorder focus 已落地；`2301e248..43993f5a` 又采用插件 Skill package provenance、
   portable/raw/visible/Claude MCP 名称唯一 canonical 解析、host-only runtime binding，以及 permission/
   Plan Mode/Hook/Evidence/子代理 canonical identity。Provider schema 不增加 alias；Reames 没有
-  `use_capability` proxy，不冒充 cache-only 子代理代理能力。Remote SSH UX/host-key 保持 P11。Codex 二级战略审至
-  `678157ac`：除前批 TUI/command/replay/exec identity 外，新增 paginated name canonical store、动态 cell 重测和
-  fresh/fork/resume subagent backfill 请求边界；Claude 无新增。Hermes 审至 `a7d7c02c`，其中 Kimi/Moonshot
+  `use_capability` proxy，不冒充 cache-only 子代理代理能力。`43993f5a..77fd1a47` 又采用 workspace virtualizer
+  stable key、ACP active-turn steering、cc-switch Reames/Reasonix app identity 与显式 Goal；automatic Plan
+  保持 default-off、仅用户显式 opt-in。Remote SSH UX/host-key 保持 P11。Codex 二级战略审至 `eceb3eea`：除前批
+  TUI/command/replay/exec identity、paginated name canonical store、动态 cell 重测和 fresh/fork/resume subagent
+  backfill 请求边界外，最新 legacy exec allow migration 的危险宽规则已转成 Reames runtime fail closed；Claude 无新增。Hermes 后续审至 `456f18b1`，其中 Kimi/Moonshot
   thinking 已窄化采用，custom endpoint/模型刷新已有等价，selector race 与 cold-start/first-token perf 进入
-  P9 合同，全零 revision fallback 被拒绝；MiMo `ec413ade` 的学习 Skill 只形成 checkpoint state 机制信号。
+  P9 合同，全零 revision fallback 被拒绝；MiMo `b7b2092a`、Scream `ae8cd938`、Kimi `c2d7bebd` 与
+  Impeccable `b906b414` 也已完成代码级分类，适用项只进入 P9/P10/M7 或由现有边界等价覆盖。
 - 本批新增 `internal/testenv`，隔离 HOME/USERPROFILE、XDG、AppData、TEMP/TMP 和 Reames home/state/cache，
   会写状态的 Go/Desktop 测试不再默认污染真实用户目录或 C 盘通用 Temp。
 - M6 微信 iLink 已把 `get_updates_buf` 收到最终投递结算之后并原子持久化，危险 `account_id` 不能逃逸
@@ -90,6 +93,13 @@ usage/cache、tool/vision、错误与 runtime 行为。
   3/3 已通过；当前宿主启动 WSL 时返回 `0x800705aa`，没有
   冒充新的真实 systemd smoke。权威边界见
   `audits/2026-07-20-m6-linux-uninstall-transaction.md`。
+- 当前未提交批次已把 macOS user-scope launchd install/uninstall 提升到同等级事务：快照 plist bytes/mode 与
+  loaded/running，同名 install 执行 bootout→原子写→bootstrap→kickstart 并验证，取消、写删、前向命令或
+  postcondition 失败使用独立 15 秒恢复上下文；恢复失败会 degraded/manual-repair。当前只有 deterministic
+  fault injection，不冒充真实 macOS manager。Windows Scheduled Task 随后也完成结构化 JSON + Export XML
+  snapshot、同名 running task 先 End 再替换、install/uninstall postcondition、独立恢复上下文、XML-safe error
+  和 degraded/manual-repair；当前 Windows 宿主只完成
+  ScheduledTasks absent 只读探针，不冒充真实 task mutation/lifecycle。
 - 同批 headless smoke 已把实际构建二进制的 `gateway recovery-status --json` 纳入纵向预检。报告新增非空
   `recovery_preflight` section：健康 config 必须为 schema v1、global valid、零 findings；临时损坏 TOML
   必须 exit 1 并投影 `config.invalid`；随后逐字节恢复原 config，且 app ID 与 synthetic Provider key 不得
@@ -97,10 +107,9 @@ usage/cache、tool/vision、错误与 runtime 行为。
 - 后续方向已由用户明确：P8 官方 OpenAI Responses/GPT 与 Claude parity 已关闭；P9 Codex-class
   Plugin/Skill/Hook/MCP/headless；P10 第一方 CDP Browser Control；P11 受治理 Remote SSH。现有兼容端点、插件基础或
   `web_search`/`web_fetch`/Playwright MCP 不能冒充这些阶段完成。
-- 2026-07-20 14:21 UTC 的后续 Upstream Watch 又发现 6 个远端移动：Reasonix
-  `43993f5a..77fd1a47`、Codex `678157ac..eceb3eea`、Hermes `a7d7c02c..3d7e1c5f`、MiMo
-  `ec413ade..b7b2092a`、Scream `22a2adaf..ae8cd938` 与 Kimi `df689955..c5b6103b`；Impeccable 检查失败。
-  当前集中批次不自动扩展或推进 lock，下一批只审 lock → latest，优先 Reasonix/Codex，不能把发现报告写成已接受。
+- 2026-07-20 14:21 UTC 的后续 Upstream Watch 与本轮 fetch 已全部完成代码级分类并推进 lock：Reasonix
+  `77fd1a47`、Codex `eceb3eea`、Hermes `456f18b1`、MiMo `b7b2092a`、Scream `ae8cd938`、Kimi
+  `c2d7bebd`、Impeccable `b906b414`。后续继续只审 lock → latest，不自动 merge/cherry-pick。
 - 当前树只保留 Go/Wails 产品；旧 Hermes/Python/Electron/TUI/plugin/test/package、`site/`、`workers/`
   已删除，public-readiness 会阻止其回归。
 - 内置工具 24 个；CLI 与 Guard 均支持 linux/darwin/windows × amd64/arm64、`CGO_ENABLED=0`。
@@ -112,15 +121,15 @@ usage/cache、tool/vision、错误与 runtime 行为。
 
 | 项目 | reviewed SHA | 决策角色 |
 |---|---|---|
-| DeepSeek Reasonix | `43993f5a10cd4afa46febf53ed9f7ab2a1ceab5b` | 唯一一级主源码上游；DeepSeek 原生与主 runtime |
-| Hermes | `a7d7c02cb6db071eced4ac82e24f878588619600` | 三级 Gateway/错误/运维机制参考；Provider/selector/perf/provenance 信号已分类 |
-| Codex | `678157acaa819d5510adfe359abb5d0392cfe461` | 二级战略；GPT/Responses、协议、插件、Hook/LSP/CDP/App-Server |
-| MiMo Code | `ec413adeccfcb65ccb63a708bb6136644ea13c79` | 三级设计/Skill 体验参考；checkpointed learning state 候选 |
-| Impeccable | `e4ab5e24bdf5321b72163d2fbcbe6fa985c848ba` | 品牌设计语言参考 |
-| Scream Code | `22a2adaf8a459ab6bcfda028cc74b4c9b7e5f11f` | 三级 Goal/TUI/可靠性机制参考 |
+| DeepSeek Reasonix | `77fd1a47be89498febe16a940621f79cc84f0b92` | 唯一一级主源码上游；DeepSeek 原生与主 runtime |
+| Hermes | `456f18b19c4208115acbf0c6b226af49916b5480` | 三级 Gateway/错误/运维机制参考；credential/stream/delivery/perf 信号已分类 |
+| Codex | `eceb3eeaf3a68d732596fd8c0e8a6807f9166770` | 二级战略；GPT/Responses、协议、插件、Hook/LSP/CDP/App-Server |
+| MiMo Code | `b7b2092a27def7b14df663fc7698165806185635` | 三级设计/Skill 体验参考；path/message/Skill 状态信号已分类 |
+| Impeccable | `b906b41462c26c359e452040994685ce6d8e4008` | 品牌设计语言与 Hook/Live 治理参考 |
+| Scream Code | `ae8cd938c54abcb29a720af064b9e26d9b129d06` | 三级 Goal/TUI/检索/可靠性机制参考 |
 | AgentArk | `63985cf819d1760f50f2a5c0dc11d82815e74623` | 安全架构参考 |
 | Claude Code | `015170d3fd84fb57ef4685a64b673fadd0690dc1` | 二级战略；Claude/Messages、Thinking、工具/视觉/缓存、插件 |
-| Kimi Code | `df6899553962d1764c9f4c3bec1b63c811cb425e` | 三级 Desktop Shell/headless/文件语义参考 |
+| Kimi Code | `c2d7bebd04106473bb4dbab2903756aa3f14a880` | 三级 Desktop Shell/headless/transcript 语义参考 |
 | Grok Build | `ba76b0a683fa52e4e60685017b85905451be17bc` | 三级安全/终端/ACP 机制参考；Stop/session/permission 信号进入后续路线 |
 | awesome-design-md | `664b3e78fd1a298ba11973822da988483256d4b4` | 设计资料参考 |
 
@@ -168,6 +177,11 @@ P7 新增区间和机器账本：
 - `docs/upstreams/reviews/reasonix-generation-8bb0e54-2301e24.json`
 - `docs/audits/2026-07-20-upstream-strategic-reference-delta.md`
 - `docs/audits/2026-07-20-codex-hermes-late-delta.md`
+- `docs/audits/2026-07-21-reasonix-43993f5-77fd1a4-codex-delta.md`
+- `docs/upstreams/reviews/reasonix-generation-43993f5-77fd1a4.json`
+- `docs/audits/2026-07-21-m6-launchd-service-transaction.md`
+- `docs/audits/2026-07-21-m6-windows-scheduled-task-transaction.md`
+- `docs/audits/2026-07-21-upstream-hermes-mimo-scream-kimi-impeccable-delta.md`
 
 ## 5. P7 本批代码变化
 
@@ -298,7 +312,7 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
 
 ## 6. 本批本地验证
 
-当前 M6/P9 批次在正式提交前已直接从工作树重跑并通过：
+上一提交 `a6d6fd07` 的完整交付门槛已通过：
 
 - Root build/vet/全 `internal/...` 测试，Desktop build/vet/全测试；
 - Frontend 完整 `test:all`、production build 和 bundle budget：entry JS 641,587 B、localized initial
@@ -308,16 +322,17 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
   feedback 生命周期，`status=passed`；
 - scripts 全发现 155 项测试通过、2 项按平台跳过；deploy/release/docs/public、安装器、Desktop
   artifact/candidate/native/interaction/accessibility/recovery/plugin lifecycle 合同和 Issue reconciliation 全部通过；
-- 本批上游接受时绑定 SHA 的 `--deep` 为 11/11、`changed_count=0`；后续监测已发现上述 6 个新移动，
-  当前 lock 与机器账本仍只证明已审到的 SHA；
-- 上游：Codex `678157ac`、Hermes `a7d7c02c` 与 MiMo `ec413ade` 逐提交/逐文件审查；最终接受强制使用绑定完整 SHA 的
+- 上一批上游接受时绑定 SHA 的 `--deep` 为 11/11、`changed_count=0`；当前未提交批次已审完并推进
+  Reasonix/Codex/Hermes/MiMo/Scream/Kimi/Impeccable。五个后续参考上游的精确 `--accept-revision` 返回
+  `changed_count=0`；Impeccable 在首次接受前移动，旧 SHA 被拒绝并在补审后才推进；
+- 历史上游：Codex `678157ac`、Hermes `a7d7c02c` 与 MiMo `ec413ade` 逐提交/逐文件审查；最终接受强制使用绑定完整 SHA 的
   `--accept-revision`，未绑定 `--accept`/`--accept-all`/`--update-lock` 已禁用；
 - Kimi：Anthropic provider 定向测试证明官方 host/model family 识别、无签名原生 thinking block 续轮回放、
   lookalike host 拒绝和 Claude signature 边界；provider/config 全组通过；
 - 高风险定向 race 覆盖微信/飞书/QQ/Telegram，以及 Desktop emitter/tab sink；
-- 最新 Reasonix MCP/Plugin Skill 与 Linux uninstall transaction 批的 `tool/plugin/config/skill/agent/control/boot/gatewayservice`
-  普通测试、vet、完整 race 与 focused `-count=20` 已通过；本批工作树 Root/Desktop/Frontend、scripts、
-  credential-free smoke 和 12 个跨目标也已完成；
+- 最新已提交 Reasonix MCP/Plugin Skill 与 Linux uninstall transaction 批的 `tool/plugin/config/skill/agent/control/boot/gatewayservice`
+  普通测试、vet、完整 race 与 focused `-count=20` 已通过；Root/Desktop/Frontend、scripts、credential-free smoke
+  和 12 个跨目标也已完成；
 - 首次 clean clone 在 Root/Desktop 并行负载下暴露 `pluginpkg.LoadState` 的 Windows 发布窗口：已有 state 在
   `MoveFileEx` 替换时曾被一次 `not exist` 误判为空。修复后，外部读取在已存在 state 上与 mutation 共用
   进程锁和 OS lifecycle lock，持锁的首次 mutation 仍允许缺失；`pluginpkg` 全包 `-count=20`、race
@@ -325,6 +340,24 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
   Frontend、baseline、155 项 scripts tests、Gateway smoke 与 12 个跨目标并全部通过；
 - `BenchmarkAsyncRuntimeEmitterCoalescedBacklog` 在 Windows amd64 独立 5 轮中位数约 `1.3 µs/op`，只证明 Go 队列合并开销，
   不冒充原生 WebView frame pacing。
+
+当前未提交批次已经通过以下最终本地门槛：
+
+- Root `go build ./...`、`go vet ./...` 与完整 `go test ./internal/... -count=1 -timeout 600s`；
+- Desktop `go build ./...`、`go vet ./...` 与完整 `go test ./... -count=1 -timeout 600s`；
+- Frontend 完整 `test:all`、production build 和 bundle budget：entry JS 641,587 B、localized initial
+  1,003,986 B、browser mock 983,252 B，全部在预算内；workspace virtualizer 的稳定 path key 覆盖折叠、展开与再展开；
+- scripts 全发现 155 项测试通过、2 项按平台跳过，Node issue reconciliation 4 项通过；
+- `verify-baseline.ps1` 通过，包含实际构建 CLI、隔离 home、credential-free Gateway smoke、公开/文档/部署/发布合同、
+  缓存敏感测试、Desktop 关键合同和 Frontend production build；
+- linux/darwin/windows x amd64/arm64 的 CLI 与 Guard，共 12 个 `CGO_ENABLED=0` 目标全部构建通过；
+- `agent/acp/control/config/permission/gatewayservice` 定向测试、vet、race 与高重复测试通过，其中 Windows transaction
+  覆盖精确 XML、enabled/running、取消、postcondition、幂等和 degraded rollback；launchd transaction 覆盖取消、
+  写删、命令与 postcondition fault injection；
+- 上游 JSON 语法、public-readiness 与 docs contract 通过，新增审计已进入索引。
+
+当前批仍须在正式 commit 后执行完整 clean clone，并以该最终 HEAD 的 CI/CodeQL 结果闭环；不得引用上一提交的绿色状态
+冒充本批证据。
 
 本批代码交付证据固定为 `a6d6fd07136453041c275e40f4f8e2b4f9bca04f`：clean clone 全量通过，push CI
 `29754127548` 8/8、CodeQL `29754135162` 3/3。本文件所在的证据闭环提交仍必须用自身 HEAD 的远端结果

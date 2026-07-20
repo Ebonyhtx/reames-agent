@@ -140,8 +140,12 @@
 | [M6 最终答复 obligation 审计](audits/2026-07-20-m6-outbound-final-response-obligation.md) | 最终文本发送前持久化、ACK 歧义可见恢复、多分片断点、单 writer、隐私投影与不重跑模型证据 |
 | [M6 微信持久轮询与 Desktop 背压审计](audits/2026-07-20-m6-weixin-polling-desktop-backpressure.md) | 微信最终投递后提交 poll cursor、三渠道 envelope 背压与 Desktop 有界 live queue 证据 |
 | [M6 Linux Gateway 卸载事务审计](audits/2026-07-20-m6-linux-uninstall-transaction.md) | user-scope 卸载快照、absent postcondition、取消/故障回滚、degraded fail-closed 与真实节点边界 |
+| [M6 macOS launchd 服务事务审计](audits/2026-07-21-m6-launchd-service-transaction.md) | user-scope plist/manager 快照、同名重装、取消/故障回滚、degraded fail-closed 与真实 macOS 节点边界 |
+| [M6 Windows Scheduled Task 服务事务审计](audits/2026-07-21-m6-windows-scheduled-task-transaction.md) | user-scope XML/state 快照、结构化探针、取消/故障回滚、degraded fail-closed 与真实 Windows 节点边界 |
 | [Reasonix 2301e248..43993f5a 插件 Skill MCP 绑定审计](audits/2026-07-20-reasonix-2301e24-43993f5.md) | canonical MCP alias、package provenance、runtime Skill binding、权限/Hook/Evidence 身份与 cache/live 边界 |
 | [Reasonix 8bb0e549..2301e248 增量审计](audits/2026-07-20-reasonix-8bb0e54-2301e24.md) | Provider env、MCP stdio/lifecycle、中断轮次恢复、WebKit focus 采用及 Remote SSH 延后 |
+| [Reasonix 43993f5a..77fd1a47 与 Codex 增量审计](audits/2026-07-21-reasonix-43993f5-77fd1a4-codex-delta.md) | ACP steering、workspace key、cc-switch/Goal、危险宽泛 exec allow fail-closed 与后续路线分类 |
+| [Hermes / MiMo / Scream / Kimi / Impeccable 最新增量审计](audits/2026-07-21-upstream-hermes-mimo-scream-kimi-impeccable-delta.md) | 五个参考上游的最新完整 SHA、代码级安全/恢复/Transcript/检索/Hook 分类与 P9/P10/M7 路由 |
 | [Codex / Claude / Hermes / Grok 最新增量审计](audits/2026-07-20-upstream-strategic-reference-delta.md) | 二级战略代码审查、Claude 无新增与三级机制信号的明确层级边界 |
 | [Codex / Hermes 提交前最新增量审计](audits/2026-07-20-codex-hermes-late-delta.md) | Codex TUI/command lifecycle 三提交代码级分类、Kimi 无签名 thinking 窄回放修复及最新冻结 |
 | [Codex / Hermes 最终移动增量审计](audits/2026-07-20-codex-hermes-final-delta.md) | paginated thread name、动态 cell 测量、subagent 请求去重与可信 Desktop benchmark 合同 |

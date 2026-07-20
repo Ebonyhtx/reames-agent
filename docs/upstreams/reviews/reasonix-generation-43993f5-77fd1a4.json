@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "upstream": "reasonix",
+  "baseline": "43993f5a10cd4afa46febf53ed9f7ab2a1ceab5b",
+  "reviewed": "77fd1a47be89498febe16a940621f79cc84f0b92",
+  "reviewed_at": "2026-07-20T13:51:51Z",
+  "evidence_transport": "github-official-compare-and-commit-api",
+  "counts": {
+    "all_commits": 10,
+    "non_merge_commits": 10,
+    "fix_perf_commits": 6,
+    "changed_files": 131,
+    "additions": 6792,
+    "deletions": 2047
+  },
+  "commits": [
+    {"sha":"464d4942adb830c4321d1fb8bd7929905f33d0d7","subject":"docs(release): prepare v1.17.16 notes","decision":"not-applicable"},
+    {"sha":"610a4c3d436744e4213d3697e6946b58e23a053a","subject":"fix(desktop): stabilize workspace tree virtualization (#6717)","decision":"adopted"},
+    {"sha":"29151f33c9965599052dc3b54eda687e70025f2d","subject":"feat(acp): support mid-turn steering / 支持 ACP 回合中引导 (#6715)","decision":"adopted-stronger"},
+    {"sha":"8cb9e3c268c0227571c881ea40db98da48c49574","subject":"Align Remote SSH config and credentials with OpenSSH / 对齐远程 SSH 配置与凭据处理 (#6716)","decision":"deferred-p11"},
+    {"sha":"4cec2b0fadcb3d04148f046ffc596fc2e0f5feff","subject":"fix(desktop): isolate WebView2 startup from stale proxies / 隔离 WebView2 启动残留代理 (#6727)","decision":"deferred-p3-p10"},
+    {"sha":"0051567cadf1e373c2d9b35e8668712fbc0217ac","subject":"fix(ccswitch): import MCP servers with enabled_reasonix (#6730)","decision":"adopted-branded"},
+    {"sha":"6fcd41d2a97b524b4426ecb5c10a0f20565e7446","subject":"Require explicit Goal start for AutoResearch / 要求显式启动目标模式后再启用自动研究 (#6731)","decision":"adopted"},
+    {"sha":"8b44e4cee53fd69f954e5b33637c2b3a0feb357f","subject":"fix(desktop): show current workspace diffs (#6733)","decision":"deferred-p9"},
+    {"sha":"6ded2b3c2940c1cf2377b1b603df893529da4a28","subject":"fix(desktop): keep Windows opener menu above transcript (#6737)","decision":"not-applicable"},
+    {"sha":"77fd1a47be89498febe16a940621f79cc84f0b92","subject":"fix: retire automatic Plan Mode / 退役自动计划模式 (#6734)","decision":"partial-rejected-explicit-opt-in-retained"}
+  ],
+  "area_counts": {
+    "agent-runtime": 3,
+    "controller-transports": 2,
+    "tools-mcp-plugins": 1,
+    "permissions-sandbox": 1,
+    "goal-plan-work-modes": 2,
+    "desktop-ui-accessibility": 5,
+    "cli-acp": 1,
+    "recovery-update": 1,
+    "build-release": 1,
+    "bug-fix-parity": 6
+  },
+  "audit": "docs/audits/2026-07-21-reasonix-43993f5-77fd1a4-codex-delta.md"
+}

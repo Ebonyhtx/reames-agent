@@ -810,6 +810,12 @@ func TestPermissionMutators(t *testing.T) {
 	if err := c.AddPermissionRule("nope", "read_file"); err == nil {
 		t.Error("expected error for unknown list")
 	}
+	if err := c.AddPermissionRule("allow", "Bash(python -c:*)"); err == nil {
+		t.Error("expected unsafe broad interpreter allow rule to be rejected")
+	}
+	if err := c.AddPermissionRule("allow", "Bash(go test:*)"); err != nil {
+		t.Fatalf("narrow allow rule: %v", err)
+	}
 
 	removed, err := c.RemovePermissionRule("deny", "Bash(rm -rf*)")
 	if err != nil || !removed {
