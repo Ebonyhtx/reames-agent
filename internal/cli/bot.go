@@ -482,8 +482,6 @@ func runGatewayLifecycle(ctx context.Context, gw gatewayLifecycle, notifier gate
 				if _, err := notifier.Status("watchdog unhealthy: " + watchdogStatus); err != nil {
 					fmt.Fprintf(stderr, "warning: systemd watchdog status notification failed: %v\n", err)
 				}
-				watchdogTicker.Stop()
-				watchdogTick = nil
 				continue
 			}
 			if _, err := notifier.Watchdog(watchdogStatus); err != nil {

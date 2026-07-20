@@ -222,6 +222,57 @@ func TestPollingRequestDeadlineReentersReconnectLadder(t *testing.T) {
 	}
 }
 
+func TestPollingFailureReportsReconnectAndRecovery(t *testing.T) {
+	t.Setenv("TELEGRAM_TEST_TOKEN", testToken)
+	var polls atomic.Int32
+	server := telegramServer(t, func(w http.ResponseWriter, r *http.Request, method string) {
+		switch method {
+		case "getMe":
+			writeResult(t, w, telegramUser{ID: 99, IsBot: true})
+		case "getUpdates":
+			switch polls.Add(1) {
+			case 1:
+				http.Error(w, "temporary", http.StatusBadGateway)
+				return
+			case 2:
+				writeResult(t, w, []telegramUpdate{})
+				return
+			}
+			waitForRequestEnd(r)
+		default:
+			t.Errorf("unexpected method %q", method)
+		}
+	})
+	a := New(config.TelegramBotConfig{TokenEnv: "TELEGRAM_TEST_TOKEN", APIBase: server.URL}, testLogger()).(*adapter)
+	a.pollTimeout = 20 * time.Millisecond
+	a.requestSlack = 10 * time.Millisecond
+	a.retryInitial = time.Millisecond
+	a.retryMaximum = time.Millisecond
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer a.Stop()
+	awaitTelegramConnectionState(t, a.ConnectionEvents(), bot.AdapterRunning)
+	awaitTelegramConnectionState(t, a.ConnectionEvents(), bot.AdapterReconnecting)
+	awaitTelegramConnectionState(t, a.ConnectionEvents(), bot.AdapterRunning)
+}
+
+func awaitTelegramConnectionState(t *testing.T, events <-chan bot.AdapterConnectionEvent, want bot.AdapterConnectionState) {
+	t.Helper()
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-events:
+			if event.State == want {
+				return
+			}
+		case <-timer.C:
+			t.Fatalf("timed out waiting for Telegram connection state %q", want)
+		}
+	}
+}
+
 func TestTransportFailureDoesNotLeakTokenOrURL(t *testing.T) {
 	t.Setenv("TELEGRAM_TEST_TOKEN", testToken)
 	a := New(config.TelegramBotConfig{TokenEnv: "TELEGRAM_TEST_TOKEN"}, testLogger()).(*adapter)

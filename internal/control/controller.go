@@ -1510,10 +1510,21 @@ func (c *Controller) Turn() int {
 // also remembers a grant for the rest of the session so the same approval scope
 // is not re-prompted. Unknown/expired IDs are ignored.
 func (c *Controller) Approve(id string, allow, session, persist bool) {
-	pending := c.approval.resolve(id)
+	c.TryApprove(id, allow, session, persist)
+}
+
+// TryApprove resolves a pending approval and reports whether the ID still
+// referred to a live prompt. Transports use the result to avoid acknowledging
+// stale or already-handled decisions as successful.
+func (c *Controller) TryApprove(id string, allow, session, persist bool) bool {
+	pending, ok := c.approval.resolve(id)
+	if !ok {
+		return false
+	}
 	if pending.reply != nil {
 		pending.reply <- approvalReply{allow: allow, session: session, persist: persist} // buffered, never blocks
 	}
+	return true
 }
 
 // EnableInteractiveApproval swaps the executor's gate for one that routes
@@ -1628,9 +1639,17 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 // AnswerQuestion resolves a pending AskRequest by ID with the user's selections.
 // Unknown/expired IDs are ignored.
 func (c *Controller) AnswerQuestion(id string, answers []event.AskAnswer) {
+	c.TryAnswerQuestion(id, answers)
+}
+
+// TryAnswerQuestion resolves a pending AskRequest and reports whether the
+// prompt was still live.
+func (c *Controller) TryAnswerQuestion(id string, answers []event.AskAnswer) bool {
 	if pending, ok := c.approval.resolveAsk(id); ok {
 		pending.reply <- answers // buffered, never blocks
+		return true
 	}
+	return false
 }
 
 // ReplayPendingPrompts re-emits the ApprovalRequest / AskRequest event for every

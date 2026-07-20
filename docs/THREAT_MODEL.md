@@ -41,6 +41,12 @@ Controller ── Agent loop ── Provider API
 | Remote SSH | 计划中（P11） | Reasonix `65fcd465` 的 host-key、bootstrap、tunnel、SFTP 与 remote serve 已完成代码级分类，但尚未进入生产树 | 在 host-key 变化、私钥/agent socket、jump host、remote bootstrap checksum、端口转发、远端命令审批、断线恢复和清理全部接入现有 Controller/permission/sandbox/credential/evidence 前，不得开放 Remote SSH；不得复制第二套 Agent runtime |
 | 构建与发布 | 部分实现 | Go 依赖哈希、六目标 candidate、SHA256SUMS、三平台 Desktop candidate、CodeQL 和发布契约检查已建立；CLI updater 已锁定官方仓库和精确资产名，实际执行候选/安装后 `version`，保留 `.previous`，并以同目录锁保护自动恢复和 `upgrade --rollback`。Desktop 包现同时交付 Guard/Desktop/launcher/helper，Windows/Linux/macOS 入口默认经过 Guard，Linux/Windows helper 和 macOS bundle rollback 保留完整安装单元。全 workflow 发布棘轮只允许 `release-candidate.yml`，拒绝 `contents/packages/id-token: write`、GitHub Release、npm 和非 snapshot GoReleaser 发布动作 | 生产发布仍禁用；公开 release 实际升级/失败回滚、CLI/Windows/macOS 工件签名、notarization、provenance attestation 和可信 updater 发布链未完成。Guard transaction 收口了应用层 crash journal，但不证明文件系统/包管理器在任意断电点的全局原子性 |
 
+IM Gateway 的远端 decision token 现绑定随机进程 epoch 并一次性消费，未知、重复或过期 approval/ask
+返回 `not_found`。`/stop` 等切换命令只在 ACK 成功后 durable 结算被取消 claims，失败保持 retryable；
+命令 claim 由外层 dispatcher 单次结算。四渠道连接事件只允许 bounded 状态和固定 reason，未知 reason
+收敛为 `connection_error`，不把原始 URL、SDK error 或 credential 投影到 status/metrics。以上降低假 ACK、
+旧卡片重放、重复 offset 提交和诊断泄漏风险，但不改变平台 ACK 与本地 commit 的 at-least-once 边界。
+
 ## 优先风险
 
 1. **远程副作用**：Serve/IM 一旦暴露到非 loopback，鉴权、Origin、CSRF、角色与审批必须同时成立。

@@ -74,6 +74,12 @@ type identifyData struct {
 	Properties properties `json:"properties"`
 }
 
+type resumeData struct {
+	Token     string `json:"token"`
+	SessionID string `json:"session_id"`
+	Seq       int64  `json:"seq"`
+}
+
 type properties struct {
 	OS      string `json:"$os"`
 	Browser string `json:"$browser"`
@@ -109,7 +115,14 @@ type wsClient struct {
 }
 
 func (a *adapter) gatewayLoop(ctx context.Context) {
-	bot.RunWithRetry(ctx, a.logger, "qq gateway", bot.RetryConfig{}, func(ctx context.Context) error {
+	defer a.connection.Report(bot.AdapterClosed, "")
+	attempt := a.gatewayAttempt
+	if attempt == nil {
+		attempt = func(ctx context.Context, token string, ready func()) error {
+			return a.connectGateway(ctx, token, ready)
+		}
+	}
+	bot.RunWithRetry(ctx, a.logger, "qq gateway", a.retry, func(ctx context.Context) error {
 		token, err := a.getAccessToken(ctx)
 		if err != nil {
 			return err
@@ -117,7 +130,11 @@ func (a *adapter) gatewayLoop(ctx context.Context) {
 		// connectGateway blocks for the connection's lifetime, returning on
 		// disconnect or error; RunWithRetry handles the cancellation-aware
 		// backoff and reconnect.
-		return a.connectGateway(ctx, token)
+		err = attempt(ctx, token, func() { a.connection.Report(bot.AdapterRunning, "") })
+		if ctx.Err() == nil {
+			a.connection.Report(bot.AdapterReconnecting, "connection_closed")
+		}
+		return err
 	})
 }
 
@@ -214,7 +231,7 @@ func qqExpiresInSeconds(value any) (int, error) {
 	}
 }
 
-func (a *adapter) connectGateway(ctx context.Context, token string) error {
+func (a *adapter) connectGateway(ctx context.Context, token string, onReady func()) error {
 	gatewayURL, err := a.getGatewayURL(ctx, token)
 	if err != nil {
 		return err
@@ -256,27 +273,17 @@ func (a *adapter) connectGateway(ctx context.Context, token string) error {
 	}
 	ws.heartbeatMs = int(sanitizeHeartbeatInterval(time.Duration(hello.HeartbeatInterval) * time.Millisecond).Milliseconds())
 
-	// Identify
-	identify := identifyData{
-		Token:   fmt.Sprintf("QQBot %s", token),
-		Intents: 1<<0 | 1<<1 | 1<<9 | 1<<10 | 1<<12 | 1<<25 | 1<<26,
-		Shard:   [2]int{0, 1},
-		Properties: properties{
-			OS:      "linux",
-			Browser: "reames-agent",
-			Device:  "reamesAgent-bot",
-		},
-	}
-	identifyJSON, _ := json.Marshal(identify)
-	if err := ws.send(opIdentify, identifyJSON); err != nil {
-		return fmt.Errorf("send identify: %w", err)
+	authOp, authPayload := a.gatewayAuthPayload(token)
+	if err := ws.send(authOp, authPayload); err != nil {
+		return fmt.Errorf("send gateway auth op %d: %w", authOp, err)
 	}
 
-	// 读取 Ready
+	// Read READY for a fresh Identify or RESUMED for an online reconnect.
 	if err := decoder.Decode(&msg); err != nil {
-		return fmt.Errorf("read ready: %w", err)
+		return fmt.Errorf("read gateway auth response: %w", err)
 	}
-	if msg.Op == opDispatch && msg.T == "READY" {
+	switch {
+	case authOp == opIdentify && msg.Op == opDispatch && msg.T == "READY":
 		var ready struct {
 			SessionID string `json:"session_id"`
 		}
@@ -286,9 +293,21 @@ func (a *adapter) connectGateway(ctx context.Context, token string) error {
 		ws.sessionID = ready.SessionID
 		a.sessionID = ready.SessionID
 		a.seq = msg.S
+		onReady()
 		a.logger.Info("qq gateway ready", "sandbox", a.cfg.Sandbox, "heartbeat_ms", ws.heartbeatMs)
-	} else {
-		a.logger.Warn("qq gateway expected ready event", "op", msg.Op, "event", msg.T)
+	case authOp == opResume && msg.Op == opDispatch && msg.T == "RESUMED":
+		if msg.S > 0 {
+			a.seq = msg.S
+		}
+		onReady()
+		a.logger.Info("qq gateway resumed", "sandbox", a.cfg.Sandbox, "heartbeat_ms", ws.heartbeatMs)
+	case msg.Op == opInvalid:
+		a.sessionID = ""
+		a.seq = 0
+		a.connection.Report(bot.AdapterReconnecting, "session_invalid")
+		return nil
+	default:
+		return fmt.Errorf("qq gateway expected READY dispatch, got op=%d event=%q", msg.Op, msg.T)
 	}
 
 	// 启动 heartbeat
@@ -335,11 +354,13 @@ func (a *adapter) connectGateway(ctx context.Context, token string) error {
 			a.handleDispatch(ctx, msg)
 		case opHeartbeatAck:
 		case opReconnect:
+			a.connection.Report(bot.AdapterReconnecting, "server_reconnect")
 			a.logger.Info("gateway requested reconnect")
 			heartbeatCancel()
 			<-heartbeatDone
 			return nil
 		case opInvalid:
+			a.connection.Report(bot.AdapterReconnecting, "session_invalid")
 			a.sessionID = ""
 			a.seq = 0
 			a.logger.Info("gateway session invalidated")
@@ -348,6 +369,25 @@ func (a *adapter) connectGateway(ctx context.Context, token string) error {
 			return nil
 		}
 	}
+}
+
+func (a *adapter) gatewayAuthPayload(token string) (int, json.RawMessage) {
+	wireToken := fmt.Sprintf("QQBot %s", token)
+	if a.sessionID != "" && a.seq > 0 {
+		payload, _ := json.Marshal(resumeData{Token: wireToken, SessionID: a.sessionID, Seq: a.seq})
+		return opResume, payload
+	}
+	payload, _ := json.Marshal(identifyData{
+		Token:   wireToken,
+		Intents: 1<<0 | 1<<1 | 1<<9 | 1<<10 | 1<<12 | 1<<25 | 1<<26,
+		Shard:   [2]int{0, 1},
+		Properties: properties{
+			OS:      "linux",
+			Browser: "reames-agent",
+			Device:  "reamesAgent-bot",
+		},
+	})
+	return opIdentify, payload
 }
 
 func (a *adapter) appID() string {

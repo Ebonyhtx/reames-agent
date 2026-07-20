@@ -14,6 +14,19 @@ type commandTargetSpy struct {
 	status RuntimeStatus
 }
 
+type resolvingCommandTarget struct {
+	*commandTargetSpy
+	accept bool
+}
+
+func (t *resolvingCommandTarget) TryApprove(id string, allow, session, persist bool) bool {
+	if !t.accept {
+		return false
+	}
+	t.commandTargetSpy.Approve(id, allow, session, persist)
+	return true
+}
+
 func (s *commandTargetSpy) Submit(input string) {
 	s.calls = append(s.calls, "submit")
 	s.values = append(s.values, input)
@@ -139,6 +152,17 @@ func TestExecuteCommandRejectsInvalidCommandsWithoutSideEffects(t *testing.T) {
 				t.Fatalf("invalid command caused calls: %#v", spy.calls)
 			}
 		})
+	}
+}
+
+func TestExecuteCommandRejectsUnknownOrExpiredApproval(t *testing.T) {
+	target := &resolvingCommandTarget{commandTargetSpy: &commandTargetSpy{status: RuntimeStatus{Running: true}}}
+	result, err := executeCommand(target, NewApprovalCommand("expired", true, false, false), CommandScopeRemote)
+	if err == nil || result.Accepted || result.Error == nil || result.Error.Code != CommandErrNotFound {
+		t.Fatalf("result = %+v, err = %v, want not_found rejection", result, err)
+	}
+	if len(target.calls) != 0 {
+		t.Fatalf("stale approval caused side effects: %#v", target.calls)
 	}
 }
 

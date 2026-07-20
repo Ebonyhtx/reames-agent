@@ -193,13 +193,13 @@ func (a *approvalManager) cancel(id string) {
 }
 
 // resolve removes and returns the pending approval for id (Approve path).
-func (a *approvalManager) resolve(id string) pendingApproval {
+func (a *approvalManager) resolve(id string) (pendingApproval, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	p := a.approvals[id]
+	p, ok := a.approvals[id]
 	delete(a.approvals, id)
 	a.writePendingSnapshotLocked(a.sessionID)
-	return p
+	return p, ok
 }
 
 // registerAsk allocates an ask ID, records the pending question batch, and

@@ -879,7 +879,7 @@ func (l *deliveryLedger) delivered(msg InboundMessage) error {
 	return nil
 }
 
-func (l *deliveryLedger) deliveredSession(sessionKey string) ([]deliveryClaim, error) {
+func (l *deliveryLedger) deliveredSession(sessionKey string, excluded []deliveryClaim) ([]deliveryClaim, error) {
 	if l == nil || strings.TrimSpace(sessionKey) == "" {
 		return nil, nil
 	}
@@ -888,10 +888,12 @@ func (l *deliveryLedger) deliveredSession(sessionKey string) ([]deliveryClaim, e
 	candidate := cloneDeliveryLedgerState(l.state)
 	now := time.Now().UTC()
 	channels := make(map[string]bool)
+	excludedKeys := deliveryClaimKeySet(excluded)
+	deliveredKeys := make(map[string]bool)
 	changed := false
 	var claims []deliveryClaim
 	for key, record := range candidate.Records {
-		if BuildSessionKey(record.Source) != sessionKey || record.Status == deliveryStatusDelivered {
+		if BuildSessionKey(record.Source) != sessionKey || record.Status == deliveryStatusDelivered || excludedKeys[key] {
 			continue
 		}
 		record.Status = deliveryStatusDelivered
@@ -899,19 +901,18 @@ func (l *deliveryLedger) deliveredSession(sessionKey string) ([]deliveryClaim, e
 		record.LastError = ""
 		candidate.Records[key] = record
 		claims = append(claims, deliveryClaim{Source: record.Source, MessageID: record.MessageID})
+		deliveredKeys[key] = true
 		if record.Cursor != "" {
 			channels[recoveryChannelKey(record.Source)] = true
 		}
 		changed = true
 	}
 	for obligationKey, obligation := range candidate.Obligations {
-		remove := BuildSessionKey(obligation.Source) == sessionKey
-		if !remove {
-			for _, claim := range obligation.Claims {
-				if BuildSessionKey(claim.Source) == sessionKey {
-					remove = true
-					break
-				}
+		remove := false
+		for _, claim := range obligation.Claims {
+			if deliveredKeys[deliveryRecordKey(claim.Source, claim.MessageID)] {
+				remove = true
+				break
 			}
 		}
 		if remove {
@@ -932,7 +933,7 @@ func (l *deliveryLedger) deliveredSession(sessionKey string) ([]deliveryClaim, e
 	return claims, nil
 }
 
-func (l *deliveryLedger) failSession(sessionKey string) ([]deliveryClaim, error) {
+func (l *deliveryLedger) failSession(sessionKey string, excluded []deliveryClaim) ([]deliveryClaim, error) {
 	if l == nil || strings.TrimSpace(sessionKey) == "" {
 		return nil, nil
 	}
@@ -940,10 +941,11 @@ func (l *deliveryLedger) failSession(sessionKey string) ([]deliveryClaim, error)
 	defer l.mu.Unlock()
 	candidate := cloneDeliveryLedgerState(l.state)
 	now := time.Now().UTC()
+	excludedKeys := deliveryClaimKeySet(excluded)
 	changed := false
 	var claims []deliveryClaim
 	for key, record := range candidate.Records {
-		if BuildSessionKey(record.Source) != sessionKey || record.Status == deliveryStatusDelivered {
+		if BuildSessionKey(record.Source) != sessionKey || record.Status == deliveryStatusDelivered || excludedKeys[key] {
 			continue
 		}
 		record.Status = deliveryStatusFailed
@@ -961,6 +963,17 @@ func (l *deliveryLedger) failSession(sessionKey string) ([]deliveryClaim, error)
 	}
 	l.state = candidate
 	return claims, nil
+}
+
+func deliveryClaimKeySet(claims []deliveryClaim) map[string]bool {
+	keys := make(map[string]bool, len(claims))
+	for _, claim := range claims {
+		if strings.TrimSpace(claim.MessageID) == "" {
+			continue
+		}
+		keys[deliveryRecordKey(claim.Source, claim.MessageID)] = true
+	}
+	return keys
 }
 
 func (l *deliveryLedger) checkpoints(binding AdapterBinding) []RecoveryCheckpoint {

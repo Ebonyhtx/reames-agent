@@ -20,16 +20,20 @@ import (
 // New 创建 QQ Bot 适配器。
 func New(cfg config.QQBotConfig, logger *slog.Logger) bot.Adapter {
 	return &adapter{
-		cfg:    cfg,
-		logger: logger.With("platform", "qq"),
+		cfg:        cfg,
+		logger:     logger.With("platform", "qq"),
+		connection: bot.NewConnectionReporter(),
 	}
 }
 
 type adapter struct {
-	cfg    config.QQBotConfig
-	logger *slog.Logger
-	msgCh  chan bot.InboundMessage
-	cancel context.CancelFunc
+	cfg            config.QQBotConfig
+	logger         *slog.Logger
+	msgCh          chan bot.InboundMessage
+	cancel         context.CancelFunc
+	connection     *bot.ConnectionReporter
+	gatewayAttempt func(context.Context, string, func()) error
+	retry          bot.RetryConfig
 
 	// gateway 状态
 	ws          *wsClient
@@ -46,6 +50,9 @@ type adapter struct {
 
 func (a *adapter) Platform() bot.Platform { return bot.PlatformQQ }
 func (a *adapter) Name() string           { return "qq" }
+func (a *adapter) ConnectionEvents() <-chan bot.AdapterConnectionEvent {
+	return a.connection.Events()
+}
 
 func (a *adapter) Start(ctx context.Context) error {
 	a.msgCh = make(chan bot.InboundMessage, 64)
@@ -60,6 +67,7 @@ func (a *adapter) Start(ctx context.Context) error {
 	}
 	ctx, a.cancel = context.WithCancel(ctx)
 
+	a.connection.Report(bot.AdapterConnecting, "")
 	go a.gatewayLoop(ctx)
 	return nil
 }
@@ -68,8 +76,11 @@ func (a *adapter) Stop() error {
 	if a.cancel != nil {
 		a.cancel()
 	}
+	a.connection.Report(bot.AdapterClosed, "")
 	return nil
 }
+
+var _ bot.AdapterConnectionStateSource = (*adapter)(nil)
 
 func (a *adapter) Send(ctx context.Context, msg bot.OutboundMessage) (bot.SendResult, error) {
 	return a.sendMessage(ctx, msg)

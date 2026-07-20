@@ -80,6 +80,7 @@ const (
 	CommandErrInvalidPayload CommandErrorCode = "invalid_payload"
 	CommandErrForbidden      CommandErrorCode = "forbidden"
 	CommandErrBusy           CommandErrorCode = "busy"
+	CommandErrNotFound       CommandErrorCode = "not_found"
 )
 
 // CommandError describes a command rejected before it reached the runtime.
@@ -140,6 +141,10 @@ type commandTarget interface {
 	RuntimeStatus() RuntimeStatus
 }
 
+type approvalCommandTarget interface {
+	TryApprove(string, bool, bool, bool) bool
+}
+
 // ExecuteCommand validates and dispatches one stable command. The scope is a
 // server-side capability decision and deliberately does not appear in Command's
 // JSON representation.
@@ -195,7 +200,16 @@ func executeCommand(target commandTarget, command Command, scope CommandScope) (
 		target.Cancel()
 	case CommandApproval:
 		payload := command.Approval
-		target.Approve(payload.ID, payload.Allow, payload.Session, payload.Persist)
+		if resolver, ok := target.(approvalCommandTarget); ok {
+			if !resolver.TryApprove(payload.ID, payload.Allow, payload.Session, payload.Persist) {
+				err := commandError(CommandErrNotFound, "approval.id", "approval request is unknown or expired")
+				result.Error = err
+				result.Status = target.RuntimeStatus()
+				return result, err
+			}
+		} else {
+			target.Approve(payload.ID, payload.Allow, payload.Session, payload.Persist)
+		}
 	case CommandStatus:
 		// Status is sampled below with every other command result.
 	}

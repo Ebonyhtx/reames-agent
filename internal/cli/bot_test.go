@@ -707,6 +707,8 @@ func TestGatewayWatchdogStatusRequiresAnActiveAdapter(t *testing.T) {
 		{name: "none", healthy: false, want: "no configured adapters"},
 		{name: "disabled only", health: []bot.AdapterHealthSnapshot{{Status: "disabled"}}, healthy: false, want: "no configured adapters"},
 		{name: "all closed", health: []bot.AdapterHealthSnapshot{{Status: "closed"}, {Status: "error"}}, healthy: false, want: "0/2 adapters active"},
+		{name: "connecting", health: []bot.AdapterHealthSnapshot{{Status: "connecting"}}, healthy: false, want: "0/1 adapters active"},
+		{name: "reconnecting", health: []bot.AdapterHealthSnapshot{{Status: "reconnecting"}}, healthy: false, want: "0/1 adapters active"},
 		{name: "running", health: []bot.AdapterHealthSnapshot{{Status: "running"}, {Status: "closed"}}, healthy: true, want: "1/2 adapters active"},
 		{name: "degraded remains useful", health: []bot.AdapterHealthSnapshot{{Status: "degraded"}, {Status: "disabled"}}, healthy: true, want: "1/1 adapters active"},
 	}
@@ -814,6 +816,31 @@ func TestGatewayLifecycleStopsWatchdogWhenAllAdaptersBecomeUnhealthy(t *testing.
 	}
 	if strings.Contains(got, "watchdog:") {
 		t.Fatalf("unhealthy lifecycle sent watchdog heartbeat: %q", got)
+	}
+}
+
+func TestGatewayLifecycleResumesWatchdogAfterAdapterRecovery(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	healthChecks := 0
+	notifier := &testGatewayNotifier{cadence: time.Millisecond, onWatchdog: cancel}
+	gw := testGatewayLifecycle{
+		health: func() []bot.AdapterHealthSnapshot {
+			healthChecks++
+			if healthChecks == 2 {
+				return []bot.AdapterHealthSnapshot{{Status: "reconnecting"}}
+			}
+			return []bot.AdapterHealthSnapshot{{Status: "running"}}
+		},
+		stop: func() {},
+	}
+	if code := runGatewayLifecycle(ctx, gw, notifier, time.Second, io.Discard); code != 0 {
+		t.Fatalf("lifecycle exit = %d", code)
+	}
+	got := strings.Join(notifier.events, "|")
+	if !strings.Contains(got, "status:watchdog unhealthy: 0/1 adapters active") ||
+		!strings.Contains(got, "watchdog:Gateway running: 1/1 adapters active") {
+		t.Fatalf("events = %q, want reconnect pause followed by recovered heartbeat", got)
 	}
 }
 

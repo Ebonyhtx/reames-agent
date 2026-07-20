@@ -25,8 +25,8 @@ type renderSink struct {
 	replyTo    string
 	logger     *slog.Logger
 	ctrl       botController
-	onApproval func(event.Approval)
-	onAsk      func(event.Ask)
+	onApproval func(event.Approval) event.Approval
+	onAsk      func(event.Ask) event.Ask
 
 	// 渲染缓冲
 	buf           strings.Builder
@@ -51,7 +51,7 @@ const (
 	renderMaxProgressMessages = 3
 )
 
-func newRenderSink(ctx context.Context, adapter Adapter, connID, domain, chatID string, chatType ChatType, userID string, replyTo string, logger *slog.Logger, onApproval func(event.Approval), onAsk func(event.Ask)) *renderSink {
+func newRenderSink(ctx context.Context, adapter Adapter, connID, domain, chatID string, chatType ChatType, userID string, replyTo string, logger *slog.Logger, onApproval func(event.Approval) event.Approval, onAsk func(event.Ask) event.Ask) *renderSink {
 	return &renderSink{
 		ctx:        ctx,
 		adapter:    adapter,
@@ -118,12 +118,13 @@ func (s *renderSink) Emit(e event.Event) {
 
 	case event.ApprovalRequest:
 		// 发送审批请求
+		approval := e.Approval
 		if s.onApproval != nil {
-			s.onApproval(e.Approval)
+			approval = s.onApproval(approval)
 		}
 		approvalText := fmt.Sprintf("⚠️ 需要批准操作:\n工具: %s\n操作: %s\n\nID: `%s`\n回复 1 批准，回复 2 拒绝；也可用 /approve %s 或 /deny %s。",
-			e.Approval.Tool, e.Approval.Subject, e.Approval.ID, e.Approval.ID, e.Approval.ID)
-		approvalText += renderApprovalPlanDetails(e.Approval.Plan)
+			approval.Tool, approval.Subject, approval.ID, approval.ID, approval.ID)
+		approvalText += renderApprovalPlanDetails(approval.Plan)
 		msg := OutboundMessage{
 			ConnectionID: s.connID,
 			Domain:       s.domain,
@@ -134,18 +135,19 @@ func (s *renderSink) Emit(e event.Event) {
 		}
 		switch s.adapter.Platform() {
 		case PlatformQQ:
-			msg.Keyboard = approvalKeyboard(e.Approval.ID)
+			msg.Keyboard = approvalKeyboard(approval.ID)
 		case PlatformFeishu:
-			msg.Card = approvalCard(e.Approval, s.chatType, s.userID)
+			msg.Card = approvalCard(approval, s.chatType, s.userID)
 		}
 		_ = s.send(msg)
 
 	case event.AskRequest:
+		ask := e.Ask
 		if s.onAsk != nil {
-			s.onAsk(e.Ask)
+			ask = s.onAsk(ask)
 		}
 		// 发送问答请求
-		askText := renderAskText(e.Ask)
+		askText := renderAskText(ask)
 		msg := OutboundMessage{
 			ConnectionID: s.connID,
 			Domain:       s.domain,
@@ -155,7 +157,7 @@ func (s *renderSink) Emit(e event.Event) {
 			ReplyToMsgID: s.replyTo,
 		}
 		if s.adapter.Platform() == PlatformFeishu {
-			msg.Card = askCard(e.Ask, askText, s.chatType, s.userID)
+			msg.Card = askCard(ask, askText, s.chatType, s.userID)
 		}
 		_ = s.send(msg)
 

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -83,28 +84,42 @@ type feishuMention struct {
 
 // adapter 飞书适配器实现。
 type adapter struct {
-	cfg      config.FeishuBotConfig
-	logger   *slog.Logger
-	msgCh    chan bot.InboundMessage
-	cancel   context.CancelFunc
-	client   *lark.Client
-	wsClient *larkws.Client
+	cfg        config.FeishuBotConfig
+	logger     *slog.Logger
+	msgCh      chan bot.InboundMessage
+	cancel     context.CancelFunc
+	client     *lark.Client
+	wsClient   *larkws.Client
+	connection *bot.ConnectionReporter
+	wsAttempt  func(context.Context, websocketLifecycleCallbacks) error
+	retry      bot.RetryConfig
 
 	seenMu sync.Mutex
 	seen   map[string]bool // 消息去重
 }
 
+type websocketLifecycleCallbacks struct {
+	ready        func()
+	reconnecting func()
+	reconnected  func()
+	failed       func()
+}
+
 // New 创建飞书 Bot 适配器。
 func New(cfg config.FeishuBotConfig, logger *slog.Logger) bot.Adapter {
 	return &adapter{
-		cfg:    cfg,
-		logger: logger.With("platform", "feishu"),
-		seen:   make(map[string]bool),
+		cfg:        cfg,
+		logger:     logger.With("platform", "feishu"),
+		seen:       make(map[string]bool),
+		connection: bot.NewConnectionReporter(),
 	}
 }
 
 func (a *adapter) Platform() bot.Platform { return bot.PlatformFeishu }
 func (a *adapter) Name() string           { return "feishu" }
+func (a *adapter) ConnectionEvents() <-chan bot.AdapterConnectionEvent {
+	return a.connection.Events()
+}
 
 func (a *adapter) Start(ctx context.Context) error {
 	a.msgCh = make(chan bot.InboundMessage, 64)
@@ -123,11 +138,23 @@ func (a *adapter) Start(ctx context.Context) error {
 		if strings.TrimSpace(a.cfg.VerificationToken) == "" {
 			return fmt.Errorf("feishu: webhook mode needs verification_token set — refusing to expose an unauthenticated event endpoint")
 		}
-		go a.runWebhook(ctx)
+		port := a.cfg.WebhookPort
+		if port == 0 {
+			port = 8080
+		}
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err != nil {
+			a.cancel()
+			a.cancel = nil
+			return fmt.Errorf("feishu webhook listen: %w", err)
+		}
+		a.connection.Report(bot.AdapterRunning, "")
+		go a.runWebhook(ctx, listener)
 	default:
 		if _, err := a.appSecret(); err != nil {
 			return err
 		}
+		a.connection.Report(bot.AdapterConnecting, "")
 		go a.runWebSocket(ctx)
 	}
 	return nil
@@ -140,6 +167,7 @@ func (a *adapter) Stop() error {
 	if a.wsClient != nil {
 		a.wsClient.Close()
 	}
+	a.connection.Report(bot.AdapterClosed, "")
 	return nil
 }
 
@@ -165,42 +193,75 @@ func (a *adapter) appSecret() (string, error) {
 
 // runWebSocket 启动飞书 WebSocket 长连接。
 func (a *adapter) runWebSocket(ctx context.Context) {
+	defer a.connection.Report(bot.AdapterClosed, "")
 	secret, err := a.appSecret()
 	if err != nil {
 		a.logger.Error("feishu websocket config error", "err", err)
 		return
 	}
-	eventHandler := a.newEventDispatcher()
-	bot.RunWithRetry(ctx, a.logger, "feishu sdk websocket", bot.RetryConfig{}, func(ctx context.Context) error {
-		opts := []larkws.ClientOption{
-			larkws.WithEventHandler(eventHandler),
-			larkws.WithLogLevel(larkcore.LogLevelError),
-			larkws.WithAutoReconnect(true),
-			larkws.WithOnReady(func() { a.logger.Info("feishu sdk websocket connected") }),
-			larkws.WithOnReconnecting(func() { a.logger.Warn("feishu sdk websocket reconnecting") }),
-			larkws.WithOnReconnected(func() { a.logger.Info("feishu sdk websocket reconnected") }),
-			larkws.WithOnError(func(err error) { a.logger.Error("feishu sdk websocket error", "err", err) }),
+	callbacks := websocketLifecycleCallbacks{
+		ready: func() {
+			a.connection.Report(bot.AdapterRunning, "")
+			a.logger.Info("feishu sdk websocket connected")
+		},
+		reconnecting: func() {
+			a.connection.Report(bot.AdapterReconnecting, "sdk_reconnecting")
+			a.logger.Warn("feishu sdk websocket reconnecting")
+		},
+		reconnected: func() {
+			a.connection.Report(bot.AdapterRunning, "")
+			a.logger.Info("feishu sdk websocket reconnected")
+		},
+		failed: func() {
+			a.connection.Report(bot.AdapterReconnecting, "sdk_error")
+		},
+	}
+	attempt := a.wsAttempt
+	if attempt == nil {
+		attempt = func(ctx context.Context, callbacks websocketLifecycleCallbacks) error {
+			return a.runSDKWebSocketAttempt(ctx, secret, callbacks)
 		}
-		if feishuDomain(a.cfg.Domain) == "lark" {
-			opts = append(opts, larkws.WithDomain(lark.LarkBaseUrl))
+	}
+	bot.RunWithRetry(ctx, a.logger, "feishu sdk websocket", a.retry, func(ctx context.Context) error {
+		err := attempt(ctx, callbacks)
+		if ctx.Err() == nil {
+			a.connection.Report(bot.AdapterReconnecting, "connection_closed")
 		}
-		client := larkws.NewClient(a.cfg.AppID, secret, opts...)
-		a.wsClient = client
-		// client.Start blocks; run it off-loop so cancellation closes the client
-		// immediately rather than waiting for Start to notice ctx. RunWithRetry
-		// handles the reconnect backoff.
-		errCh := make(chan error, 1)
-		go func() { errCh <- client.Start(ctx) }()
-		select {
-		case <-ctx.Done():
-			client.Close()
-			return nil
-		case err := <-errCh:
-			client.Close()
-			return err
-		}
+		return err
 	})
 }
+
+func (a *adapter) runSDKWebSocketAttempt(ctx context.Context, secret string, callbacks websocketLifecycleCallbacks) error {
+	opts := []larkws.ClientOption{
+		larkws.WithEventHandler(a.newEventDispatcher()),
+		larkws.WithLogLevel(larkcore.LogLevelError),
+		larkws.WithAutoReconnect(true),
+		larkws.WithOnReady(callbacks.ready),
+		larkws.WithOnReconnecting(callbacks.reconnecting),
+		larkws.WithOnReconnected(callbacks.reconnected),
+		larkws.WithOnError(func(err error) {
+			callbacks.failed()
+			a.logger.Error("feishu sdk websocket error", "err", err)
+		}),
+	}
+	if feishuDomain(a.cfg.Domain) == "lark" {
+		opts = append(opts, larkws.WithDomain(lark.LarkBaseUrl))
+	}
+	client := larkws.NewClient(a.cfg.AppID, secret, opts...)
+	a.wsClient = client
+	errCh := make(chan error, 1)
+	go func() { errCh <- client.Start(ctx) }()
+	select {
+	case <-ctx.Done():
+		client.Close()
+		return nil
+	case err := <-errCh:
+		client.Close()
+		return err
+	}
+}
+
+var _ bot.AdapterConnectionStateSource = (*adapter)(nil)
 
 func (a *adapter) newEventDispatcher() *dispatcher.EventDispatcher {
 	return dispatcher.NewEventDispatcher(a.cfg.VerificationToken, "").
@@ -704,12 +765,8 @@ func feishuCodeError(code int, msg string) string {
 }
 
 // runWebhook 启动飞书 Webhook 模式。
-func (a *adapter) runWebhook(ctx context.Context) {
-	port := a.cfg.WebhookPort
-	if port == 0 {
-		port = 8080
-	}
-
+func (a *adapter) runWebhook(ctx context.Context, listener net.Listener) {
+	defer a.connection.Report(bot.AdapterClosed, "")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/feishu/event", func(w http.ResponseWriter, r *http.Request) {
 		eventCtx := r.Context()
@@ -754,7 +811,6 @@ func (a *adapter) runWebhook(ctx context.Context) {
 	})
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
 		Handler: mux,
 	}
 
@@ -765,8 +821,8 @@ func (a *adapter) runWebhook(ctx context.Context) {
 		}
 	}()
 
-	a.logger.Info("feishu webhook listening", "port", port)
-	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+	a.logger.Info("feishu webhook listening", "addr", listener.Addr().String())
+	if err := server.Serve(listener); err != http.ErrServerClosed {
 		a.logger.Error("feishu webhook server error", "err", err)
 	}
 }

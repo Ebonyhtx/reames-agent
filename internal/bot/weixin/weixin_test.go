@@ -11,12 +11,54 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"reames-agent/internal/bot"
 	"reames-agent/internal/config"
 )
+
+func TestPollingFailureReportsReconnectAndRecovery(t *testing.T) {
+	isolateWeixinUserConfig(t)
+	t.Setenv("WEIXIN_TEST_TOKEN", "token-1")
+	var polls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if polls.Add(1) == 1 {
+			http.Error(w, "temporary", http.StatusBadGateway)
+			return
+		}
+		writeWeixinPollResponse(t, w, "", "")
+	}))
+	defer server.Close()
+	a := New(config.WeixinBotConfig{TokenEnv: "WEIXIN_TEST_TOKEN", APIBase: server.URL, AccountID: "reconnect"}, testWeixinLogger()).(*adapter)
+	a.startupDelay = time.Millisecond
+	a.retryDelay = time.Millisecond
+	a.idleDelay = time.Hour
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer a.Stop()
+	awaitWeixinConnectionState(t, a.ConnectionEvents(), bot.AdapterConnecting)
+	awaitWeixinConnectionState(t, a.ConnectionEvents(), bot.AdapterReconnecting)
+	awaitWeixinConnectionState(t, a.ConnectionEvents(), bot.AdapterRunning)
+}
+
+func awaitWeixinConnectionState(t *testing.T, events <-chan bot.AdapterConnectionEvent, want bot.AdapterConnectionState) {
+	t.Helper()
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-events:
+			if event.State == want {
+				return
+			}
+		case <-timer.C:
+			t.Fatalf("timed out waiting for Weixin connection state %q", want)
+		}
+	}
+}
 
 func TestStartReturnsMissingToken(t *testing.T) {
 	isolateWeixinUserConfig(t)

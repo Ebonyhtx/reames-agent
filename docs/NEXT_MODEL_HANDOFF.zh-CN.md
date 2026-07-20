@@ -62,6 +62,10 @@ usage/cache、tool/vision、错误与 runtime 行为。
   final-response obligation 也已关闭：最终文本发送前持久化，平台 ACK 后逐分片提交，最后 ACK 与 inbound
   claims/cursor 原子结算；冷启动直接恢复原答复，不重跑模型，ACK 歧义显示“可能重复”。真实渠道历史
   分页/掉线回环仍未完成。
+- 本批 M6 渠道合同已加入 Controller `not_found` 决策确认、带随机 epoch 的一次性远端
+  approval/ask token、四平台 `/stop` active/queued/ACK settlement 矩阵，以及统一
+  `connecting/running/reconnecting/closed` 状态、reconnect metrics 和 watchdog 恢复。QQ Resume 只覆盖
+  在线 session，飞书 webhook 先 bind 再报告 running；真实四渠道回环仍为 `external-blocked`。
 - Reasonix 最新已代码级审至 `77fd1a47`：`8bb0e549..2301e248` 的数字开头 Provider env、MCP stdio reply queue、
   Desktop 全 MCP/插件 lifecycle admission 与 visible/detached Controller reservation、中断轮次 LocalOnly
   恢复和 WebKit recorder focus 已落地；`2301e248..43993f5a` 又采用插件 Skill package provenance、
@@ -93,13 +97,14 @@ usage/cache、tool/vision、错误与 runtime 行为。
   3/3 已通过；当前宿主启动 WSL 时返回 `0x800705aa`，没有
   冒充新的真实 systemd smoke。权威边界见
   `audits/2026-07-20-m6-linux-uninstall-transaction.md`。
-- 当前未提交批次已把 macOS user-scope launchd install/uninstall 提升到同等级事务：快照 plist bytes/mode 与
+- 提交 `84ea60fe` 已把 macOS user-scope launchd install/uninstall 提升到同等级事务：快照 plist bytes/mode 与
   loaded/running，同名 install 执行 bootout→原子写→bootstrap→kickstart 并验证，取消、写删、前向命令或
   postcondition 失败使用独立 15 秒恢复上下文；恢复失败会 degraded/manual-repair。当前只有 deterministic
   fault injection，不冒充真实 macOS manager。Windows Scheduled Task 随后也完成结构化 JSON + Export XML
   snapshot、同名 running task 先 End 再替换、install/uninstall postcondition、独立恢复上下文、XML-safe error
   和 degraded/manual-repair；当前 Windows 宿主只完成
-  ScheduledTasks absent 只读探针，不冒充真实 task mutation/lifecycle。
+  ScheduledTasks absent 只读探针，不冒充真实 task mutation/lifecycle。该提交的 CI `29778198039` 8/8 与
+  CodeQL `29778198006` 3/3 全绿。
 - 同批 headless smoke 已把实际构建二进制的 `gateway recovery-status --json` 纳入纵向预检。报告新增非空
   `recovery_preflight` section：健康 config 必须为 schema v1、global valid、零 findings；临时损坏 TOML
   必须 exit 1 并投影 `config.invalid`；随后逐字节恢复原 config，且 app ID 与 synthetic Provider key 不得
@@ -276,6 +281,15 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
   `audits/2026-07-19-m6-durable-channel-recovery.md` 与
   `audits/2026-07-20-m6-outbound-final-response-obligation.md` 与
   `audits/2026-07-20-m6-weixin-polling-desktop-backpressure.md`。
+- 远端 approval/ask 不再直接暴露 Controller ID；Gateway 使用每进程随机 epoch + 单调序号的一次性 token，
+  Controller 对未知/重复/过期 ID 返回稳定 `not_found`，不再假 ACK；
+- `/stop` 成功 ACK 会取消 active turn、清空 queue、先结算旧 claims，再由外层单次结算命令 claim；失败
+  ACK 保持全部 claims retryable 且不推进 checkpoint；ACK 后 canceled-session commit 失败也会向外传播，
+  不把命令误标 delivered。Feishu/QQ/微信/Telegram 表驱动 fixture 同时验证；
+- 四 adapter 共用 bounded connection state。status/metrics 只投影固定 reason 与 reconnect count；CLI
+  watchdog 在 connecting/reconnecting 期间暂停 heartbeat，恢复 running 后继续。QQ Resume 只证明在线
+  WebSocket session 恢复，不证明关机期间补扫。权威审计：
+  `audits/2026-07-21-m6-channel-decisions-cancellation-reconnect.md`。
 
 ## 5.3 Reasonix 最新可靠性与 Telegram 扩展
 
@@ -341,27 +355,25 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
 - `BenchmarkAsyncRuntimeEmitterCoalescedBacklog` 在 Windows amd64 独立 5 轮中位数约 `1.3 µs/op`，只证明 Go 队列合并开销，
   不冒充原生 WebView frame pacing。
 
-当前未提交批次已经通过以下最终本地门槛：
+渠道合同批在提交前已经通过：
 
-- Root `go build ./...`、`go vet ./...` 与完整 `go test ./internal/... -count=1 -timeout 600s`；
-- Desktop `go build ./...`、`go vet ./...` 与完整 `go test ./... -count=1 -timeout 600s`；
-- Frontend 完整 `test:all`、production build 和 bundle budget：entry JS 641,587 B、localized initial
-  1,003,986 B、browser mock 983,252 B，全部在预算内；workspace virtualizer 的稳定 path key 覆盖折叠、展开与再展开；
-- scripts 全发现 155 项测试通过、2 项按平台跳过，Node issue reconciliation 4 项通过；
-- `verify-baseline.ps1` 通过，包含实际构建 CLI、隔离 home、credential-free Gateway smoke、公开/文档/部署/发布合同、
-  缓存敏感测试、Desktop 关键合同和 Frontend production build；
-- linux/darwin/windows x amd64/arm64 的 CLI 与 Guard，共 12 个 `CGO_ENABLED=0` 目标全部构建通过；
-- `agent/acp/control/config/permission/gatewayservice` 定向测试、vet、race 与高重复测试通过，其中 Windows transaction
-  覆盖精确 XML、enabled/running、取消、postcondition、幂等和 degraded rollback；launchd transaction 覆盖取消、
-  写删、命令与 postcondition fault injection；
-- 上游 JSON 语法、public-readiness 与 docs contract 通过，新增审计已进入索引。
+- Root `go build ./...`、`go vet ./...`、完整 `go test ./internal/... -count=1 -timeout 600s`；
+- Desktop `go build ./...`、`go vet ./...`、完整 `go test ./... -count=1 -timeout 600s`；
+- Frontend `test:all`、production build 与 bundle budget：entry 641,587 B、localized initial
+  1,003,986 B、browser mock 983,252 B；
+- `control/bot/feishu/qq/telegram/weixin/cli` 完整测试与 race；四平台 `/stop`、decision token、
+  reconnect/watchdog、QQ Resume、飞书 bind、Gateway Start rollback 和取消账本故障路径聚焦 `-count=20`；
+- scripts 全发现 155 项通过、2 项按平台跳过；`verify-baseline.ps1`、credential-free Gateway smoke、
+  docs/public/deploy/release contracts 全部通过；
+- linux/darwin/windows × amd64/arm64 的 CLI 与 Guard，共 12 个 `CGO_ENABLED=0` 最终源码目标通过；
+- `git diff --check`。
 
-当前批仍须在正式 commit 后执行完整 clean clone，并以该最终 HEAD 的 CI/CodeQL 结果闭环；不得引用上一提交的绿色状态
-冒充本批证据。
+以上本地证据不能替代最终 HEAD 的 clean clone 和 CI/CodeQL；交付时必须核对同一 SHA，不得引用
+`84ea60fe` 或更早提交的绿色结果冒充本批证据。
 
-本批代码交付证据固定为 `a6d6fd07136453041c275e40f4f8e2b4f9bca04f`：clean clone 全量通过，push CI
-`29754127548` 8/8、CodeQL `29754135162` 3/3。本文件所在的证据闭环提交仍必须用自身 HEAD 的远端结果
-验证，不能拿 `a6d6fd07` 的绿色状态替代；新会话统一使用：
+当前已提交基线为 `84ea60fe24126cb31f944e055f607ce159b3d4cc`：push CI `29778198039` 8/8、
+CodeQL `29778198006` 3/3。后续批次仍必须用自身最终 HEAD 的 clean clone 和远端结果验证；
+新会话统一使用：
 
 ```powershell
 gh run list --commit (git rev-parse HEAD) --limit 20
@@ -403,7 +415,7 @@ gh run list --commit (git rev-parse HEAD) --limit 20
 3. 本批 CI/CodeQL 若失败，先在同一批修复，不用碎片 push 消耗 CI。
 4. 电脑清理后若 `F:\code-reference` 丢失，按 `docs/upstreams/upstreams.json` 重建；不要从旧聊天猜 SHA。
 5. 远端全绿且用户未提供外部环境时，M6 飞书/QQ 历史分页、微信/Telegram 真实保留窗口、真实掉线和云节点
-   证据保持等待；仓库内继续逐渠道审批/取消/reconnect fixture 与 P9 App-Server/headless，
+   证据保持等待；仓库内渠道审批/取消/reconnect fixture 已收口，下一步进入 P9 App-Server/headless，
    再进入 P10，不降低真实 API、真实 IM、systemd reboot 或浏览器登录态证据门槛。
 
 ## 9. Git 与清洁约束

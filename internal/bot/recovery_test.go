@@ -679,14 +679,66 @@ func TestGatewayStopAcknowledgementFailureLeavesCanceledClaimsRetryable(t *testi
 	key := BuildSessionKey(original.Session())
 	gw.controllers[key] = &sessionState{activeInbound: &original, cancel: func() {}}
 	adapter := &failedRecoverySendAdapter{newFakeAdapter(PlatformWeixin, "stop-failed")}
-	if err := gw.handleSlashCommand(context.Background(), adapter, key, stop); err == nil {
+	err := gw.handleSlashCommand(context.Background(), adapter, key, stop)
+	if err == nil {
 		t.Fatal("/stop accepted a failed acknowledgement")
 	}
+	gw.failInbound(stop, err)
 	if got := ledger.snapshot(); got.Failed != 2 || got.Delivered != 0 || got.Checkpoints != 0 {
 		t.Fatalf("failed acknowledgement snapshot = %+v", got)
 	}
 	if claimed, err := ledger.claim(original); err != nil || !claimed {
 		t.Fatalf("canceled original retry claim = %v, %v", claimed, err)
+	}
+}
+
+func TestGatewayStopSettlementWriteFailureKeepsCommandRetryable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "delivery-ledger.json")
+	ledger := openTestDeliveryLedger(t, path, 16)
+	gw := NewGateway(GatewayConfig{}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	gw.recovery = ledger
+	original := recoveryTestMessage("message-running-settlement-failure", "cursor-running-settlement-failure")
+	original.Text = "long task"
+	stop := recoveryTestMessage("message-stop-settlement-failure", "cursor-stop-settlement-failure")
+	stop.Text = "/stop"
+	for _, msg := range []InboundMessage{original, stop} {
+		if claimed, err := ledger.claim(msg); err != nil || !claimed {
+			t.Fatalf("claim %s = %v, %v", msg.MessageID, claimed, err)
+		}
+	}
+	key := BuildSessionKey(original.Session())
+	gw.controllers[key] = &sessionState{activeInbound: &original, cancel: func() {}}
+	originalWrite := ledger.writeFile
+	failNextWrite := true
+	ledger.writeFile = func(path string, data []byte, mode os.FileMode) error {
+		if failNextWrite {
+			failNextWrite = false
+			return errors.New("injected canceled-session commit failure")
+		}
+		return originalWrite(path, data, mode)
+	}
+
+	adapter := newFakeAdapter(PlatformWeixin, "stop-settlement-failure")
+	err := gw.handleSlashCommand(context.Background(), adapter, key, stop)
+	if err == nil || !strings.Contains(err.Error(), "canceled-session commit failure") {
+		t.Fatalf("handle /stop error = %v, want durable settlement failure", err)
+	}
+	gw.failInbound(stop, err)
+	if got := ledger.snapshot(); got.Processing != 1 || got.Failed != 1 || got.Delivered != 0 || got.Checkpoints != 0 {
+		t.Fatalf("settlement write failure snapshot = %+v", got)
+	}
+
+	ledger.close()
+	restarted, err := openDeliveryLedger(path, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restarted.close()
+	for _, msg := range []InboundMessage{original, stop} {
+		claimed, claimErr := restarted.claim(msg)
+		if claimErr != nil || !claimed {
+			t.Fatalf("retry claim %q = %t, %v", msg.MessageID, claimed, claimErr)
+		}
 	}
 }
 

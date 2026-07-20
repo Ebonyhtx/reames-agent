@@ -2,7 +2,7 @@
 
 > 状态：当前唯一执行路线
 >
-> 更新：2026-07-20
+> 更新：2026-07-21
 >
 > 规划方式：先关闭真实用户闭环，再扩展能力面
 
@@ -435,6 +435,15 @@ notarization、公开主题 registry
   status 或 Provider prompt；状态接口只显示数量。v1→v2 迁移、第二 writer fail-closed、发送前磁盘状态、多分片
   断点、发送/commit 故障、重复入站、取消、扫描预算和 race 已有测试。详见
   `audits/2026-07-20-m6-outbound-final-response-obligation.md`。
+- [x] 渠道决策、取消与重连合同：Controller 对未知/重复/过期 approval、ask 返回稳定
+  `not_found`；Gateway 远端 card/文本使用带随机 epoch 的一次性 decision token。`/stop`、`/new`、
+  `/reset`、`/use`、`/attach` 在 ACK 成功时只结算被取消的 active/pending claims，命令 claim 由
+  外层 dispatcher 结算一次；ACK 失败保持 claims retryable，连续 cursor 不提前推进。Feishu、QQ、
+  微信、Telegram 共用 table-driven active-cancel/queue-clear/settlement 合同。四个 adapter
+  统一投影 bounded `connecting/running/reconnecting/closed` 状态，Gateway status/metrics 增加
+  reconnect counter，未知 reason 脱敏；CLI watchdog 在 reconnect 期间暂停 heartbeat，恢复 running
+  后继续。QQ 仅对完整在线 session 使用 Resume，飞书 webhook 先同步 bind 再报告 running。详见
+  `audits/2026-07-21-m6-channel-decisions-cancellation-reconnect.md`。
 - [ ] 渠道断线实证：微信和 Telegram 已把各自原生 long-poll cursor/offset 放到最终投递之后提交，但仍依赖
   平台真实保留窗口；飞书/QQ 尚无已实现且已证明的历史分页/resume API。当前已获得跨进程实时事件去重、
   最终投递门禁、微信/Telegram cursor 重放和所有实时 adapter 的队列背压，但不能冒充关机期间的完整漏消息
@@ -597,7 +606,9 @@ durable session/subagent、TUI queue/interject、ACP/headless。不得照搬其 
 也不接入 xAI auth、telemetry、online memory、managed policy、marketplace 或 Rust 第二 runtime
 → 当前 M6 已交付 Telegram/微信 durable long polling、实时 adapter 背压、outbound final-response obligation，
   以及 Linux systemd、macOS launchd、Windows Scheduled Task user-scope 故障可回滚事务；代码提交 `a6d6fd07` 的 clean clone、CI
-  `29754127548` 8/8 与 CodeQL `29754135162` 3/3 是上一基线，不替代当前未提交批次。下一无需凭据的可靠性工作是继续逐渠道审批/取消/reconnect fixture。
+  `29754127548` 8/8 与 CodeQL `29754135162` 3/3 是旧基线，`84ea60fe` 的 CI `29778198039` 8/8 与 CodeQL
+  `29778198006` 3/3 是当前已提交基线，均不替代后续批次。逐渠道审批/取消/reconnect fixture 已在
+  当前批收口；下一仓库主线进入 P9 App-Server/headless。
   并行等待干净 Linux linger-enabled logout/reboot、真实 macOS/Windows 节点、
   真实 watchdog kill/restart、Gateway recovery-status/system service 实启，以及真实 Provider/IM 回环
 → 仓库战略主线继续 P9 → P10 → P11：Codex-class 插件/headless、第一方 CDP Browser Control、受治理 Remote SSH；

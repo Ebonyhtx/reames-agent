@@ -2,7 +2,11 @@
 // 架构参考 Hermes 项目的 gateway/adapter/session 模式。
 package bot
 
-import "context"
+import (
+	"context"
+	"sync"
+	"time"
+)
 
 // Platform 标识 IM 平台。
 type Platform string
@@ -153,6 +157,68 @@ type Adapter interface {
 
 	// Name 返回适配器实例名（用于日志）。
 	Name() string
+}
+
+// AdapterConnectionState is a transport-neutral connection lifecycle state.
+type AdapterConnectionState string
+
+const (
+	AdapterConnecting   AdapterConnectionState = "connecting"
+	AdapterRunning      AdapterConnectionState = "running"
+	AdapterReconnecting AdapterConnectionState = "reconnecting"
+	AdapterClosed       AdapterConnectionState = "closed"
+)
+
+// AdapterConnectionEvent carries only bounded host-defined state. Reason must
+// be a fixed non-secret identifier, never a raw SDK or transport error.
+type AdapterConnectionEvent struct {
+	State  AdapterConnectionState
+	Reason string
+	At     time.Time
+}
+
+// AdapterConnectionStateSource is an optional adapter capability consumed by
+// BotGateway health, status, metrics, and watchdog projection.
+type AdapterConnectionStateSource interface {
+	ConnectionEvents() <-chan AdapterConnectionEvent
+}
+
+// ConnectionReporter is the shared non-blocking lifecycle emitter embedded by
+// first-party adapters. A slow health consumer sees the latest bounded states
+// without applying backpressure to a platform connection loop.
+type ConnectionReporter struct {
+	mu sync.Mutex
+	ch chan AdapterConnectionEvent
+}
+
+func NewConnectionReporter() *ConnectionReporter {
+	return &ConnectionReporter{ch: make(chan AdapterConnectionEvent, 8)}
+}
+
+func (r *ConnectionReporter) Events() <-chan AdapterConnectionEvent {
+	if r == nil {
+		return nil
+	}
+	return r.ch
+}
+
+func (r *ConnectionReporter) Report(state AdapterConnectionState, reason string) {
+	if r == nil {
+		return
+	}
+	event := AdapterConnectionEvent{State: state, Reason: reason, At: time.Now().UTC()}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	select {
+	case r.ch <- event:
+		return
+	default:
+	}
+	select {
+	case <-r.ch:
+	default:
+	}
+	r.ch <- event
 }
 
 // DeliverySettlementAdapter is an optional adapter contract for transports

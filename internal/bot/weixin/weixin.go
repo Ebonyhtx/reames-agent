@@ -163,6 +163,7 @@ type adapter struct {
 	retryDelay   time.Duration
 	idleDelay    time.Duration
 	writeState   func(string, []byte, os.FileMode) error
+	connection   *bot.ConnectionReporter
 }
 
 // New 创建微信 Bot 适配器。
@@ -175,11 +176,15 @@ func New(cfg config.WeixinBotConfig, logger *slog.Logger) bot.Adapter {
 		startupDelay:   weixinStartupDelay,
 		retryDelay:     weixinRetryDelay,
 		idleDelay:      weixinIdleDelay,
+		connection:     bot.NewConnectionReporter(),
 	}
 }
 
 func (a *adapter) Platform() bot.Platform { return bot.PlatformWeixin }
 func (a *adapter) Name() string           { return "weixin" }
+func (a *adapter) ConnectionEvents() <-chan bot.AdapterConnectionEvent {
+	return a.connection.Events()
+}
 
 func (a *adapter) Start(ctx context.Context) error {
 	a.lifecycleMu.Lock()
@@ -214,8 +219,10 @@ func (a *adapter) Start(ctx context.Context) error {
 	a.mu.Unlock()
 
 	a.logger.Info("weixin polling started", "account", logHash(a.accountID()), "api_base", a.apiBase())
+	a.connection.Report(bot.AdapterConnecting, "")
 	go func() {
 		defer close(done)
+		defer a.connection.Report(bot.AdapterClosed, "")
 		a.pollLoop(ctx)
 	}()
 	return nil
@@ -230,6 +237,7 @@ func (a *adapter) Stop() error {
 		return nil
 	}
 	cancel()
+	a.connection.Report(bot.AdapterClosed, "")
 	if done == nil {
 		a.cancel = nil
 		return nil
@@ -519,11 +527,13 @@ func (a *adapter) pollLoop(ctx context.Context) {
 		result, err := a.getUpdates(ctx)
 		if err != nil {
 			a.logger.Error("getupdates failed", "err", err)
+			a.connection.Report(bot.AdapterReconnecting, "poll_failed")
 			if !bot.SleepCtx(ctx, retryDelay) {
 				return
 			}
 			continue
 		}
+		a.connection.Report(bot.AdapterRunning, "")
 		if err := a.publishPollBatch(ctx, result); err != nil {
 			if ctx.Err() != nil {
 				return
@@ -543,6 +553,8 @@ func (a *adapter) pollLoop(ctx context.Context) {
 		}
 	}
 }
+
+var _ bot.AdapterConnectionStateSource = (*adapter)(nil)
 
 // getUpdates 调用微信 iLink getupdates API。
 func (a *adapter) getUpdates(ctx context.Context) (ilinkResponse, error) {

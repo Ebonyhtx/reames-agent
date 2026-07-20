@@ -63,6 +63,7 @@ func New(cfg config.TelegramBotConfig, logger *slog.Logger) bot.Adapter {
 		retryInitial:   defaultRetryInitial,
 		retryMaximum:   defaultRetryMaximum,
 		settlementWake: make(chan struct{}, 1),
+		connection:     bot.NewConnectionReporter(),
 	}
 }
 
@@ -90,10 +91,14 @@ type adapter struct {
 	pending        map[int64]*pendingUpdate
 	pendingOrder   []int64
 	settlementWake chan struct{}
+	connection     *bot.ConnectionReporter
 }
 
 func (a *adapter) Platform() bot.Platform { return bot.PlatformTelegram }
 func (a *adapter) Name() string           { return "telegram" }
+func (a *adapter) ConnectionEvents() <-chan bot.AdapterConnectionEvent {
+	return a.connection.Events()
+}
 
 func (a *adapter) Start(ctx context.Context) error {
 	a.lifecycleMu.Lock()
@@ -140,8 +145,10 @@ func (a *adapter) Start(ctx context.Context) error {
 	done = a.done
 	a.mu.Unlock()
 
+	a.connection.Report(bot.AdapterRunning, "")
 	go func() {
 		defer close(done)
+		defer a.connection.Report(bot.AdapterClosed, "")
 		a.pollLoop(runCtx)
 	}()
 	return nil
@@ -159,6 +166,7 @@ func (a *adapter) Stop() error {
 		return nil
 	}
 	cancel()
+	a.connection.Report(bot.AdapterClosed, "")
 	a.client.CloseIdleConnections()
 	if done == nil {
 		return nil
@@ -277,6 +285,7 @@ func (a *adapter) pollLoop(ctx context.Context) {
 				return
 			}
 			a.logger.Warn("telegram polling request failed", "err", err)
+			a.connection.Report(bot.AdapterReconnecting, "poll_failed")
 			if !bot.SleepCtx(ctx, delay) {
 				return
 			}
@@ -286,6 +295,7 @@ func (a *adapter) pollLoop(ctx context.Context) {
 			}
 			continue
 		}
+		a.connection.Report(bot.AdapterRunning, "")
 		if len(updates) == 0 {
 			delay = a.retryInitial
 			if delay <= 0 {
@@ -316,6 +326,8 @@ func (a *adapter) pollLoop(ctx context.Context) {
 		}
 	}
 }
+
+var _ bot.AdapterConnectionStateSource = (*adapter)(nil)
 
 func (a *adapter) publishBatch(ctx context.Context, updates []telegramUpdate) bool {
 	sort.Slice(updates, func(i, j int) bool { return updates[i].UpdateID < updates[j].UpdateID })

@@ -238,6 +238,11 @@ func (gw *BotGateway) handleControlMetrics(w http.ResponseWriter, r *http.Reques
 		labels := adapterMetricLabels(health)
 		fmt.Fprintf(w, "reamesAgent_bot_adapter_send_errors_total{%s} %d\n", labels, health.SendErrors)
 	}
+	fmt.Fprintln(w, "# TYPE reamesAgent_bot_adapter_reconnects_total counter")
+	for _, health := range gw.AdapterHealth() {
+		labels := adapterMetricLabels(health)
+		fmt.Fprintf(w, "reamesAgent_bot_adapter_reconnects_total{%s} %d\n", labels, health.Reconnects)
+	}
 	fmt.Fprintln(w, "# TYPE reamesAgent_bot_adapter_status gauge")
 	for _, health := range gw.AdapterHealth() {
 		labels := adapterMetricLabels(health)

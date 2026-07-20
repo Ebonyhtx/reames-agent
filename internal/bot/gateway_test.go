@@ -579,6 +579,29 @@ func TestGatewayReturnsErrorWhenAllAdaptersFail(t *testing.T) {
 	}
 }
 
+func TestGatewayStartFailureRetainsConfiguredBindingsForRetry(t *testing.T) {
+	bad := newFakeAdapter(PlatformWeixin, "retry-weixin")
+	bad.startErr = errors.New("fixture unavailable")
+	gw := NewGatewayWithAdapterBindings(GatewayConfig{
+		Enabled: map[Platform]bool{PlatformWeixin: true},
+	}, []AdapterBinding{{ID: "weixin-retry", Platform: PlatformWeixin, Adapter: bad}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := gw.Start(context.Background()); err == nil {
+		t.Fatal("first Start succeeded with unavailable adapter")
+	}
+	if got := gw.AdapterCount(); got != 0 {
+		t.Fatalf("adapter count after failure = %d, want 0", got)
+	}
+
+	bad.startErr = nil
+	if err := gw.Start(context.Background()); err != nil {
+		t.Fatalf("retry Start: %v", err)
+	}
+	defer gw.Stop()
+	if got := gw.AdapterCount(); got != 1 {
+		t.Fatalf("adapter count after retry = %d, want 1", got)
+	}
+}
+
 func TestGatewayAllowlistCheck(t *testing.T) {
 	cfg := GatewayConfig{
 		Allowlist: AllowlistConfig{
@@ -761,8 +784,8 @@ func TestGatewayNormalizesNumericApprovalShortcutsOnlyWhenPending(t *testing.T) 
 	}
 
 	gw.controllers[key] = &sessionState{
-		pendingApprovals: map[string]event.Approval{
-			"42": {ID: "42", Tool: "explore"},
+		pendingApprovals: map[string]pendingRemoteApproval{
+			"42": {internalID: "42", approval: event.Approval{ID: "42", Tool: "explore"}},
 		},
 		lastApprovalID: "42",
 	}
@@ -775,7 +798,7 @@ func TestGatewayNormalizesNumericApprovalShortcutsOnlyWhenPending(t *testing.T) 
 	if !ok || got != "/deny 42" {
 		t.Fatalf("normalize 2 = %q,%v; want /deny 42,true", got, ok)
 	}
-	gw.forgetPendingApproval(key, "42")
+	_, _, _ = gw.takePendingApproval(key, "42")
 	if _, ok := gw.normalizeApprovalShortcut(key, "1"); ok {
 		t.Fatal("numeric text after approval is forgotten should stay a normal message")
 	}
@@ -791,15 +814,15 @@ func TestGatewayNormalizesAskShortcutForPendingAsk(t *testing.T) {
 	}
 
 	gw.controllers[key] = &sessionState{
-		pendingAsks: map[string][]event.AskQuestion{
-			"ask-1": {{
+		pendingAsks: map[string]pendingRemoteAsk{
+			"ask-1": {internalID: "internal-ask-1", questions: []event.AskQuestion{{
 				ID:     "q1",
 				Prompt: "Choose one",
 				Options: []event.AskOption{
 					{Label: "Allow once"},
 					{Label: "Deny"},
 				},
-			}},
+			}}},
 		},
 		lastAskID: "ask-1",
 	}
@@ -817,10 +840,10 @@ func TestGatewayNormalizesAskShortcutForPendingAsk(t *testing.T) {
 		t.Fatalf("normalize freeform answer = %q,%v; want /answer ask-1 freeform answer,true", got, ok)
 	}
 
-	gw.controllers[key].pendingAsks["ask-2"] = []event.AskQuestion{
+	gw.controllers[key].pendingAsks["ask-2"] = pendingRemoteAsk{internalID: "internal-ask-2", questions: []event.AskQuestion{
 		{ID: "q1", Prompt: "First", Options: []event.AskOption{{Label: "A"}}},
 		{ID: "q2", Prompt: "Second", Options: []event.AskOption{{Label: "B"}}},
-	}
+	}}
 	gw.controllers[key].lastAskID = "ask-2"
 	got, ok = gw.normalizeAskShortcut(key, "1")
 	if !ok || got != "/answer ask-2 1" {
@@ -901,7 +924,7 @@ func TestGatewayApproveWithoutSessionSendsGuidance(t *testing.T) {
 	if len(sent) != 1 {
 		t.Fatalf("sent count = %d, want 1", len(sent))
 	}
-	if !strings.Contains(sent[0].Text, "没有找到当前会话中的待审批操作") {
+	if !strings.Contains(sent[0].Text, "已过期或不属于当前会话") {
 		t.Fatalf("sent text = %q, want missing approval guidance", sent[0].Text)
 	}
 }
@@ -1091,8 +1114,8 @@ func TestGatewayApprovalReplyUnblocksWedgedTurn(t *testing.T) {
 	gw.controllers[key] = &sessionState{
 		ctrl:             ctrl,
 		sink:             sink,
-		pendingApprovals: make(map[string]event.Approval),
-		pendingAsks:      make(map[string][]event.AskQuestion),
+		pendingApprovals: make(map[string]pendingRemoteApproval),
+		pendingAsks:      make(map[string]pendingRemoteAsk),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1105,6 +1128,10 @@ func TestGatewayApprovalReplyUnblocksWedgedTurn(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("approval request was never emitted; turn did not start")
 	}
+	approvalToken := gw.currentPendingApprovalID(key)
+	if approvalToken == "" || approvalToken == "appr-1" {
+		t.Fatalf("remote approval token = %q, want opaque token distinct from controller ID", approvalToken)
+	}
 
 	adapter.msgCh <- InboundMessage{
 		Platform:     PlatformFeishu,
@@ -1112,7 +1139,7 @@ func TestGatewayApprovalReplyUnblocksWedgedTurn(t *testing.T) {
 		ChatType:     ChatDM,
 		ChatID:       "chat",
 		UserID:       "user",
-		Text:         "/approve appr-1",
+		Text:         "/approve " + approvalToken,
 	}
 
 	select {

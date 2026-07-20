@@ -4,17 +4,103 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"reames-agent/internal/bot"
 	"reames-agent/internal/config"
 )
+
+func TestGatewayLoopReportsReconnectAndRecovery(t *testing.T) {
+	a := New(config.QQBotConfig{}, slog.New(slog.NewTextHandler(io.Discard, nil))).(*adapter)
+	a.token = "cached-token"
+	a.tokenExpiry = time.Now().Add(time.Hour)
+	a.retry = bot.RetryConfig{InitialDelay: time.Millisecond, MaxDelay: time.Millisecond}
+	var attempts atomic.Int32
+	a.gatewayAttempt = func(ctx context.Context, token string, ready func()) error {
+		if token != "cached-token" {
+			t.Fatalf("token = %q, want cached token", token)
+		}
+		ready()
+		if attempts.Add(1) == 1 {
+			return errors.New("fixture disconnect")
+		}
+		<-ctx.Done()
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		a.gatewayLoop(ctx)
+	}()
+	awaitQQConnectionState(t, a.ConnectionEvents(), bot.AdapterRunning)
+	awaitQQConnectionState(t, a.ConnectionEvents(), bot.AdapterReconnecting)
+	awaitQQConnectionState(t, a.ConnectionEvents(), bot.AdapterRunning)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("QQ gateway loop did not stop after cancellation")
+	}
+}
+
+func TestGatewayAuthPayloadResumesOnlyWithCompleteSessionState(t *testing.T) {
+	a := &adapter{}
+	op, payload := a.gatewayAuthPayload("token")
+	if op != opIdentify {
+		t.Fatalf("fresh auth op = %d, want identify", op)
+	}
+	var identify identifyData
+	if err := json.Unmarshal(payload, &identify); err != nil {
+		t.Fatal(err)
+	}
+	if identify.Token != "QQBot token" || identify.Shard != [2]int{0, 1} {
+		t.Fatalf("identify payload = %+v", identify)
+	}
+
+	a.sessionID = "session-1"
+	a.seq = 42
+	op, payload = a.gatewayAuthPayload("token")
+	if op != opResume {
+		t.Fatalf("reconnect auth op = %d, want resume", op)
+	}
+	var resume resumeData
+	if err := json.Unmarshal(payload, &resume); err != nil {
+		t.Fatal(err)
+	}
+	if resume.Token != "QQBot token" || resume.SessionID != "session-1" || resume.Seq != 42 {
+		t.Fatalf("resume payload = %+v", resume)
+	}
+
+	a.seq = 0
+	if op, _ := a.gatewayAuthPayload("token"); op != opIdentify {
+		t.Fatalf("incomplete resume state used op %d, want identify", op)
+	}
+}
+
+func awaitQQConnectionState(t *testing.T, events <-chan bot.AdapterConnectionEvent, want bot.AdapterConnectionState) {
+	t.Helper()
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-events:
+			if event.State == want {
+				return
+			}
+		case <-timer.C:
+			t.Fatalf("timed out waiting for QQ connection state %q", want)
+		}
+	}
+}
 
 func TestHandleDispatchDirectMessageUsesDirectChatType(t *testing.T) {
 	a := &adapter{

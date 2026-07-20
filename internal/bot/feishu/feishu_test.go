@@ -3,11 +3,14 @@ package feishu
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +19,53 @@ import (
 
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 )
+
+func TestWebSocketReconnectReportsRunningDegradedAndRecovered(t *testing.T) {
+	t.Setenv("FEISHU_TEST_SECRET", "secret")
+	a := New(config.FeishuBotConfig{
+		AppID:        "app",
+		AppSecretEnv: "FEISHU_TEST_SECRET",
+		Mode:         "websocket",
+	}, slog.New(slog.NewTextHandler(io.Discard, nil))).(*adapter)
+	a.retry = bot.RetryConfig{InitialDelay: time.Millisecond, MaxDelay: time.Millisecond}
+	var attempts atomic.Int32
+	a.wsAttempt = func(ctx context.Context, callbacks websocketLifecycleCallbacks) error {
+		if attempts.Add(1) == 1 {
+			callbacks.ready()
+			return errors.New("fixture disconnect")
+		}
+		callbacks.reconnected()
+		<-ctx.Done()
+		return nil
+	}
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer a.Stop()
+	awaitFeishuConnectionState(t, a.ConnectionEvents(), bot.AdapterConnecting)
+	awaitFeishuConnectionState(t, a.ConnectionEvents(), bot.AdapterRunning)
+	awaitFeishuConnectionState(t, a.ConnectionEvents(), bot.AdapterReconnecting)
+	awaitFeishuConnectionState(t, a.ConnectionEvents(), bot.AdapterRunning)
+	if attempts.Load() < 2 {
+		t.Fatalf("websocket attempts = %d, want reconnect", attempts.Load())
+	}
+}
+
+func awaitFeishuConnectionState(t *testing.T, events <-chan bot.AdapterConnectionEvent, want bot.AdapterConnectionState) {
+	t.Helper()
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-events:
+			if event.State == want {
+				return
+			}
+		case <-timer.C:
+			t.Fatalf("timed out waiting for Feishu connection state %q", want)
+		}
+	}
+}
 
 func TestStartReturnsMissingWebSocketSecret(t *testing.T) {
 	t.Setenv("FEISHU_TEST_SECRET", "")
@@ -28,6 +78,30 @@ func TestStartReturnsMissingWebSocketSecret(t *testing.T) {
 	err := a.Start(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "FEISHU_TEST_SECRET") {
 		t.Fatalf("Start error = %v, want missing secret env", err)
+	}
+}
+
+func TestWebhookStartReturnsBindFailureBeforeReportingRunning(t *testing.T) {
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+	a := New(config.FeishuBotConfig{
+		Mode:              "webhook",
+		WebhookPort:       port,
+		VerificationToken: "fixture-token",
+	}, slog.New(slog.NewTextHandler(io.Discard, nil))).(*adapter)
+
+	err = a.Start(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "webhook listen") {
+		t.Fatalf("Start error = %v, want synchronous bind failure", err)
+	}
+	select {
+	case event := <-a.ConnectionEvents():
+		t.Fatalf("bind failure reported connection state: %+v", event)
+	default:
 	}
 }
 

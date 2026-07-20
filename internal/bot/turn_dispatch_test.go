@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"reames-agent/internal/control"
+	"reames-agent/internal/event"
 )
 
 // approvalBlockingController is a botController whose RunTurn blocks the way a
@@ -108,7 +109,14 @@ func TestGatewayApprovalReplyUnblocksTurnOffDispatchGoroutine(t *testing.T) {
 	key := BuildSessionKey(msg.Session())
 	// Pre-seed the session so runTurn reuses this fake controller instead of
 	// building a real one via boot.Build.
-	gw.controllers[key] = &sessionState{ctrl: ctrl, sink: &sessionEventSink{}}
+	gw.controllers[key] = &sessionState{
+		ctrl: ctrl,
+		sink: &sessionEventSink{},
+		pendingApprovals: map[string]pendingRemoteApproval{
+			"remote-token": {internalID: "some-id", approval: event.Approval{ID: "some-id"}},
+		},
+		lastApprovalID: "remote-token",
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -130,7 +138,7 @@ func TestGatewayApprovalReplyUnblocksTurnOffDispatchGoroutine(t *testing.T) {
 	// session would wedge until restart. With the turn off the dispatch loop,
 	// this reply is delivered and unblocks the turn.
 	approve := msg
-	approve.Text = "/approve some-id"
+	approve.Text = "/approve remote-token"
 	adapter.msgCh <- approve
 
 	select {

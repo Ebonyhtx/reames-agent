@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -146,16 +147,18 @@ type AdapterHealthSnapshot struct {
 	Messages      int64     `json:"messages"`
 	Sends         int64     `json:"sends"`
 	SendErrors    int64     `json:"send_errors"`
+	Reconnects    int64     `json:"reconnects"`
 	Closed        bool      `json:"closed"`
 }
 
 // BotGateway 是 reames-agent bot 消息网关，管理 Controller 生命周期、session 并发、
 // 事件渲染和平台适配器。
 type BotGateway struct {
-	cfg      GatewayConfig
-	adapters []AdapterBinding
-	sessions *SessionManager
-	startErr []error
+	cfg                GatewayConfig
+	configuredAdapters []AdapterBinding
+	adapters           []AdapterBinding
+	sessions           *SessionManager
+	startErr           []error
 
 	mu                      sync.Mutex
 	controllers             map[string]*sessionState // session key -> active state
@@ -169,6 +172,11 @@ type BotGateway struct {
 	sessionOverrides        map[string]sessionRuntimeOverride
 	recovery                *deliveryLedger
 	activeObligations       map[string]bool
+	decisionEpoch           string
+	nextDecisionID          uint64
+	adapterWatchCancel      context.CancelFunc
+	starting                bool
+	started                 bool
 	stopping                bool
 	turnWG                  sync.WaitGroup
 	deliveryWG              sync.WaitGroup
@@ -205,11 +213,35 @@ func botCancel(ctrl control.CommandControl) {
 	_, _ = ctrl.ExecuteCommand(control.NewCancelCommand(), control.CommandScopeRemote)
 }
 
-func botApprove(ctrl control.CommandControl, id string, allow bool) {
+func botApprove(ctrl control.CommandControl, id string, allow bool) bool {
 	if ctrl == nil {
-		return
+		return false
 	}
-	_, _ = ctrl.ExecuteCommand(control.NewApprovalCommand(id, allow, false, false), control.CommandScopeRemote)
+	result, err := ctrl.ExecuteCommand(control.NewApprovalCommand(id, allow, false, false), control.CommandScopeRemote)
+	return err == nil && result.Accepted
+}
+
+func botAnswer(ctrl control.Approvals, id string, answers []event.AskAnswer) bool {
+	if ctrl == nil {
+		return false
+	}
+	if resolver, ok := ctrl.(interface {
+		TryAnswerQuestion(string, []event.AskAnswer) bool
+	}); ok {
+		return resolver.TryAnswerQuestion(id, answers)
+	}
+	ctrl.AnswerQuestion(id, answers)
+	return true
+}
+
+type pendingRemoteApproval struct {
+	internalID string
+	approval   event.Approval
+}
+
+type pendingRemoteAsk struct {
+	internalID string
+	questions  []event.AskQuestion
 }
 
 type sessionState struct {
@@ -222,8 +254,8 @@ type sessionState struct {
 	toolApprovalMode string
 	sessionPath      string
 	cancel           context.CancelFunc
-	pendingAsks      map[string][]event.AskQuestion
-	pendingApprovals map[string]event.Approval
+	pendingAsks      map[string]pendingRemoteAsk
+	pendingApprovals map[string]pendingRemoteApproval
 	lastApprovalID   string
 	lastAskID        string
 	activeInbound    *InboundMessage
@@ -309,9 +341,11 @@ func NewGatewayWithAdapterBindings(cfg GatewayConfig, adapters []AdapterBinding,
 	if cfg.PairingMaxPending <= 0 {
 		cfg.PairingMaxPending = defaultPairingMaxPending
 	}
+	bindings := normalizeAdapterBindings(adapters)
 	gw := &BotGateway{
 		cfg:                     cfg,
-		adapters:                normalizeAdapterBindings(adapters),
+		configuredAdapters:      append([]AdapterBinding(nil), bindings...),
+		adapters:                bindings,
 		sessions:                NewSessionManager(cfg.Debounce),
 		controllers:             make(map[string]*sessionState),
 		pendingReactionCleanups: make(map[string][]func()),
@@ -322,6 +356,7 @@ func NewGatewayWithAdapterBindings(cfg GatewayConfig, adapters []AdapterBinding,
 		adapterHealth:           make(map[string]*AdapterHealthSnapshot),
 		sessionOverrides:        make(map[string]sessionRuntimeOverride),
 		activeObligations:       make(map[string]bool),
+		decisionEpoch:           rand.Text(),
 		logger:                  logger.With("component", "bot_gateway"),
 	}
 	gw.buildAllowlist()
@@ -384,6 +419,24 @@ func (gw *BotGateway) buildSelfUserIDs() {
 
 // Start 启动所有已启用的平台适配器并开始处理消息。
 func (gw *BotGateway) Start(ctx context.Context) error {
+	gw.mu.Lock()
+	if gw.starting || gw.started {
+		gw.mu.Unlock()
+		return errors.New("bot gateway is already started")
+	}
+	gw.starting = true
+	configuredAdapters := append([]AdapterBinding(nil), gw.configuredAdapters...)
+	gw.mu.Unlock()
+	startSucceeded := false
+	defer func() {
+		if startSucceeded {
+			return
+		}
+		gw.mu.Lock()
+		gw.starting = false
+		gw.mu.Unlock()
+	}()
+
 	recovery, err := openDeliveryLedger(gw.cfg.RecoveryPath, gw.cfg.RecoveryRecordLimit)
 	if err != nil {
 		return err
@@ -391,13 +444,15 @@ func (gw *BotGateway) Start(ctx context.Context) error {
 	gw.mu.Lock()
 	gw.recovery = recovery
 	gw.stopping = false
+	watchCtx, watchCancel := context.WithCancel(ctx)
+	gw.adapterWatchCancel = watchCancel
 	gw.mu.Unlock()
 	started := make([]AdapterBinding, 0, len(gw.adapters))
-	startSucceeded := false
 	defer func() {
 		if startSucceeded {
 			return
 		}
+		watchCancel()
 		for _, binding := range started {
 			_ = binding.Adapter.Stop()
 		}
@@ -409,7 +464,7 @@ func (gw *BotGateway) Start(ctx context.Context) error {
 		recovery.close()
 	}()
 	var startErr []error
-	for _, binding := range gw.adapters {
+	for _, binding := range configuredAdapters {
 		if !gw.cfg.Enabled[binding.Platform] {
 			gw.logger.Info("platform disabled, skipping", "platform", binding.Platform, "connection", binding.ID)
 			gw.markAdapterDisabled(binding)
@@ -432,6 +487,11 @@ func (gw *BotGateway) Start(ctx context.Context) error {
 	gw.adapters = started
 	gw.startErr = startErr
 	gw.mu.Unlock()
+	for _, binding := range started {
+		if source, ok := binding.Adapter.(AdapterConnectionStateSource); ok {
+			go gw.watchAdapterConnection(watchCtx, binding, source.ConnectionEvents())
+		}
+	}
 	if len(started) == 0 && len(startErr) > 0 {
 		return errors.Join(startErr...)
 	}
@@ -461,6 +521,10 @@ func (gw *BotGateway) Start(ctx context.Context) error {
 		go gw.dispatchLoop(ctx, binding)
 	}
 
+	gw.mu.Lock()
+	gw.starting = false
+	gw.started = true
+	gw.mu.Unlock()
 	startSucceeded = true
 	return nil
 }
@@ -577,6 +641,61 @@ func (gw *BotGateway) markAdapterStarted(binding AdapterBinding) {
 	health.Closed = false
 }
 
+func (gw *BotGateway) watchAdapterConnection(ctx context.Context, binding AdapterBinding, events <-chan AdapterConnectionEvent) {
+	if events == nil {
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event, ok := <-events:
+			if !ok {
+				gw.markAdapterClosed(binding)
+				return
+			}
+			gw.applyAdapterConnectionEvent(binding, event)
+		}
+	}
+}
+
+func (gw *BotGateway) applyAdapterConnectionEvent(binding AdapterBinding, event AdapterConnectionEvent) {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	health := gw.ensureAdapterHealthLocked(binding)
+	switch event.State {
+	case AdapterConnecting:
+		health.Status = string(AdapterConnecting)
+		health.Closed = true
+	case AdapterRunning:
+		health.Status = string(AdapterRunning)
+		health.Closed = false
+		health.LastError = ""
+	case AdapterReconnecting:
+		if health.Status != string(AdapterReconnecting) {
+			health.Reconnects++
+		}
+		health.Status = string(AdapterReconnecting)
+		health.Closed = true
+		health.LastErrorAt = event.At
+		health.LastError = stableAdapterConnectionReason(event.Reason)
+	case AdapterClosed:
+		health.Status = string(AdapterClosed)
+		health.Closed = true
+	}
+}
+
+func stableAdapterConnectionReason(reason string) string {
+	switch strings.TrimSpace(reason) {
+	case "":
+		return ""
+	case "connection_closed", "poll_failed", "sdk_error", "sdk_reconnecting", "server_reconnect", "session_invalid":
+		return strings.TrimSpace(reason)
+	default:
+		return "connection_error"
+	}
+}
+
 func (gw *BotGateway) markAdapterStartFailed(binding AdapterBinding, err error) {
 	gw.mu.Lock()
 	defer gw.mu.Unlock()
@@ -598,6 +717,7 @@ func (gw *BotGateway) markAdapterMessage(binding AdapterBinding) {
 	health.LastMessageAt = now
 	health.Messages++
 	health.Closed = false
+	health.LastError = ""
 }
 
 func (gw *BotGateway) markAdapterClosed(binding AdapterBinding) {
@@ -660,11 +780,16 @@ func (gw *BotGateway) Stop() {
 	var states []*sessionState
 	gw.mu.Lock()
 	gw.stopping = true
+	watchCancel := gw.adapterWatchCancel
+	gw.adapterWatchCancel = nil
 	for key, state := range gw.controllers {
 		states = append(states, state)
 		delete(gw.controllers, key)
 	}
 	gw.mu.Unlock()
+	if watchCancel != nil {
+		watchCancel()
+	}
 	for _, state := range states {
 		closeBotSessionState(state)
 	}
@@ -1245,12 +1370,16 @@ func (gw *BotGateway) currentPendingApprovalID(key string) string {
 	return ""
 }
 
-func (gw *BotGateway) forgetPendingApproval(key, id string) {
+func (gw *BotGateway) takePendingApproval(key, id string) (*sessionState, pendingRemoteApproval, bool) {
 	gw.mu.Lock()
 	defer gw.mu.Unlock()
 	state, ok := gw.controllers[key]
 	if !ok || state.pendingApprovals == nil {
-		return
+		return nil, pendingRemoteApproval{}, false
+	}
+	pending, found := state.pendingApprovals[id]
+	if !found {
+		return state, pendingRemoteApproval{}, false
 	}
 	delete(state.pendingApprovals, id)
 	if state.lastApprovalID == id {
@@ -1260,6 +1389,72 @@ func (gw *BotGateway) forgetPendingApproval(key, id string) {
 			break
 		}
 	}
+	return state, pending, true
+}
+
+func (gw *BotGateway) registerPendingApproval(state *sessionState, approval event.Approval) event.Approval {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	if state.pendingApprovals == nil {
+		state.pendingApprovals = make(map[string]pendingRemoteApproval)
+	}
+	token := gw.nextDecisionTokenLocked("approval")
+	state.pendingApprovals[token] = pendingRemoteApproval{internalID: approval.ID, approval: approval}
+	state.lastApprovalID = token
+	approval.ID = token
+	return approval
+}
+
+func (gw *BotGateway) registerPendingAsk(state *sessionState, ask event.Ask) event.Ask {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	if state.pendingAsks == nil {
+		state.pendingAsks = make(map[string]pendingRemoteAsk)
+	}
+	token := gw.nextDecisionTokenLocked("ask")
+	state.pendingAsks[token] = pendingRemoteAsk{internalID: ask.ID, questions: append([]event.AskQuestion(nil), ask.Questions...)}
+	state.lastAskID = token
+	ask.ID = token
+	return ask
+}
+
+func (gw *BotGateway) nextDecisionTokenLocked(kind string) string {
+	gw.nextDecisionID++
+	return kind + "-" + gw.decisionEpoch + "-" + strconv.FormatUint(gw.nextDecisionID, 36)
+}
+
+func (gw *BotGateway) takePendingAsk(key, id string) (*sessionState, pendingRemoteAsk, bool) {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	state, ok := gw.controllers[key]
+	if !ok || state.pendingAsks == nil {
+		return nil, pendingRemoteAsk{}, false
+	}
+	pending, found := state.pendingAsks[id]
+	if !found {
+		return state, pendingRemoteAsk{}, false
+	}
+	delete(state.pendingAsks, id)
+	if state.lastAskID == id {
+		state.lastAskID = ""
+		for nextID := range state.pendingAsks {
+			state.lastAskID = nextID
+			break
+		}
+	}
+	return state, pending, true
+}
+
+func (gw *BotGateway) clearPendingRemoteDecisions(state *sessionState) {
+	if state == nil {
+		return
+	}
+	gw.mu.Lock()
+	clear(state.pendingApprovals)
+	clear(state.pendingAsks)
+	state.lastApprovalID = ""
+	state.lastAskID = ""
+	gw.mu.Unlock()
 }
 
 func (gw *BotGateway) normalizeAskShortcut(key, text string) (string, bool) {
@@ -1326,13 +1521,7 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 			cancel()
 		}
 		gw.sessions.ForceRelease(key)
-		err := gw.sendText(ctx, adapter, msg, "已停止当前任务。")
-		if err == nil {
-			gw.settleCanceledSession(key)
-		} else {
-			gw.failCanceledSession(key)
-		}
-		return err
+		return gw.finishCanceledSession(key, msg, gw.sendText(ctx, adapter, msg, "已停止当前任务。"))
 
 	case "/new", "/reset":
 		var cancel context.CancelFunc
@@ -1356,24 +1545,12 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 			if err := state.ctrl.NewSession(); err != nil {
 				gw.logger.Warn("new session failed", "err", err)
 				gw.sessions.ForceRelease(key)
-				sendErr := gw.sendText(ctx, adapter, msg, "新会话创建失败，请稍后重试。")
-				if sendErr == nil {
-					gw.settleCanceledSession(key)
-				} else {
-					gw.failCanceledSession(key)
-				}
-				return sendErr
+				return gw.finishCanceledSession(key, msg, gw.sendText(ctx, adapter, msg, "新会话创建失败，请稍后重试。"))
 			}
 			gw.rememberSessionReady(msg, state.ctrl)
 		}
 		gw.sessions.ForceRelease(key)
-		err := gw.sendText(ctx, adapter, msg, "已开始新会话。")
-		if err == nil {
-			gw.settleCanceledSession(key)
-		} else {
-			gw.failCanceledSession(key)
-		}
-		return err
+		return gw.finishCanceledSession(key, msg, gw.sendText(ctx, adapter, msg, "已开始新会话。"))
 
 	case "/approve":
 		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "approver"); !allowed {
@@ -1383,16 +1560,11 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		if len(cmd.Args) < 1 {
 			return gw.sendText(ctx, adapter, msg, "用法: /approve <id>")
 		}
-		gw.mu.Lock()
-		state, ok := gw.controllers[key]
-		gw.mu.Unlock()
-		if ok && state.ctrl != nil {
-			botApprove(state.ctrl, cmd.Args[0], true)
-			gw.forgetPendingApproval(key, cmd.Args[0])
+		state, pending, ok := gw.takePendingApproval(key, cmd.Args[0])
+		if ok && state.ctrl != nil && botApprove(state.ctrl, pending.internalID, true) {
 			return gw.sendText(ctx, adapter, msg, "已批准。")
-		} else {
-			return gw.sendText(ctx, adapter, msg, "没有找到当前会话中的待审批操作，请重新触发一次操作。")
 		}
+		return gw.sendText(ctx, adapter, msg, "审批已处理、已过期或不属于当前会话，请重新触发一次操作。")
 
 	case "/deny":
 		if allowed, err := gw.requireCommandRole(ctx, adapter, msg, "approver"); !allowed {
@@ -1401,16 +1573,11 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		if len(cmd.Args) < 1 {
 			return gw.sendText(ctx, adapter, msg, "用法: /deny <id>")
 		}
-		gw.mu.Lock()
-		state, ok := gw.controllers[key]
-		gw.mu.Unlock()
-		if ok && state.ctrl != nil {
-			botApprove(state.ctrl, cmd.Args[0], false)
-			gw.forgetPendingApproval(key, cmd.Args[0])
+		state, pending, ok := gw.takePendingApproval(key, cmd.Args[0])
+		if ok && state.ctrl != nil && botApprove(state.ctrl, pending.internalID, false) {
 			return gw.sendText(ctx, adapter, msg, "已拒绝。")
-		} else {
-			return gw.sendText(ctx, adapter, msg, "没有找到当前会话中的待审批操作，请重新触发一次操作。")
 		}
+		return gw.sendText(ctx, adapter, msg, "审批已处理、已过期或不属于当前会话，请重新触发一次操作。")
 
 	case "/answer":
 		if len(cmd.Args) < 2 {
@@ -1418,26 +1585,14 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		}
 		askID := cmd.Args[0]
 		rawAnswer := strings.TrimSpace(strings.Join(cmd.Args[1:], " "))
-		gw.mu.Lock()
-		state, ok := gw.controllers[key]
-		var questions []event.AskQuestion
-		if ok {
-			questions = state.pendingAsks[askID]
-			delete(state.pendingAsks, askID)
-			if state.lastAskID == askID {
-				state.lastAskID = ""
-				for nextID := range state.pendingAsks {
-					state.lastAskID = nextID
-					break
-				}
-			}
-		}
-		gw.mu.Unlock()
+		state, pending, ok := gw.takePendingAsk(key, askID)
 		if !ok || state.ctrl == nil {
-			return gw.sendText(ctx, adapter, msg, "没有找到当前会话。")
+			return gw.sendText(ctx, adapter, msg, "问答已处理、已过期或不属于当前会话，请重新触发一次提问。")
 		}
-		answers := parseAskAnswers(questions, rawAnswer)
-		state.ctrl.AnswerQuestion(askID, answers)
+		answers := parseAskAnswers(pending.questions, rawAnswer)
+		if !botAnswer(state.ctrl, pending.internalID, answers) {
+			return gw.sendText(ctx, adapter, msg, "问答已处理或已过期，请重新触发一次提问。")
+		}
 		return gw.sendText(ctx, adapter, msg, "已提交回答。")
 
 	case "/yolo", "/mode":
@@ -1486,10 +1641,8 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		}
 		text, changed := gw.handleUseProjectCommand(key, msg.Text)
 		err := gw.sendText(ctx, adapter, msg, text)
-		if err == nil && changed {
-			gw.settleCanceledSession(key)
-		} else if err != nil && changed {
-			gw.failCanceledSession(key)
+		if changed {
+			return gw.finishCanceledSession(key, msg, err)
 		}
 		return err
 
@@ -1505,10 +1658,8 @@ func (gw *BotGateway) handleSlashCommand(ctx context.Context, adapter Adapter, k
 		}
 		text, changed := gw.handleAttachSessionCommand(key, msg.Text)
 		err := gw.sendText(ctx, adapter, msg, text)
-		if err == nil && changed {
-			gw.settleCanceledSession(key)
-		} else if err != nil && changed {
-			gw.failCanceledSession(key)
+		if changed {
+			return gw.finishCanceledSession(key, msg, err)
 		}
 		return err
 
@@ -1970,23 +2121,11 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 		msg.UserID,
 		inboundReplyMessageID(msg),
 		gw.logger,
-		func(approval event.Approval) {
-			gw.mu.Lock()
-			if state.pendingApprovals == nil {
-				state.pendingApprovals = make(map[string]event.Approval)
-			}
-			state.pendingApprovals[approval.ID] = approval
-			state.lastApprovalID = approval.ID
-			gw.mu.Unlock()
+		func(approval event.Approval) event.Approval {
+			return gw.registerPendingApproval(state, approval)
 		},
-		func(ask event.Ask) {
-			gw.mu.Lock()
-			if state.pendingAsks == nil {
-				state.pendingAsks = make(map[string][]event.AskQuestion)
-			}
-			state.pendingAsks[ask.ID] = ask.Questions
-			state.lastAskID = ask.ID
-			gw.mu.Unlock()
+		func(ask event.Ask) event.Ask {
+			return gw.registerPendingAsk(state, ask)
 		},
 	)
 	// Finish initializing the sink before publishing it as the live target: once
@@ -2016,6 +2155,7 @@ func (gw *BotGateway) runTurn(ctx context.Context, adapter Adapter, key string, 
 
 	// 运行一轮对话
 	err := state.ctrl.RunTurn(turnCtx, input)
+	gw.clearPendingRemoteDecisions(state)
 	sink.complete(err)
 	if err != nil {
 		gw.failInbound(msg, err)
@@ -2083,22 +2223,31 @@ func (gw *BotGateway) settleCanceledInbound(msg *InboundMessage) {
 	gw.notifyInboundSettlements(inboundDeliveryClaims(*msg), true)
 }
 
-func (gw *BotGateway) settleCanceledSession(key string) {
-	claims, err := gw.recoveryLedger().deliveredSession(key)
-	if err != nil {
-		gw.logger.Error("canceled bot session could not commit durable delivery", "session", key, "err", err)
-		return
+func (gw *BotGateway) finishCanceledSession(key string, command InboundMessage, deliveryErr error) error {
+	if deliveryErr == nil {
+		return gw.settleCanceledSession(key, command)
 	}
-	gw.notifyInboundSettlements(claims, true)
+	return errors.Join(deliveryErr, gw.failCanceledSession(key, command))
 }
 
-func (gw *BotGateway) failCanceledSession(key string) {
-	claims, err := gw.recoveryLedger().failSession(key)
+func (gw *BotGateway) settleCanceledSession(key string, command InboundMessage) error {
+	claims, err := gw.recoveryLedger().deliveredSession(key, inboundDeliveryClaims(command))
+	if err != nil {
+		gw.logger.Error("canceled bot session could not commit durable delivery", "session", key, "err", err)
+		return err
+	}
+	gw.notifyInboundSettlements(claims, true)
+	return nil
+}
+
+func (gw *BotGateway) failCanceledSession(key string, command InboundMessage) error {
+	claims, err := gw.recoveryLedger().failSession(key, inboundDeliveryClaims(command))
 	if err != nil {
 		gw.logger.Error("canceled bot session failure could not be persisted", "session", key, "err", err)
-		return
+		return err
 	}
 	gw.notifyInboundSettlements(claims, false)
+	return nil
 }
 
 func (gw *BotGateway) failInbound(msg InboundMessage, cause error) {
@@ -2230,7 +2379,7 @@ func (gw *BotGateway) getOrCreateSession(ctx context.Context, key string, msg In
 		workspaceRoot:    profile.workspaceRoot,
 		toolApprovalMode: profile.toolApprovalMode,
 		sessionPath:      profile.sessionPath,
-		pendingAsks:      make(map[string][]event.AskQuestion),
+		pendingAsks:      make(map[string]pendingRemoteAsk),
 		createdAt:        time.Now(),
 		lastActive:       time.Now(),
 	}
