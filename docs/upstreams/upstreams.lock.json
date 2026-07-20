@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updated_at": "2026-07-19T20:50:10Z",
+  "updated_at": "2026-07-20T00:13:01Z",
   "upstreams": {
     "reasonix": {
       "branch": "main-v2",
@@ -11,20 +11,20 @@
     "hermes": {
       "branch": "main",
       "baseline": "1c473bc6a6a0f62e4c264fa0c59ce58606100301",
-      "reviewed": "1b17015f7a8d0c0d68b1f08aa389538e7fd172e3",
-      "latest_seen": "1b17015f7a8d0c0d68b1f08aa389538e7fd172e3"
+      "reviewed": "a7d7c02cb6db071eced4ac82e24f878588619600",
+      "latest_seen": "a7d7c02cb6db071eced4ac82e24f878588619600"
     },
     "codex": {
       "branch": "main",
       "baseline": "f6e251c3ac6573a4d6eccddea6ad12587868485f",
-      "reviewed": "7844386e3de08febd13075eaaaf0e6f9dbe52c58",
-      "latest_seen": "7844386e3de08febd13075eaaaf0e6f9dbe52c58"
+      "reviewed": "678157acaa819d5510adfe359abb5d0392cfe461",
+      "latest_seen": "678157acaa819d5510adfe359abb5d0392cfe461"
     },
     "mimo": {
       "branch": "main",
       "baseline": "ba87f5d48d7d3e77145fce6797faebf016fd23c6",
-      "reviewed": "f24ce4eb7341bfba6bb608436c1d27a843508adf",
-      "latest_seen": "f24ce4eb7341bfba6bb608436c1d27a843508adf"
+      "reviewed": "ec413adeccfcb65ccb63a708bb6136644ea13c79",
+      "latest_seen": "ec413adeccfcb65ccb63a708bb6136644ea13c79"
     },
     "impeccable": {
       "branch": "main",

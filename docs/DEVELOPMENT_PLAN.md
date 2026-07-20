@@ -413,6 +413,13 @@ notarization、公开主题 registry
   退避、可取消 Stop、重复 Start 拒绝、Stop 后重启、`update_id` durable identity、原生 `message_id` reply，
   以及最终发送成功并 durable commit 后 offset 才推进均有 localhost 故障注入。真实 BotFather/token、群聊、
   审批/取消、掉线和节点重启仍为 `external-blocked`；见 `audits/2026-07-19-m6-telegram-durable-polling.md`。
+- [x] 微信 iLink durable polling：`get_updates_buf` 不再在 HTTP receipt 时推进；每批 inbound 等待 Gateway
+  最终投递的 `SettleInbound`，成功后才把 schema-versioned cursor 以 0600 原子文件提交。failed settlement、
+  取消、磁盘写失败和进程重启均从旧 cursor 重放；损坏 state startup fail closed，空 poll 不重复写盘；危险
+  `account_id` 统一映射为 digest，账户、context token 与 poll state 文件不能逃逸 `weixin/accounts`。
+  飞书 SDK/webhook、QQ Gateway 与微信 poll 的 64 条入站队列饱和时也改为可取消背压，不再在 durable claim
+  前静默 drop。localhost、restart、disk-failure 和 race 证据见
+  `audits/2026-07-20-m6-weixin-polling-desktop-backpressure.md`。
 - [x] Outbound final-response obligation：delivery ledger schema v2 在最终文本离开进程前持久化身份绑定的
   obligation；每个 obligation 最多 1 MiB/512 个文本分片，整个账本仍限 4 MiB，并由同路径长生命周期 OS
   文件锁保证 CLI Gateway 与 Desktop bot 不能并发写。每个分片发送前先原子写 `attempting`，平台 ACK 后才推进
@@ -422,10 +429,11 @@ notarization、公开主题 registry
   status 或 Provider prompt；状态接口只显示数量。v1→v2 迁移、第二 writer fail-closed、发送前磁盘状态、多分片
   断点、发送/commit 故障、重复入站、取消、扫描预算和 race 已有测试。详见
   `audits/2026-07-20-m6-outbound-final-response-obligation.md`。
-- [ ] 渠道断线实证：内置飞书/QQ/微信适配器尚未实现可选 `RecoveryAdapter` 的真实历史分页/resume；Telegram
-  long poll 依赖远端保留 update，也尚无独立历史补扫 API。当前已获得跨进程实时事件去重和最终投递门禁，
-  但不能冒充完全离线期间的漏消息补扫。逐渠道实现后还须以真实凭据执行掉线、重连、历史补偿、审批/取消与
-  最终远端投递回环；该项保持 adapter/external-blocked。
+- [ ] 渠道断线实证：微信和 Telegram 已把各自原生 long-poll cursor/offset 放到最终投递之后提交，但仍依赖
+  平台真实保留窗口；飞书/QQ 尚无已实现且已证明的历史分页/resume API。当前已获得跨进程实时事件去重、
+  最终投递门禁、微信/Telegram cursor 重放和所有实时 adapter 的队列背压，但不能冒充关机期间的完整漏消息
+  补扫。仍须以真实凭据执行掉线、重连、历史补偿、审批/取消与最终远端投递回环；该项保持
+  adapter/external-blocked。
 - 每个渠道先完成文本 + 审批 + 取消 + 断线补偿/恢复，再扩展媒体与富交互。
 - 阿里云等自有服务器形态按 [云端 Agent 计划](CLOUD_AGENT_PLAN.md) 推进，先完成 SSH/CLI 与独立 Gateway service，再按需开启 `serve`，最后承载后台研究任务。
 
@@ -463,12 +471,29 @@ notarization、公开主题 registry
 - 审计 Codex App-Server/headless 线程、命令、事件、审批和 MCP runtime 语义，只扩展现有
   `internal/control`/event wire；不引入第二套 Agent/runtime 或破坏传输无关边界。
 - App-Server replay store 只保留会话恢复必需的 canonical 事件；raw response item、realtime audio/transcript、
-  MCP progress、command/process output delta 不得进入持久 replay。Desktop `asyncRuntimeEmitter` 的 live queue
-  另做压力测试、有界 backpressure/drop 设计与顺序证明，不把 Serve 慢订阅者 drop 冒充 Desktop 已解决。
+  MCP progress、command/process output delta 不得进入持久 replay。
+- [x] Desktop `asyncRuntimeEmitter` live queue 默认限制 2048 active envelopes；同 tab 文本/推理/工具进度合并，
+  达到上限后对 producer 施加可取消背压，不丢 text/reasoning/tool-progress 或 completion、完整消息/工具结果、
+  approval/Ask、usage、lifecycle；避免异常中断时因缺少最终 Message 而丢失部分展示。顺序、上限、取消、race
+  和微基准已证明；`Clear` 通过 generation 阻止旧 tab/context 的等待 producer 在清空后重新入队；不把 Serve
+  慢订阅者 drop 或合成 benchmark 冒充原生 WebView frame pacing。
 - App-Server completion backfill、最终结算和 unsubscribe 必须先同时匹配 primary thread ID 与 turn ID；fixture
   必须覆盖 child completion 先于 primary completion，且 child 不触发 `thread/read` 或顶层完成。
+- Codex `7844386e..678157ac` 固定三项 App-Server/TUI 合同：paginated thread 的 explicit name 与 derived
+  title/preview 分离，canonical metadata writer 缺失时在 mutation 前失败；只有 resume/navigation 才补历史
+  descendants，fresh/fork 不发冗余 backfill，同次 backfill 的 status 必须复用且 live channel liveness 更强；
+  未来 transcript virtualization 只缓存显式 stable cell，status/visualization/宽度/字体/主题变化必须重测。
 - Desktop/Browser 性能基准使用隔离 home/profile、可复现 spawn/attach、显式启动 settle 和无 DNS/embed 噪声
-  fixture；基线记录平台、设备与 backend 连接状态，合成历史微基准不得冒充冷启动或流式 frame pacing。
+  fixture；基线记录平台、设备与 backend 连接状态。按 Hermes `a7d7c02c` 进一步要求 connected gate、真实段落
+  与无换行单 block 双场景、focus/anti-throttle、recorder generation、多次中位数、dev/prod 分离、唯一调试端口，
+  并分别测量 cold start、warm-cache start 和 backend connected 后 first token；合成历史或 Go queue 微基准不得
+  冒充冷启动或流式 frame pacing。
+- Hermes custom endpoint CRUD/目标 Provider 显式模型刷新在 Reames 已有等价或更强边界；不引入 Python web
+  server/Electron 配置面，也不以 best-effort 探测静默改写 Provider 配置。new-chat model/provider/effort/fast 在
+  慢 profile refresh 与立即发送竞态中的线性化进入 Desktop 原生交互回归合同。
+- MiMo `ec413ade` 的 `learn-everything` 只形成 checkpointed Skill state 候选。先完成通用 Skill 的权限、版本、
+  撤销、会话投影和状态目录归属，再考虑课程 checkpoint、portable state block、mastery/review/error 状态；
+  不复制其 prompt bundle 或 OpenCode runtime。
 - 将 Codex `ultra` 的自动任务委派作为 Agent/runtime 能力单独验收；P8 只支持已证明的 Responses wire
   effort，不能把 `ultra -> max` 的兼容别名写成自动委派 parity。
 - OpenAI 官方预设已按 2026-07-19 公共 API 文档开放 `gpt-5.6-sol`、`gpt-5.6-terra`、
@@ -555,17 +580,18 @@ P1/P2/P3/P4/P5 已关闭；P5 的 CI、CodeQL 与三平台 Desktop candidate 全
 → P6/P7 已关闭；P8 官方 OpenAI Responses/GPT 与 Anthropic Messages/Claude 的仓库内原生协议门槛已关闭，
   真实公网 API 回环仍为 external-blocked
 → Reasonix 一级上游最新审至 `2301e248`：Provider env、MCP stdio/lifecycle、中断轮次恢复与 WebKit focus
-  已采用，Remote SSH 两项进入 P11。Codex 二级战略审至 `7844386e`，Claude 仍为 `015170d3`；Hermes
-  最终审至 `1b17015f`，其中 `e361c5e2` 的 Kimi thinking 信号已窄化采用，其他机制增量已分类；权威 SHA 只看 lock
+  已采用，Remote SSH 两项进入 P11。Codex 二级战略审至 `678157ac`，Claude 仍为 `015170d3`；Hermes
+  最终审至 `dd418284`，其中 Kimi thinking 已窄化采用，最新 thread/perf/session-color 机制已分类；权威 SHA 只看 lock
 → Grok Build `ba76b0a6` 已按机制参考审查；后续增量重点比较 shell/permission/sandbox、
 durable session/subagent、TUI queue/interject、ACP/headless。不得照搬其 Plan Mode 的 shell/subagent 写入缺口，
 也不接入 xAI auth、telemetry、online memory、managed policy、marketplace 或 Rust 第二 runtime
-→ 当前 M6 已交付 Telegram durable long polling 与 outbound final-response obligation；下一无需凭据的
-  可靠性工作是继续逐渠道 RecoveryAdapter fixture。并行等待干净 Linux linger-enabled logout/reboot、
+→ 当前 M6 已交付 Telegram/微信 durable long polling、实时 adapter 背压与 outbound final-response obligation；
+  下一无需凭据的可靠性工作是继续逐渠道审批/取消/reconnect fixture。并行等待干净 Linux linger-enabled logout/reboot、
   真实 watchdog kill/restart、Gateway recovery-status/system service 实启，以及真实 Provider/IM 回环
 → 仓库战略主线继续 P9 → P10 → P11：Codex-class 插件/headless、第一方 CDP Browser Control、受治理 Remote SSH；
   分别跟进 Codex/Claude 的代码级 Agent 能力，每条先完成 fixture/权限/沙箱/evidence 再补真实回环
-→ 体验候选：历史消息时间、Windows 外部打开器、Subagent profile、workspace 面板偏好按真实用户缺口进入
+→ 体验候选：历史消息时间、Windows 外部打开器、Subagent profile、workspace 面板偏好、durable topic 级颜色
+  override 按真实用户缺口进入
 → external-blocked：真实运营 registry 的生产 endpoint、人员/HSM 密钥仪式、online custody、
 实际轮换/compromise drill，以及声明 provenance 时的独立 DSSE/SLSA policy verifier
 → 并行等待干净云节点、真实飞书和公开签名 release 外部证据，取得环境后关闭 M6 external-blocked 项

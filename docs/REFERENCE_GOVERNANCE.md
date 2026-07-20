@@ -411,3 +411,29 @@ Hermes 隔离 spawn/settle/无网络噪声的 Desktop perf 方法进入 P9/P10 b
 reviewed SHA 为 `7844386e3de08febd13075eaaaf0e6f9dbe52c58` 和
 `1b17015f7a8d0c0d68b1f08aa389538e7fd172e3`；精确 SHA 接受后 11/11 无变化。完整证据见
 `audits/2026-07-20-codex-hermes-late-delta.md`。
+
+## 18. 2026-07-20 Codex / Hermes 最终移动增量
+
+本批完整验证期间 Codex 又从 `7844386e` 移动到 `678157ac`，Hermes 从 `1b17015f` 移动到 `dd418284`。
+Codex 三提交均完成代码级审查：paginated thread name 固定“显式 name 与派生 title/preview 分离、canonical
+metadata store、缺 writer 时 mutation 前失败”；动态 transcript cell 固定 stable/dynamic height 和异步内容重测；
+subagent metadata 固定 fresh/fork 不补历史 descendants、resume/navigation 才补、复用 backfill status 且 live
+channel liveness 更强。它们进入 P9 App-Server/virtualization 合同，不在当前 Go/Wails runtime 中复制 Rust store/TUI。
+
+Hermes 的 durable-lineage session color 只作为 session > project 的 UX 候选；其最新 perf harness 的 connected
+gate、真实段落/单 block 双场景、focus/anti-throttle、recorder generation 与多次中位数方法进入 P9 原生性能证据
+合同。Reames 当前 Go 微基准仍只证明 emitter queue 开销，不冒充 WebView frame pacing。完整证据见
+`audits/2026-07-20-codex-hermes-final-delta.md`。
+
+## 19. 2026-07-20 Hermes / MiMo 最终移动增量
+
+最终治理检查又发现 Hermes `dd418284..a7d7c02c` 与 MiMo `f24ce4eb..ec413ade`。Hermes 的 custom
+endpoint CRUD、目标 Provider 显式模型刷新和 key 状态投影在 Reames 已有等价或更强边界；new-chat selector
+异步竞态进入 P9 Desktop 回归合同；standard DSR 只作为 Bubble Tea 依赖层信号。production cold-start、
+first-token、唯一调试端口、connected gate、组成指标与 warm-cache 口径进入原生性能证据合同。无 Git 时用
+全零 commit 并转为未固定 branch bootstrap 会削弱 provenance，明确拒绝。
+
+MiMo 新增 `learn-everything` Skill bundle，只提供“阶段 checkpoint、可携带 state block、mastery/review/error
+状态”的机制候选；不复制其 prompt bundle 或 OpenCode runtime，未来必须落到 Reames P9 通用 Skill 权限、版本、
+撤销、会话投影和状态归属合同之后。完整结论见
+`audits/2026-07-20-hermes-mimo-final-delta.md`。

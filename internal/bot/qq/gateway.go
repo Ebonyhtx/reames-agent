@@ -332,7 +332,7 @@ func (a *adapter) connectGateway(ctx context.Context, token string) error {
 
 		switch msg.Op {
 		case opDispatch:
-			a.handleDispatch(msg)
+			a.handleDispatch(ctx, msg)
 		case opHeartbeatAck:
 		case opReconnect:
 			a.logger.Info("gateway requested reconnect")
@@ -447,7 +447,7 @@ func (ws *wsClient) send(op int, d json.RawMessage) error {
 	return err
 }
 
-func (a *adapter) handleDispatch(msg gatewayPayload) {
+func (a *adapter) handleDispatch(ctx context.Context, msg gatewayPayload) {
 	var evt dispatchEvent
 	if err := json.Unmarshal(msg.D, &evt); err != nil {
 		a.logger.Error("parse dispatch", "err", err)
@@ -486,10 +486,19 @@ func (a *adapter) handleDispatch(msg gatewayPayload) {
 	}
 	a.logger.Info("qq dispatch received", "event", msg.T, "chat_type", ib.ChatType)
 
+	a.publishInbound(ctx, ib)
+}
+
+func (a *adapter) publishInbound(ctx context.Context, msg bot.InboundMessage) bool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	select {
-	case a.msgCh <- ib:
-	default:
-		a.logger.Warn("message channel full, dropping message")
+	case <-ctx.Done():
+		a.logger.Warn("qq inbound canceled before gateway claim", "err", ctx.Err())
+		return false
+	case a.msgCh <- msg:
+		return true
 	}
 }
 

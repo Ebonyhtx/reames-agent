@@ -2,6 +2,8 @@ package weixin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,10 +44,47 @@ func weixinAccountDir(root string) string {
 
 func savedAccountPath(accountID string) string {
 	root := config.MemoryUserDir()
-	if root == "" || accountID == "" {
+	stem := weixinAccountFileStem(accountID)
+	if root == "" || stem == "" {
 		return ""
 	}
-	return filepath.Join(weixinAccountDir(root), accountID+".json")
+	return filepath.Join(weixinAccountDir(root), stem+".json")
+}
+
+// weixinAccountFileStem preserves ordinary iLink account IDs while mapping
+// manually configured path separators, control characters and Windows device
+// names to a stable non-secret digest. All account-owned files must use this
+// helper so account_id can never escape the accounts directory.
+func weixinAccountFileStem(accountID string) string {
+	raw := accountID
+	accountID = strings.TrimSpace(raw)
+	if accountID == "" {
+		return ""
+	}
+	if raw == accountID && safeWeixinAccountFileStem(accountID) {
+		return accountID
+	}
+	sum := sha256.Sum256([]byte(raw))
+	return "account-" + hex.EncodeToString(sum[:16])
+}
+
+func safeWeixinAccountFileStem(name string) bool {
+	if len(name) > 128 || strings.Trim(name, ". ") != name {
+		return false
+	}
+	for _, r := range name {
+		if r < 0x20 || strings.ContainsRune(`/\\:<>"|?*`, r) {
+			return false
+		}
+	}
+	base := strings.ToUpper(strings.SplitN(name, ".", 2)[0])
+	if base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" ||
+		base == "CLOCK$" || base == "CONIN$" || base == "CONOUT$" {
+		return false
+	}
+	return len(base) != 4 ||
+		(!strings.HasPrefix(base, "COM") && !strings.HasPrefix(base, "LPT")) ||
+		base[3] < '1' || base[3] > '9'
 }
 
 func loadSavedAccount(accountID string) (savedAccount, error) {
@@ -74,7 +113,9 @@ func loadAnySavedAccount() (savedAccount, error) {
 		return savedAccount{}, err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") || strings.Contains(entry.Name(), "context-tokens") {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") ||
+			strings.HasSuffix(entry.Name(), ".context-tokens.json") ||
+			strings.HasSuffix(entry.Name(), ".poll-state.json") {
 			continue
 		}
 		accountID := strings.TrimSuffix(entry.Name(), ".json")

@@ -106,15 +106,19 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
   等价回归基础上，本批继续采用数字开头 Provider env、MCP stdio server request/有界 reply queue、全部
   Desktop MCP/插件 lifecycle admission 与 visible/detached Controller reservation、graceful interrupted-turn
   recovery 和 WebKit shortcut recorder focus；保留 Reames identity-bound trust 与冷崩溃 checkpoint rollback，
-  Remote SSH UX/host-key 两项继续进入 P11。Codex 二级战略审至 `7844386e`，Claude 仍为 `015170d3`；
+  Remote SSH UX/host-key 两项继续进入 P11。Codex 二级战略审至 `678157ac`，Claude 仍为 `015170d3`；
   Hermes `e361c5e2` 的 Kimi adaptive thinking 信号已补齐无签名 provider-native block 的窄回放，cron
   profile/Windows `simple-git` 路径仍只按机制层分类；Codex raw replay retention、finalized Markdown cache
-  和 diff cloning 作为 P9 合同/性能信号，`7844386e` 又固定 completion backfill 的 primary thread+turn 身份；
-  Hermes 最终审至 `1b17015f`，其隔离 spawn/settle 性能方法进入 P9/P10 benchmark，不复制 Electron/Rust
-  非同构 runtime；Grok Build `ba76b0a6` 不改变层级。完整结论见
+  和 diff cloning 作为 P9 合同/性能信号；最新三提交又固定 paginated explicit name、动态 cell 重测及
+  fresh/fork/resume subagent backfill/request 复用边界。Hermes 最终审至 `a7d7c02c`：custom endpoint/目标
+  Provider 刷新已有等价，selector race 进入回归合同，cold-start/first-token/唯一调试端口/warm-cache 方法进入
+  P9/P10 benchmark；全零 revision fallback 因削弱 provenance 被拒绝。MiMo `ec413ade` 的 checkpointed
+  learning Skill 只作未来通用 Skill 状态机制候选；Grok Build `ba76b0a6` 不改变层级。完整结论见
   `audits/2026-07-20-reasonix-8bb0e54-2301e24.md` 与
   `audits/2026-07-20-upstream-strategic-reference-delta.md`、
-  `audits/2026-07-20-codex-hermes-late-delta.md`。
+  `audits/2026-07-20-codex-hermes-late-delta.md` 与
+  `audits/2026-07-20-codex-hermes-final-delta.md`、
+  `audits/2026-07-20-hermes-mimo-final-delta.md`。
 - 新增 `internal/testenv` 并接入会写状态的 Go/Desktop 测试包，隔离 HOME/USERPROFILE、XDG、AppData、TEMP/TMP 以及 Reames home/state/cache override；本批测试不会再默认把配置、worktree lease 和大量临时小文件写入真实用户目录或 C 盘通用 Temp。
 - 继承自早期迁移的 Hermes/Python runtime、Electron/TUI、旧 plugins/tests/package 元数据以及 `site/`、`workers/` 已在完成运行引用和替代实现审计后从当前树删除；参考机制只保留在 Git 历史和 `F:\code-reference`，不得重新整套 vendor。
 

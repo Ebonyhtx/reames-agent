@@ -205,7 +205,7 @@ func (a *adapter) runWebSocket(ctx context.Context) {
 func (a *adapter) newEventDispatcher() *dispatcher.EventDispatcher {
 	return dispatcher.NewEventDispatcher(a.cfg.VerificationToken, "").
 		OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
-			a.handleSDKMessage(event)
+			a.handleSDKMessage(ctx, event)
 			return nil
 		}).
 		OnP2MessageReadV1(func(ctx context.Context, event *larkim.P2MessageReadV1) error {
@@ -218,7 +218,7 @@ func (a *adapter) newEventDispatcher() *dispatcher.EventDispatcher {
 			return nil
 		}).
 		OnP2CardActionTrigger(func(ctx context.Context, event *callback.CardActionTriggerEvent) (*callback.CardActionTriggerResponse, error) {
-			if event == nil || event.EventReq == nil || !a.handleCardAction(event.Body) {
+			if event == nil || event.EventReq == nil || !a.handleCardAction(ctx, event.Body) {
 				a.logger.Warn("feishu card action ignored", "reason", "invalid_payload")
 				return cardActionToast("warning", "操作无效或已过期"), nil
 			}
@@ -226,7 +226,7 @@ func (a *adapter) newEventDispatcher() *dispatcher.EventDispatcher {
 		})
 }
 
-func (a *adapter) handleSDKMessage(event *larkim.P2MessageReceiveV1) {
+func (a *adapter) handleSDKMessage(ctx context.Context, event *larkim.P2MessageReceiveV1) {
 	if event == nil || event.Event == nil || event.Event.Message == nil {
 		return
 	}
@@ -276,11 +276,10 @@ func (a *adapter) handleSDKMessage(event *larkim.P2MessageReceiveV1) {
 		ThreadID:  stringPtrValue(msg.ThreadId),
 		Raw:       event,
 	}
-	select {
-	case a.msgCh <- ib:
+	if a.publishInbound(ctx, ib) {
 		a.logger.Info("feishu inbound queued", "chat_type", chatType, "chat", logHash(ib.ChatID), "user", logHash(ib.UserID), "message", logHash(ib.MessageID), "text_chars", len([]rune(ib.Text)))
-	default:
-		a.logger.Warn("feishu message channel full")
+	} else {
+		a.unmarkSeen(eventID)
 	}
 }
 
@@ -300,11 +299,11 @@ func (a *adapter) handleWSEvent(ctx context.Context, raw json.RawMessage) {
 		if err := json.Unmarshal(evt.Event, &msg); err != nil {
 			return
 		}
-		a.handleMessage(msg)
+		a.handleMessage(ctx, msg, evt.Header.EventID)
 	}
 }
 
-func (a *adapter) handleCardAction(raw []byte) bool {
+func (a *adapter) handleCardAction(ctx context.Context, raw []byte) bool {
 	var payload struct {
 		Header feishuHeader `json:"header"`
 		Event  struct {
@@ -357,12 +356,24 @@ func (a *adapter) handleCardAction(raw []byte) bool {
 		Text:       command,
 		MessageID:  payload.Event.Context.OpenMessageID,
 	}
-	select {
-	case a.msgCh <- ib:
-	default:
-		a.logger.Warn("feishu card action channel full")
+	if a.publishInbound(ctx, ib) {
+		return true
 	}
-	return true
+	a.unmarkSeen(payload.Header.EventID)
+	return false
+}
+
+func (a *adapter) publishInbound(ctx context.Context, msg bot.InboundMessage) bool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		a.logger.Warn("feishu inbound canceled before gateway claim", "message", logHash(msg.MessageID), "err", ctx.Err())
+		return false
+	case a.msgCh <- msg:
+		return true
+	}
 }
 
 func (a *adapter) markSeen(eventID string) bool {
@@ -383,6 +394,15 @@ func (a *adapter) markSeen(eventID string) bool {
 		a.seen[eventID] = true
 	}
 	return false
+}
+
+func (a *adapter) unmarkSeen(eventID string) {
+	if eventID == "" {
+		return
+	}
+	a.seenMu.Lock()
+	delete(a.seen, eventID)
+	a.seenMu.Unlock()
 }
 
 func cardActionChatType(raw string) bot.ChatType {
@@ -427,7 +447,7 @@ func logHash(id string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
-func (a *adapter) handleMessage(msg feishuMsgEvent) {
+func (a *adapter) handleMessage(ctx context.Context, msg feishuMsgEvent, eventIDs ...string) {
 	if msg.MsgType != "text" {
 		a.logger.Info("feishu message ignored", "reason", "non_text", "msg_type", msg.MsgType, "chat_type", msg.ChatType, "message", logHash(msg.MessageID))
 		return
@@ -465,11 +485,10 @@ func (a *adapter) handleMessage(msg feishuMsgEvent) {
 		ib.UserName = msg.Sender.SenderID.OpenID
 	}
 
-	select {
-	case a.msgCh <- ib:
+	if a.publishInbound(ctx, ib) {
 		a.logger.Info("feishu inbound queued", "chat_type", chatType, "chat", logHash(ib.ChatID), "user", logHash(ib.UserID), "message", logHash(ib.MessageID), "text_chars", len([]rune(ib.Text)))
-	default:
-		a.logger.Warn("feishu message channel full")
+	} else if len(eventIDs) > 0 {
+		a.unmarkSeen(eventIDs[0])
 	}
 }
 
@@ -693,6 +712,7 @@ func (a *adapter) runWebhook(ctx context.Context) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/feishu/event", func(w http.ResponseWriter, r *http.Request) {
+		eventCtx := r.Context()
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1024*1024))
 		if err != nil {
 			http.Error(w, "bad request", 400)
@@ -726,9 +746,9 @@ func (a *adapter) runWebhook(ctx context.Context) {
 			return
 		}
 
-		if !a.handleCardAction(body) {
+		if !a.handleCardAction(eventCtx, body) {
 			raw, _ := json.Marshal(evt)
-			a.handleWSEvent(ctx, raw)
+			a.handleWSEvent(eventCtx, raw)
 		}
 		w.WriteHeader(200)
 	})

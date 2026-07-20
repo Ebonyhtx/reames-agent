@@ -350,14 +350,23 @@ The built-in Feishu, QQ, Weixin, and Telegram adapters already use durable
 claim/dedupe and the final-delivery gate. Telegram additionally maps
 `update_id` to the durable delivery identity and only advances the remote
 polling offset after the final reply was sent and the delivery ledger commit
-succeeded. Before each final text chunk is sent, the Gateway persists an
+succeeded. Weixin applies the same rule to its native `get_updates_buf`: the
+opaque buffer is atomically persisted in a mode-0600 poll-state file only after
+every inbound message in that batch was durably settled. Failure, cancellation,
+or a state-write error keeps the previous buffer for replay. A manually configured Weixin `account_id` that is unsafe as
+a cross-platform filename is mapped to a stable digest and cannot escape `weixin/accounts`. Before each final text chunk
+is sent, the Gateway persists an
 `attempting` state. A platform acknowledgement advances `next_chunk`; the last
 acknowledgement atomically removes the obligation, settles every merged inbound
 claim, and advances the contiguous cursor/Telegram offset. A duplicate inbound
 event that owns an existing obligation resumes that exact reply and does not
-create a Controller or run the model again. Feishu, QQ, and Weixin do not yet page message history
-missed while the process was completely offline. That requires a platform-specific history/resume
-API and real application credentials. Delivery is explicitly at-least-once. A
+create a Controller or run the model again. Feishu and QQ do not yet page message
+history missed while the process was completely offline; Weixin and Telegram
+still depend on the platform's real retention window. Full offline recovery
+therefore requires platform-specific history/resume semantics and real application
+credentials. A saturated live-adapter queue now backpressures the platform reader
+or exits on service cancellation instead of silently dropping an envelope before
+the durable claim. Delivery is explicitly at-least-once. A
 crash after a platform accepted a chunk but before the local acknowledgement was
 committed is ambiguous, so recovery conservatively resends that unconfirmed
 chunk with a visible warning that it may be a duplicate. Chunks whose
@@ -552,8 +561,9 @@ Bindings are stored in the user's Reames Agent data, not inside the app bundle:
   stored in the user config.
 - Feishu and Lark secrets are stored in Reames Agent's global
   `<Reames Agent home>/.env`, shared by CLI and desktop.
-- The WeChat scanned account token is stored in the Reames Agent user data
-  directory.
+- The WeChat scanned account token and an opaque poll cursor containing no
+  message text or user identity are stored in the Reames Agent user data
+  directory; the cursor uses an atomic mode-0600 file.
 - The QQ App ID is stored in user config; the App Secret is stored under the
   configured env var, `QQ_BOT_APP_SECRET` by default, in the global credentials
   file.

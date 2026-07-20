@@ -1080,10 +1080,13 @@ type runtimeEventEnvelope struct {
 	payload []interface{}
 }
 
+const defaultRuntimeEventQueueLimit = 2048
+
 // asyncRuntimeEmitter decouples Wails' runtime event bridge from agent
 // emission. runtime.EventsEmit can block when the single webview event channel
-// backs up; callers enqueue in-order work and return without holding the
-// agent's event.Sync lock.
+// backs up; callers enqueue in-order work until the bounded queue is full, then
+// apply cancellable backpressure instead of growing memory or losing semantic
+// events. Adjacent streaming deltas are coalesced before that limit is reached.
 // runtimeEventsEmitFallback is the emit used when no per-instance override is
 // installed. Production keeps the real Wails bridge; the test binary swaps in
 // a no-op via TestMain, because Wails EventsEmit log.Fatals outside a running
@@ -1092,11 +1095,14 @@ type runtimeEventEnvelope struct {
 var runtimeEventsEmitFallback runtimeEventEmitFunc = runtime.EventsEmit
 
 type asyncRuntimeEmitter struct {
-	mu      sync.Mutex
-	emit    runtimeEventEmitFunc
-	queue   []runtimeEventEnvelope
-	head    int
-	running bool
+	mu         sync.Mutex
+	emit       runtimeEventEmitFunc
+	queue      []runtimeEventEnvelope
+	head       int
+	running    bool
+	limit      int
+	space      chan struct{}
+	generation uint64
 }
 
 func (e *asyncRuntimeEmitter) Emit(ctx context.Context, name string, payload ...interface{}) {
@@ -1108,20 +1114,54 @@ func (e *asyncRuntimeEmitter) Emit(ctx context.Context, name string, payload ...
 		name:    name,
 		payload: append([]interface{}(nil), payload...),
 	}
-	e.mu.Lock()
-	e.queue = append(e.queue, item)
-	if !e.running {
-		e.running = true
-		go e.run()
+	var generation uint64
+	initialized := false
+	for {
+		e.mu.Lock()
+		if e.space == nil {
+			e.space = make(chan struct{})
+		}
+		if !initialized {
+			generation = e.generation
+			initialized = true
+		} else if generation != e.generation {
+			e.mu.Unlock()
+			return
+		}
+		if e.mergeTailLocked(item) {
+			e.mu.Unlock()
+			return
+		}
+		limit := e.limit
+		if limit <= 0 {
+			limit = defaultRuntimeEventQueueLimit
+		}
+		if len(e.queue)-e.head < limit {
+			e.queue = append(e.queue, item)
+			if !e.running {
+				e.running = true
+				go e.run()
+			}
+			e.mu.Unlock()
+			return
+		}
+		space := e.space
+		e.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return
+		case <-space:
+		}
 	}
-	e.mu.Unlock()
 }
 
 func (e *asyncRuntimeEmitter) Clear() {
 	e.mu.Lock()
+	e.generation++
 	clear(e.queue)
 	e.queue = nil
 	e.head = 0
+	e.signalSpaceLocked()
 	e.mu.Unlock()
 }
 
@@ -1133,6 +1173,7 @@ func (e *asyncRuntimeEmitter) run() {
 			e.queue = nil
 			e.head = 0
 			e.running = false
+			e.signalSpaceLocked()
 			e.mu.Unlock()
 			return
 		}
@@ -1140,6 +1181,7 @@ func (e *asyncRuntimeEmitter) run() {
 		var zero runtimeEventEnvelope
 		e.queue[e.head] = zero
 		e.head++
+		e.signalSpaceLocked()
 		if e.head > 64 && e.head*2 >= len(e.queue) {
 			e.queue = append([]runtimeEventEnvelope(nil), e.queue[e.head:]...)
 			e.head = 0
@@ -1152,6 +1194,74 @@ func (e *asyncRuntimeEmitter) run() {
 
 		emit(item.ctx, item.name, item.payload...)
 	}
+}
+
+func (e *asyncRuntimeEmitter) signalSpaceLocked() {
+	if e.space != nil {
+		close(e.space)
+	}
+	e.space = make(chan struct{})
+}
+
+func (e *asyncRuntimeEmitter) mergeTailLocked(item runtimeEventEnvelope) bool {
+	if len(e.queue) <= e.head {
+		return false
+	}
+	return mergeRuntimeEvent(&e.queue[len(e.queue)-1], item)
+}
+
+func (e *asyncRuntimeEmitter) queueStats() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.queue) - e.head
+}
+
+func mergeRuntimeEvent(dst *runtimeEventEnvelope, src runtimeEventEnvelope) bool {
+	if dst == nil || dst.name != src.name {
+		return false
+	}
+	if dst.name == "project-tree:changed" && len(dst.payload) == 0 && len(src.payload) == 0 {
+		return true
+	}
+	left, ok := runtimeAgentWireEvent(*dst)
+	if !ok {
+		return false
+	}
+	right, ok := runtimeAgentWireEvent(src)
+	if !ok || left.TabID != right.TabID || left.Kind != right.Kind {
+		return false
+	}
+	switch left.Kind {
+	case "text", "reasoning":
+		left.Text += right.Text
+		left.Reasoning += right.Reasoning
+	case "tool_progress":
+		if left.Tool == nil || right.Tool == nil || left.Tool.ID == "" || left.Tool.ID != right.Tool.ID {
+			return false
+		}
+		tool := *left.Tool
+		tool.Output += right.Tool.Output
+		left.Tool = &tool
+	default:
+		return false
+	}
+	dst.payload[0] = left
+	return true
+}
+
+func runtimeAgentWireEvent(item runtimeEventEnvelope) (wireEventTab, bool) {
+	if item.name != eventChannel || len(item.payload) != 1 {
+		return wireEventTab{}, false
+	}
+	switch payload := item.payload[0].(type) {
+	case wireEventTab:
+		return payload, true
+	case *wireEventTab:
+		if payload != nil {
+			return *payload, true
+		}
+	}
+	return wireEventTab{}, false
 }
 
 func topicActivityStatusFromEvent(e event.Event) (string, bool) {

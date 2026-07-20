@@ -109,6 +109,12 @@ background job 视为 busy。`runtimeBuildGate` 只负责异步 controller build
 Controller 也不能把已删除/禁用的工具重新注册。Server-initiated stdio `ping` 和 method-not-found reply 使用独立
 有界 reply queue，stdout read loop 永不等待可能堵塞的 stdin client writer。
 
+Desktop 的 Wails runtime bridge 同样不得成为无界内存队列。`asyncRuntimeEmitter` 默认只保留 2048 个 active
+envelope；相邻 text/reasoning/tool-progress delta 可合并，达到上限后对 producer 施加可取消背压。所有事件保持
+原顺序且不因 overflow 丢弃，因为异常中断时部分 text/reasoning/tool progress 不一定立刻有完整终态回填。
+`Clear` 推进 generation，旧 context 中等待空间的 producer 不能在 tab 清理后重新入队。该 live queue 不进入
+App-Server replay store，也不改变 canonical transcript。
+
 ## 三、界面隔离目标与当前约束
 
 目标边界是所有界面层（CLI / Desktop / Web / IM / ACP）通过 `control.SessionAPI` 驱动运行时，并通过 `event.Sink` / `eventwire` 消费共享事件合同：
@@ -164,6 +170,13 @@ obligation 必须保存最终答复文本才能在重启后原样恢复，但正
 health、control status、Prometheus metrics 和 Provider request 只处理计数或当前 inbound 语义，绝不投影
 obligation chunks。启动时 obligation 恢复优先于平台历史补扫，并与 `RecoveryAdapter` 共用默认 200 条全局
 扫描预算。该事务提供可见的 at-least-once 最终回复，不把平台 ACK 与本地磁盘 commit 冒充分布式 exactly-once。
+
+微信 iLink 的 `get_updates_buf` 是 adapter-owned poll cursor：HTTP receipt 只建立 pending batch，Gateway 在最终
+回复和 delivery-ledger commit 后调用 `SettleInbound`，adapter 才以 0600 原子文件提交新 buffer。failed
+settlement、取消或写盘失败保留旧 buffer，restart 后继续从已提交值轮询。Telegram offset 使用同一结算原则；
+微信账户拥有的 account/context-token/poll-state 文件还通过共同的安全 stem 约束在 `weixin/accounts`，危险
+`account_id` 稳定映射为 digest。飞书/QQ 在没有已证明的 history/resume API 前只提供实时背压和 durable claim，
+不伪造离线补扫。
 
 ## 六、会话运行态与恢复
 

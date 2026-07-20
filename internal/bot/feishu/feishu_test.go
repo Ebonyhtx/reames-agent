@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"reames-agent/internal/bot"
 	"reames-agent/internal/config"
@@ -27,6 +28,48 @@ func TestStartReturnsMissingWebSocketSecret(t *testing.T) {
 	err := a.Start(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "FEISHU_TEST_SECRET") {
 		t.Fatalf("Start error = %v, want missing secret env", err)
+	}
+}
+
+func TestPublishInboundBackpressuresInsteadOfDroppingEnvelope(t *testing.T) {
+	a := &adapter{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		msgCh:  make(chan bot.InboundMessage, 1),
+	}
+	a.msgCh <- bot.InboundMessage{MessageID: "first"}
+	done := make(chan bool, 1)
+	go func() {
+		done <- a.publishInbound(context.Background(), bot.InboundMessage{MessageID: "second"})
+	}()
+	select {
+	case <-done:
+		t.Fatal("publish returned while the gateway queue was still full")
+	case <-time.After(30 * time.Millisecond):
+	}
+	if got := (<-a.msgCh).MessageID; got != "first" {
+		t.Fatalf("first queued message = %q", got)
+	}
+	if ok := <-done; !ok {
+		t.Fatal("publish failed after queue capacity became available")
+	}
+	if got := (<-a.msgCh).MessageID; got != "second" {
+		t.Fatalf("second queued message = %q", got)
+	}
+}
+
+func TestPublishInboundCancellationReleasesBackpressure(t *testing.T) {
+	a := &adapter{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		msgCh:  make(chan bot.InboundMessage, 1),
+	}
+	a.msgCh <- bot.InboundMessage{MessageID: "first"}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if a.publishInbound(ctx, bot.InboundMessage{MessageID: "second"}) {
+		t.Fatal("canceled publish succeeded")
+	}
+	if got := len(a.msgCh); got != 1 {
+		t.Fatalf("queue length = %d, want original envelope only", got)
 	}
 }
 
@@ -73,6 +116,34 @@ func TestMarkSeenConcurrent(t *testing.T) {
 	}
 }
 
+func TestCanceledInboundUnmarksEventForPlatformRetry(t *testing.T) {
+	a := &adapter{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		msgCh:  make(chan bot.InboundMessage, 1),
+	}
+	a.msgCh <- bot.InboundMessage{MessageID: "full"}
+	if a.markSeen("evt-retry") {
+		t.Fatal("first event mark reported duplicate")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	a.handleMessage(ctx, feishuMsgEvent{
+		MessageID: "msg-retry",
+		ChatID:    "chat-retry",
+		ChatType:  "p2p",
+		MsgType:   "text",
+		Content:   `{"text":"retry me"}`,
+		Sender: feishuSender{SenderID: struct {
+			UserID  string `json:"user_id"`
+			OpenID  string `json:"open_id"`
+			UnionID string `json:"union_id"`
+		}{OpenID: "open-user"}},
+	}, "evt-retry")
+	if a.markSeen("evt-retry") {
+		t.Fatal("canceled publish left event marked as delivered")
+	}
+}
+
 func TestHandleCardActionUsesChatType(t *testing.T) {
 	a := &adapter{
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -96,7 +167,7 @@ func TestHandleCardActionUsesChatType(t *testing.T) {
 		}
 	}`)
 
-	if !a.handleCardAction(raw) {
+	if !a.handleCardAction(context.Background(), raw) {
 		t.Fatal("handleCardAction returned false")
 	}
 
@@ -133,7 +204,7 @@ func TestHandleCardActionEnqueuesAskAnswerCommand(t *testing.T) {
 		}
 	}`)
 
-	if !a.handleCardAction(raw) {
+	if !a.handleCardAction(context.Background(), raw) {
 		t.Fatal("handleCardAction returned false")
 	}
 
@@ -175,7 +246,7 @@ func TestHandleCardActionAcceptsDirectOperatorID(t *testing.T) {
 		}
 	}`)
 
-	if !a.handleCardAction(raw) {
+	if !a.handleCardAction(context.Background(), raw) {
 		t.Fatal("handleCardAction returned false")
 	}
 
@@ -212,7 +283,7 @@ func TestHandleCardActionDoesNotTrustCardRequesterAsOperator(t *testing.T) {
 		}
 	}`)
 
-	if !a.handleCardAction(raw) {
+	if !a.handleCardAction(context.Background(), raw) {
 		t.Fatal("handleCardAction returned false")
 	}
 
@@ -231,7 +302,7 @@ func TestHandleMessageTreatsTopicGroupAsGroup(t *testing.T) {
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		msgCh:  make(chan bot.InboundMessage, 1),
 	}
-	a.handleMessage(feishuMsgEvent{
+	a.handleMessage(context.Background(), feishuMsgEvent{
 		MessageID: "msg-topic",
 		ChatID:    "chat-topic",
 		ChatType:  "topic_group",
@@ -260,7 +331,7 @@ func TestHandleMessageRequiresMentionInTopicGroup(t *testing.T) {
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		msgCh:  make(chan bot.InboundMessage, 1),
 	}
-	a.handleMessage(feishuMsgEvent{
+	a.handleMessage(context.Background(), feishuMsgEvent{
 		MessageID: "msg-topic",
 		ChatID:    "chat-topic",
 		ChatType:  "topic_group",

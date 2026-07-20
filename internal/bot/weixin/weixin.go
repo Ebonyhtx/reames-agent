@@ -15,18 +15,21 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"reames-agent/internal/bot"
 	"reames-agent/internal/config"
+	"reames-agent/internal/fileutil"
 )
 
 const (
@@ -46,6 +49,12 @@ const (
 	weixinMsgStateDone  = 2
 
 	weixinHTTPTimeout = 30 * time.Second
+
+	weixinPollStateVersion = 1
+	weixinStartupDelay     = 2 * time.Second
+	weixinRetryDelay       = 5 * time.Second
+	weixinIdleDelay        = 500 * time.Millisecond
+	weixinStopTimeout      = 5 * time.Second
 )
 
 var weixinHTTPClient = &http.Client{Timeout: weixinHTTPTimeout}
@@ -115,27 +124,57 @@ func (s *ilinkString) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("ilink string: expected string or number, got %s", string(data))
 }
 
+type pollSettlementState uint8
+
+const (
+	pollWaiting pollSettlementState = iota
+	pollDelivered
+	pollFailed
+)
+
+type weixinPollState struct {
+	Version      int    `json:"version"`
+	SyncBuf      string `json:"sync_buf,omitempty"`
+	LastUpdateID int64  `json:"last_update_id,omitempty"`
+}
+
 // adapter 微信适配器实现。
 type adapter struct {
 	cfg    config.WeixinBotConfig
 	logger *slog.Logger
 	msgCh  chan bot.InboundMessage
 	cancel context.CancelFunc
+	done   chan struct{}
 
-	mu            sync.Mutex
-	contextTokens map[string]string
-	syncBuf       string
-	lastUpdateID  int64
-	pollReadyOnce sync.Once
-	lastPollLog   time.Time
+	lifecycleMu sync.Mutex
+
+	mu             sync.Mutex
+	contextTokens  map[string]string
+	syncBuf        string
+	lastUpdateID   int64
+	pending        map[string]pollSettlementState
+	pendingOrder   []string
+	pendingNext    weixinPollState
+	settlementWake chan struct{}
+	pollReadyOnce  sync.Once
+	lastPollLog    time.Time
+
+	startupDelay time.Duration
+	retryDelay   time.Duration
+	idleDelay    time.Duration
+	writeState   func(string, []byte, os.FileMode) error
 }
 
 // New 创建微信 Bot 适配器。
 func New(cfg config.WeixinBotConfig, logger *slog.Logger) bot.Adapter {
 	return &adapter{
-		cfg:           cfg,
-		logger:        logger.With("platform", "weixin"),
-		contextTokens: make(map[string]string),
+		cfg:            cfg,
+		logger:         logger.With("platform", "weixin"),
+		contextTokens:  make(map[string]string),
+		settlementWake: make(chan struct{}, 1),
+		startupDelay:   weixinStartupDelay,
+		retryDelay:     weixinRetryDelay,
+		idleDelay:      weixinIdleDelay,
 	}
 }
 
@@ -143,23 +182,70 @@ func (a *adapter) Platform() bot.Platform { return bot.PlatformWeixin }
 func (a *adapter) Name() string           { return "weixin" }
 
 func (a *adapter) Start(ctx context.Context) error {
-	a.msgCh = make(chan bot.InboundMessage, 64)
-	ctx, a.cancel = context.WithCancel(ctx)
-	a.loadContextTokens()
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	if a.done != nil {
+		select {
+		case <-a.done:
+			a.cancel = nil
+			a.done = nil
+		default:
+			return fmt.Errorf("weixin adapter is already started")
+		}
+	}
 	if a.token() == "" {
 		return a.tokenMissingError()
 	}
+	if err := a.loadPollState(); err != nil {
+		return err
+	}
+	a.loadContextTokens()
+	ctx, a.cancel = context.WithCancel(ctx)
+	done := make(chan struct{})
+	a.done = done
+	a.mu.Lock()
+	a.msgCh = make(chan bot.InboundMessage, 64)
+	a.pending = make(map[string]pollSettlementState)
+	a.pendingOrder = nil
+	a.pendingNext = weixinPollState{}
+	if a.settlementWake == nil {
+		a.settlementWake = make(chan struct{}, 1)
+	}
+	a.mu.Unlock()
 
 	a.logger.Info("weixin polling started", "account", logHash(a.accountID()), "api_base", a.apiBase())
-	go a.pollLoop(ctx)
+	go func() {
+		defer close(done)
+		a.pollLoop(ctx)
+	}()
 	return nil
 }
 
 func (a *adapter) Stop() error {
-	if a.cancel != nil {
-		a.cancel()
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	cancel := a.cancel
+	done := a.done
+	if cancel == nil {
+		return nil
 	}
-	return nil
+	cancel()
+	if done == nil {
+		a.cancel = nil
+		return nil
+	}
+	timer := time.NewTimer(weixinStopTimeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		if a.done == done {
+			a.cancel = nil
+			a.done = nil
+		}
+		return nil
+	case <-timer.C:
+		return fmt.Errorf("weixin stop timed out waiting for polling cancellation")
+	}
 }
 
 func (a *adapter) Send(ctx context.Context, msg bot.OutboundMessage) (bot.SendResult, error) {
@@ -171,8 +257,40 @@ func (a *adapter) SendTyping(ctx context.Context, chatID string) error {
 }
 
 func (a *adapter) Messages() <-chan bot.InboundMessage {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	return a.msgCh
 }
+
+// SettleInbound advances the opaque iLink get_updates_buf only after the
+// shared Gateway ledger has durably committed final outbound delivery. A
+// failed settlement keeps the previously committed buffer, so the same remote
+// batch remains eligible for replay instead of disappearing after receipt.
+func (a *adapter) SettleInbound(messageID string, delivered bool) {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return
+	}
+	a.mu.Lock()
+	state, ok := a.pending[messageID]
+	if ok && state == pollWaiting {
+		if delivered {
+			a.pending[messageID] = pollDelivered
+		} else {
+			a.pending[messageID] = pollFailed
+		}
+	}
+	wake := a.settlementWake
+	a.mu.Unlock()
+	if ok && wake != nil {
+		select {
+		case wake <- struct{}{}:
+		default:
+		}
+	}
+}
+
+var _ bot.DeliverySettlementAdapter = (*adapter)(nil)
 
 // SendText sends one plain text message to a saved Weixin iLink conversation.
 // It is used by desktop settings as an actual connection test.
@@ -242,10 +360,11 @@ func (a *adapter) setContextToken(chatID, token string) {
 
 func (a *adapter) tokenStorePath() string {
 	root := config.MemoryUserDir()
-	if root == "" {
+	stem := weixinAccountFileStem(a.accountID())
+	if root == "" || stem == "" {
 		return ""
 	}
-	return filepath.Join(weixinAccountDir(root), a.accountID()+".context-tokens.json")
+	return filepath.Join(weixinAccountDir(root), stem+".context-tokens.json")
 }
 
 func (a *adapter) loadContextTokens() {
@@ -287,6 +406,66 @@ func (a *adapter) saveContextTokens() {
 	}
 }
 
+func (a *adapter) pollStatePath() string {
+	root := config.MemoryUserDir()
+	stem := weixinAccountFileStem(a.accountID())
+	if root == "" || stem == "" {
+		return ""
+	}
+	return filepath.Join(weixinAccountDir(root), stem+".poll-state.json")
+}
+
+func (a *adapter) loadPollState() error {
+	path := a.pollStatePath()
+	if path == "" {
+		return fmt.Errorf("weixin poll state path is unavailable")
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		a.mu.Lock()
+		a.syncBuf = ""
+		a.lastUpdateID = 0
+		a.mu.Unlock()
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read weixin poll state: %w", err)
+	}
+	var state weixinPollState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return fmt.Errorf("decode weixin poll state: %w", err)
+	}
+	if state.Version != weixinPollStateVersion || state.LastUpdateID < 0 {
+		return fmt.Errorf("weixin poll state is invalid or unsupported")
+	}
+	a.mu.Lock()
+	a.syncBuf = state.SyncBuf
+	a.lastUpdateID = state.LastUpdateID
+	a.mu.Unlock()
+	return nil
+}
+
+func (a *adapter) persistPollState(state weixinPollState) error {
+	path := a.pollStatePath()
+	if path == "" {
+		return fmt.Errorf("weixin poll state path is unavailable")
+	}
+	state.Version = weixinPollStateVersion
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode weixin poll state: %w", err)
+	}
+	data = append(data, '\n')
+	write := a.writeState
+	if write == nil {
+		write = fileutil.AtomicWriteFile
+	}
+	if err := write(path, data, 0o600); err != nil {
+		return fmt.Errorf("persist weixin poll state: %w", err)
+	}
+	return nil
+}
+
 func ilinkGET(ctx context.Context, baseURL, endpoint string) (map[string]any, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(baseURL, "/")+"/"+strings.TrimLeft(endpoint, "/"), nil)
 	if err != nil {
@@ -316,8 +495,20 @@ func ilinkGET(ctx context.Context, baseURL, endpoint string) (map[string]any, er
 // pollLoop 长轮询获取更新。
 func (a *adapter) pollLoop(ctx context.Context) {
 	// 启动时短暂等待让登录完成
-	if !bot.SleepCtx(ctx, 2*time.Second) {
+	startupDelay := a.startupDelay
+	if startupDelay <= 0 {
+		startupDelay = weixinStartupDelay
+	}
+	if !bot.SleepCtx(ctx, startupDelay) {
 		return
+	}
+	retryDelay := a.retryDelay
+	if retryDelay <= 0 {
+		retryDelay = weixinRetryDelay
+	}
+	idleDelay := a.idleDelay
+	if idleDelay <= 0 {
+		idleDelay = weixinIdleDelay
 	}
 
 	for {
@@ -325,22 +516,28 @@ func (a *adapter) pollLoop(ctx context.Context) {
 			return
 		}
 
-		updates, err := a.getUpdates(ctx)
+		result, err := a.getUpdates(ctx)
 		if err != nil {
 			a.logger.Error("getupdates failed", "err", err)
-			if !bot.SleepCtx(ctx, 5*time.Second) {
+			if !bot.SleepCtx(ctx, retryDelay) {
+				return
+			}
+			continue
+		}
+		if err := a.publishPollBatch(ctx, result); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			a.logger.Error("weixin poll batch failed", "err", err)
+			if !bot.SleepCtx(ctx, retryDelay) {
 				return
 			}
 			continue
 		}
 
-		for _, upd := range updates {
-			a.handleUpdate(upd)
-		}
-
 		// 没有更新时短暂等待
-		if len(updates) == 0 {
-			if !bot.SleepCtx(ctx, 500*time.Millisecond) {
+		if !result.HasMore && len(result.Updates) == 0 && len(result.Msgs) == 0 {
+			if !bot.SleepCtx(ctx, idleDelay) {
 				return
 			}
 		}
@@ -348,10 +545,10 @@ func (a *adapter) pollLoop(ctx context.Context) {
 }
 
 // getUpdates 调用微信 iLink getupdates API。
-func (a *adapter) getUpdates(ctx context.Context) ([]ilinkUpdate, error) {
+func (a *adapter) getUpdates(ctx context.Context) (ilinkResponse, error) {
 	tok := a.token()
 	if tok == "" {
-		return nil, a.tokenMissingError()
+		return ilinkResponse{}, a.tokenMissingError()
 	}
 
 	url := a.apiBase() + getUpdatesPath
@@ -368,44 +565,35 @@ func (a *adapter) getUpdates(ctx context.Context) ([]ilinkUpdate, error) {
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(body))
 	if err != nil {
-		return nil, err
+		return ilinkResponse{}, err
 	}
 	setIlinkHeaders(req, tok, body)
 
 	resp, err := weixinHTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return ilinkResponse{}, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		return ilinkResponse{}, fmt.Errorf("weixin getupdates HTTP %d", resp.StatusCode)
+	}
 
 	var result ilinkResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+		return ilinkResponse{}, err
 	}
 	if result.Ret != 0 || result.Errcode != 0 {
-		return nil, fmt.Errorf("getupdates error ret=%d errcode=%d: %s", result.Ret, result.Errcode, result.Errmsg)
+		return ilinkResponse{}, fmt.Errorf("getupdates error ret=%d errcode=%d: %s", result.Ret, result.Errcode, result.Errmsg)
 	}
 	a.pollReadyOnce.Do(func() {
 		a.logger.Info("weixin getupdates ready", "account", logHash(a.accountID()), "api_base", a.apiBase())
 	})
 	a.logPollHealth(result)
-
-	a.mu.Lock()
-	if result.GetUpdatesBuf != "" {
-		a.syncBuf = result.GetUpdatesBuf
+	if result.GetUpdatesBuf == "" && (result.HasMore || len(result.Updates) > 0 || len(result.Msgs) > 0) {
+		return ilinkResponse{}, fmt.Errorf("weixin getupdates returned messages without a recovery buffer")
 	}
-	if len(result.Updates) > 0 {
-		last := result.Updates[len(result.Updates)-1]
-		a.lastUpdateID = last.UpdateID
-	}
-	a.mu.Unlock()
-
-	if len(result.Msgs) > 0 {
-		for _, msg := range result.Msgs {
-			a.handleIlinkMessage(msg)
-		}
-	}
-	return result.Updates, nil
+	return result, nil
 }
 
 func (a *adapter) logPollHealth(result ilinkResponse) {
@@ -428,20 +616,152 @@ func (a *adapter) logPollHealth(result ilinkResponse) {
 		"timeout_ms", result.LongpollingTimeoutMs)
 }
 
+func (a *adapter) publishPollBatch(ctx context.Context, result ilinkResponse) error {
+	a.mu.Lock()
+	if len(a.pendingOrder) != 0 {
+		a.mu.Unlock()
+		return fmt.Errorf("weixin settlement batch overlap")
+	}
+	current := weixinPollState{
+		Version:      weixinPollStateVersion,
+		SyncBuf:      a.syncBuf,
+		LastUpdateID: a.lastUpdateID,
+	}
+	a.mu.Unlock()
+
+	sort.SliceStable(result.Updates, func(i, j int) bool {
+		return result.Updates[i].UpdateID < result.Updates[j].UpdateID
+	})
+	next := current
+	if result.GetUpdatesBuf != "" {
+		next.SyncBuf = result.GetUpdatesBuf
+	}
+	for _, upd := range result.Updates {
+		if upd.UpdateID > next.LastUpdateID {
+			next.LastUpdateID = upd.UpdateID
+		}
+	}
+
+	seen := make(map[string]bool, len(result.Updates)+len(result.Msgs))
+	messages := make([]bot.InboundMessage, 0, len(result.Updates)+len(result.Msgs))
+	for _, upd := range result.Updates {
+		msg, ok := a.inboundFromUpdate(upd)
+		if !ok || seen[msg.MessageID] {
+			continue
+		}
+		seen[msg.MessageID] = true
+		messages = append(messages, msg)
+	}
+	for _, raw := range result.Msgs {
+		msg, ok := a.inboundFromIlinkMessage(raw)
+		if !ok || seen[msg.MessageID] {
+			continue
+		}
+		seen[msg.MessageID] = true
+		messages = append(messages, msg)
+	}
+
+	a.mu.Lock()
+	a.pendingNext = next
+	for _, msg := range messages {
+		a.pending[msg.MessageID] = pollWaiting
+		a.pendingOrder = append(a.pendingOrder, msg.MessageID)
+	}
+	a.mu.Unlock()
+
+	for _, msg := range messages {
+		select {
+		case <-ctx.Done():
+			a.clearPendingBatch()
+			return ctx.Err()
+		case a.msgCh <- msg:
+			a.logger.Info("weixin inbound queued", "chat_type", msg.ChatType, "chat", logHash(msg.ChatID), "user", logHash(msg.UserID), "message", logHash(msg.MessageID), "text_chars", len([]rune(msg.Text)))
+		}
+	}
+
+	delivered, err := a.waitForBatchSettlement(ctx)
+	if err != nil {
+		return err
+	}
+	if !delivered {
+		return fmt.Errorf("weixin poll batch delivery failed; recovery buffer was not advanced")
+	}
+	return nil
+}
+
+func (a *adapter) waitForBatchSettlement(ctx context.Context) (delivered bool, err error) {
+	for {
+		a.mu.Lock()
+		allSettled := true
+		delivered = true
+		for _, id := range a.pendingOrder {
+			switch a.pending[id] {
+			case pollWaiting:
+				allSettled = false
+			case pollFailed:
+				delivered = false
+			}
+		}
+		if allSettled {
+			next := a.pendingNext
+			current := weixinPollState{
+				Version:      weixinPollStateVersion,
+				SyncBuf:      a.syncBuf,
+				LastUpdateID: a.lastUpdateID,
+			}
+			a.mu.Unlock()
+			if delivered && next != current {
+				if err := a.persistPollState(next); err != nil {
+					a.clearPendingBatch()
+					return false, err
+				}
+				a.mu.Lock()
+				a.syncBuf = next.SyncBuf
+				a.lastUpdateID = next.LastUpdateID
+				a.mu.Unlock()
+			}
+			a.clearPendingBatch()
+			return delivered, nil
+		}
+		wake := a.settlementWake
+		a.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			a.clearPendingBatch()
+			return false, ctx.Err()
+		case <-wake:
+		}
+	}
+}
+
+func (a *adapter) clearPendingBatch() {
+	a.mu.Lock()
+	for _, id := range a.pendingOrder {
+		delete(a.pending, id)
+	}
+	a.pendingOrder = nil
+	a.pendingNext = weixinPollState{}
+	a.mu.Unlock()
+}
+
 // handleUpdate 处理单条微信更新消息。
-func (a *adapter) handleUpdate(upd ilinkUpdate) {
+func (a *adapter) inboundFromUpdate(upd ilinkUpdate) (bot.InboundMessage, bool) {
 	if upd.UpdateType != "message" {
 		a.logger.Info("weixin update ignored", "reason", "non_message", "update_type", upd.UpdateType)
-		return
+		return bot.InboundMessage{}, false
 	}
 
 	m := upd.Message
+	if strings.TrimSpace(string(m.MessageID)) == "" || strings.TrimSpace(m.From.UserID) == "" || strings.TrimSpace(m.Text) == "" {
+		a.logger.Info("weixin update ignored", "reason", "missing_identity_or_text", "message", logHash(string(m.MessageID)))
+		return bot.InboundMessage{}, false
+	}
 	chatType := bot.ChatDM
 	if m.ChatType == "group" {
 		chatType = bot.ChatGroup
 	}
 
-	ib := bot.InboundMessage{
+	return bot.InboundMessage{
 		Platform:  bot.PlatformWeixin,
 		ChatType:  chatType,
 		ChatID:    m.ChatID,
@@ -449,35 +769,32 @@ func (a *adapter) handleUpdate(upd ilinkUpdate) {
 		UserName:  m.From.UserName,
 		Text:      m.Text,
 		MessageID: string(m.MessageID),
-	}
-
-	select {
-	case a.msgCh <- ib:
-		a.logger.Info("weixin inbound queued", "source", "update", "chat_type", chatType, "chat", logHash(ib.ChatID), "user", logHash(ib.UserID), "message", logHash(ib.MessageID), "text_chars", len([]rune(ib.Text)))
-	default:
-		a.logger.Warn("weixin message channel full")
-	}
+	}, true
 }
 
-func (a *adapter) handleIlinkMessage(m ilinkMessage) {
+func (a *adapter) inboundFromIlinkMessage(m ilinkMessage) (bot.InboundMessage, bool) {
 	if m.FromUserID == "" || m.FromUserID == a.accountID() {
 		a.logger.Info("weixin message ignored", "reason", "self_or_missing_sender", "from", logHash(m.FromUserID), "message", logHash(string(m.MessageID)))
-		return
+		return bot.InboundMessage{}, false
 	}
 	text := extractIlinkText(m.ItemList)
 	if text == "" {
 		a.logger.Info("weixin message ignored", "reason", "empty_text", "from", logHash(m.FromUserID), "message", logHash(string(m.MessageID)))
-		return
+		return bot.InboundMessage{}, false
 	}
 	chatType, chatID := guessIlinkChat(m, a.accountID())
 	if chatID == "" {
 		a.logger.Info("weixin message ignored", "reason", "missing_chat", "from", logHash(m.FromUserID), "message", logHash(string(m.MessageID)))
-		return
+		return bot.InboundMessage{}, false
+	}
+	if strings.TrimSpace(string(m.MessageID)) == "" {
+		a.logger.Info("weixin message ignored", "reason", "missing_message_id", "from", logHash(m.FromUserID))
+		return bot.InboundMessage{}, false
 	}
 	if m.ContextToken != "" {
 		a.setContextToken(chatID, m.ContextToken)
 	}
-	ib := bot.InboundMessage{
+	return bot.InboundMessage{
 		Platform:  bot.PlatformWeixin,
 		ChatType:  chatType,
 		ChatID:    chatID,
@@ -485,13 +802,7 @@ func (a *adapter) handleIlinkMessage(m ilinkMessage) {
 		UserName:  m.FromUserID,
 		Text:      text,
 		MessageID: string(m.MessageID),
-	}
-	select {
-	case a.msgCh <- ib:
-		a.logger.Info("weixin inbound queued", "source", "message", "chat_type", chatType, "chat", logHash(ib.ChatID), "user", logHash(ib.UserID), "message", logHash(ib.MessageID), "text_chars", len([]rune(ib.Text)))
-	default:
-		a.logger.Warn("weixin message channel full")
-	}
+	}, true
 }
 
 func logHash(id string) string {

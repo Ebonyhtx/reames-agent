@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"reames-agent/internal/bot"
 	"reames-agent/internal/config"
@@ -33,7 +34,7 @@ func TestHandleDispatchDirectMessageUsesDirectChatType(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a.handleDispatch(gatewayPayload{T: "DIRECT_MESSAGE_CREATE", D: raw})
+	a.handleDispatch(context.Background(), gatewayPayload{T: "DIRECT_MESSAGE_CREATE", D: raw})
 
 	msg := <-a.msgCh
 	if msg.ChatType != bot.ChatDirect {
@@ -41,6 +42,48 @@ func TestHandleDispatchDirectMessageUsesDirectChatType(t *testing.T) {
 	}
 	if msg.ChatID != "guild-1" {
 		t.Fatalf("chat id = %q, want guild-1", msg.ChatID)
+	}
+}
+
+func TestPublishInboundBackpressuresInsteadOfDroppingEnvelope(t *testing.T) {
+	a := &adapter{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		msgCh:  make(chan bot.InboundMessage, 1),
+	}
+	a.msgCh <- bot.InboundMessage{MessageID: "first"}
+	done := make(chan bool, 1)
+	go func() {
+		done <- a.publishInbound(context.Background(), bot.InboundMessage{MessageID: "second"})
+	}()
+	select {
+	case <-done:
+		t.Fatal("publish returned while the gateway queue was still full")
+	case <-time.After(30 * time.Millisecond):
+	}
+	if got := (<-a.msgCh).MessageID; got != "first" {
+		t.Fatalf("first queued message = %q", got)
+	}
+	if ok := <-done; !ok {
+		t.Fatal("publish failed after queue capacity became available")
+	}
+	if got := (<-a.msgCh).MessageID; got != "second" {
+		t.Fatalf("second queued message = %q", got)
+	}
+}
+
+func TestPublishInboundCancellationReleasesBackpressure(t *testing.T) {
+	a := &adapter{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		msgCh:  make(chan bot.InboundMessage, 1),
+	}
+	a.msgCh <- bot.InboundMessage{MessageID: "first"}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if a.publishInbound(ctx, bot.InboundMessage{MessageID: "second"}) {
+		t.Fatal("canceled publish succeeded")
+	}
+	if got := len(a.msgCh); got != 1 {
+		t.Fatalf("queue length = %d, want original envelope only", got)
 	}
 }
 
@@ -61,7 +104,7 @@ func TestHandleDispatchC2CUsesUserOpenID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a.handleDispatch(gatewayPayload{T: "C2C_MESSAGE_CREATE", D: raw})
+	a.handleDispatch(context.Background(), gatewayPayload{T: "C2C_MESSAGE_CREATE", D: raw})
 
 	msg := <-a.msgCh
 	if msg.UserID != "openid-user" {

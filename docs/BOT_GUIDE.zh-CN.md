@@ -307,13 +307,18 @@ schema-v2 原子投递账本。它保存远端入站身份、状态、opaque 恢
 
 当前内置飞书、QQ、微信和 Telegram 适配器已使用持久 claim/去重和最终投递门禁。
 Telegram 还会把 `update_id` 作为持久投递身份，并且只有最终回复发送成功且投递
-账本提交成功后才推进远端 polling offset。每个最终文本分片发送前，Gateway 会先
+账本提交成功后才推进远端 polling offset。微信 iLink 同样只在该批所有最终回复结算后，才把
+`get_updates_buf` 写入 0600 原子 poll-state；失败、取消或写盘失败会继续使用旧 buffer 重放。
+手工设置的微信 `account_id` 若不是安全的跨平台文件名，会稳定映射为 digest，不能逃逸
+`weixin/accounts`。
+每个最终文本分片发送前，Gateway 会先
 持久化 `attempting`；平台 ACK 后才推进 `next_chunk`，最后一个 ACK 会在一次原子写中
 删除 obligation、结算所有被合并的 inbound claims，并推进连续 cursor/Telegram offset。
 重复入站若命中已有 obligation，会直接恢复原答复，不创建 Controller，也不再次运行模型。
-飞书、QQ 和微信尚未实现完全离线期间的历史消息分页补扫。因此“进程收到过事件后的重复投递恢复”
-可用，不代表“关机期间所有漏消息都能恢复”。后者必须由具体平台的历史/resume
-API 和真实应用凭据验证。投递保持明确的 at-least-once 边界：如果平台已经接收某个
+飞书和 QQ 尚未实现完全离线期间的历史消息分页补扫；微信/Telegram 仍依赖平台真实保留窗口。
+因此“进程收到过事件后的重复投递恢复”可用，不代表“关机期间所有漏消息都能恢复”。后者必须由
+具体平台的历史/resume API、保留策略和真实应用凭据验证。实时 adapter 的本地入站队列饱和时会等待
+Gateway 或在服务取消时退出，不再在 durable claim 前静默丢消息。投递保持明确的 at-least-once 边界：如果平台已经接收某个
 分片，但进程在本地提交 ACK 前崩溃，系统无法证明远端结果，会保守重发这个未确认分片，
 并添加“可能重复”的可见提示；已经持久 ACK 的前置分片不会重发。纯 `pending` obligation
 表示从未尝试发送，恢复时不会显示重复警告。
@@ -494,7 +499,8 @@ YOLO 的边界很重要：
 - Bot 连接、远端 ID、白名单、模型和审批模式保存在用户配置文件。
 - 飞书和 Lark 的密钥保存在 CLI 与桌面端共用的 Reames Agent 全局
   `<Reames Agent home>/.env`。
-- 微信扫码后的账号 token 保存在 Reames Agent 的用户数据目录。
+- 微信扫码后的账号 token 和不含消息正文/用户身份的 opaque poll cursor 保存在 Reames Agent 的用户数据目录；
+  cursor 文件使用 0600 原子写入。
 - QQ 的 App ID 保存在用户配置文件；App Secret 通过配置的环境变量
   （默认 `QQ_BOT_APP_SECRET`）保存在 Reames Agent 全局凭据文件中。
 

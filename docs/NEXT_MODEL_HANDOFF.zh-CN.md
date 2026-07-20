@@ -65,11 +65,16 @@ usage/cache、tool/vision、错误与 runtime 行为。
 - Reasonix 最新 `8bb0e549..2301e248` 已完成代码级采用：数字开头 Provider env、MCP stdio reply queue、
   Desktop 全 MCP/插件 lifecycle admission 与 visible/detached Controller reservation、中断轮次 LocalOnly
   恢复和 WebKit recorder focus 已落地；Remote SSH UX/host-key 保持 P11。Codex 二级战略审至
-  `7844386e`，其最新 TUI/command lifecycle/replay/diff/exec completion 七提交已按代码级能力分类；Claude 无新增。
-  Hermes 审至 `1b17015f`，其中 Kimi/Moonshot 无签名 provider-native thinking block 已窄化采用，perf harness
-  和 session-color 变化仍只形成机制信号。
+  `678157ac`：除前批 TUI/command/replay/exec identity 外，新增 paginated name canonical store、动态 cell 重测和
+  fresh/fork/resume subagent backfill 请求边界；Claude 无新增。Hermes 审至 `a7d7c02c`，其中 Kimi/Moonshot
+  thinking 已窄化采用，custom endpoint/模型刷新已有等价，selector race 与 cold-start/first-token perf 进入
+  P9 合同，全零 revision fallback 被拒绝；MiMo `ec413ade` 的学习 Skill 只形成 checkpoint state 机制信号。
 - 本批新增 `internal/testenv`，隔离 HOME/USERPROFILE、XDG、AppData、TEMP/TMP 和 Reames home/state/cache，
   会写状态的 Go/Desktop 测试不再默认污染真实用户目录或 C 盘通用 Temp。
+- M6 微信 iLink 已把 `get_updates_buf` 收到最终投递结算之后并原子持久化，危险 `account_id` 不能逃逸
+  `weixin/accounts`；飞书/QQ/微信实时队列满时
+  改为可取消背压。P9 Desktop `asyncRuntimeEmitter` 已完成 2048 项上限、瞬态 delta 合并、零语义 drop
+  和 race/微基准；原生 WebView frame pacing 仍未由合成 benchmark 证明。
 - 后续方向已由用户明确：P8 官方 OpenAI Responses/GPT 与 Claude parity 已关闭；P9 Codex-class
   Plugin/Skill/Hook/MCP/headless；P10 第一方 CDP Browser Control；P11 受治理 Remote SSH。现有兼容端点、插件基础或
   `web_search`/`web_fetch`/Playwright MCP 不能冒充这些阶段完成。
@@ -85,9 +90,9 @@ usage/cache、tool/vision、错误与 runtime 行为。
 | 项目 | reviewed SHA | 决策角色 |
 |---|---|---|
 | DeepSeek Reasonix | `2301e24827bf62c7584f34c4f541c432dd4f6e0b` | 唯一一级主源码上游；DeepSeek 原生与主 runtime |
-| Hermes | `1b17015f7a8d0c0d68b1f08aa389538e7fd172e3` | 三级 Gateway/错误/运维机制参考；Kimi thinking 与 perf harness 信号已分类 |
-| Codex | `7844386e3de08febd13075eaaaf0e6f9dbe52c58` | 二级战略；GPT/Responses、协议、插件、Hook/LSP/CDP |
-| MiMo Code | `f24ce4eb7341bfba6bb608436c1d27a843508adf` | 三级设计/Skill 体验参考 |
+| Hermes | `a7d7c02cb6db071eced4ac82e24f878588619600` | 三级 Gateway/错误/运维机制参考；Provider/selector/perf/provenance 信号已分类 |
+| Codex | `678157acaa819d5510adfe359abb5d0392cfe461` | 二级战略；GPT/Responses、协议、插件、Hook/LSP/CDP/App-Server |
+| MiMo Code | `ec413adeccfcb65ccb63a708bb6136644ea13c79` | 三级设计/Skill 体验参考；checkpointed learning state 候选 |
 | Impeccable | `e4ab5e24bdf5321b72163d2fbcbe6fa985c848ba` | 品牌设计语言参考 |
 | Scream Code | `22a2adaf8a459ab6bcfda028cc74b4c9b7e5f11f` | 三级 Goal/TUI/可靠性机制参考 |
 | AgentArk | `63985cf819d1760f50f2a5c0dc11d82815e74623` | 安全架构参考 |
@@ -227,11 +232,13 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
   collect/debounce、queue-cap summarize/drop 会把全部消息 claim 与 media 带入后续 turn；成功
   `/stop`、`/new`、`/reset`、`/use`、`/attach` 或 interrupt ack 会关闭全部被明确取消的 active/pending
   claims，避免用户明确停止或切换的任务在重启后重放；
-- 可选 `RecoveryAdapter` 合同和 fake history scan 已有故障注入，但内置飞书/QQ/微信尚未接真实历史 API。
-  当前完成的是 durable live-event dedupe/final-delivery core，不是完全离线漏消息恢复；
+- 微信 iLink 的原生 `get_updates_buf` 已改为最终投递结算后 0600 原子提交；failed settlement、磁盘失败与
+  restart 从旧 buffer 重放。Telegram 同样在最终投递后推进 offset。飞书/QQ 仍没有已证明的 history/resume
+  API；四类实时 adapter 的满队列现在背压而不静默 drop。当前仍不能把平台保留窗口冒充完全离线漏消息恢复；
 - control `/status`、IM `/status` 与 metrics 只返回统计计数。权威审计：
   `audits/2026-07-19-m6-durable-channel-recovery.md` 与
-  `audits/2026-07-20-m6-outbound-final-response-obligation.md`。
+  `audits/2026-07-20-m6-outbound-final-response-obligation.md` 与
+  `audits/2026-07-20-m6-weixin-polling-desktop-backpressure.md`。
 
 ## 5.3 Reasonix 最新可靠性与 Telegram 扩展
 
@@ -261,19 +268,7 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
 
 ## 6. 本批本地验证
 
-本批有两个只用于 detached clean-clone、不会移动 `main` 的临时验证对象：生产 Go/Desktop/Gateway 与
-12 目标门槛跑在 `2e362dfff85f3a50dc6471cbd3b677e85a187b92`；其后只增加 frontend lifecycle 合同修复的
-`39c720c9fc0d347f9eeb6e5ba7ebd58de9e7e18e` 重跑完整 Frontend 门槛。正式提交 SHA 仍以 Git 为准。
-独立 clone `F:\reames-agent-clean-verify-2` 已证明：
-
-- Root（`2e362dff`）：`go build ./...`、`go vet ./...`、`go test -p=1 ./internal/... -count=1 -timeout 300s`；
-- Desktop（`2e362dff`）：`go build ./...`、`go vet ./...`、`go test -p=1 ./... -count=1 -timeout 600s`；
-- Frontend（`39c720c9`）：`corepack pnpm test:all`、production build 和 bundle budget；
-- 发布形态与 Gateway（`2e362dff`）：linux/darwin/windows × amd64/arm64 的 CLI 与 Guard 共 12 个
-  `CGO_ENABLED=0` 目标；真实构建二进制完成 clean-node setup/doctor/service plan、localhost Provider 单轮、持久会话和本地
-  feedback 生命周期；报告 `status=passed`，真实 Provider/IM/service-manager 回环仍明确列为 `external_blocked`；
-
-在只追加 frontend lifecycle 合同修复、上游审计与治理脚本后，最终当前工作树又直接重跑并通过：
+当前 M6/P9 批次在正式提交前已直接从工作树重跑并通过：
 
 - Root build/vet/全 `internal/...` 测试，Desktop build/vet/全测试；
 - Frontend 完整 `test:all`、production build 和 bundle budget：entry JS 641,587 B、localized initial
@@ -284,25 +279,17 @@ P8 仓库内实现与本地交付门槛已关闭，`a58f7691` 对应 CI `2966342
 - scripts 全发现 151 项测试通过、2 项按平台跳过；deploy/release/docs/public、安装器、Desktop
   artifact/candidate/native/interaction/accessibility/recovery/plugin lifecycle 合同和 Issue reconciliation 全部通过；
 - 最终绑定 SHA 的 `--deep` 为 11/11、`changed_count=0`；
-- 上游：Codex `7844386e` 与 Hermes `1b17015f` 逐提交/逐文件审查；最终接受强制使用绑定完整 SHA 的
+- 上游：Codex `678157ac`、Hermes `a7d7c02c` 与 MiMo `ec413ade` 逐提交/逐文件审查；最终接受强制使用绑定完整 SHA 的
   `--accept-revision`，未绑定 `--accept`/`--accept-all`/`--update-lock` 已禁用；
 - Kimi：Anthropic provider 定向测试证明官方 host/model family 识别、无签名原生 thinking block 续轮回放、
   lookalike host 拒绝和 Claude signature 边界；provider/config 全组通过；
-- Frontend 首轮 clean-clone 发现 `bundle-contract` 没同步新 shortcut recorder 生命周期；修复为解析
-  `package.json` scripts 并要求 theme/export/shortcut 全部挂载后，定向测试、完整 `test:all` 与 production build
-  重新通过。
+- 高风险定向 race 覆盖微信/飞书/QQ/Telegram，以及 Desktop emitter/tab sink；
+- `BenchmarkAsyncRuntimeEmitterCoalescedBacklog` 在 Windows amd64 独立 5 轮中位数约 `1.3 µs/op`，只证明 Go 队列合并开销，
+  不冒充原生 WebView frame pacing。
 
-同一批此前还通过高风险 race（provider/agent/control/plugin/bot/jobs 与 Desktop 全量）、当前 Windows Wails
-executable 构建，以及真实 Chrome/UI Automation 插件 install/enable/update/rollback/doctor/remove smoke；
-该插件 smoke 的 `boundary_changes=[]`、`errors=[]`。最终临时对象只在其后增加 Kimi provider、上游审计和
-frontend lifecycle 合同修复，没有改动插件 lifecycle 生产路径。
-
-旧 `1489ee18`、`670f2845` 和早期 run ID 仅为中间快照，不是本批最终证据。依赖可重建性已在本批早期从空
-`node_modules`、锁文件和 F 盘 pnpm store 完成 install/test/build；最终对象复用同一锁定安装并再次跑完整
-Frontend 门槛。
-
-本批仓库内与 clean-clone 门槛已关闭；尚未完成的是最终 push 提交对应的远端 CI/CodeQL。在远端证据
-全绿前不得关闭本批最后公开交付门槛。
+提交前不得把旧 detached SHA、早期 clean clone、插件 smoke 或历史 run ID 当作本批证据。正式提交后必须从该
+提交建立新的 `F:\reames-agent-clean-verify`，重跑 Root、Desktop、Frontend、公开清洁与上游治理门槛；只有
+clean clone 通过且最终 push SHA 的 CI/CodeQL 全绿，才可关闭本批公开交付门槛。
 
 远端完成声明必须使用最终 push 提交对应的 CI/CodeQL。为避免仅写回 run ID 又触发一次 CI，本文件不
 硬编码本批 run ID；新会话使用：
@@ -346,8 +333,8 @@ gh run list --commit (git rev-parse HEAD) --limit 20
 2. Upstream Watch 若无新提交，不重开 P6/P7；若有新提交，只审 lock → latest。
 3. 本批 CI/CodeQL 若失败，先在同一批修复，不用碎片 push 消耗 CI。
 4. 电脑清理后若 `F:\code-reference` 丢失，按 `docs/upstreams/upstreams.json` 重建；不要从旧聊天猜 SHA。
-5. 远端全绿且用户未提供外部环境时，M6 渠道历史分页/真实掉线和云节点证据保持等待；仓库内继续逐渠道
-   RecoveryAdapter fixture 与 P9，
+5. 远端全绿且用户未提供外部环境时，M6 飞书/QQ 历史分页、微信/Telegram 真实保留窗口、真实掉线和云节点
+   证据保持等待；仓库内继续逐渠道审批/取消/reconnect fixture 与 P9 App-Server/headless，
    再进入 P10，不降低真实 API、真实 IM、systemd reboot 或浏览器登录态证据门槛。
 
 ## 9. Git 与清洁约束
