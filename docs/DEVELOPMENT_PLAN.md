@@ -485,6 +485,12 @@ notarization、公开主题 registry
   fresh-human、generation identity、TUF/provenance、OS sandbox 和进程树回收，不接入无治理 marketplace。
 - 审计 Codex App-Server/headless 线程、命令、事件、审批和 MCP runtime 语义，只扩展现有
   `internal/control`/event wire；不引入第二套 Agent/runtime 或破坏传输无关边界。
+- [x] 首批 App-Server 纵向闭环：新增 `reames-agent app-server` 本地 stdio JSONL 入口，复用
+  `boot.Build -> control.Controller`，实现 initialize、thread start/resume/list/loaded-list/read/name/unsubscribe、
+  turn start/steer/interrupt、审批/Ask 与 canonical transcript replay。8 MiB 帧/64 并发有界，wire 与 params
+  严格校验，响应先于事件流；stable thread sidecar 在冲突恢复时事务式移动 active transcript 与 writer lease。
+  WebSocket、paginated history、fork/archive/rollback、图片/audio、review/realtime/dynamic-tool 注册仍明确 unsupported，
+  不以首批闭环宣称完整 parity。见 `docs/audits/2026-07-21-p9-app-server-initial-slice.md`。
 - App-Server replay store 只保留会话恢复必需的 canonical 事件；raw response item、realtime audio/transcript、
   MCP progress、command/process output delta 不得进入持久 replay。
 - [x] Desktop `asyncRuntimeEmitter` live queue 默认限制 2048 active envelopes；同 tab 文本/推理/工具进度合并，

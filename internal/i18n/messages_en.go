@@ -433,6 +433,7 @@ Usage:
   reames-agent review [--base BRANCH] [--commit SHA] [--model NAME]  AI-powered code review on local diffs
   reames-agent serve [--model NAME] [--addr HOST:PORT] [--auth none|token|password] [--token STR] [--password STR] [--hash-password]  serve over HTTP+SSE (with optional auth)
   reames-agent acp [--model NAME]                           serve Agent Client Protocol over stdio (also: reames-agent --acp)
+  reames-agent app-server [--model NAME]                    serve the local App-Server protocol over stdio JSONL
   reames-agent setup [path]                                 interactive config wizard; writes reames-agent.toml (+ .env)
   reames-agent config auto-plan [off|on]                    configure automatic plan mode
   reames-agent config memory-v5 [off|observe|compact|on|status]  configure Memory v5

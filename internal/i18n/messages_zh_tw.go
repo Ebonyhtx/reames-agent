@@ -378,6 +378,7 @@ var ChineseTraditional = Messages{
   reames-agent review [--base BRANCH] [--commit SHA] [--model NAME]  AI 程式碼審查（基於本機 diff）
   reames-agent serve [--model NAME] [--addr HOST:PORT] [--auth none|token|password] [--token STR] [--password STR] [--hash-password]  透過 HTTP+SSE 提供服務（支援可選認證）
   reames-agent acp [--model NAME]                           透過 stdio 提供 Agent Client Protocol（也可用：reames-agent --acp）
+  reames-agent app-server [--model NAME]                    透過 stdio JSONL 提供本機 App-Server 協定
   reames-agent setup [path]                                 互動式設定精靈；生成 reames-agent.toml（及 .env）
   reames-agent config auto-plan [off|on]                    設定自動計畫模式
   reames-agent config memory-v5 [off|observe|compact|on|status]  設定 Memory v5

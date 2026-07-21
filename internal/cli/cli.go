@@ -125,6 +125,9 @@ func Run(args []string, version string) int {
 	case "acp":
 		configureCLIThemeFromConfigNoProbe()
 		return acpCommand(rest, version)
+	case "app-server":
+		configureCLIThemeFromConfigNoProbe()
+		return appServerCommand(rest, version)
 	case "mcp":
 		configureCLIThemeFromConfigNoProbe()
 		return mcpCommand(rest)
@@ -192,7 +195,7 @@ func isDefaultInteractiveFlag(arg string) bool {
 
 func shouldMigrateLegacyConfigForCLI(cmd string) bool {
 	switch cmd {
-	case "", "run", "chat", "code", "serve", "setup", "config", "init", "acp", "mcp", "plugin", "doctor", "feedback", "bot", "gateway", "upgrade", "update":
+	case "", "run", "chat", "code", "serve", "setup", "config", "init", "acp", "app-server", "mcp", "plugin", "doctor", "feedback", "bot", "gateway", "upgrade", "update":
 		return true
 	default:
 		return false

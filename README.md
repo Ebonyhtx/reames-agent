@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.co
 
 - **Multi-model**: DeepSeek, OpenAI-compatible, Anthropic — config-driven, no hardcoded models
 - **Cache-first**: DeepSeek prefix cache optimization, 95%+ hit rate target
-- **Shared controller, multiple surfaces**: CLI/TUI, Desktop (Wails + React), Web/Cloud (HTTP/SSE), ACP, and IM gateway
+- **Shared controller, multiple surfaces**: CLI/TUI, Desktop (Wails + React), Web/Cloud (HTTP/SSE), ACP, App-Server, and IM gateway
 - **Three work modes**: `economy` minimizes optional tool-schema cost, `balanced` exposes the full stable tool set, and `delivery` adds an evidence-backed completion contract
 - **IM Gateway**: Feishu, QQ, WeChat, Telegram bot adapters
 - **Plugin/MCP**: MCP stdio + HTTP transports, skill playbook system
@@ -47,6 +47,7 @@ powershell -ExecutionPolicy Bypass -c "iex (irm https://raw.githubusercontent.co
 reames-agent                        # Interactive CLI session
 reames-agent run "fix the auth bug" # Headless single task
 reames-agent serve                  # Start web UI on localhost:8787
+reames-agent app-server             # Local Codex-class stdio JSONL integration
 reames-agent gateway run --channels feishu    # Run IM gateway in foreground
 reames-agent gateway install --dry-run --channels feishu  # Preview background service install
 reames-agent guard check --json        # Credential-free recovery report

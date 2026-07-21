@@ -18,6 +18,7 @@ internal/
   provider/       # LLM Provider 接口 + OpenAI/Anthropic 实现
   tool/           # 工具抽象 + Registry + 内置工具
   serve/          # HTTP/SSE 服务（Web/Cloud 前端）
+  appserver/      # Codex-class 本地 stdio JSONL 协议投影
   bot/            # IM Bot（飞书/QQ/微信/Telegram）
   cli/            # Bubble Tea TUI 实现
   config/         # TOML 配置加载
@@ -114,6 +115,25 @@ envelope；相邻 text/reasoning/tool-progress delta 可合并，达到上限后
 原顺序且不因 overflow 丢弃，因为异常中断时部分 text/reasoning/tool progress 不一定立刻有完整终态回填。
 `Clear` 推进 generation，旧 context 中等待空间的 producer 不能在 tab 清理后重新入队。该 live queue 不进入
 App-Server replay store，也不改变 canonical transcript。
+
+### App-Server / headless 协议
+
+`reames-agent app-server` 通过 `internal/appserver` 把现有 `control.Controller` 投影为本地 stdio JSONL
+协议。`internal/cli` 只解析启动参数并复用 `boot.Build`；App-Server 不拥有第二套 Agent loop、Provider
+装配或 transcript。每个 loaded thread 持有独立 Controller、session writer lease 和订阅状态；同一 thread
+最多一个 active turn，`turn/steer`、`turn/interrupt` 和最终 completion 必须同时匹配 primary thread ID 与
+turn ID。
+
+恢复只从 `control.TranscriptMessage` 重建 user/assistant/reasoning/tool item。raw Provider response、实时
+audio/transcript、tool progress 和 command output delta 仅属于 live event，不写入额外 replay store。
+`<session>.jsonl.appserver.json` 以 0600 原子 sidecar 保存 stable thread ID、origin transcript 和当前 active
+recovery transcript；冲突恢复先重绑 lease，再发布两侧 metadata，任一步失败都回滚 sidecar 与 lease。
+删除 session 时该 sidecar 与其他 session-owned sidecar 一起删除。
+
+协议帧最大 8 MiB、每连接最多 64 个并发请求。wire 省略 `jsonrpc`；顶层字段、method params 和 enum
+均严格校验。当前只监听 stdin/stdout，不开放 WebSocket 或网络端口。approval 与 Ask 是 server-initiated
+request；fresh-human 工具不能获得静默 session grant，sandbox escape 只保留已有的显式 session approval
+语义。完整支持/拒绝矩阵见 [App-Server 工程与接入合同](APP_SERVER.zh-CN.md)。
 
 ## 三、界面隔离目标与当前约束
 

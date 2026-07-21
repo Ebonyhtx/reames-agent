@@ -17,6 +17,7 @@
 | 文档 | 用途 |
 |---|---|
 | [中文使用指南](GUIDE.zh-CN.md) / [English guide](GUIDE.md) | CLI、配置、会话和功能使用 |
+| [App-Server（中文）](APP_SERVER.zh-CN.md) / [English](APP_SERVER.md) | 本地 stdio JSONL 接入、方法矩阵、审批与恢复边界 |
 | [中文机器人指南](BOT_GUIDE.zh-CN.md) / [English bot guide](BOT_GUIDE.md) | IM Gateway 配置与使用 |
 | [部署指南](DEPLOY.md) | 服务器 CLI、独立 Gateway service、敏感备份/恢复、二进制回滚、Docker、systemd 与 nginx |
 | [恢复指南（中文）](RECOVERY.zh-CN.md) / [English](RECOVERY.md) | Offline Guard、crash-loop、Safe Mode、更新回滚和运维操作手册 |
@@ -140,6 +141,7 @@
 | [M6 最终答复 obligation 审计](audits/2026-07-20-m6-outbound-final-response-obligation.md) | 最终文本发送前持久化、ACK 歧义可见恢复、多分片断点、单 writer、隐私投影与不重跑模型证据 |
 | [M6 微信持久轮询与 Desktop 背压审计](audits/2026-07-20-m6-weixin-polling-desktop-backpressure.md) | 微信最终投递后提交 poll cursor、三渠道 envelope 背压与 Desktop 有界 live queue 证据 |
 | [M6 渠道审批、取消与重连审计](audits/2026-07-21-m6-channel-decisions-cancellation-reconnect.md) | 四渠道一次性决策 token、取消 settlement/checkpoint、连接状态、watchdog 恢复与隐私投影证据 |
+| [P9 App-Server 首批纵向闭环审计](audits/2026-07-21-p9-app-server-initial-slice.md) | stdio JSONL、Controller 复用、thread/turn/审批/恢复合同、威胁模型与 unsupported 矩阵 |
 | [M6 Linux Gateway 卸载事务审计](audits/2026-07-20-m6-linux-uninstall-transaction.md) | user-scope 卸载快照、absent postcondition、取消/故障回滚、degraded fail-closed 与真实节点边界 |
 | [M6 macOS launchd 服务事务审计](audits/2026-07-21-m6-launchd-service-transaction.md) | user-scope plist/manager 快照、同名重装、取消/故障回滚、degraded fail-closed 与真实 macOS 节点边界 |
 | [M6 Windows Scheduled Task 服务事务审计](audits/2026-07-21-m6-windows-scheduled-task-transaction.md) | user-scope XML/state 快照、结构化探针、取消/故障回滚、degraded fail-closed 与真实 Windows 节点边界 |

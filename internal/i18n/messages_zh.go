@@ -434,6 +434,7 @@ var Chinese = Messages{
   reames-agent review [--base BRANCH] [--commit SHA] [--model NAME]  AI 代码审查（基于本地 diff）
   reames-agent serve [--model NAME] [--addr HOST:PORT] [--auth none|token|password] [--token STR] [--password STR] [--hash-password]  通过 HTTP+SSE 提供服务（支持可选认证）
   reames-agent acp [--model NAME]                           通过 stdio 提供 Agent Client Protocol（也可用：reames-agent --acp）
+  reames-agent app-server [--model NAME]                    通过 stdio JSONL 提供本地 App-Server 协议
   reames-agent setup [path]                                 交互式配置向导；生成 reames-agent.toml（及 .env）
   reames-agent config auto-plan [off|on]                    配置自动计划模式
   reames-agent config memory-v5 [off|observe|compact|on|status]  配置 Memory v5

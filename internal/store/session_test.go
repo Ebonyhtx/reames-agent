@@ -22,6 +22,7 @@ func TestSessionSidecarLayout(t *testing.T) {
 		{"checkpoint", SessionCheckpointDir(p), "/home/u/.reames-agent/sessions/abc.ckpt"},
 		{"jobs", SessionJobsDir(p), "/home/u/.reames-agent/sessions/abc.jobs"},
 		{"cleanup-pending", SessionCleanupPending(p), "/home/u/.reames-agent/sessions/abc.cleanup-pending.json"},
+		{"app-server-meta", SessionAppServerMeta(p), p + ".appserver.json"},
 	}
 	for _, c := range cases {
 		if c.got != c.want {
@@ -47,6 +48,7 @@ func TestSessionSidecarEmptyPath(t *testing.T) {
 		{"checkpoint", SessionCheckpointDir},
 		{"jobs", SessionJobsDir},
 		{"cleanup-pending", SessionCleanupPending},
+		{"app-server-meta", SessionAppServerMeta},
 	} {
 		if got := fn.f(""); got != "" {
 			t.Errorf("%s(\"\") = %q, want empty", fn.name, got)
@@ -86,6 +88,7 @@ func TestSessionSidecarFiles(t *testing.T) {
 		"/home/u/.reames-agent/sessions/abc.events.jsonl.damaged",
 		"/home/u/.reames-agent/sessions/abc.event-index.json",
 		"/home/u/.reames-agent/sessions/abc.conflicts.jsonl",
+		p + ".appserver.json",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("SessionSidecarFiles = %v, want %v", got, want)

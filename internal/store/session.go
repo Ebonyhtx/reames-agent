@@ -142,6 +142,15 @@ func SessionCleanupPending(sessionPath string) string {
 	return sessionStem(sessionPath) + ".cleanup-pending.json"
 }
 
+// SessionAppServerMeta binds a stable App-Server thread id to the active
+// transcript, including recovery-branch redirects (<id>.jsonl.appserver.json).
+func SessionAppServerMeta(sessionPath string) string {
+	if strings.TrimSpace(sessionPath) == "" {
+		return ""
+	}
+	return sessionPath + ".appserver.json"
+}
+
 // SessionSidecarFiles returns every regular-file sidecar owned by a session
 // transcript: branch meta, goal state, event/index logs, and diagnostic logs.
 // Every surface that deletes a session (desktop trash, /clear, serve, ACP)
@@ -161,5 +170,6 @@ func SessionSidecarFiles(sessionPath string) []string {
 		SessionEventLogDamaged(sessionPath),
 		SessionEventIndex(sessionPath),
 		SessionConflictLog(sessionPath),
+		SessionAppServerMeta(sessionPath),
 	}
 }

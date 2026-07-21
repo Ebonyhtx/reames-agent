@@ -15,6 +15,7 @@
 - [Work modes](#work-modes)
 - [Environment variables](#environment-variables)
 - [Serve web frontend](#serve-web-frontend)
+- [App-Server integration](./APP_SERVER.md)
 - [Configuration paths](./CONFIG_PATHS.md)
 - [Reasoning language](./REASONING_LANGUAGE.md)
 - [Task contracts and pause policy](./TASK_CONTRACT.md)
@@ -250,6 +251,13 @@ model and reasoning-effort controls, Goal, a live todo panel fed by the
 `todo_write` tool, and provider balance when configured. Use `--model`,
 `--max-steps`, or `--resume` for one-off launches; otherwise `serve` uses the
 user-global `default_model`.
+
+## App-Server integration
+
+`reames-agent app-server` exposes the local Controller to editor and automation
+clients over a bounded stdio JSONL protocol. It is an initial, explicitly scoped
+Codex-class compatibility surface, not a claim of full Codex App-Server parity.
+See the [App-Server guide and method matrix](./APP_SERVER.md) before integrating.
 
 ## Custom OpenAI-compatible providers
 
