@@ -489,8 +489,16 @@ notarization、公开主题 registry
   `boot.Build -> control.Controller`，实现 initialize、thread start/resume/list/loaded-list/read/name/unsubscribe、
   turn start/steer/interrupt、审批/Ask 与 canonical transcript replay。8 MiB 帧/64 并发有界，wire 与 params
   严格校验，响应先于事件流；stable thread sidecar 在冲突恢复时事务式移动 active transcript 与 writer lease。
-  WebSocket、paginated history、fork/archive/rollback、图片/audio、review/realtime/dynamic-tool 注册仍明确 unsupported，
-  不以首批闭环宣称完整 parity。见 `docs/audits/2026-07-21-p9-app-server-initial-slice.md`。
+  该首批检查点尚未包含 fork/archive/rollback；这些能力已由紧随其后的 lifecycle 批次补齐。WebSocket、
+  paginated history、图片/audio、review/realtime/dynamic-tool 注册仍明确 unsupported，不以局部闭环宣称完整
+  parity。见 `docs/audits/2026-07-21-p9-app-server-initial-slice.md`。
+- [x] App-Server 持久 thread lifecycle 第二批：实现 `thread/fork`（可选包含式 `lastTurnId`）、
+  `thread/archive`、`thread/unarchive`、`thread/rollback` 和 `thread/list archived=true`。fork 不切换源
+  Controller，稳定 sidecar v2 保存 `forkedFromId`；archive 在 removal guard 下把 canonical sidecar、checkpoint、
+  jobs、Guardian、子代理记录及 recovery origin/active 对作为同一 bundle 移动，archive/unarchive 任一 artifact
+  故障均反向回滚。active turn、pending prompt、background job 和外部 writer lease fail closed；rollback 只用
+  `RewindConversation`，不冒充工作区回退。compact/review/settings/dynamic-tool、paginated history、媒体/realtime、
+  WebSocket 与 multi-agent 投影仍未支持。见 `docs/audits/2026-07-21-p9-app-server-thread-lifecycle.md`。
 - App-Server replay store 只保留会话恢复必需的 canonical 事件；raw response item、realtime audio/transcript、
   MCP progress、command/process output delta 不得进入持久 replay。
 - [x] Desktop `asyncRuntimeEmitter` live queue 默认限制 2048 active envelopes；同 tab 文本/推理/工具进度合并，

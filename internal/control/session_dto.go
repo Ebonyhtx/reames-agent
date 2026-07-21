@@ -2,6 +2,7 @@ package control
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"reames-agent/internal/agent"
@@ -171,6 +172,23 @@ func ListSessions(dir string) ([]SessionInfo, error) {
 		}
 	}
 	return out, nil
+}
+
+// LoadSessionInfo returns the canonical event-log-aware summary for one exact
+// transcript path, including transcripts temporarily stored in an archive
+// bundle directory.
+func LoadSessionInfo(path string) (SessionInfo, error) {
+	infos, err := ListSessions(filepath.Dir(path))
+	if err != nil {
+		return SessionInfo{}, err
+	}
+	want := CanonicalSessionPath(path)
+	for _, info := range infos {
+		if CanonicalSessionPath(info.Path) == want {
+			return info, nil
+		}
+	}
+	return SessionInfo{}, fmt.Errorf("session not found: %s", filepath.Base(path))
 }
 
 // SessionOrderInfo is the stable metadata-only ordering record used by prompt

@@ -125,6 +125,7 @@ type SessionHistory interface {
 	ForkNamed(turn int, name string) (string, error)
 	ForkSession(turn int, name string) (string, error)
 	Branch(name string) (string, error)
+	BranchSession(name string) (string, error)
 	Branches() ([]agent.BranchInfo, error)
 	BranchTreeText() string
 	SwitchBranch(ref string) (agent.BranchInfo, error)

@@ -82,6 +82,39 @@ type ThreadStartResponse struct {
 
 type ThreadResumeResponse = ThreadStartResponse
 
+type ThreadForkParams struct {
+	ThreadID   string `json:"threadId"`
+	LastTurnID string `json:"lastTurnId,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Cwd        string `json:"cwd,omitempty"`
+	Ephemeral  bool   `json:"ephemeral,omitempty"`
+}
+
+type ThreadForkResponse = ThreadStartResponse
+
+type ThreadArchiveParams struct {
+	ThreadID string `json:"threadId"`
+}
+
+type ThreadArchiveResponse struct{}
+
+type ThreadUnarchiveParams struct {
+	ThreadID string `json:"threadId"`
+}
+
+type ThreadUnarchiveResponse struct {
+	Thread Thread `json:"thread"`
+}
+
+type ThreadRollbackParams struct {
+	ThreadID string `json:"threadId"`
+	NumTurns int    `json:"numTurns"`
+}
+
+type ThreadRollbackResponse struct {
+	Thread Thread `json:"thread"`
+}
+
 type SandboxPolicy struct {
 	Type                string   `json:"type"`
 	WritableRoots       []string `json:"writableRoots,omitempty"`
@@ -141,6 +174,7 @@ type ThreadListParams struct {
 	SortDirection string   `json:"sortDirection,omitempty"`
 	Cwd           []string `json:"cwd,omitempty"`
 	SearchTerm    string   `json:"searchTerm,omitempty"`
+	Archived      bool     `json:"archived,omitempty"`
 }
 
 // UnmarshalJSON accepts Codex's cwd string-or-array filter without weakening
@@ -154,11 +188,12 @@ func (p *ThreadListParams) UnmarshalJSON(raw []byte) error {
 		SortDirection string          `json:"sortDirection,omitempty"`
 		Cwd           json.RawMessage `json:"cwd,omitempty"`
 		SearchTerm    string          `json:"searchTerm,omitempty"`
+		Archived      bool            `json:"archived,omitempty"`
 	}
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return err
 	}
-	*p = ThreadListParams{Cursor: wire.Cursor, Limit: wire.Limit, SortKey: wire.SortKey, SortDirection: wire.SortDirection, SearchTerm: wire.SearchTerm}
+	*p = ThreadListParams{Cursor: wire.Cursor, Limit: wire.Limit, SortKey: wire.SortKey, SortDirection: wire.SortDirection, SearchTerm: wire.SearchTerm, Archived: wire.Archived}
 	if len(wire.Cwd) == 0 || string(wire.Cwd) == "null" {
 		return nil
 	}

@@ -50,6 +50,7 @@ type Controller interface {
 	RunTurn(context.Context, string) error
 	Cancel()
 	TrySteer(string) bool
+	RuntimeStatus() control.RuntimeStatus
 	Transcript() []control.TranscriptMessage
 	Approve(string, bool, bool, bool)
 	AnswerQuestion(string, []event.AskAnswer)
@@ -60,6 +61,9 @@ type Controller interface {
 	SessionDir() string
 	WorkspaceRoot() string
 	ResumeSessionPath(string, func() error) error
+	ForkSession(int, string) (string, error)
+	BranchSession(string) (string, error)
+	Rewind(int, control.RewindScope) error
 	Close()
 	EnsureSessionPath()
 }
@@ -81,6 +85,10 @@ func Serve(ctx context.Context, r io.Reader, w io.Writer, factory Factory, info 
 	for method, handler := range map[string]requestHandler{
 		"thread/start":       svc.threadStart,
 		"thread/resume":      svc.threadResume,
+		"thread/fork":        svc.threadFork,
+		"thread/archive":     svc.threadArchive,
+		"thread/unarchive":   svc.threadUnarchive,
+		"thread/rollback":    svc.threadRollback,
 		"thread/list":        svc.threadList,
 		"thread/loaded/list": svc.threadLoadedList,
 		"thread/read":        svc.threadRead,
@@ -149,14 +157,50 @@ func (s *threadSession) close() {
 	s.mu.Unlock()
 	_ = s.ctrl.SnapshotForShutdown()
 	s.cleanupUnpersistedMetadata()
+	s.ctrl.Close()
+	// Keep the writer lease through Controller.Close: SessionEnd hooks and
+	// background-job teardown may still touch session-owned state.
 	if s.lease != nil {
 		s.lease.Release()
 	}
-	s.ctrl.Close()
 	s.mu.Lock()
 	s.closing = false
 	s.closed = true
 	s.mu.Unlock()
+}
+
+func (s *threadSession) closeIdleForArchive() error {
+	if status := s.ctrl.RuntimeStatus(); status.Running || status.PendingPrompt || status.BackgroundJobs > 0 {
+		return errors.New("thread has active work")
+	}
+	s.mu.Lock()
+	if s.active != nil {
+		s.mu.Unlock()
+		return errors.New("thread has an active turn")
+	}
+	if s.closing || s.closed {
+		s.mu.Unlock()
+		return errors.New("thread is closing")
+	}
+	s.closing = true
+	s.mu.Unlock()
+	if err := s.ctrl.SnapshotForShutdown(); err != nil {
+		s.mu.Lock()
+		s.closing = false
+		s.mu.Unlock()
+		return fmt.Errorf("snapshot thread before archive: %w", err)
+	}
+	s.ctrl.Close()
+	// Keep the writer lease through Controller.Close: SessionEnd hooks and
+	// background-job teardown may still touch session-owned state.
+	if s.lease != nil {
+		s.lease.Release()
+	}
+	s.mu.Lock()
+	s.closing = false
+	s.closed = true
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *threadSession) cleanupUnpersistedMetadata() {
@@ -394,6 +438,263 @@ func (s *service) threadResume(ctx context.Context, raw json.RawMessage) (any, e
 	return s.threadOpenResponse(sess, s.threadObject(sess, true)), nil
 }
 
+func (s *service) threadFork(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p ThreadForkParams
+	if err := strictDecode(raw, &p); err != nil {
+		return nil, invalidParams("thread/fork", err)
+	}
+	id := strings.TrimSpace(p.ThreadID)
+	if id == "" {
+		return nil, invalidParams("thread/fork", errors.New("threadId is required"))
+	}
+	if p.Ephemeral {
+		return nil, invalidParams("thread/fork", errors.New("ephemeral threads are not supported"))
+	}
+
+	source := s.thread(id)
+	if source == nil {
+		path, meta, err := s.resolveThread(id)
+		if err != nil {
+			return nil, &RPCError{Code: ErrInvalidParams, Message: "thread/fork: unknown thread " + id}
+		}
+		source, err = s.loadStoredThread(ctx, id, path, meta, "", "", false)
+		if err != nil {
+			return nil, sessionOperationError("thread/fork", err)
+		}
+		defer source.close()
+	}
+	source.mu.Lock()
+	busy := source.active != nil || source.closing || source.closed
+	source.mu.Unlock()
+	if busy {
+		return nil, &RPCError{Code: ErrInvalidRequest, Message: "thread/fork: source thread is active or closing"}
+	}
+
+	turns := transcriptTurns(id, source.ctrl.Transcript())
+	var forkPath string
+	var err error
+	lastTurnID := strings.TrimSpace(p.LastTurnID)
+	if lastTurnID == "" {
+		forkPath, err = source.ctrl.BranchSession("")
+	} else {
+		index := -1
+		for i := range turns {
+			if turns[i].ID == lastTurnID {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			return nil, invalidParams("thread/fork", errors.New("lastTurnId does not belong to the source thread"))
+		}
+		if index == len(turns)-1 {
+			forkPath, err = source.ctrl.BranchSession("")
+		} else {
+			forkPath, err = source.ctrl.ForkSession(index+1, "")
+		}
+	}
+	if err != nil {
+		return nil, &RPCError{Code: ErrInvalidRequest, Message: "thread/fork: " + err.Error()}
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = control.DiscardSessionArtifacts(s.factory.SessionDir(), forkPath)
+		}
+	}()
+	newID := control.BranchID(forkPath)
+	forkMeta := appServerMeta{
+		ThreadID: newID, OriginTranscript: filepath.Base(forkPath), ActiveTranscript: filepath.Base(forkPath), ForkedFromID: id,
+	}
+	if err := saveAppServerMeta(forkPath, forkMeta); err != nil {
+		return nil, &RPCError{Code: ErrInternal, Message: "thread/fork: save App-Server metadata: " + err.Error()}
+	}
+	meta, _, err := control.LoadSessionMeta(forkPath)
+	if err != nil {
+		return nil, &RPCError{Code: ErrInternal, Message: "thread/fork: load fork metadata: " + err.Error()}
+	}
+	forked, err := s.loadStoredThread(ctx, newID, forkPath, meta, p.Model, p.Cwd, true)
+	if err != nil {
+		return nil, sessionOperationError("thread/fork", err)
+	}
+	s.mu.Lock()
+	if _, exists := s.threads[newID]; exists {
+		s.mu.Unlock()
+		forked.close()
+		return nil, &RPCError{Code: ErrInvalidRequest, Message: "thread/fork: thread identity collision"}
+	}
+	s.threads[newID] = forked
+	s.mu.Unlock()
+	committed = true
+	thread := s.threadObject(forked, true)
+	response := s.threadOpenResponse(forked, thread)
+	return deferredResponse{value: response, after: func() {
+		s.notifyThread(newID, "thread/started", map[string]any{"thread": thread})
+	}}, nil
+}
+
+func (s *service) threadArchive(_ context.Context, raw json.RawMessage) (any, error) {
+	var p ThreadArchiveParams
+	if err := strictDecode(raw, &p); err != nil {
+		return nil, invalidParams("thread/archive", err)
+	}
+	id := strings.TrimSpace(p.ThreadID)
+	if id == "" {
+		return nil, invalidParams("thread/archive", errors.New("threadId is required"))
+	}
+	path := ""
+	origin := ""
+	if loaded := s.thread(id); loaded != nil {
+		if err := loaded.closeIdleForArchive(); err != nil {
+			return nil, &RPCError{Code: ErrInvalidRequest, Message: "thread/archive: " + err.Error()}
+		}
+		path = loaded.path
+		origin = loaded.origin
+		s.removeThread(id, loaded)
+	} else {
+		var err error
+		path, _, err = s.resolveThreadInfo(id)
+		if err != nil {
+			return nil, &RPCError{Code: ErrInvalidParams, Message: "thread/archive: unknown thread " + id}
+		}
+		if meta, ok, metaErr := loadAppServerMeta(path); metaErr != nil {
+			return nil, &RPCError{Code: ErrInternal, Message: "thread/archive: " + metaErr.Error()}
+		} else if ok {
+			origin = filepath.Join(filepath.Dir(path), meta.OriginTranscript)
+		}
+	}
+	related := []string{}
+	if strings.TrimSpace(origin) != "" && control.CanonicalSessionPath(origin) != control.CanonicalSessionPath(path) {
+		related = append(related, origin)
+	}
+	if _, err := control.ArchiveSessionBundle(s.factory.SessionDir(), path, related...); err != nil {
+		return nil, sessionOperationError("thread/archive", err)
+	}
+	return deferredResponse{value: ThreadArchiveResponse{}, after: func() {
+		s.notify("thread/archived", map[string]any{"threadId": id})
+	}}, nil
+}
+
+func (s *service) threadUnarchive(_ context.Context, raw json.RawMessage) (any, error) {
+	var p ThreadUnarchiveParams
+	if err := strictDecode(raw, &p); err != nil {
+		return nil, invalidParams("thread/unarchive", err)
+	}
+	id := strings.TrimSpace(p.ThreadID)
+	if id == "" {
+		return nil, invalidParams("thread/unarchive", errors.New("threadId is required"))
+	}
+	archived, err := s.resolveArchivedThread(id)
+	if err != nil {
+		return nil, &RPCError{Code: ErrInvalidParams, Message: "thread/unarchive: unknown archived thread " + id}
+	}
+	path, err := control.UnarchiveSession(s.factory.SessionDir(), archived.Path)
+	if err != nil {
+		return nil, sessionOperationError("thread/unarchive", err)
+	}
+	info, err := control.LoadSessionInfo(path)
+	if err != nil {
+		return nil, &RPCError{Code: ErrInternal, Message: "thread/unarchive: " + err.Error()}
+	}
+	thread := s.threadObjectFromInfo(info, false)
+	return deferredResponse{value: ThreadUnarchiveResponse{Thread: thread}, after: func() {
+		s.notify("thread/unarchived", map[string]any{"threadId": id})
+	}}, nil
+}
+
+func (s *service) threadRollback(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p ThreadRollbackParams
+	if err := strictDecode(raw, &p); err != nil {
+		return nil, invalidParams("thread/rollback", err)
+	}
+	id := strings.TrimSpace(p.ThreadID)
+	if id == "" || p.NumTurns < 1 {
+		return nil, invalidParams("thread/rollback", errors.New("threadId is required and numTurns must be at least 1"))
+	}
+	sess := s.thread(id)
+	temporary := false
+	if sess == nil {
+		path, meta, err := s.resolveThread(id)
+		if err != nil {
+			return nil, &RPCError{Code: ErrInvalidParams, Message: "thread/rollback: unknown thread " + id}
+		}
+		sess, err = s.loadStoredThread(ctx, id, path, meta, "", "", false)
+		if err != nil {
+			return nil, sessionOperationError("thread/rollback", err)
+		}
+		temporary = true
+		defer sess.close()
+	}
+	sess.mu.Lock()
+	busy := sess.active != nil || sess.closing || sess.closed
+	sess.mu.Unlock()
+	if busy {
+		return nil, &RPCError{Code: ErrInvalidRequest, Message: "thread/rollback: thread is active or closing"}
+	}
+	turns := transcriptTurns(id, sess.ctrl.Transcript())
+	if p.NumTurns > len(turns) {
+		return nil, invalidParams("thread/rollback", fmt.Errorf("numTurns exceeds the thread's %d turns", len(turns)))
+	}
+	target := len(turns) - p.NumTurns
+	if err := sess.ctrl.Rewind(target, control.RewindConversation); err != nil {
+		return nil, &RPCError{Code: ErrInvalidRequest, Message: "thread/rollback: " + err.Error()}
+	}
+	if !temporary {
+		return ThreadRollbackResponse{Thread: s.threadObject(sess, true)}, nil
+	}
+	info, err := control.LoadSessionInfo(sess.path)
+	if err != nil {
+		return nil, &RPCError{Code: ErrInternal, Message: "thread/rollback: " + err.Error()}
+	}
+	thread := s.threadObjectFromInfo(info, true)
+	thread.Turns = transcriptTurns(id, sess.ctrl.Transcript())
+	return ThreadRollbackResponse{Thread: thread}, nil
+}
+
+func (s *service) loadStoredThread(ctx context.Context, id, path string, meta control.SessionMeta, model, cwd string, subscribed bool) (*threadSession, error) {
+	cwd = firstNonEmpty(cwd, meta.WorkspaceRoot)
+	sink := newEventSink(s)
+	rt, err := s.factory.NewThread(ctx, ThreadParams{Cwd: cwd, Model: model, Sink: sink, OnSessionRecovered: sink.sessionRecovered})
+	if err != nil {
+		return nil, err
+	}
+	ctrl := rt.Controller
+	if ctrl == nil {
+		return nil, errors.New("factory returned no controller")
+	}
+	ctrl.EnableInteractiveApproval()
+	lease := control.NewSessionLeaseKeeper()
+	if err := ctrl.ResumeSessionPath(path, func() error { return lease.Rebind(path) }); err != nil {
+		lease.Release()
+		ctrl.Close()
+		return nil, err
+	}
+	appMeta, hasAppMeta, err := loadAppServerMeta(path)
+	if err != nil {
+		lease.Release()
+		ctrl.Close()
+		return nil, err
+	}
+	if !hasAppMeta {
+		appMeta = appServerMeta{ThreadID: id, OriginTranscript: filepath.Base(path), ActiveTranscript: filepath.Base(path)}
+		if err := saveAppServerMeta(path, appMeta); err != nil {
+			lease.Release()
+			ctrl.Close()
+			return nil, err
+		}
+	}
+	origin := filepath.Join(filepath.Dir(path), appMeta.OriginTranscript)
+	sess := &threadSession{
+		id: id, ctrl: ctrl, sink: sink, lease: lease, path: path, origin: origin,
+		cwd: firstNonEmpty(rt.Cwd, ctrl.WorkspaceRoot(), cwd), model: firstNonEmpty(rt.Model, model, meta.Model),
+		provider: firstNonEmpty(rt.ModelProvider, modelProvider(rt.Model), modelProvider(meta.Model)),
+		sandbox:  conservativeSandbox(rt.Sandbox), subscribed: subscribed,
+	}
+	sink.bind(sess)
+	sink.bindApproval(ctrl.Approve, ctrl.AnswerQuestion)
+	return sess, nil
+}
+
 func (s *service) threadList(_ context.Context, raw json.RawMessage) (any, error) {
 	var p ThreadListParams
 	if err := decodeThreadListParams(raw, &p); err != nil {
@@ -408,7 +709,13 @@ func (s *service) threadList(_ context.Context, raw json.RawMessage) (any, error
 	if p.SortDirection != "" && p.SortDirection != "asc" && p.SortDirection != "desc" {
 		return nil, invalidParams("thread/list", fmt.Errorf("unsupported sortDirection %q", p.SortDirection))
 	}
-	records, err := s.sessionRecords()
+	var records []threadRecord
+	var err error
+	if p.Archived {
+		records, err = s.archivedRecords()
+	} else {
+		records, err = s.sessionRecords()
+	}
 	if err != nil {
 		return nil, &RPCError{Code: ErrInternal, Message: "thread/list: " + err.Error()}
 	}
@@ -598,7 +905,7 @@ func (s *service) turnStart(ctx context.Context, raw json.RawMessage) (any, erro
 	state := newTurnState(sess.id, turnID, p.ClientUserMessageID, text, cancel)
 	state.setContext(runCtx)
 	sess.mu.Lock()
-	if sess.closed || sess.active != nil {
+	if sess.closing || sess.closed || sess.active != nil {
 		sess.mu.Unlock()
 		cancel()
 		return nil, &RPCError{Code: ErrInvalidRequest, Message: "turn/start: thread already has an active turn"}
@@ -781,11 +1088,15 @@ func (s *service) threadObjectFromRecord(record threadRecord, includeTurns bool)
 	name := stringPtrIf(info.CustomTitle)
 	parent := stringPtrIf(info.ParentID)
 	provider := ""
+	var forkedFrom *string
+	if appMeta, ok, _ := loadAppServerMeta(info.Path); ok {
+		forkedFrom = stringPtrIf(appMeta.ForkedFromID)
+	}
 	if meta, ok, _ := control.LoadSessionMeta(info.Path); ok {
 		provider = modelProvider(meta.Model)
 	}
 	thread := Thread{
-		ID: id, SessionID: id, ParentThreadID: parent, Preview: info.Preview,
+		ID: id, SessionID: id, ForkedFromID: forkedFrom, ParentThreadID: parent, Preview: info.Preview,
 		HistoryMode: "legacy", ModelProvider: provider, CreatedAt: created, UpdatedAt: updated,
 		RecencyAt: &updated, Status: ThreadStatus{Type: "notLoaded"}, Path: &path,
 		Cwd: info.WorkspaceRoot, CLIVersion: s.info.Version, Source: "unknown", Name: name,
@@ -887,6 +1198,46 @@ func (s *service) sessionRecords() ([]threadRecord, error) {
 	return out, nil
 }
 
+func (s *service) archivedRecords() ([]threadRecord, error) {
+	archived, err := control.ListArchivedSessions(s.factory.SessionDir())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]threadRecord, 0, len(archived))
+	for _, item := range archived {
+		meta, ok, err := loadAppServerMeta(item.Path)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		info, err := control.LoadSessionInfo(item.Path)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, threadRecord{id: meta.ThreadID, info: info})
+	}
+	return out, nil
+}
+
+func (s *service) resolveArchivedThread(id string) (control.ArchivedSession, error) {
+	archived, err := control.ListArchivedSessions(s.factory.SessionDir())
+	if err != nil {
+		return control.ArchivedSession{}, err
+	}
+	for _, item := range archived {
+		meta, ok, metaErr := loadAppServerMeta(item.Path)
+		if metaErr != nil {
+			return control.ArchivedSession{}, metaErr
+		}
+		if ok && meta.ThreadID == id {
+			return item, nil
+		}
+	}
+	return control.ArchivedSession{}, errors.New("not found")
+}
+
 func (s *service) threadIDForPath(path string) string {
 	if meta, ok, err := loadAppServerMeta(path); err == nil && ok {
 		return meta.ThreadID
@@ -898,6 +1249,14 @@ func (s *service) thread(id string) *threadSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.threads[id]
+}
+
+func (s *service) removeThread(id string, expected *threadSession) {
+	s.mu.Lock()
+	if s.threads[id] == expected {
+		delete(s.threads, id)
+	}
+	s.mu.Unlock()
 }
 
 func (s *service) notify(method string, params any) {
@@ -957,6 +1316,13 @@ func sessionLeaseError(method string, err error) *RPCError {
 		return &RPCError{Code: ErrInvalidRequest, Message: method + ": " + control.SessionInUseMessage(err) + "; " + control.SessionLeaseCloseHint}
 	}
 	return &RPCError{Code: ErrInternal, Message: method + ": session lease: " + err.Error()}
+}
+
+func sessionOperationError(method string, err error) *RPCError {
+	if control.IsSessionLeaseHeld(err) {
+		return sessionLeaseError(method, err)
+	}
+	return &RPCError{Code: ErrInternal, Message: method + ": " + err.Error()}
 }
 
 func modelProvider(model string) string {
@@ -1049,7 +1415,7 @@ func decodeThreadListParams(raw json.RawMessage, dst *ThreadListParams) error {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
 	}
-	allowed := map[string]struct{}{"cursor": {}, "limit": {}, "sortKey": {}, "sortDirection": {}, "cwd": {}, "searchTerm": {}}
+	allowed := map[string]struct{}{"cursor": {}, "limit": {}, "sortKey": {}, "sortDirection": {}, "cwd": {}, "searchTerm": {}, "archived": {}}
 	for key := range fields {
 		if _, ok := allowed[key]; !ok {
 			return fmt.Errorf("json: unknown field %q", key)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -106,6 +107,11 @@ func (c *fakeController) RunTurn(ctx context.Context, input string) error {
 }
 
 func (c *fakeController) Cancel() {}
+func (c *fakeController) RuntimeStatus() control.RuntimeStatus {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return control.RuntimeStatus{Running: c.running, Cancellable: c.running}
+}
 func (c *fakeController) TrySteer(text string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -181,6 +187,71 @@ func (c *fakeController) ResumeSessionPath(path string, before func() error) err
 	c.history = transcript
 	c.mu.Unlock()
 	return nil
+}
+func (c *fakeController) BranchSession(_ string) (string, error) {
+	c.mu.Lock()
+	messages := c.persisted.Snapshot()
+	parent := c.path
+	c.mu.Unlock()
+	return c.saveFork(messages, parent)
+}
+func (c *fakeController) ForkSession(turn int, _ string) (string, error) {
+	c.mu.Lock()
+	messages := c.persisted.Snapshot()
+	parent := c.path
+	c.mu.Unlock()
+	boundary := messageBoundaryForTurn(messages, turn)
+	if boundary < 0 {
+		return "", fmt.Errorf("missing turn %d", turn)
+	}
+	return c.saveFork(messages[:boundary], parent)
+}
+func (c *fakeController) Rewind(turn int, scope control.RewindScope) error {
+	if scope != control.RewindConversation {
+		return errors.New("fake supports conversation rewind only")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	messages := c.persisted.Snapshot()
+	boundary := messageBoundaryForTurn(messages, turn)
+	if boundary < 0 {
+		return fmt.Errorf("missing turn %d", turn)
+	}
+	c.persisted.Replace(messages[:boundary])
+	c.history = c.history[:boundary]
+	return c.persisted.Save(c.path)
+}
+func (c *fakeController) saveFork(messages []provider.Message, parent string) (string, error) {
+	path := control.NewSessionPath(c.dir, "fixture")
+	sess := agent.NewSession("stable system")
+	sess.Messages = append([]provider.Message(nil), messages...)
+	if err := sess.Save(path); err != nil {
+		return "", err
+	}
+	if err := control.UpdateSessionMeta(path, false, func(meta *control.SessionMeta) error {
+		meta.ParentID = control.BranchID(parent)
+		meta.WorkspaceRoot = c.root
+		meta.Model = "fixture/model"
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+func messageBoundaryForTurn(messages []provider.Message, turn int) int {
+	ordinal := 0
+	for i, message := range messages {
+		if message.Role == provider.RoleUser {
+			if ordinal == turn {
+				return i
+			}
+			ordinal++
+		}
+	}
+	if ordinal == turn {
+		return len(messages)
+	}
+	return -1
 }
 func (c *fakeController) Close() { c.mu.Lock(); c.closed = true; c.mu.Unlock() }
 func (c *fakeController) EnsureSessionPath() {
@@ -561,8 +632,151 @@ func TestDecodeThreadListParamsIsStrictAndAcceptsCwdForms(t *testing.T) {
 		}
 	}
 	var p ThreadListParams
-	if err := decodeThreadListParams(json.RawMessage(`{"archived":true}`), &p); err == nil || !strings.Contains(err.Error(), "unknown field") {
-		t.Fatalf("unsupported filter err=%v", err)
+	if err := decodeThreadListParams(json.RawMessage(`{"archived":true}`), &p); err != nil || !p.Archived {
+		t.Fatalf("archived filter = %+v err=%v", p, err)
+	}
+	if err := decodeThreadListParams(json.RawMessage(`{"unsupported":true}`), &p); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unknown filter err=%v", err)
+	}
+}
+
+func TestPersistentThreadForkRollbackArchiveAndUnarchive(t *testing.T) {
+	dir := t.TempDir()
+	root := t.TempDir()
+	factory := &fakeFactory{dir: dir, root: root}
+	h := newWireHarness(t, factory)
+	h.send(t, map[string]any{"id": 1, "method": "initialize", "params": map[string]any{"clientInfo": map[string]any{"name": "fixture", "version": "1.0"}}})
+	_ = readResponse(t, h, "1", nil)
+	h.send(t, map[string]any{"id": 2, "method": "thread/start", "params": map[string]any{}})
+	started := readResponse(t, h, "2", nil)
+	var start ThreadStartResponse
+	if err := json.Unmarshal(started["result"], &start); err != nil {
+		t.Fatal(err)
+	}
+	source := factory.latest()
+	source.mu.Lock()
+	source.history = []control.TranscriptMessage{
+		{Index: 1, Role: control.TranscriptUser, Content: "first"},
+		{Index: 2, Role: control.TranscriptAssistant, Content: "first answer"},
+		{Index: 3, Role: control.TranscriptUser, Content: "second"},
+		{Index: 4, Role: control.TranscriptAssistant, Content: "second answer"},
+	}
+	source.persisted = agent.NewSession("system")
+	for _, message := range source.history {
+		role := provider.RoleUser
+		if message.Role == control.TranscriptAssistant {
+			role = provider.RoleAssistant
+		}
+		source.persisted.Add(provider.Message{Role: role, Content: message.Content})
+	}
+	source.mu.Unlock()
+	if err := source.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+	firstTurn := transcriptTurns(start.Thread.ID, source.Transcript())[0].ID
+	h.send(t, map[string]any{"id": 3, "method": "thread/fork", "params": map[string]any{"threadId": start.Thread.ID, "lastTurnId": firstTurn}})
+	forkedFrame := readResponse(t, h, "3", nil)
+	var forked ThreadForkResponse
+	if err := json.Unmarshal(forkedFrame["result"], &forked); err != nil {
+		t.Fatal(err)
+	}
+	if forked.Thread.ForkedFromID == nil || *forked.Thread.ForkedFromID != start.Thread.ID || len(forked.Thread.Turns) != 1 {
+		t.Fatalf("fork response = %+v", forked.Thread)
+	}
+	// Rollback drops only the copied conversation suffix. The fake controller's
+	// Rewind rejects every scope except RewindConversation, making this mapping
+	// explicit in the transport contract.
+	h.send(t, map[string]any{"id": 4, "method": "thread/rollback", "params": map[string]any{"threadId": forked.Thread.ID, "numTurns": 1}})
+	rolled := readResponse(t, h, "4", nil)
+	var rollback ThreadRollbackResponse
+	if err := json.Unmarshal(rolled["result"], &rollback); err != nil {
+		t.Fatal(err)
+	}
+	if len(rollback.Thread.Turns) != 0 {
+		t.Fatalf("rollback turns = %+v", rollback.Thread.Turns)
+	}
+	h.send(t, map[string]any{"id": 5, "method": "thread/archive", "params": map[string]any{"threadId": forked.Thread.ID}})
+	_ = readResponse(t, h, "5", nil)
+	h.send(t, map[string]any{"id": 6, "method": "thread/list", "params": map[string]any{"archived": true}})
+	archived := readResponse(t, h, "6", nil)
+	var archiveList ThreadListResponse
+	if err := json.Unmarshal(archived["result"], &archiveList); err != nil {
+		t.Fatal(err)
+	}
+	if len(archiveList.Data) != 1 || archiveList.Data[0].ID != forked.Thread.ID {
+		t.Fatalf("archive list = %+v", archiveList.Data)
+	}
+	h.send(t, map[string]any{"id": 7, "method": "thread/unarchive", "params": map[string]any{"threadId": forked.Thread.ID}})
+	unarchived := readResponse(t, h, "7", nil)
+	var restored ThreadUnarchiveResponse
+	if err := json.Unmarshal(unarchived["result"], &restored); err != nil {
+		t.Fatal(err)
+	}
+	if restored.Thread.ID != forked.Thread.ID || restored.Thread.ForkedFromID == nil || *restored.Thread.ForkedFromID != start.Thread.ID {
+		t.Fatalf("unarchive response = %+v", restored.Thread)
+	}
+	if notification := h.read(t); frameMethod(notification) != "thread/unarchived" {
+		t.Fatalf("unarchive notification = %s", mustJSON(notification))
+	}
+	// Archive and unarchive the original source, then fork it while it is
+	// unloaded. This exercises the disk-resume path rather than only the loaded
+	// Controller path above.
+	h.send(t, map[string]any{"id": 8, "method": "thread/archive", "params": map[string]any{"threadId": start.Thread.ID}})
+	_ = readResponse(t, h, "8", nil)
+	if notification := h.read(t); frameMethod(notification) != "thread/archived" {
+		t.Fatalf("source archive notification = %s", mustJSON(notification))
+	}
+	h.send(t, map[string]any{"id": 9, "method": "thread/unarchive", "params": map[string]any{"threadId": start.Thread.ID}})
+	_ = readResponse(t, h, "9", nil)
+	if notification := h.read(t); frameMethod(notification) != "thread/unarchived" {
+		t.Fatalf("source unarchive notification = %s", mustJSON(notification))
+	}
+	h.send(t, map[string]any{"id": 10, "method": "thread/fork", "params": map[string]any{"threadId": start.Thread.ID}})
+	unloadedFork := readResponse(t, h, "10", nil)
+	var unloadedForkResponse ThreadForkResponse
+	if err := json.Unmarshal(unloadedFork["result"], &unloadedForkResponse); err != nil {
+		t.Fatal(err)
+	}
+	if unloadedForkResponse.Thread.ForkedFromID == nil || *unloadedForkResponse.Thread.ForkedFromID != start.Thread.ID {
+		t.Fatalf("unloaded fork response = %+v", unloadedForkResponse.Thread)
+	}
+	if notification := h.read(t); frameMethod(notification) != "thread/started" {
+		t.Fatalf("unloaded fork notification = %s", mustJSON(notification))
+	}
+}
+
+func TestThreadLifecycleMutationsRejectActiveTurnBeforePersistence(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "active.jsonl")
+	ctrl := newFakeController(dir, t.TempDir(), event.Discard)
+	ctrl.path = path
+	ctrl.persisted.Add(provider.Message{Role: provider.RoleUser, Content: "active"})
+	if err := ctrl.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	active := newTurnState("thread-active", "turn-active", "", "active", cancel)
+	active.setContext(ctx)
+	sess := &threadSession{id: "thread-active", ctrl: ctrl, active: active, path: path, origin: path}
+	svc := &service{factory: &fakeFactory{dir: dir, root: ctrl.root}, threads: map[string]*threadSession{"thread-active": sess}}
+	for method, call := range map[string]func() (any, error){
+		"fork": func() (any, error) {
+			return svc.threadFork(context.Background(), json.RawMessage(`{"threadId":"thread-active"}`))
+		},
+		"archive": func() (any, error) {
+			return svc.threadArchive(context.Background(), json.RawMessage(`{"threadId":"thread-active"}`))
+		},
+		"rollback": func() (any, error) {
+			return svc.threadRollback(context.Background(), json.RawMessage(`{"threadId":"thread-active","numTurns":1}`))
+		},
+	} {
+		if _, err := call(); err == nil || !strings.Contains(err.Error(), "active") {
+			t.Fatalf("%s active-turn error = %v", method, err)
+		}
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("active-turn gate mutated transcript: %v", err)
 	}
 }
 

@@ -93,6 +93,12 @@ Reames Agent 是一个以 DeepSeek Reasonix 为工程底座、面向本地与远
   Lite/WebSocket、PTC、persisted reasoning/pro、显式缓存、hosted tools、multi-agent 与 App-Server。真实公网
   API 回环仍为 `external-blocked`；最终公开交付仍要求该 push 对应 CI/CodeQL 全绿。详见
   `audits/2026-07-19-p8-native-gpt-claude-provider-parity.md`。
+- P9 App-Server 已完成第二个本地纵向批次：在首批 stdio initialize/thread/turn/审批/Ask/replay 基础上，新增
+  持久 `thread/fork`、`thread/archive`、`thread/unarchive`、conversation-only `thread/rollback` 与归档列表。
+  fork 保持源 Controller 不切换并持久化稳定 ancestry；archive/unarchive 在 writer/removal locks 下事务移动完整
+  session artifact bundle，包含 recovery origin/active 对，故障注入证明部分移动会反向回滚。当前只完成定向
+  control/appserver 测试，尚未经过本大批全量、race、跨目标、clean clone、CI/CodeQL，因此不宣称本批已交付或
+  P9 parity。详见 `audits/2026-07-21-p9-app-server-thread-lifecycle.md`。
 - Hermes `bf391030..862b1b37` 暴露的空响应分类问题已完成同构修复：Provider 返回的 empty-response
   advisory 即使提到 `max_tokens`，共享 classifier 也返回可重试 server error 和 `ShouldCompact=false`；
   真实 context-window 溢出仍返回压缩建议。当前 Agent 自动压缩由 usage 驱动，尚未消费该分类合同，

@@ -62,10 +62,12 @@ checkpoint, Hook and evidence policy.
 
 ## Explicit non-parity
 
-Paginated history, thread fork/archive/unarchive/rollback, compact/review,
-settings mutation, dynamic-tool registration, MCP status/login methods, image or
-audio input, realtime conversation, WebSocket/Responses Lite and multi-agent
-App-Server projection remain unsupported. `ephemeral: true`, unknown
+At this initial-slice checkpoint, thread fork/archive/unarchive/rollback were
+unsupported; they are implemented by the follow-up lifecycle slice documented
+in `2026-07-21-p9-app-server-thread-lifecycle.md`. Paginated history,
+compact/review, settings mutation, dynamic-tool registration, MCP status/login
+methods, image or audio input, realtime conversation, WebSocket/Responses Lite
+and multi-agent App-Server projection remain unsupported. `ephemeral: true`, unknown
 `historyMode` and unsupported official override fields fail before Controller
 mutation. These remain active P9 work and are not represented as complete.
 

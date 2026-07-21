@@ -2755,6 +2755,17 @@ func (c *Controller) CheckpointHasBoundary(turn int) bool {
 // Branch copies the current conversation into a child branch and switches to it.
 // Unlike Fork, it branches at the current tip and does not require a checkpoint.
 func (c *Controller) Branch(name string) (string, error) {
+	return c.branchNamed(name, true)
+}
+
+// BranchSession copies the current conversation into a child branch without
+// switching this controller to it. Headless transports use it to materialize a
+// fork while the source thread remains loaded and independently writable.
+func (c *Controller) BranchSession(name string) (string, error) {
+	return c.branchNamed(name, false)
+}
+
+func (c *Controller) branchNamed(name string, switchToBranch bool) (string, error) {
 	if c.executor == nil {
 		return "", c.rewindFail(fmt.Errorf("branch unavailable"))
 	}
@@ -2806,21 +2817,23 @@ func (c *Controller) Branch(name string) (string, error) {
 	}); err != nil {
 		return "", c.rewindFail(cleanupSessionCreationError(newPath, err))
 	}
-	// See snapshotMu: the swap must not interleave with an in-flight save.
-	c.snapshotMu.Lock()
-	c.executor.SetSession(sess)
-	c.ResetPlannerSession()
-	c.mu.Lock()
-	c.sessionPath = newPath
-	c.guardianPath = guardian.PathFor(newPath)
-	c.mu.Unlock()
-	c.setActiveJobSession(newPath)
-	c.rebindCheckpoints(newPath)
-	c.restoreSessionRuntime(newPath)
-	if c.guardianSess != nil {
-		c.guardianSess.Reset()
+	if switchToBranch {
+		// See snapshotMu: the swap must not interleave with an in-flight save.
+		c.snapshotMu.Lock()
+		c.executor.SetSession(sess)
+		c.ResetPlannerSession()
+		c.mu.Lock()
+		c.sessionPath = newPath
+		c.guardianPath = guardian.PathFor(newPath)
+		c.mu.Unlock()
+		c.setActiveJobSession(newPath)
+		c.rebindCheckpoints(newPath)
+		c.restoreSessionRuntime(newPath)
+		if c.guardianSess != nil {
+			c.guardianSess.Reset()
+		}
+		c.snapshotMu.Unlock()
 	}
-	c.snapshotMu.Unlock()
 	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
 		Text: fmt.Sprintf("created branch %s", agent.BranchID(newPath))})
 	return newPath, nil

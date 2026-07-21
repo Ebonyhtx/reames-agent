@@ -29,12 +29,15 @@ reames-agent app-server --model openai/gpt-5.6-sol --profile delivery
 |---|---|---|
 | client -> server | `initialize`、`initialized` | 支持 |
 | client -> server | `thread/start`、`thread/resume` | 只支持持久化 legacy history |
+| client -> server | `thread/fork` | 持久 fork；可选包含边界的 `lastTurnId` |
+| client -> server | `thread/archive`、`thread/unarchive` | idle thread 的事务式本地归档 |
+| client -> server | `thread/rollback` | 已弃用兼容方法；只截断对话历史 |
 | client -> server | `thread/list`、`thread/loaded/list`、`thread/read` | 支持有界 cursor 分页 |
 | client -> server | `thread/name/set`、`thread/unsubscribe` | 支持 |
 | client -> server | `turn/start`、`turn/steer`、`turn/interrupt` | 只支持文本；每 thread 最多一个 active turn |
 | server -> client | `thread/started`、thread/turn/item 状态与文本/推理 delta | 支持 live 投影 |
 | server -> client | command/file approval、`item/tool/requestUserInput` | 支持 server request |
-| client -> server | fork/archive/unarchive/rollback/compact/review/settings/dynamic-tool | 不支持 |
+| client -> server | compact/review/settings/dynamic-tool | 不支持 |
 | transport | WebSocket / TCP / HTTP | 不支持 |
 | content | image、local image、skill、mention、audio、realtime 输入输出 | 不支持 |
 | history | `historyMode: "paginated"` | 在装配 runtime 前拒绝 |
@@ -46,7 +49,22 @@ environment override 不会悄悄退回默认值。
 `workspaceWrite`、配置后的 write roots 与 sandbox network access。
 
 `thread/list` 沿用 Reames 会话历史语义：新 thread 至少产生一个 user turn 后才进入列表；
-`thread/loaded/list` 会包含仍在内存中的空 thread。
+`thread/loaded/list` 会包含仍在内存中的空 thread。归档 thread 默认不在列表中，需显式传
+`{"archived":true}`。
+
+`thread/fork` 把 canonical 持久历史复制到独立持有 writer lease 的新 thread，不切换源 Controller。
+`lastTurnId` 是包含式边界。源 thread 必须 idle；不支持的 runtime override 和 `ephemeral: true` 会在发布
+fork 前失败。响应包含复制后的 turns 与 `forkedFromId`，随后才发送 `thread/started`。
+
+`thread/archive` 先停止并卸载 idle runtime，再把 transcript、canonical event log、metadata、checkpoint、
+jobs、Guardian 状态、所属子代理记录，以及 recovery 的 origin/active transcript 对作为同一个可回滚 bundle
+移入 session store 的 `.archive`。active turn、pending prompt、background job、writer lease、目标冲突或任一
+artifact 移动失败都会拒绝操作。`thread/unarchive` 在移动前检查所有 live target，并在部分恢复失败时反向
+回滚。响应始终先于 `thread/archived` 或 `thread/unarchived` notification。
+
+`thread/rollback` 要求 `numTurns >= 1`，并且刻意只处理 conversation：它复用 Controller 的持久 rewind
+事务和 checkpoint transcript anchor，但绝不恢复工作区文件。文件回退仍由客户端负责。该方法跟随上游
+弃用状态，只作为有界兼容面保留。
 
 ## Runtime 与安全边界
 
@@ -61,7 +79,7 @@ permission、sandbox、Hook、checkpoint 和 evidence 规则继续生效。
 
 replay 只从 canonical Reames transcript 重建；raw Provider item、tool progress、process output delta 和
 realtime media 不写入第二份 replay log。版本化 0600 sidecar 在冲突恢复切换 active transcript 后保持
-App-Server thread ID 稳定；metadata 与 writer lease 更新失败时一起回滚。
+App-Server thread ID 和 fork ancestry 稳定；metadata、archive bundle 与 writer lease 更新失败时一起回滚。
 
 这只是首批纵向闭环，不代表完整 Codex App-Server parity。剩余 P9 工作以
 [发展计划](DEVELOPMENT_PLAN.md#p9codex-class-extensibility-与-headless-协议)为准。

@@ -11,13 +11,14 @@ import (
 	"reames-agent/internal/store"
 )
 
-const appServerMetaVersion = 1
+const appServerMetaVersion = 2
 
 type appServerMeta struct {
 	Version          int    `json:"version"`
 	ThreadID         string `json:"threadId"`
 	OriginTranscript string `json:"originTranscript"`
 	ActiveTranscript string `json:"activeTranscript"`
+	ForkedFromID     string `json:"forkedFromId,omitempty"`
 }
 
 func appServerMetaPath(sessionPath string) string {
@@ -43,7 +44,7 @@ func loadAppServerMeta(sessionPath string) (appServerMeta, bool, error) {
 	if err := json.Unmarshal(raw, &meta); err != nil {
 		return appServerMeta{}, false, fmt.Errorf("decode App-Server metadata %s: %w", path, err)
 	}
-	if meta.Version != appServerMetaVersion {
+	if meta.Version != 1 && meta.Version != appServerMetaVersion {
 		return appServerMeta{}, false, fmt.Errorf("unsupported App-Server metadata version %d", meta.Version)
 	}
 	if strings.TrimSpace(meta.ThreadID) == "" || !safeTranscriptBase(meta.OriginTranscript) || !safeTranscriptBase(meta.ActiveTranscript) {
