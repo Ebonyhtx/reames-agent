@@ -46,18 +46,27 @@ The archive transaction protects process concurrency and ordinary operation
 failures. It does not claim power-loss atomicity across multiple filesystem
 renames. Corrupt or manually edited manifests fail closed.
 
-## Evidence in this worktree
+## Local evidence
 
 - `go test ./internal/control ./internal/appserver -count=1`
+- `go test -race ./internal/appserver ./internal/control -count=1`
+- `go build ./...`, `go vet ./...`, and `go test ./internal/... -count=1`
+- Desktop `go test ./... -count=1`; frontend `pnpm test:all` and
+  `pnpm build`
+- public-readiness, builtin-tool-contract, and upstream-watch contract checks
+- 12 CGO-disabled CLI/Guard builds for Linux, macOS, and Windows on amd64 and
+  arm64
+- clean clone of implementation commit `afa4c127` repeating build, vet,
+  internal tests, Desktop tests, a fresh frozen frontend install plus test and
+  build, and the public/tool/upstream contract checks
 - archive/unarchive round trip with canonical sidecars and checkpoint directory;
 - injected archive and restore move failures with reverse rollback;
 - recovery origin/active bundle round trip;
 - wire-level fork/rollback/archive/list/unarchive round trip and stable ancestry;
 - active-turn rejection before persistence mutation.
 
-Full repository, race, Desktop/Frontend, cross-target, clean-clone, CI and
-CodeQL gates remain pending for the larger P9 delivery batch. This audit does
-not mark P9 complete.
+The final pushed HEAD still requires its own CI and CodeQL results. This audit
+does not mark P9 complete.
 
 ## Explicit non-parity
 
