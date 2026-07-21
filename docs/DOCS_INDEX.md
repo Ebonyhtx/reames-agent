@@ -142,6 +142,7 @@
 | [M6 微信持久轮询与 Desktop 背压审计](audits/2026-07-20-m6-weixin-polling-desktop-backpressure.md) | 微信最终投递后提交 poll cursor、三渠道 envelope 背压与 Desktop 有界 live queue 证据 |
 | [M6 渠道审批、取消与重连审计](audits/2026-07-21-m6-channel-decisions-cancellation-reconnect.md) | 四渠道一次性决策 token、取消 settlement/checkpoint、连接状态、watchdog 恢复与隐私投影证据 |
 | [P9 App-Server 首批纵向闭环审计](audits/2026-07-21-p9-app-server-initial-slice.md) | stdio JSONL、Controller 复用、thread/turn/审批/恢复合同、威胁模型与 unsupported 矩阵 |
+| [P9 App-Server 持久线程生命周期审计](audits/2026-07-21-p9-app-server-thread-lifecycle.md) | fork/archive/unarchive/rollback、共享归档事务、writer/removal guard、clean-clone 与非 parity 边界 |
 | [M6 Linux Gateway 卸载事务审计](audits/2026-07-20-m6-linux-uninstall-transaction.md) | user-scope 卸载快照、absent postcondition、取消/故障回滚、degraded fail-closed 与真实节点边界 |
 | [M6 macOS launchd 服务事务审计](audits/2026-07-21-m6-launchd-service-transaction.md) | user-scope plist/manager 快照、同名重装、取消/故障回滚、degraded fail-closed 与真实 macOS 节点边界 |
 | [M6 Windows Scheduled Task 服务事务审计](audits/2026-07-21-m6-windows-scheduled-task-transaction.md) | user-scope XML/state 快照、结构化探针、取消/故障回滚、degraded fail-closed 与真实 Windows 节点边界 |
